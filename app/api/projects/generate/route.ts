@@ -158,11 +158,32 @@ export async function POST(req: NextRequest) {
           emit({ type: "checkpoint", label: "Database ready", status: "complete" });
         }
 
+        // Start live error fixer in parallel
+        const { LiveFixer } = await import("@/lib/live-fixer");
+        const liveFixer = new LiveFixer(
+          sandbox,
+          model,
+          emit,
+          featureFiles.map(f => f.path),
+        );
+        // Also mark scaffold files as already written
+        for (const f of scaffoldFiles) {
+          liveFixer.markFileWritten(f.path, f.content);
+        }
+        liveFixer.start();
+
         // Stage 2.6: Feature Phase — write feature files one by one (triggers HMR)
-        const generatedFiles = await runFeaturePhase(featureFiles, scaffoldFiles, sandbox, emit);
+        const generatedFiles = await runFeaturePhase(featureFiles, scaffoldFiles, sandbox, emit, liveFixer);
+
+        const liveFixCount = liveFixer.stop();
+        if (liveFixCount > 0) {
+          console.log(`[generate] Live fixer applied ${liveFixCount} fixes during generation`);
+          emit({ type: 'checkpoint', label: `Fixed ${liveFixCount} errors during generation`, status: 'complete' });
+        }
 
         // Stage 3: Build Verification
         emit({ type: "stage_update", stage: "verifying_build" });
+        console.log(`[generate] Starting final type check (live fixer already fixed ${liveFixCount} errors)`);
         const verifyTimeout = new Promise<boolean>((_, reject) =>
           setTimeout(() => reject(new Error("Build verification timed out (5 min)")), 300_000)
         );

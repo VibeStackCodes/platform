@@ -168,7 +168,8 @@ export async function runFeaturePhase(
   featureFiles: GeneratedFile[],
   scaffoldFiles: GeneratedFile[],
   sandbox: Sandbox,
-  emit: (event: StreamEvent) => void
+  emit: (event: StreamEvent) => void,
+  liveFixer?: { markFileWritten(path: string, content: string): void } | null,
 ): Promise<Map<string, string>> {
   const generatedContents = new Map<string, string>();
 
@@ -183,6 +184,7 @@ export async function runFeaturePhase(
 
     await uploadFile(sandbox, file.content, `/workspace/${file.path}`);
     generatedContents.set(file.path, file.content);
+    liveFixer?.markFileWritten(file.path, file.content);
 
     const linesOfCode = file.content.split('\n').length;
     emit({ type: 'file_chunk', path: file.path, chunk: file.content });

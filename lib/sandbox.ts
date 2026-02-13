@@ -245,7 +245,7 @@ export async function initGeneratedApp(
     console.log('Starting dev server...');
     await runCommand(
       sandbox,
-      'bun run dev',
+      'bun run dev 2>/tmp/checker-errors.log',
       'dev-server',
       { cwd: workDir, async: true, timeout: 0 }
     );
@@ -349,7 +349,8 @@ export async function startDevServer(
   workDir: string = '/workspace'
 ): Promise<{ url: string }> {
   // Start dev server in background (async mode, no timeout)
-  runCommand(sandbox, 'bun run dev', 'dev-server', {
+  // Redirect stderr to file for live-fixer to read vite-plugin-checker errors
+  runCommand(sandbox, 'bun run dev 2>/tmp/checker-errors.log', 'dev-server', {
     cwd: workDir,
     async: true,
     timeout: 0
