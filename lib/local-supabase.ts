@@ -7,7 +7,7 @@ import { runCommand } from './sandbox';
  * Uses PGlite (Supabase's embedded WASM Postgres) to validate migrations
  * inside the sandbox. No system-level Postgres installation needed.
  *
- * PGlite runs in-process via Node/Bun — <3MB, supports pgcrypto + uuid-ossp.
+ * PGlite runs in-process via Node/Bun — <3MB, PG16 with gen_random_uuid() built-in.
  */
 
 /**
@@ -25,7 +25,6 @@ import { PGlite } from '@electric-sql/pglite';
 
 const db = new PGlite();
 try {
-  await db.exec(\`CREATE EXTENSION IF NOT EXISTS pgcrypto; CREATE EXTENSION IF NOT EXISTS "uuid-ossp";\`);
   await db.exec(${JSON.stringify(migrationSQL)});
   console.log('MIGRATION_OK');
 } catch (e) {
