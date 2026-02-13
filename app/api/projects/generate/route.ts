@@ -127,10 +127,11 @@ export async function POST(req: NextRequest) {
         }
 
         // Supabase project creation (runs in parallel with generation)
+        let supabaseProject: import("@/lib/types").SupabaseProject | null = null;
         let supabaseProjectId = existingProject?.supabase_project_id ?? null;
         const supabasePromise = !supabaseProjectId
           ? createSupabaseProject(chatPlan.appName)
-              .then((p) => { supabaseProjectId = p.id; })
+              .then((p) => { supabaseProject = p; supabaseProjectId = p.id; })
           : Promise.resolve();
 
         await supabase
@@ -155,13 +156,31 @@ export async function POST(req: NextRequest) {
           throw new Error("Build verification failed after maximum retries");
         }
 
-        // Wait for Supabase project
+        // Wait for Supabase project and store credentials
         await supabasePromise;
-        if (supabaseProjectId) {
+        if (supabaseProject) {
+          const sp = supabaseProject as import("@/lib/types").SupabaseProject;
           await supabase
             .from("projects")
-            .update({ supabase_project_id: supabaseProjectId })
+            .update({
+              supabase_project_id: sp.id,
+              supabase_url: sp.url,
+              supabase_anon_key: sp.anonKey,
+              supabase_service_role_key: sp.serviceRoleKey,
+            })
             .eq("id", project.id);
+
+          // Apply migrations to the provisioned Supabase project
+          const migrationContent = generatedFiles.get("supabase/migrations/001_init.sql");
+          if (migrationContent) {
+            emit({ type: "checkpoint", label: "Applying database migrations", status: "active" });
+            const { runMigration } = await import("@/lib/supabase-mgmt");
+            const result = await runMigration(sp.id, migrationContent);
+            if (!result.success) {
+              throw new Error(`Database migration failed: ${result.error}`);
+            }
+            emit({ type: "checkpoint", label: "Applying database migrations", status: "complete" });
+          }
         }
 
         // Stage 4: Push to GitHub
@@ -185,8 +204,9 @@ export async function POST(req: NextRequest) {
         // Stage 6: Completion
         emit({ type: "stage_update", stage: "complete" });
 
-        const eagerDeployUrl = process.env.VERCEL_WILDCARD_PROJECT_ID
-          ? `https://${buildAppSlug(chatPlan.appName, project.id)}.vibestack.site`
+        const wildcardDomain = process.env.VERCEL_WILDCARD_DOMAIN;
+        const eagerDeployUrl = wildcardDomain
+          ? `https://${buildAppSlug(chatPlan.appName, project.id)}.${wildcardDomain}`
           : undefined;
 
         await supabase

@@ -252,10 +252,13 @@ export interface Project {
   generation_state: GenerationState | null;
   sandbox_id: string | null;
   supabase_project_id: string | null;
+  supabase_anon_key: string | null;
+  supabase_service_role_key: string | null;
   preview_url: string | null;
   code_server_url: string | null;
   deploy_url: string | null;
   supabase_url: string | null;
+  github_repo_url: string | null;
   model: string | null;
   created_at: string;
   updated_at: string;

@@ -198,3 +198,15 @@ CREATE POLICY "Users can update own project messages"
 -- GitHub Persistence
 -- ============================================================================
 ALTER TABLE projects ADD COLUMN IF NOT EXISTS github_repo_url TEXT;
+
+-- ============================================================================
+-- Supabase Credentials (for Vercel env var injection at deploy time)
+-- ============================================================================
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS supabase_anon_key TEXT;
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS supabase_service_role_key TEXT;
+
+-- Allow build_failed status
+ALTER TABLE projects DROP CONSTRAINT IF EXISTS projects_status_check;
+ALTER TABLE projects ADD CONSTRAINT projects_status_check CHECK (
+  status IN ('pending', 'planning', 'generating', 'verifying', 'complete', 'error', 'build_failed', 'deploying', 'deployed')
+);

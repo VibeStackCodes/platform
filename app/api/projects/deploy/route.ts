@@ -78,29 +78,45 @@ export async function POST(req: NextRequest) {
 
     let deployUrl: string;
 
+    // Build Supabase env vars from stored credentials
+    const supabaseEnvVars: Record<string, string> = {};
+    if (project.supabase_url) {
+      supabaseEnvVars.VITE_SUPABASE_URL = project.supabase_url;
+    }
+    if (project.supabase_anon_key) {
+      supabaseEnvVars.VITE_SUPABASE_ANON_KEY = project.supabase_anon_key;
+    }
+
     console.log(`[deploy] Project: ${project.name}, GitHub: ${project.github_repo_url || 'none'}, Sandbox: ${project.sandbox_id}`);
+    console.log(`[deploy] Supabase env vars: ${Object.keys(supabaseEnvVars).join(', ') || 'none'}`);
+
+    let vercelProjectSlug: string;
+
     if (project.github_repo_url) {
       // Deploy from GitHub repo (required path)
       const repoFullName = project.github_repo_url
         .replace("https://github.com/", "");
       console.log(`[deploy] Deploying from GitHub: ${repoFullName}`);
-      deployUrl = await deployFromGitHub(repoFullName, project.name, vercelTeamId);
+      const result = await deployFromGitHub(repoFullName, project.name, vercelTeamId, supabaseEnvVars);
+      deployUrl = result.deployUrl;
+      vercelProjectSlug = result.vercelProjectSlug;
     } else {
       // Fallback: download files and upload to Vercel
       console.log(`[deploy] No GitHub repo, falling back to file upload...`);
       const files = await downloadDirectory(sandbox, "/workspace");
       console.log(`[deploy] Downloaded ${files.length} files, deploying to Vercel...`);
-      deployUrl = await deployToVercel(project.name, files, vercelTeamId);
+      deployUrl = await deployToVercel(project.name, files, vercelTeamId, supabaseEnvVars);
+      vercelProjectSlug = project.name.toLowerCase().replace(/[^a-z0-9-]/g, "-");
     }
 
     console.log(`[deploy] Deployment successful: ${deployUrl}`);
 
-    // Assign custom domain alias if wildcard project is configured
-    const wildcardProjectId = process.env.VERCEL_WILDCARD_PROJECT_ID;
-    if (wildcardProjectId) {
+    // Assign custom domain alias to the actual deployed project
+    const wildcardDomain = process.env.VERCEL_WILDCARD_DOMAIN; // e.g. "vibestack.site"
+    if (wildcardDomain) {
       const appSlug = buildAppSlug(project.name, projectId);
-      const customDomain = `${appSlug}.vibestack.site`;
-      deployUrl = await assignCustomDomain(customDomain, wildcardProjectId);
+      const customDomain = `${appSlug}.${wildcardDomain}`;
+      deployUrl = await assignCustomDomain(customDomain, vercelProjectSlug);
       console.log(`[deploy] Custom domain assigned: ${deployUrl}`);
     }
 
@@ -155,7 +171,8 @@ interface VercelDeployment {
 async function deployToVercel(
   projectName: string,
   files: Array<{ path: string; content: Buffer }>,
-  teamId?: string
+  teamId?: string,
+  envVars?: Record<string, string>
 ): Promise<string> {
   const vercelToken = process.env.VERCEL_TOKEN;
   if (!vercelToken) {
@@ -191,6 +208,9 @@ async function deployToVercel(
           outputDirectory: "dist",
         },
         target: "production",
+        ...(envVars && Object.keys(envVars).length > 0
+          ? { env: envVars }
+          : {}),
       }),
     }
   );
@@ -218,8 +238,9 @@ async function deployToVercel(
 async function deployFromGitHub(
   repoFullName: string,
   projectName: string,
-  teamId?: string
-): Promise<string> {
+  teamId?: string,
+  envVars?: Record<string, string>
+): Promise<{ deployUrl: string; vercelProjectSlug: string }> {
   const vercelToken = process.env.VERCEL_TOKEN;
   if (!vercelToken) {
     throw new Error("VERCEL_TOKEN environment variable is required");
@@ -277,6 +298,11 @@ async function deployFromGitHub(
     throw new Error(`Vercel project creation failed: ${errorBody}`);
   }
 
+  // Step 2.5: Set environment variables on the Vercel project
+  if (envVars && Object.keys(envVars).length > 0) {
+    await setVercelEnvVars(slug, envVars, finalTeamId, vercelToken);
+  }
+
   // Step 3: Create explicit deployment with gitSource (doesn't rely on Vercel GitHub App)
   const deployResponse = await fetch(
     `https://api.vercel.com/v13/deployments${finalTeamId ? `?teamId=${finalTeamId}` : ""}`,
@@ -309,7 +335,43 @@ async function deployFromGitHub(
 
   await waitForDeploymentReady(deployment.id, finalTeamId, vercelToken);
 
-  return deployUrl;
+  return { deployUrl, vercelProjectSlug: slug };
+}
+
+/**
+ * Set environment variables on a Vercel project
+ */
+async function setVercelEnvVars(
+  projectSlug: string,
+  envVars: Record<string, string>,
+  teamId: string | undefined,
+  token: string
+): Promise<void> {
+  const body = Object.entries(envVars).map(([key, value]) => ({
+    key,
+    value,
+    target: ["production", "preview", "development"],
+    type: "encrypted",
+  }));
+
+  const response = await fetch(
+    `https://api.vercel.com/v10/projects/${projectSlug}/env${teamId ? `?teamId=${teamId}` : ""}`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`Failed to set Vercel env vars: ${error}`);
+  }
+
+  console.log(`[deploy] Set ${body.length} env vars on project ${projectSlug}`);
 }
 
 /**
@@ -377,7 +439,7 @@ async function waitForDeploymentReady(
  */
 async function assignCustomDomain(
   domain: string,
-  wildcardProjectId: string
+  vercelProjectSlug: string
 ): Promise<string> {
   const vercelToken = process.env.VERCEL_TOKEN;
   if (!vercelToken) {
@@ -387,7 +449,7 @@ async function assignCustomDomain(
   const teamId = process.env.VERCEL_TEAM_ID;
 
   const response = await fetch(
-    `https://api.vercel.com/v10/projects/${wildcardProjectId}/domains${teamId ? `?teamId=${teamId}` : ""}`,
+    `https://api.vercel.com/v10/projects/${vercelProjectSlug}/domains${teamId ? `?teamId=${teamId}` : ""}`,
     {
       method: "POST",
       headers: {
