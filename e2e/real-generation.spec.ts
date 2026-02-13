@@ -202,7 +202,29 @@ test.describe('Real Generation Pipeline', () => {
     });
 
     // ================================================================
-    // Step 10: Wait for pipeline to finish — assert success
+    // Step 10: Check live fixer and database checkpoints
+    // ================================================================
+    await test.step('Check live fixer and database checkpoints', async () => {
+      // Database should be ready quickly (local Postgres migration <1s)
+      const dbReady = page.getByText(/Database ready/i).first();
+      await expect(dbReady).toBeVisible({ timeout: 60_000 });
+      console.log('Local database ready');
+
+      // Live fixer may or may not fix errors — just log if visible
+      const liveFixCheckpoint = page.getByText(/Fixed \d+ errors during generation/i).first();
+      const isVisible = await liveFixCheckpoint.isVisible().catch(() => false);
+      if (isVisible) {
+        const text = await liveFixCheckpoint.textContent();
+        console.log(`Live fixer checkpoint: ${text}`);
+      } else {
+        console.log('No live fixer checkpoint (clean generation)');
+      }
+
+      await page.screenshot({ path: 'test-results/live-fixer-checkpoints.png', fullPage: true });
+    });
+
+    // ================================================================
+    // Step 11: Wait for pipeline to finish — assert success
     // ================================================================
     await test.step('Wait for pipeline completion', async () => {
       // Wait for build verification to appear
@@ -238,7 +260,7 @@ test.describe('Real Generation Pipeline', () => {
     });
 
     // ================================================================
-    // Step 11: Verify files were generated
+    // Step 12: Verify files were generated
     // ================================================================
     await test.step('Verify generated files', async () => {
       const completedFiles = page.getByText(/\(\d+ lines\)/);
@@ -250,7 +272,7 @@ test.describe('Real Generation Pipeline', () => {
     });
 
     // ================================================================
-    // Step 12: Verify GitHub repo
+    // Step 13: Verify GitHub repo
     // ================================================================
     await test.step('Verify GitHub repo has content', async () => {
       const projectId = extractProjectId(page.url());
@@ -280,7 +302,7 @@ test.describe('Real Generation Pipeline', () => {
     });
 
     // ================================================================
-    // Step 13: Deploy to Vercel
+    // Step 14: Deploy to Vercel
     // ================================================================
     await test.step('Deploy to Vercel', async () => {
       const deployResponsePromise = page.waitForResponse(
@@ -324,7 +346,7 @@ test.describe('Real Generation Pipeline', () => {
     });
 
     // ================================================================
-    // Step 14: Edit generated code
+    // Step 15: Edit generated code
     // ================================================================
     await test.step('Edit generated code', async () => {
       const textarea = page.locator('textarea[name="message"]');
@@ -349,7 +371,7 @@ test.describe('Real Generation Pipeline', () => {
     });
 
     // ================================================================
-    // Step 15: Verify project on dashboard
+    // Step 16: Verify project on dashboard
     // ================================================================
     await test.step('Verify project on dashboard', async () => {
       await page.goto('/dashboard');
