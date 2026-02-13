@@ -273,4 +273,81 @@ test.describe('VibeStack E2E', () => {
       await expect(page.getByText('Database link will appear here once the project is generated')).toBeVisible();
     });
   });
+
+  // =========================================================================
+  // 7. Deploy (mock)
+  // =========================================================================
+
+  test.describe('Deploy (mock)', () => {
+    test('deploy button calls API and handles success', async ({ page }) => {
+      // Intercept deploy API with mock response
+      await page.route('**/api/projects/deploy', async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            success: true,
+            deployUrl: 'https://mock-app-12345678.vibestack.site',
+            projectId: 'mock-deploy-test',
+          }),
+        });
+      });
+
+      await page.goto('/project/mock-deploy-test');
+      await waitForHydration(page);
+
+      // Click deploy button
+      const deployBtn = page.getByRole('button', { name: /Deploy/i });
+      await expect(deployBtn).toBeVisible({ timeout: 10_000 });
+
+      // Listen for the API call
+      const deployPromise = page.waitForResponse('**/api/projects/deploy');
+      await deployBtn.click();
+
+      const response = await deployPromise;
+      const body = await response.json();
+      expect(body.success).toBe(true);
+      expect(body.deployUrl).toMatch(/\.vibestack\.site$/);
+    });
+  });
+
+  // =========================================================================
+  // 8. Edit/Iterate (mock)
+  // =========================================================================
+
+  test.describe('Edit/Iterate (mock)', () => {
+    test('post-generation edit returns mock response', async ({ page }) => {
+      await page.goto('/project/mock-edit-test');
+      await waitForHydration(page);
+
+      // Navigate through mock flow: question → thinking → plan → approve → edit
+      // Turn 1: clarifying question
+      await expect(page.getByText(/What kind of tasks/i).first()).toBeVisible({ timeout: 15_000 });
+      await page.getByText('Team collaboration').click();
+
+      // Turn 2: thinking steps
+      await expect(page.getByText('Analyzing requirements')).toBeVisible({ timeout: 15_000 });
+
+      // Turn 3: trigger plan
+      const textarea = page.locator('textarea[name="message"]');
+      await textarea.fill('Proceed');
+      await textarea.press('Enter');
+      await expect(page.getByText('TaskFlow', { exact: true })).toBeVisible({ timeout: 15_000 });
+
+      // Turn 4: approve → start_generation
+      await page.getByRole('button', { name: /Approve & Generate/i }).click();
+      await expect(
+        page.getByText(/Plan approved|Generating|Generation Complete/i).first()
+      ).toBeVisible({ timeout: 30_000 });
+
+      // Turn 5: send edit instruction
+      await textarea.fill('Add a dark mode toggle to the header');
+      await textarea.press('Enter');
+
+      // Should get mock edit response
+      await expect(
+        page.getByText(/updated 2 files/i).first()
+      ).toBeVisible({ timeout: 15_000 });
+    });
+  });
 });
