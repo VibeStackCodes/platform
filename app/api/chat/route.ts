@@ -104,7 +104,8 @@ function toolCallStreamResult(toolCallId: string, toolName: string, args: unknow
  * Turn 1: clarifying question
  * Turn 2: thinking_steps showing planning process
  * Turn 3: show_plan with full fixture plan
- * Turn 4+: start_generation
+ * Turn 4: start_generation
+ * Turn 5+: edit response as plain text
  */
 function buildMockChatResponse(messages: UIMessage[]) {
   const userMessages = messages.filter((m) => m.role === 'user');
@@ -128,8 +129,31 @@ function buildMockChatResponse(messages: UIMessage[]) {
     });
   } else if (turnNumber === 3) {
     streamResult = toolCallStreamResult('mock-plan', 'show_plan', MOCK_CHAT_PLAN);
-  } else {
+  } else if (turnNumber === 4) {
     streamResult = toolCallStreamResult('mock-gen', 'start_generation', { approved: true });
+  } else {
+    // Turn 5+: simulate edit response as plain text
+    const editMockModel = new MockLanguageModelV3({
+      doStream: {
+        stream: new ReadableStream({
+          async start(controller) {
+            const text = "I've updated 2 files based on your instruction: `src/components/header.tsx` and `src/index.css`. The changes have been applied and the build verified successfully.";
+            controller.enqueue({ type: 'text-delta', textDelta: text });
+            controller.enqueue({ type: 'finish', finishReason: 'stop', usage: { inputTokens: 0, outputTokens: 0 } });
+            controller.close();
+          },
+        }),
+      },
+    });
+
+    const editResult = streamText({
+      model: editMockModel,
+      messages: [{ role: 'user', content: 'mock' }],
+      tools: chatTools,
+      maxOutputTokens: 4096,
+    });
+
+    return editResult.toUIMessageStreamResponse();
   }
 
   const mockModel = new MockLanguageModelV3({
