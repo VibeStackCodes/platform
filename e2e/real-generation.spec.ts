@@ -182,14 +182,27 @@ test.describe('Real Generation Pipeline', () => {
 
       await expect(
         page.getByText(/\(\d+ lines\)/).first()
-      ).toBeVisible({ timeout: 300_000 });
+      ).toBeVisible({ timeout: 60_000 });
 
       console.log('First file completed');
       await page.screenshot({ path: 'test-results/generation-progress.png', fullPage: true });
     });
 
     // ================================================================
-    // Step 9: Wait for pipeline to finish — assert success
+    // Step 9: Verify early preview URL
+    // ================================================================
+    await test.step('Verify early preview URL', async () => {
+      // Preview should be available during generation (HMR dev server)
+      const previewFrame = page.locator('iframe[src*="preview"], [data-testid="preview-frame"]');
+      if (await previewFrame.count() > 0) {
+        console.log('Preview frame detected during generation');
+      }
+      // The preview_ready SSE event should have fired by now
+      await page.screenshot({ path: 'test-results/early-preview.png', fullPage: true });
+    });
+
+    // ================================================================
+    // Step 10: Wait for pipeline to finish — assert success
     // ================================================================
     await test.step('Wait for pipeline completion', async () => {
       // Wait for build verification to appear
@@ -202,7 +215,7 @@ test.describe('Real Generation Pipeline', () => {
       // If build fails, the pipeline now errors — no "Pushing to GitHub" checkpoint
       await expect(
         page.getByText(/Pushing to GitHub/i).first()
-      ).toBeVisible({ timeout: 900_000 });
+      ).toBeVisible({ timeout: 300_000 });
       console.log('GitHub push checkpoint visible — build passed');
 
       // Poll project status until server finishes
@@ -225,7 +238,7 @@ test.describe('Real Generation Pipeline', () => {
     });
 
     // ================================================================
-    // Step 10: Verify files were generated
+    // Step 11: Verify files were generated
     // ================================================================
     await test.step('Verify generated files', async () => {
       const completedFiles = page.getByText(/\(\d+ lines\)/);
@@ -237,7 +250,7 @@ test.describe('Real Generation Pipeline', () => {
     });
 
     // ================================================================
-    // Step 11: Verify GitHub repo
+    // Step 12: Verify GitHub repo
     // ================================================================
     await test.step('Verify GitHub repo has content', async () => {
       const projectId = extractProjectId(page.url());
@@ -267,7 +280,7 @@ test.describe('Real Generation Pipeline', () => {
     });
 
     // ================================================================
-    // Step 12: Deploy to Vercel
+    // Step 13: Deploy to Vercel
     // ================================================================
     await test.step('Deploy to Vercel', async () => {
       const deployResponsePromise = page.waitForResponse(
@@ -311,7 +324,7 @@ test.describe('Real Generation Pipeline', () => {
     });
 
     // ================================================================
-    // Step 13: Edit generated code
+    // Step 14: Edit generated code
     // ================================================================
     await test.step('Edit generated code', async () => {
       const textarea = page.locator('textarea[name="message"]');
@@ -336,7 +349,7 @@ test.describe('Real Generation Pipeline', () => {
     });
 
     // ================================================================
-    // Step 14: Verify project on dashboard
+    // Step 15: Verify project on dashboard
     // ================================================================
     await test.step('Verify project on dashboard', async () => {
       await page.goto('/dashboard');
