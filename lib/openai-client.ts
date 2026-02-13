@@ -20,7 +20,7 @@ let _client: OpenAI | null = null;
 
 export function getOpenAIClient(): OpenAI {
   if (!_client) {
-    _client = new OpenAI();
+    _client = new OpenAI({ maxRetries: 3 });
   }
   return _client;
 }
@@ -78,19 +78,3 @@ export function isAnthropicModel(modelId: string): boolean {
   return modelId.startsWith('claude-');
 }
 
-// ============================================================================
-// Retry Utilities
-// ============================================================================
-
-import { withRetry, type RetryOptions } from './retry';
-
-/**
- * Convenience wrapper for OpenAI API calls with retry logic
- */
-export async function withOpenAIRetry<T>(
-  fn: () => Promise<T>,
-  operation: string,
-  options?: Omit<RetryOptions, 'operation'>
-): Promise<T> {
-  return withRetry(fn, { ...options, operation });
-}

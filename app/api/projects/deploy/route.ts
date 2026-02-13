@@ -9,6 +9,8 @@ import { createClient } from "@/lib/supabase-server";
 import { downloadDirectory, getDaytonaClient, runCommand } from "@/lib/sandbox";
 import { buildAppSlug } from "@/lib/slug";
 import type { DeployRequest } from "@/lib/types";
+import { checkDeploymentStatus } from "@vercel/client";
+import type { Deployment } from "@vercel/client";
 
 /**
  * Build the project in sandbox with production env vars
@@ -282,7 +284,14 @@ async function deployToVercel(
   const deployUrl = `https://${deployment.url}`;
   console.log(`[deploy] Deployment created: ${deployUrl} (${deployment.id})`);
 
-  await waitForDeploymentReady(deployment.id, finalTeamId, vercelToken);
+  // Convert to Deployment type expected by @vercel/client
+  const vercelDeployment: Deployment = {
+    id: deployment.id,
+    url: deployment.url,
+    readyState: deployment.readyState,
+  } as Deployment;
+
+  await waitForDeploymentReady(vercelDeployment, finalTeamId, vercelToken);
 
   return deployUrl;
 }
@@ -389,7 +398,14 @@ async function deployFromGitHub(
   const deployUrl = `https://${deployment.url}`;
   console.log(`[deploy] Deployment created: ${deployUrl} (${deployment.id})`);
 
-  await waitForDeploymentReady(deployment.id, finalTeamId, vercelToken);
+  // Convert to Deployment type expected by @vercel/client
+  const vercelDeployment: Deployment = {
+    id: deployment.id,
+    url: deployment.url,
+    readyState: deployment.readyState,
+  } as Deployment;
+
+  await waitForDeploymentReady(vercelDeployment, finalTeamId, vercelToken);
 
   return { deployUrl, vercelProjectSlug: slug };
 }
@@ -431,62 +447,49 @@ async function setVercelEnvVars(
 }
 
 /**
- * Poll Vercel deployment until it's ready
+ * Poll Vercel deployment until it's ready using @vercel/client
  */
 async function waitForDeploymentReady(
-  deploymentId: string,
+  deployment: Deployment,
   teamId: string | undefined,
   token: string,
   maxAttempts: number = 60 // 5 minutes with 5s intervals
 ): Promise<void> {
-  const pollInterval = 5000; // 5 seconds
+  const clientOptions = {
+    token,
+    teamId,
+    path: '', // Not used for status checks
+  };
 
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    await new Promise((resolve) => setTimeout(resolve, pollInterval));
+  let attempt = 0;
 
-    const statusResponse = await fetch(
-      `https://api.vercel.com/v13/deployments/${deploymentId}${teamId ? `?teamId=${teamId}` : ""}`,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      }
-    );
+  for await (const event of checkDeploymentStatus(deployment, clientOptions)) {
+    attempt++;
 
-    if (!statusResponse.ok) {
-      throw new Error(`Failed to check deployment status: ${await statusResponse.text()}`);
+    if (attempt > maxAttempts) {
+      throw new Error("Deployment timed out waiting for READY state");
     }
 
-    const deployment: VercelDeployment = await statusResponse.json();
-    console.log(`[deploy] Deployment status: ${deployment.readyState} (attempt ${attempt + 1}/${maxAttempts})`);
+    console.log(`[deploy] Deployment status event: ${event.type} (attempt ${attempt}/${maxAttempts})`);
 
-    if (deployment.readyState === "READY") {
+    if (event.type === 'ready') {
       console.log(`[deploy] Deployment ready!`);
       return;
     }
 
-    if (deployment.readyState === "ERROR" || deployment.readyState === "CANCELED") {
-      // Try to fetch build logs for debugging
-      try {
-        const logsResponse = await fetch(
-          `https://api.vercel.com/v3/deployments/${deploymentId}/events${teamId ? `?teamId=${teamId}` : ""}`,
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
-        if (logsResponse.ok) {
-          const events = await logsResponse.json();
-          const errorEvents = events
-            .filter((e: { type: string }) => e.type === "error" || e.type === "stderr")
-            .slice(-10);
-          console.error("[deploy] Build error logs:", JSON.stringify(errorEvents, null, 2));
-        }
-      } catch {
-        // Ignore log fetch errors
-      }
-      throw new Error(`Deployment failed with state: ${deployment.readyState}`);
+    if (event.type === 'error') {
+      const errorPayload = event.payload as any;
+      const errorMessage = errorPayload?.message || JSON.stringify(errorPayload);
+      console.error("[deploy] Deployment error:", errorMessage);
+      throw new Error(`Deployment failed: ${errorMessage}`);
+    }
+
+    if (event.type === 'canceled') {
+      throw new Error('Deployment was canceled');
     }
   }
 
-  throw new Error("Deployment timed out waiting for READY state");
+  throw new Error("Deployment status check ended without reaching READY state");
 }
 
 /**

@@ -15,6 +15,7 @@ import type { GenerateRequest, StreamEvent, ChatPlan } from "@/lib/types";
 import { classifyFeatures } from "@/lib/feature-classifier";
 import { executeTemplate } from "@/lib/template-registry";
 import { getMockFileContent } from "@/lib/mock-data";
+import { createSSEStream } from "@/lib/sse";
 
 const MOCK_MODE = process.env.NEXT_PUBLIC_MOCK_MODE === "true";
 
@@ -54,17 +55,10 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const encoder = new TextEncoder();
+  return createSSEStream(async (emit) => {
+    let projectId: string | null = null;
 
-  const stream = new ReadableStream({
-    async start(controller) {
-      const emit = (event: StreamEvent) => {
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
-      };
-
-      let projectId: string | null = null;
-
-      try {
+    try {
         // Reuse existing project (from chat) or create a new one
         let project;
         if (existingProjectId) {
@@ -262,8 +256,6 @@ export async function POST(req: NextRequest) {
           urls: { preview: previewUrlStr, codeServer: codeServerUrlStr },
           requirementResults: [],
         });
-
-        controller.close();
       } catch (error) {
         console.error("[generate] Error:", error);
 
@@ -276,33 +268,16 @@ export async function POST(req: NextRequest) {
           message: error instanceof Error ? error.message : String(error),
           stage: "error",
         });
-
-        controller.close();
       }
-    },
-  });
-
-  return new Response(stream, {
-    headers: {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache",
-      "Connection": "keep-alive",
-    },
-  });
+    });
 }
 
 /**
  * Mock generate response — simulates the template pipeline with delays.
  */
 function buildMockGenerateResponse(chatPlan: ChatPlan) {
-  const encoder = new TextEncoder();
-
-  const stream = new ReadableStream({
-    async start(controller) {
-      const emit = (event: StreamEvent) => {
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
-      };
-      const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  return createSSEStream(async (emit) => {
+    const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
       // Stage 1: Provisioning
       emit({ type: "stage_update", stage: "provisioning" });
@@ -370,25 +345,14 @@ function buildMockGenerateResponse(chatPlan: ChatPlan) {
       await delay(200);
       emit({ type: "checkpoint", label: "Pushing to GitHub", status: "complete" });
 
-      // Stage 6: Complete
-      emit({ type: "stage_update", stage: "complete" });
-      emit({ type: "code_server_ready", url: "http://localhost:13337" });
-      emit({
-        type: "complete",
-        projectId: "mock-project-id",
-        urls: { preview: "http://localhost:3000", codeServer: "http://localhost:13337" },
-        requirementResults: [],
-      });
-
-      controller.close();
-    },
-  });
-
-  return new Response(stream, {
-    headers: {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache",
-      "Connection": "keep-alive",
-    },
+    // Stage 6: Complete
+    emit({ type: "stage_update", stage: "complete" });
+    emit({ type: "code_server_ready", url: "http://localhost:13337" });
+    emit({
+      type: "complete",
+      projectId: "mock-project-id",
+      urls: { preview: "http://localhost:3000", codeServer: "http://localhost:13337" },
+      requirementResults: [],
+    });
   });
 }

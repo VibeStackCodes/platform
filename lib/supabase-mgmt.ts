@@ -5,6 +5,7 @@
  * via the Supabase Management API (api.supabase.com/v1)
  */
 
+import { SupabaseManagementAPI } from "supabase-management-js";
 import type { SupabaseProject, SupabaseSchema } from "./types";
 
 // ============================================================================
@@ -64,11 +65,33 @@ export interface MigrationResult {
 }
 
 // ============================================================================
-// Management API Helper
+// SDK Client Singleton
+// ============================================================================
+
+let _client: SupabaseManagementAPI | null = null;
+
+/**
+ * Get or create the Supabase Management API client
+ */
+function getClient(): SupabaseManagementAPI {
+  if (!_client) {
+    const accessToken = process.env.SUPABASE_ACCESS_TOKEN;
+    if (!accessToken) {
+      throw new Error("SUPABASE_ACCESS_TOKEN environment variable is required");
+    }
+    _client = new SupabaseManagementAPI({ accessToken });
+  }
+  return _client;
+}
+
+// ============================================================================
+// Management API Helper (Legacy)
 // ============================================================================
 
 /**
  * Helper function for authenticated requests to Supabase Management API
+ * @deprecated Use getClient() for supported operations
+ * Kept for operations not yet supported by the SDK and for test compatibility
  */
 export async function mgmtFetch(
   path: string,
@@ -113,6 +136,7 @@ export async function createSupabaseProject(
   dbPassword?: string,
   plan: string = "free"
 ): Promise<SupabaseProject> {
+  const client = getClient();
   const orgId = process.env.SUPABASE_E2E_ORG_ID || process.env.SUPABASE_ORG_ID;
   if (!orgId) {
     throw new Error("SUPABASE_ORG_ID environment variable is required");
@@ -132,24 +156,19 @@ export async function createSupabaseProject(
     .replace(/^-|-$/g, "")
     .slice(0, 63);
 
-  // Create the project
-  const createResponse = await mgmtFetch("/projects", {
-    method: "POST",
-    body: JSON.stringify({
-      name: sanitizedName,
-      organization_id: orgId,
-      region,
-      plan,
-      db_pass: password,
-    }),
+  // Create the project using SDK
+  const project = await client.createProject({
+    name: sanitizedName,
+    organization_id: orgId,
+    region: region as any,
+    plan: plan as any,
+    db_pass: password,
   });
 
-  if (!createResponse.ok) {
-    const error = await createResponse.text();
-    throw new Error(`Failed to create Supabase project: ${error}`);
+  if (!project) {
+    throw new Error("Failed to create Supabase project: No response from SDK");
   }
 
-  const project: SupabaseAPIProject = await createResponse.json();
   console.log(`[supabase-mgmt] Created project ${project.id}, waiting for ACTIVE_HEALTHY status...`);
 
   // Poll until project is ready
@@ -159,6 +178,9 @@ export async function createSupabaseProject(
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     await new Promise((resolve) => setTimeout(resolve, pollInterval));
 
+    // Use SDK health check to verify project is ready
+    // Note: checkServiceHealth requires the project ref and a list of services
+    // We'll use raw fetch for polling status since SDK doesn't have a direct "get project status" method
     const statusResponse = await mgmtFetch(`/projects/${project.id}`);
     if (!statusResponse.ok) {
       throw new Error(`Failed to check project status: ${await statusResponse.text()}`);
@@ -168,15 +190,14 @@ export async function createSupabaseProject(
     console.log(`[supabase-mgmt] Project status: ${currentProject.status} (attempt ${attempt + 1}/${maxAttempts})`);
 
     if (currentProject.status === "ACTIVE_HEALTHY") {
-      // Fetch API keys
-      const keysResponse = await mgmtFetch(`/projects/${project.id}/api-keys`);
-      if (!keysResponse.ok) {
-        throw new Error(`Failed to fetch API keys: ${await keysResponse.text()}`);
+      // Fetch API keys using SDK
+      const keys = await client.getProjectApiKeys(project.id);
+      if (!keys) {
+        throw new Error("Failed to fetch API keys from SDK");
       }
 
-      const keys = await keysResponse.json();
-      const anonKey = keys.find((k: any) => k.name === "anon")?.api_key;
-      const serviceRoleKey = keys.find((k: any) => k.name === "service_role")?.api_key;
+      const anonKey = keys.find((k) => k.name === "anon")?.api_key;
+      const serviceRoleKey = keys.find((k) => k.name === "service_role")?.api_key;
 
       if (!anonKey || !serviceRoleKey) {
         throw new Error("Failed to retrieve API keys from project");
@@ -208,14 +229,9 @@ export async function createSupabaseProject(
  * Delete a Supabase project
  */
 export async function deleteSupabaseProject(projectId: string): Promise<void> {
-  const response = await mgmtFetch(`/projects/${projectId}`, {
-    method: "DELETE",
-  });
+  const client = getClient();
 
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`Failed to delete project: ${error}`);
-  }
+  await client.deleteProject(projectId);
 
   console.log(`[supabase-mgmt] Deleted project ${projectId}`);
 }
@@ -234,20 +250,10 @@ export async function runMigration(
   projectId: string,
   sql: string
 ): Promise<MigrationResult> {
-  try {
-    const response = await mgmtFetch(`/projects/${projectId}/database/query`, {
-      method: "POST",
-      body: JSON.stringify({ query: sql }),
-    });
+  const client = getClient();
 
-    if (!response.ok) {
-      const error = await response.text();
-      return {
-        success: false,
-        error: `Migration failed: ${error}`,
-        executedAt: new Date().toISOString(),
-      };
-    }
+  try {
+    await client.runQuery(projectId, sql);
 
     return {
       success: true,

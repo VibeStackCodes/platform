@@ -11,7 +11,7 @@
  * ingestion into the OpenAI Evals API or custom analysis pipelines.
  */
 
-import { mkdirSync, existsSync, appendFileSync } from 'fs';
+import pino from 'pino';
 import { join } from 'path';
 import type { Plan, BuildError, RequirementResult } from './types';
 
@@ -46,24 +46,37 @@ export type EvalEventType =
 
 const EVAL_DIR = join(process.cwd(), '.eval-logs');
 
-function ensureEvalDir(): void {
-  if (!existsSync(EVAL_DIR)) {
-    mkdirSync(EVAL_DIR, { recursive: true });
-  }
-}
-
-function getLogPath(): string {
-  const date = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-  return join(EVAL_DIR, `evals-${date}.jsonl`);
-}
+const logger = pino({
+  level: 'info',
+  formatters: {
+    level: () => ({}), // Remove pino's default level field
+  },
+  timestamp: false, // We'll add our own timestamp field
+  transport: {
+    target: 'pino-roll',
+    options: {
+      file: join(EVAL_DIR, 'evals'),
+      frequency: 'daily',
+      dateFormat: 'yyyy-MM-dd',
+      extension: '.jsonl',
+      mkdir: true,
+    },
+  },
+});
 
 /**
  * Append an eval entry to today's JSONL log
  */
 function logEntry(entry: EvalEntry): void {
   try {
-    ensureEvalDir();
-    appendFileSync(getLogPath(), JSON.stringify(entry) + '\n');
+    // Structure pino output to match the original JSONL format
+    logger.info({
+      timestamp: entry.timestamp,
+      runId: entry.runId,
+      event: entry.event,
+      model: entry.model,
+      data: entry.data,
+    });
   } catch (error) {
     // Eval logging should never break the pipeline
     console.warn('Eval log write failed:', error);

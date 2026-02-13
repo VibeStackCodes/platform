@@ -145,46 +145,39 @@ async function analyzeErrors(buildOutput: string, model: string): Promise<ErrorA
 // ============================================================================
 
 /**
- * Parse build errors from Next.js Turbopack output
+ * Parse build errors from tsc --noEmit and Next.js build output
  *
- * Handles:
+ * Handles TypeScript compiler diagnostic format as primary pattern:
+ * - Standard tsc format: file(line,col): error TSxxxx: message
  * - Turbopack compilation errors
  * - Module not found errors
- * - TypeScript type errors
  * - Import errors
+ *
+ * Deduplicates errors by file+line+message to avoid redundant fixes.
  */
 export function parseBuildErrors(output: string): BuildError[] {
   const errors: BuildError[] = [];
+  const seen = new Set<string>();
 
-  // Pattern 1: Turbopack errors (./app/page.tsx:10:5)
-  const turbopackPattern = /\.\/([^\s:]+):(\d+):(\d+)\s*\n([^\n]+)/g;
+  /**
+   * Add error if not already seen (deduplication)
+   */
+  function addError(error: BuildError): void {
+    const key = `${error.file}:${error.line || 0}:${error.message}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      errors.push(error);
+    }
+  }
+
+  // Pattern 1 (PRIMARY): TypeScript compiler diagnostic format
+  // file(line,col): error TSxxxx: message
+  // This is the most reliable format from tsc --noEmit
+  const tscPattern = /([\w\/.-]+)\((\d+),(\d+)\): error (TS\d+): ([^\n]+)/g;
   let match;
 
-  while ((match = turbopackPattern.exec(output)) !== null) {
-    errors.push({
-      file: match[1],
-      line: parseInt(match[2], 10),
-      message: match[4].trim(),
-      raw: match[0],
-    });
-  }
-
-  // Pattern 2: Module not found (Cannot find module 'X' or its corresponding type declarations)
-  const moduleNotFoundPattern = /Cannot find module ['"]([^'"]+)['"](?: or its corresponding type declarations)?/g;
-
-  while ((match = moduleNotFoundPattern.exec(output)) !== null) {
-    errors.push({
-      file: 'unknown',
-      message: `Cannot find module '${match[1]}'`,
-      raw: match[0],
-    });
-  }
-
-  // Pattern 3: TypeScript errors (TS2322, TS2304, etc.)
-  const tsErrorPattern = /([\w\/.-]+)\((\d+),(\d+)\): error (TS\d+): ([^\n]+)/g;
-
-  while ((match = tsErrorPattern.exec(output)) !== null) {
-    errors.push({
+  while ((match = tscPattern.exec(output)) !== null) {
+    addError({
       file: match[1],
       line: parseInt(match[2], 10),
       message: `${match[4]}: ${match[5]}`,
@@ -192,24 +185,39 @@ export function parseBuildErrors(output: string): BuildError[] {
     });
   }
 
-  // Pattern 4: Import errors (Module '"X"' has no exported member 'Y')
-  const importErrorPattern = /Module ['"]([^'"]+)['"] has no exported member ['"]([^'"]+)['"]/g;
+  // Pattern 2: Turbopack errors (./app/page.tsx:10:5)
+  // Only match if preceded by error indicators to avoid false positives
+  const turbopackPattern = /(?:error|Error|✕|×|failed)[\s\S]{0,50}?\.\/([^\s:]+):(\d+):(\d+)\s*\n([^\n]+)/g;
 
-  while ((match = importErrorPattern.exec(output)) !== null) {
-    errors.push({
-      file: 'unknown',
-      message: `Module '${match[1]}' has no exported member '${match[2]}'`,
+  while ((match = turbopackPattern.exec(output)) !== null) {
+    addError({
+      file: match[1],
+      line: parseInt(match[2], 10),
+      message: match[4].trim(),
       raw: match[0],
     });
   }
 
-  // Pattern 5: Generic error lines with file paths
-  const genericErrorPattern = /Error: ([^\n]+)\n\s+at ([^\s(]+)/g;
+  // Pattern 3: Module not found errors
+  // Cannot find module 'X' or its corresponding type declarations
+  const moduleNotFoundPattern = /Cannot find module ['"]([^'"]+)['"](?: or its corresponding type declarations)?/g;
 
-  while ((match = genericErrorPattern.exec(output)) !== null) {
-    errors.push({
-      file: match[2],
-      message: match[1],
+  while ((match = moduleNotFoundPattern.exec(output)) !== null) {
+    addError({
+      file: 'unknown',
+      message: `Cannot find module '${match[1]}'`,
+      raw: match[0],
+    });
+  }
+
+  // Pattern 4: Import/export errors
+  // Module '"X"' has no exported member 'Y'
+  const importErrorPattern = /Module ['"]([^'"]+)['"] has no exported member ['"]([^'"]+)['"]/g;
+
+  while ((match = importErrorPattern.exec(output)) !== null) {
+    addError({
+      file: 'unknown',
+      message: `Module '${match[1]}' has no exported member '${match[2]}'`,
       raw: match[0],
     });
   }
