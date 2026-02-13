@@ -248,5 +248,89 @@ test.describe('Real Generation Pipeline', () => {
         console.warn('Console errors during test:', consoleErrors);
       }
     });
+
+    // ================================================================
+    // Step 10: Deploy to Vercel with custom domain
+    // ================================================================
+    await test.step('Deploy to Vercel', async () => {
+      // Capture the deploy API response
+      const deployResponsePromise = page.waitForResponse(
+        (resp) => resp.url().includes('/api/projects/deploy') && resp.status() === 200
+      );
+
+      // Click Deploy button
+      const deployBtn = page.getByRole('button', { name: /Deploy/i });
+      await expect(deployBtn).toBeVisible({ timeout: 10_000 });
+      await deployBtn.click();
+
+      console.log('Deploy triggered, waiting for completion...');
+
+      // Wait for deploy response (up to 5 minutes)
+      const deployResponse = await deployResponsePromise;
+      const deployData = await deployResponse.json();
+
+      console.log('Deploy response:', deployData);
+      expect(deployData.success).toBe(true);
+      expect(deployData.deployUrl).toBeTruthy();
+
+      // Verify custom domain pattern
+      expect(deployData.deployUrl).toMatch(/https:\/\/[\w-]+\.vibestack\.site/);
+
+      // Verify deployed site is reachable
+      const siteResponse = await fetch(deployData.deployUrl);
+      console.log(`Deployed site status: ${siteResponse.status}`);
+      expect(siteResponse.status).toBe(200);
+
+      await page.screenshot({ path: 'test-results/deployed.png', fullPage: true });
+      console.log(`Deployed successfully: ${deployData.deployUrl}`);
+    });
+
+    // ================================================================
+    // Step 11: Edit/Iterate on generated code
+    // ================================================================
+    await test.step('Edit generated code', async () => {
+      const textarea = page.locator('textarea[name="message"]');
+      await textarea.fill('Change the primary color scheme to use green instead of blue');
+      await textarea.press('Enter');
+
+      console.log('Edit instruction sent, waiting for AI response...');
+
+      // Wait for assistant response mentioning file modifications
+      await expect(
+        page.locator('.is-assistant').last()
+      ).toBeVisible({ timeout: 300_000 });
+
+      // Wait for the response to finish streaming
+      await page.waitForTimeout(5000);
+
+      const lastMessage = await page.locator('.is-assistant').last().textContent();
+      console.log('Edit response:', lastMessage?.slice(0, 200));
+
+      await page.screenshot({ path: 'test-results/post-edit.png', fullPage: true });
+      console.log('Edit completed');
+    });
+
+    // ================================================================
+    // Step 12: Verify project on dashboard
+    // ================================================================
+    await test.step('Verify project on dashboard', async () => {
+      await page.goto('/dashboard');
+
+      // Wait for projects to load
+      await expect(page.getByRole('heading', { name: 'Projects', exact: true })).toBeVisible({ timeout: 15_000 });
+
+      // Should see at least one project card (not empty state)
+      await expect(page.getByText('No projects yet')).not.toBeVisible({ timeout: 5_000 });
+
+      // Verify a project card exists
+      const projectCards = page.locator('[class*="card"], [class*="Card"]').filter({
+        hasNot: page.getByText('No projects yet'),
+      });
+      const count = await projectCards.count();
+      console.log(`Dashboard shows ${count} project(s)`);
+      expect(count).toBeGreaterThan(0);
+
+      await page.screenshot({ path: 'test-results/dashboard-final.png', fullPage: true });
+    });
   });
 });
