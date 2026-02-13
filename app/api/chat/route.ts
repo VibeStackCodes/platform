@@ -132,28 +132,19 @@ function buildMockChatResponse(messages: UIMessage[]) {
   } else if (turnNumber === 4) {
     streamResult = toolCallStreamResult('mock-gen', 'start_generation', { approved: true });
   } else {
-    // Turn 5+: simulate edit response as plain text
-    const editMockModel = new MockLanguageModelV3({
-      doStream: {
-        stream: new ReadableStream({
-          async start(controller) {
-            const text = "I've updated 2 files based on your instruction: `src/components/header.tsx` and `src/index.css`. The changes have been applied and the build verified successfully.";
-            controller.enqueue({ type: 'text-delta', textDelta: text });
-            controller.enqueue({ type: 'finish', finishReason: 'stop', usage: { inputTokens: 0, outputTokens: 0 } });
-            controller.close();
-          },
-        }),
-      },
-    });
+    // Turn 5+: simulate edit response — reuse toolCallStreamResult pattern
+    // but emit a simple text-delta instead of tool-input parts
+    const editText = "I've updated 2 files based on your instruction: `src/components/header.tsx` and `src/index.css`. The changes have been applied and the build verified successfully.";
+    streamResult = {
+      stream: new ReadableStream({
+        async start(controller) {
+          controller.enqueue({ type: 'text-delta' as const, id: 'edit-delta', delta: editText });
+          controller.enqueue({ type: 'finish' as const, finishReason: 'stop' as const, usage: { inputTokens: 0, outputTokens: 0 } });
+          controller.close();
+        },
+      }),
+    };
 
-    const editResult = streamText({
-      model: editMockModel,
-      messages: [{ role: 'user', content: 'mock' }],
-      tools: chatTools,
-      maxOutputTokens: 4096,
-    });
-
-    return editResult.toUIMessageStreamResponse();
   }
 
   const mockModel = new MockLanguageModelV3({
