@@ -220,7 +220,7 @@ export async function initGeneratedApp(
     console.log('Uploading generated files...');
     await uploadFiles(sandbox, files);
 
-    // 2. Initialize git repo
+    // 2. Initialize git repo (no SDK equivalent for git init)
     console.log('Initializing git...');
     await runCommand(
       sandbox,
@@ -231,12 +231,14 @@ export async function initGeneratedApp(
 
     // 3. Deps pre-installed in snapshot — skip install
 
-    // 4. Initial commit with scaffolding
-    await runCommand(
-      sandbox,
-      'git add -A && git commit -m "chore: initial project scaffolding"',
-      'git-initial-commit',
-      { cwd: workDir, timeout: 30 }
+    // 4. Stage all files and commit using Daytona SDK
+    console.log('Staging and committing files...');
+    await sandbox.git.add(workDir, ['.']);
+    await sandbox.git.commit(
+      workDir,
+      'chore: initial project scaffolding',
+      'VibeStack',
+      'vibestack@generated.app',
     );
 
     // 5. Start dev server in background (async mode)
@@ -336,6 +338,31 @@ export async function getPreviewUrl(
   } catch (error) {
     throw new Error(`Failed to get preview URL: ${error instanceof Error ? error.message : String(error)}`);
   }
+}
+
+/**
+ * Start the Vite dev server in the background.
+ * Returns preview URL immediately — HMR will pick up file changes.
+ */
+export async function startDevServer(
+  sandbox: Sandbox,
+  workDir: string = '/workspace'
+): Promise<{ url: string }> {
+  // Start dev server in background (async mode, no timeout)
+  runCommand(sandbox, 'bun run dev', 'dev-server', {
+    cwd: workDir,
+    async: true,
+    timeout: 0
+  }).catch(() => {
+    // Dev server runs forever — errors are expected when sandbox shuts down
+  });
+
+  // Wait for server to start (poll port 3000)
+  await waitForServerReady(sandbox, 3000, 30);
+
+  // Get preview URL
+  const preview = await getPreviewUrl(sandbox, 3000);
+  return { url: preview.url };
 }
 
 // ============================================================================
@@ -464,26 +491,20 @@ export async function provisionProject(
   supabaseClient: any,
 ): Promise<void> {
   try {
-    const { createSupabaseProject } = await import('@/lib/supabase-mgmt');
-
-    const [sandbox, supabaseProject] = await Promise.all([
-      createSandbox({
-        language: 'typescript',
-        autoStopInterval: 10,
-        labels: { project: projectId, app: appName, type: 'vibestack-generated' },
-      }),
-      createSupabaseProject(appName),
-    ]);
+    // Only pre-provision sandbox — Supabase project is created by the generate route
+    // (avoids double-creation which hits the free tier 2-project limit)
+    const sandbox = await createSandbox({
+      language: 'typescript',
+      autoStopInterval: 60,
+      labels: { project: projectId, app: appName, type: 'vibestack-generated' },
+    });
 
     await supabaseClient
       .from('projects')
-      .update({
-        sandbox_id: sandbox.id,
-        supabase_project_id: supabaseProject.id,
-      })
+      .update({ sandbox_id: sandbox.id })
       .eq('id', projectId);
 
-    console.log(`✓ Project provisioned: sandbox=${sandbox.id}, supabase=${supabaseProject.id}`);
+    console.log(`✓ Sandbox pre-provisioned: ${sandbox.id}`);
   } catch (error) {
     console.error(`[provisionProject] Failed for ${projectId}:`, error);
     // Don't throw — this is fire-and-forget. Generation route will create its own if needed.

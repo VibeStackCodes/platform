@@ -7,9 +7,9 @@
 import { NextRequest } from "next/server";
 import { createRepo, getInstallationToken, buildRepoName } from "@/lib/github";
 import { buildAppSlug } from "@/lib/slug";
-import { runPipeline } from "@/lib/template-pipeline";
+import { runPipeline, runScaffoldPhase, runFeaturePhase } from "@/lib/template-pipeline";
 import { verifyAndFix } from "@/lib/verifier";
-import { createSandbox, getSandbox, getPreviewUrl, pushToGitHub } from "@/lib/sandbox";
+import { createSandbox, getSandbox, getPreviewUrl, pushToGitHub, startDevServer } from "@/lib/sandbox";
 import { createSupabaseProject } from "@/lib/supabase-mgmt";
 import type { GenerateRequest, StreamEvent, ChatPlan } from "@/lib/types";
 import { classifyFeatures } from "@/lib/feature-classifier";
@@ -139,9 +139,27 @@ export async function POST(req: NextRequest) {
           .update({ sandbox_id: sandbox.id })
           .eq("id", project.id);
 
-        // Stage 2: Template Pipeline
+        // Stage 2: Scaffold Phase — write layer 0 files + install dependencies
         emit({ type: "stage_update", stage: "generating" });
-        const generatedFiles = await runPipeline(chatPlan, sandbox, emit);
+        const { scaffoldFiles, featureFiles, allMigrations } = await runScaffoldPhase(chatPlan, sandbox, emit);
+
+        // Stage 2.5: Start dev server + emit preview URL (HMR ready)
+        emit({ type: "checkpoint", label: "Starting dev server", status: "active" });
+        const { url: previewUrlStr } = await startDevServer(sandbox);
+        emit({ type: "preview_ready", url: previewUrlStr });
+        emit({ type: "checkpoint", label: "Starting dev server", status: "complete" });
+        console.log(`✓ Dev server started: ${previewUrlStr}`);
+
+        // Apply migration to local Postgres (instant — <1s)
+        if (allMigrations.length > 0) {
+          const migrationContent = allMigrations.join('\n\n-- ---\n\n');
+          const { applyLocalMigration } = await import("@/lib/local-supabase");
+          await applyLocalMigration(sandbox, migrationContent);
+          emit({ type: "checkpoint", label: "Database ready", status: "complete" });
+        }
+
+        // Stage 2.6: Feature Phase — write feature files one by one (triggers HMR)
+        const generatedFiles = await runFeaturePhase(featureFiles, scaffoldFiles, sandbox, emit);
 
         // Stage 3: Build Verification
         emit({ type: "stage_update", stage: "verifying_build" });
@@ -193,12 +211,9 @@ export async function POST(req: NextRequest) {
         emit({ type: 'checkpoint', label: 'Pushing to GitHub', status: 'complete' });
         console.log(`✓ Pushed to GitHub: ${htmlUrl}`);
 
-        // Stage 5: Preview URLs
-        const previewUrl = await getPreviewUrl(sandbox, 3000);
+        // Stage 5: Code Server URL
         const codeServerUrl = await getPreviewUrl(sandbox, 13337);
-        const previewUrlStr = previewUrl.url;
         const codeServerUrlStr = codeServerUrl.url;
-        emit({ type: "preview_ready", url: previewUrlStr });
         emit({ type: "code_server_ready", url: codeServerUrlStr });
 
         // Stage 6: Completion

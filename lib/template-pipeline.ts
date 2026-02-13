@@ -20,13 +20,22 @@ const LAYER_LABELS: Record<number, string> = {
   2: 'features and UI',
 };
 
-export async function runPipeline(
+interface ScaffoldPhaseResult {
+  scaffoldFiles: GeneratedFile[];
+  featureFiles: GeneratedFile[];
+  allDeps: Record<string, string>;
+  allMigrations: string[];
+}
+
+/**
+ * Scaffold Phase: Execute all templates, separate layer 0 (scaffold) from feature files.
+ * Writes only layer 0 files + installs dependencies.
+ */
+export async function runScaffoldPhase(
   chatPlan: ChatPlan,
   sandbox: Sandbox,
   emit: (event: StreamEvent) => void
-): Promise<Map<string, string>> {
-  const generatedContents = new Map<string, string>();
-
+): Promise<ScaffoldPhaseResult> {
   // 1. Classify features → template tasks
   const tasks = classifyFeatures(chatPlan.features);
   console.log(`[pipeline] Classified ${chatPlan.features.length} features → ${tasks.length} template tasks`);
@@ -88,14 +97,17 @@ export async function runPipeline(
     allFiles.push(migrationFile);
   }
 
-  // 4. Write all files to sandbox
+  // 4. Separate scaffold files (layer 0) from feature files (layer 1+)
+  const scaffoldFiles = allFiles.filter(f => f.layer === 0);
+  const featureFiles = allFiles.filter(f => f.layer > 0);
+
+  // 5. Write scaffold files only
   emit({ type: 'stage_update', stage: 'generating' });
 
-  for (const file of allFiles) {
+  for (const file of scaffoldFiles) {
     emit({ type: 'file_start', path: file.path, layer: file.layer });
 
     await uploadFile(sandbox, file.content, `/workspace/${file.path}`);
-    generatedContents.set(file.path, file.content);
 
     const linesOfCode = file.content.split('\n').length;
     emit({ type: 'file_chunk', path: file.path, chunk: file.content });
@@ -104,13 +116,9 @@ export async function runPipeline(
     console.log(`[pipeline] ✓ ${file.path} (${linesOfCode} lines)`);
   }
 
-  // 5. Install dependencies
+  // 6. Install dependencies
   if (Object.keys(allDeps).length > 0) {
     emit({ type: 'checkpoint', label: 'Installing dependencies', status: 'active' });
-
-    // Read existing package.json, merge deps, write back
-    // The scaffold template already writes package.json with base deps
-    // We need to add template-specific deps
 
     const depsList = Object.entries(allDeps)
       .map(([pkg, ver]) => `${pkg}@${ver}`)
@@ -130,7 +138,7 @@ export async function runPipeline(
     emit({ type: 'checkpoint', label: 'Installing dependencies', status: 'complete' });
   }
 
-  // 6. Init git repo + commit all generated files
+  // 7. Init git repo
   try {
     await runCommand(
       sandbox,
@@ -138,6 +146,53 @@ export async function runPipeline(
       'git-init',
       { cwd: '/workspace', timeout: 30 }
     );
+  } catch (error) {
+    throw new Error(`Git init failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
+  console.log(`[pipeline] ✓ Scaffold phase complete: ${scaffoldFiles.length} files written, ${featureFiles.length} feature files pending`);
+
+  return {
+    scaffoldFiles,
+    featureFiles,
+    allDeps,
+    allMigrations,
+  };
+}
+
+/**
+ * Feature Phase: Write feature files (layer 1+) one by one, triggering HMR.
+ * Returns all generated file contents (scaffold + features).
+ */
+export async function runFeaturePhase(
+  featureFiles: GeneratedFile[],
+  scaffoldFiles: GeneratedFile[],
+  sandbox: Sandbox,
+  emit: (event: StreamEvent) => void
+): Promise<Map<string, string>> {
+  const generatedContents = new Map<string, string>();
+
+  // Add scaffold files to contents map
+  for (const file of scaffoldFiles) {
+    generatedContents.set(file.path, file.content);
+  }
+
+  // Write feature files one by one (triggers HMR)
+  for (const file of featureFiles) {
+    emit({ type: 'file_start', path: file.path, layer: file.layer });
+
+    await uploadFile(sandbox, file.content, `/workspace/${file.path}`);
+    generatedContents.set(file.path, file.content);
+
+    const linesOfCode = file.content.split('\n').length;
+    emit({ type: 'file_chunk', path: file.path, chunk: file.content });
+    emit({ type: 'file_complete', path: file.path, linesOfCode });
+
+    console.log(`[pipeline] ✓ ${file.path} (${linesOfCode} lines)`);
+  }
+
+  // Commit all files (scaffold + features)
+  try {
     await sandbox.git.add('/workspace', ['.']);
     const commitResponse = await sandbox.git.commit(
       '/workspace',
@@ -147,6 +202,7 @@ export async function runPipeline(
     );
     const hash = commitResponse.sha?.slice(0, 7) || 'unknown';
 
+    const allFiles = [...scaffoldFiles, ...featureFiles];
     emit({
       type: 'layer_commit',
       layer: 0,
@@ -158,6 +214,21 @@ export async function runPipeline(
     throw new Error(`Git commit failed: ${error instanceof Error ? error.message : String(error)}`);
   }
 
-  console.log(`[pipeline] ✓ Pipeline complete: ${allFiles.length} files`);
+  console.log(`[pipeline] ✓ Feature phase complete: ${featureFiles.length} files written`);
+  return generatedContents;
+}
+
+/**
+ * Legacy wrapper: Run both scaffold and feature phases (for backward compatibility with mock mode).
+ */
+export async function runPipeline(
+  chatPlan: ChatPlan,
+  sandbox: Sandbox,
+  emit: (event: StreamEvent) => void
+): Promise<Map<string, string>> {
+  const { scaffoldFiles, featureFiles } = await runScaffoldPhase(chatPlan, sandbox, emit);
+  const generatedContents = await runFeaturePhase(featureFiles, scaffoldFiles, sandbox, emit);
+
+  console.log(`[pipeline] ✓ Pipeline complete: ${generatedContents.size} files`);
   return generatedContents;
 }

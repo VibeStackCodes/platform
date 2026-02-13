@@ -106,6 +106,26 @@ export async function POST(req: NextRequest) {
 
     console.log(`[deploy] Downloading files from sandbox ${sandbox.id}...`);
 
+    // Apply migration to cloud Supabase if not already done
+    if (project.supabase_project_id) {
+      try {
+        const migrationFile = await sandbox.fs.downloadFile('/workspace/supabase/migrations/001_init.sql');
+        if (migrationFile) {
+          const { runMigration } = await import("@/lib/supabase-mgmt");
+          const result = await runMigration(project.supabase_project_id, migrationFile.toString());
+          if (!result.success) {
+            console.error(`[deploy] Cloud migration warning: ${result.error}`);
+            // Don't throw — migration might already be applied
+          } else {
+            console.log('[deploy] Cloud Supabase migration applied');
+          }
+        }
+      } catch (err) {
+        console.warn('[deploy] Could not apply cloud migration:', err);
+        // Continue — migration may already be applied from generation
+      }
+    }
+
     let deployUrl: string;
 
     // Build Supabase env vars from stored credentials
