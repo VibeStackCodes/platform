@@ -3,28 +3,37 @@ import { test, expect } from '@playwright/test';
 /**
  * Real E2E Generation Test
  *
- * Full pipeline: sign up → chat (GPT-5.2) → plan → approve → generate
+ * Full pipeline: sign up → chat (GPT-5.2) → plan → approve → generate → deploy
  * Uses real APIs: OpenAI GPT-5.2, Daytona sandbox, Supabase provisioning
  *
  * Requirements:
  * - NEXT_PUBLIC_MOCK_MODE=false
  * - All API keys set in .env.local
  * - Supabase staging has auto-confirm enabled
+ *
+ * Every step is strict pass/fail. No step swallows errors.
  */
 
-// 15 minute timeout — real generation takes several minutes
-test.setTimeout(900_000);
+// 30 minute timeout — generation + verify/fix loop + deploy
+test.setTimeout(1_800_000);
 
 const MODEL = 'gpt-5.2';
 
 const HOSPITAL_PROMPT = `Build a hospital bed management dashboard with 3 user roles: Administrator, Nurse, and Physician. Administrators can see all wards, manage staff assignments, and view hospital-wide analytics. Nurses can only see their assigned ward, update bed status (available, occupied, cleaning, maintenance), and chat with other nurses in real-time. Physicians can see their patients across wards, add clinical notes, and receive emergency alert banners when bed capacity drops below 20%. Include: user authentication with role selection at signup, a real-time presence indicator showing who's currently online, a live bed occupancy grid that updates instantly when any user changes a bed status, private real-time messaging between staff, and a notification bell for urgent alerts. Use a clean, professional healthcare aesthetic — think soft blues, clear data hierarchy, proper spacing. Make it responsive for tablets since nurses use iPads at bedside.`;
 
+/** Helper: extract project ID from URL */
+function extractProjectId(url: string): string {
+  const id = url.split('/project/')[1]?.split('?')[0];
+  if (!id) throw new Error(`Cannot extract project ID from URL: ${url}`);
+  return id;
+}
+
 test.describe('Real Generation Pipeline', () => {
-  test('full flow: sign up → chat → plan → generate', async ({ page }) => {
+  test('full flow: sign up → chat → plan → generate → deploy', async ({ page }) => {
     const testEmail = `e2e-${Date.now()}@test.vibestack.dev`;
     const testPassword = 'TestPass123!';
 
-    // Intercept ALL /api/chat and /api/projects/generate calls to force GPT-5.2
+    // Intercept API calls to force GPT-5.2
     await page.route('**/api/chat', async (route) => {
       const request = route.request();
       if (request.method() === 'POST') {
@@ -65,12 +74,11 @@ test.describe('Real Generation Pipeline', () => {
       await textarea.fill(HOSPITAL_PROMPT);
       await textarea.press('Enter');
 
-      // Should redirect to auth/login (not logged in)
       await expect(page).toHaveURL(/\/auth\/login/, { timeout: 10_000 });
     });
 
     // ================================================================
-    // Step 2: Sign up with auto-confirm
+    // Step 2: Sign up
     // ================================================================
     await test.step('Sign up new user', async () => {
       await page.locator('button', { hasText: /^Sign Up$/ }).click();
@@ -80,17 +88,14 @@ test.describe('Real Generation Pipeline', () => {
       await page.locator('#password').fill(testPassword);
       await page.locator('button[type="submit"]').click();
 
-      // Auto-confirm → redirect to /project/:id
       await expect(page).toHaveURL(/\/project\//, { timeout: 15_000 });
       console.log('Signed up and redirected to project page');
     });
 
     // ================================================================
-    // Step 3: Wait for AI response (clarifying question)
+    // Step 3: Wait for AI response
     // ================================================================
-    await test.step('Wait for AI clarifying question (GPT-5.2)', async () => {
-      // Auto-submit fires on mount. Route intercept forces model=gpt-5.2.
-      // Wait for either: chat error div OR an assistant message (class .is-assistant)
+    await test.step('Wait for AI response', async () => {
       const chatError = page.locator('[data-testid="chat-error"]');
       const assistantMsg = page.locator('.is-assistant').first();
 
@@ -98,8 +103,6 @@ test.describe('Real Generation Pipeline', () => {
 
       if (await chatError.isVisible()) {
         const errorText = await chatError.textContent();
-        console.error('Chat error:', errorText);
-        console.error('Console errors:', consoleErrors);
         throw new Error(`Chat API failed: ${errorText}`);
       }
 
@@ -108,71 +111,41 @@ test.describe('Real Generation Pipeline', () => {
     });
 
     // ================================================================
-    // Step 3.5: Verify chat persistence across reload
+    // Step 4: Verify chat persistence across reload
     // ================================================================
     await test.step('Verify chat persistence survives reload', async () => {
-      // Count messages before reload
       const msgCountBefore = await page.locator('.is-assistant, .is-user').count();
-      console.log(`Messages before reload: ${msgCountBefore}`);
       expect(msgCountBefore).toBeGreaterThan(0);
 
-      // Wait for persistence POST to complete (fires on status transition)
       await page.waitForTimeout(2000);
-
-      // Reload the page
       await page.reload({ waitUntil: 'networkidle' });
 
-      // Messages should be restored from DB
       const restoredMessages = page.locator('.is-assistant, .is-user');
       await expect(restoredMessages.first()).toBeVisible({ timeout: 15_000 });
 
       const msgCountAfter = await restoredMessages.count();
-      console.log(`Messages after reload: ${msgCountAfter}`);
       expect(msgCountAfter).toBe(msgCountBefore);
 
       await page.screenshot({ path: 'test-results/after-reload-persistence.png', fullPage: true });
-      console.log('Chat persistence verified!');
+      console.log(`Chat persistence verified (${msgCountAfter} messages)`);
     });
 
     // ================================================================
-    // Step 4: Answer clarifying question → trigger plan
+    // Step 5: Answer clarifying questions → wait for plan
     // ================================================================
     await test.step('Answer questions until plan appears', async () => {
-      // GPT-5.2 should skip questions for detailed prompts and go straight to plan.
-      // Strategy: wait for either the Approve button (plan ready) or suggestion buttons
-      // (clarifying question). If neither appears within 120s, the AI is probably
-      // generating thinking_steps → show_plan which takes time for complex prompts.
-
       const approveBtn = page.getByRole('button', { name: /Approve & Generate/i }).last();
       const suggestionBtn = page.locator('[data-testid="suggestion-button"]').first();
 
-      // First, wait for either plan or a suggestion button (clarifying question)
-      console.log('Waiting for plan or clarifying question...');
-
-      // Take periodic screenshots while waiting
-      const screenshotInterval = setInterval(async () => {
-        const ts = Date.now();
-        await page.screenshot({ path: `test-results/waiting-${ts}.png`, fullPage: true }).catch(() => {});
-        const pageText = await page.locator('.is-assistant').last().textContent().catch(() => 'N/A');
-        console.log(`[${new Date().toISOString()}] Page state: ${pageText?.slice(0, 100)}...`);
-      }, 15_000);
-
-      try {
-        await expect(approveBtn.or(suggestionBtn)).toBeVisible({ timeout: 180_000 });
-      } finally {
-        clearInterval(screenshotInterval);
-      }
+      await expect(approveBtn.or(suggestionBtn)).toBeVisible({ timeout: 180_000 });
 
       if (await approveBtn.isVisible().catch(() => false)) {
         console.log('Plan appeared without clarifying questions');
       } else {
-        // Got a clarifying question — answer it, then wait for plan
         const text = await suggestionBtn.textContent();
-        console.log(`Answering clarifying question: clicking "${text?.slice(0, 60)}..."`);
+        console.log(`Answering clarifying question: "${text?.slice(0, 60)}..."`);
         await suggestionBtn.click();
 
-        // Now wait for the plan (AI will go through thinking_steps → show_plan)
-        console.log('Waiting for plan after answering question...');
         await expect(approveBtn).toBeVisible({ timeout: 180_000 });
       }
 
@@ -180,21 +153,19 @@ test.describe('Real Generation Pipeline', () => {
     });
 
     // ================================================================
-    // Step 5: Verify plan card content
+    // Step 6: Verify plan card content
     // ================================================================
     await test.step('Verify plan card', async () => {
       await expect(page.getByText(/Features \(/)).toBeVisible({ timeout: 30_000 });
-
       await page.screenshot({ path: 'test-results/plan-card.png', fullPage: true });
     });
 
     // ================================================================
-    // Step 6: Approve plan → trigger generation
+    // Step 7: Approve plan → trigger generation
     // ================================================================
     await test.step('Approve and generate', async () => {
       await page.getByRole('button', { name: /Approve & Generate/i }).last().click();
 
-      // ConfirmationAccepted shows approval state
       await expect(
         page.getByText(/Plan approved|generating/i).first()
       ).toBeVisible({ timeout: 10_000 });
@@ -203,15 +174,12 @@ test.describe('Real Generation Pipeline', () => {
     });
 
     // ================================================================
-    // Step 7: Watch generation queue
+    // Step 8: Watch generation — wait for files
     // ================================================================
     await test.step('Watch generation queue', async () => {
-      // Wait for at least one file to show in the queue
-      // Queue items show file paths — wait for any path-like text in the queue area
       await page.waitForTimeout(5000);
       await page.screenshot({ path: 'test-results/generation-started.png', fullPage: true });
 
-      // Wait for first file to complete (shows line count)
       await expect(
         page.getByText(/\(\d+ lines\)/).first()
       ).toBeVisible({ timeout: 300_000 });
@@ -221,110 +189,168 @@ test.describe('Real Generation Pipeline', () => {
     });
 
     // ================================================================
-    // Step 8: Wait for completion
+    // Step 9: Wait for pipeline to finish — assert success
     // ================================================================
-    await test.step('Wait for generation complete', async () => {
-      // The pipeline emits checkpoints + layer commits. Wait for the git commit message
-      // which appears at the end of the pipeline, or "Build verification" checkpoint.
+    await test.step('Wait for pipeline completion', async () => {
+      // Wait for build verification to appear
       await expect(
-        page.getByText(/feat: generate app from templates|Build verification/i).first()
-      ).toBeVisible({ timeout: 600_000 });
+        page.getByText(/Build (verification|attempt)/i).first()
+      ).toBeVisible({ timeout: 300_000 });
+      console.log('Build verification started');
 
-      console.log('Generation complete!');
+      // Wait for GitHub push (build must pass for this to appear)
+      // If build fails, the pipeline now errors — no "Pushing to GitHub" checkpoint
+      await expect(
+        page.getByText(/Pushing to GitHub/i).first()
+      ).toBeVisible({ timeout: 900_000 });
+      console.log('GitHub push checkpoint visible — build passed');
+
+      // Poll project status until server finishes
+      const projectId = extractProjectId(page.url());
+      const maxWait = 120_000;
+      const start = Date.now();
+      let status = 'generating';
+
+      while (Date.now() - start < maxWait && status === 'generating') {
+        await page.waitForTimeout(3000);
+        const data = await page.evaluate(async (pid) => {
+          const resp = await fetch(`/api/projects/${pid}`);
+          return resp.ok ? resp.json() : null;
+        }, projectId);
+        status = data?.status || 'generating';
+      }
+
+      console.log(`Final project status: ${status}`);
+      expect(status).toBe('complete');
     });
 
     // ================================================================
-    // Step 9: Final assertions
+    // Step 10: Verify files were generated
     // ================================================================
-    await test.step('Verify final state', async () => {
+    await test.step('Verify generated files', async () => {
       const completedFiles = page.getByText(/\(\d+ lines\)/);
       const count = await completedFiles.count();
       console.log(`Completed files: ${count}`);
       expect(count).toBeGreaterThan(0);
 
       await page.screenshot({ path: 'test-results/generation-complete.png', fullPage: true });
-
-      if (consoleErrors.length > 0) {
-        console.warn('Console errors during test:', consoleErrors);
-      }
     });
 
     // ================================================================
-    // Step 10: Deploy to Vercel with custom domain
+    // Step 11: Verify GitHub repo
+    // ================================================================
+    await test.step('Verify GitHub repo has content', async () => {
+      const projectId = extractProjectId(page.url());
+
+      const projectData = await page.evaluate(async (pid) => {
+        const resp = await fetch(`/api/projects/${pid}`);
+        return resp.ok ? resp.json() : null;
+      }, projectId);
+
+      expect(projectData).toBeTruthy();
+      expect(projectData.github_repo_url).toBeTruthy();
+      console.log(`GitHub repo: ${projectData.github_repo_url}`);
+
+      // Verify repo has content via GitHub API
+      const repoFullName = projectData.github_repo_url.replace('https://github.com/', '');
+      const ghResp = await fetch(`https://api.github.com/repos/${repoFullName}/contents/`, {
+        headers: { 'Accept': 'application/vnd.github.v3+json' },
+      });
+
+      expect(ghResp.ok).toBe(true);
+      const contents = await ghResp.json();
+      const fileCount = Array.isArray(contents) ? contents.length : 0;
+      console.log(`GitHub repo root files: ${fileCount}`);
+      expect(fileCount).toBeGreaterThan(0);
+
+      await page.screenshot({ path: 'test-results/github-verified.png', fullPage: true });
+    });
+
+    // ================================================================
+    // Step 12: Deploy to Vercel
     // ================================================================
     await test.step('Deploy to Vercel', async () => {
-      // Capture the deploy API response
       const deployResponsePromise = page.waitForResponse(
-        (resp) => resp.url().includes('/api/projects/deploy') && resp.status() === 200
+        (resp) => resp.url().includes('/api/projects/deploy'),
+        { timeout: 600_000 }
       );
 
-      // Click Deploy button
       const deployBtn = page.getByRole('button', { name: /Deploy/i });
       await expect(deployBtn).toBeVisible({ timeout: 10_000 });
       await deployBtn.click();
+      console.log('Deploy triggered');
 
-      console.log('Deploy triggered, waiting for completion...');
-
-      // Wait for deploy response (up to 5 minutes)
       const deployResponse = await deployResponsePromise;
       const deployData = await deployResponse.json();
+      const deployStatus = deployResponse.status();
 
-      console.log('Deploy response:', deployData);
+      console.log(`Deploy response (${deployStatus}):`, JSON.stringify(deployData, null, 2));
+
+      expect(deployStatus).toBe(200);
       expect(deployData.success).toBe(true);
       expect(deployData.deployUrl).toBeTruthy();
-
-      // Verify custom domain pattern
       expect(deployData.deployUrl).toMatch(/https:\/\/[\w-]+\.vibestack\.site/);
 
       // Verify deployed site is reachable
-      const siteResponse = await fetch(deployData.deployUrl);
-      console.log(`Deployed site status: ${siteResponse.status}`);
-      expect(siteResponse.status).toBe(200);
+      let siteStatus = 0;
+      for (let attempt = 0; attempt < 5; attempt++) {
+        try {
+          const siteResponse = await fetch(deployData.deployUrl);
+          siteStatus = siteResponse.status;
+          if (siteStatus === 200) break;
+        } catch {
+          // DNS not ready yet
+        }
+        console.log(`Site check attempt ${attempt + 1}: ${siteStatus || 'DNS error'}`);
+        await page.waitForTimeout(5000);
+      }
+      expect(siteStatus).toBe(200);
 
       await page.screenshot({ path: 'test-results/deployed.png', fullPage: true });
-      console.log(`Deployed successfully: ${deployData.deployUrl}`);
+      console.log(`Deployed: ${deployData.deployUrl}`);
     });
 
     // ================================================================
-    // Step 11: Edit/Iterate on generated code
+    // Step 13: Edit generated code
     // ================================================================
     await test.step('Edit generated code', async () => {
       const textarea = page.locator('textarea[name="message"]');
       await textarea.fill('Change the primary color scheme to use green instead of blue');
       await textarea.press('Enter');
+      console.log('Edit instruction sent');
 
-      console.log('Edit instruction sent, waiting for AI response...');
-
-      // Wait for assistant response mentioning file modifications
+      // Wait for assistant response
+      const assistantMsgCount = await page.locator('.is-assistant').count();
       await expect(
-        page.locator('.is-assistant').last()
+        page.locator(`.is-assistant >> nth=${assistantMsgCount}`)
       ).toBeVisible({ timeout: 300_000 });
 
-      // Wait for the response to finish streaming
+      // Wait for streaming to finish
       await page.waitForTimeout(5000);
 
       const lastMessage = await page.locator('.is-assistant').last().textContent();
+      expect(lastMessage).toBeTruthy();
       console.log('Edit response:', lastMessage?.slice(0, 200));
 
       await page.screenshot({ path: 'test-results/post-edit.png', fullPage: true });
-      console.log('Edit completed');
     });
 
     // ================================================================
-    // Step 12: Verify project on dashboard
+    // Step 14: Verify project on dashboard
     // ================================================================
     await test.step('Verify project on dashboard', async () => {
       await page.goto('/dashboard');
 
-      // Wait for projects to load
-      await expect(page.getByRole('heading', { name: 'Projects', exact: true })).toBeVisible({ timeout: 15_000 });
+      await expect(
+        page.getByRole('heading', { name: 'Projects', exact: true })
+      ).toBeVisible({ timeout: 15_000 });
 
-      // Should see at least one project card (not empty state)
-      await expect(page.getByText('No projects yet')).not.toBeVisible({ timeout: 5_000 });
+      // Must not show empty state
+      const emptyState = page.getByText('No projects yet');
+      await expect(emptyState).not.toBeVisible({ timeout: 5_000 });
 
-      // Verify a project card exists
       const projectCards = page.locator('[class*="card"], [class*="Card"]').filter({
-        hasNot: page.getByText('No projects yet'),
+        hasNot: emptyState,
       });
       const count = await projectCards.count();
       console.log(`Dashboard shows ${count} project(s)`);
@@ -332,5 +358,10 @@ test.describe('Real Generation Pipeline', () => {
 
       await page.screenshot({ path: 'test-results/dashboard-final.png', fullPage: true });
     });
+
+    // Final: dump console errors if any
+    if (consoleErrors.length > 0) {
+      console.warn('Console errors during test:', consoleErrors);
+    }
   });
 });
