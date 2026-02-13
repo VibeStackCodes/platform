@@ -44,3 +44,6 @@ next-env.d.ts
 
 # eval logs
 .eval-logs/
+
+# firecrawl cache
+.firecrawl/
