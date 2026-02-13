@@ -139,13 +139,16 @@ function buildTableDefFromConfig(config: Record<string, unknown>): TableDef | nu
     });
   }
 
-  // user_id FK (all CRUD tables have it)
-  columns.push({
-    name: 'user_id',
-    type: 'uuid',
-    nullable: false,
-    references: { table: 'auth.users', column: 'id' },
-  });
+  // user_id FK (all CRUD tables have it) — skip if belongsTo already added it
+  const hasUserIdCol = columns.some(c => c.name === 'user_id');
+  if (!hasUserIdCol) {
+    columns.push({
+      name: 'user_id',
+      type: 'uuid',
+      nullable: false,
+      references: { table: 'auth.users', column: 'id' },
+    });
+  }
 
   // Timestamps
   columns.push(
@@ -198,6 +201,26 @@ export function executeTemplate(
     if (tableDef) {
       schema = { tables: [tableDef] };
     }
+  } else if (task.template === 'auth') {
+    // Auth template produces a profiles table (commonly referenced by other entities)
+    schema = {
+      tables: [{
+        name: 'profiles',
+        columns: [
+          { name: 'id', type: 'uuid', primaryKey: true, default: 'gen_random_uuid()' },
+          { name: 'user_id', type: 'uuid', nullable: false, unique: true, references: { table: 'auth.users', column: 'id' } },
+          { name: 'display_name', type: 'text' },
+          { name: 'avatar_url', type: 'text' },
+          { name: 'created_at', type: 'timestamptz', nullable: false, default: 'now()' },
+          { name: 'updated_at', type: 'timestamptz', nullable: false, default: 'now()' },
+        ],
+        rlsPolicies: [
+          { name: 'Users can view all profiles', operation: 'SELECT', using: 'true' },
+          { name: 'Users can update own profile', operation: 'UPDATE', using: 'auth.uid() = user_id' },
+          { name: 'Users can insert own profile', operation: 'INSERT', withCheck: 'auth.uid() = user_id' },
+        ],
+      }],
+    };
   } else if (task.template === 'messaging') {
     schema = {
       tables: [{
