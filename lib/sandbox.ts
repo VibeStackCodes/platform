@@ -352,10 +352,13 @@ export async function pushToGitHub(
   token: string,
   workDir: string = '/workspace'
 ): Promise<void> {
-  // Add remote (shell command — no SDK method for remote add)
+  // Build authenticated URL: https://x-access-token:TOKEN@github.com/org/repo.git
+  const authedUrl = cloneUrl.replace('https://', `https://x-access-token:${token}@`);
+
+  // Add remote with embedded auth token
   await runCommand(
     sandbox,
-    `git remote add origin ${cloneUrl}`,
+    `git remote add origin ${authedUrl}`,
     'git-remote-add',
     { cwd: workDir, timeout: 15 }
   );
@@ -368,8 +371,15 @@ export async function pushToGitHub(
     { cwd: workDir, timeout: 10 }
   );
 
-  // Push using Daytona's native git module with token auth
-  await sandbox.git.push(workDir, 'x-access-token', token);
+  // Push via shell git (Daytona's native git.push can fail silently)
+  await runCommand(
+    sandbox,
+    'git push -u origin main',
+    'git-push',
+    { cwd: workDir, timeout: 60 }
+  );
+
+  console.log(`✓ Git push to ${cloneUrl} completed`);
 }
 
 // ============================================================================

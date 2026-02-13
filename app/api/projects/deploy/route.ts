@@ -79,12 +79,19 @@ export async function POST(req: NextRequest) {
     let deployUrl: string;
 
     console.log(`[deploy] Project: ${project.name}, GitHub: ${project.github_repo_url || 'none'}, Sandbox: ${project.sandbox_id}`);
-
-    // Always deploy from sandbox files (reliable) — GitHub push may fail silently
-    console.log(`[deploy] Downloading files from sandbox for deployment...`);
-    const files = await downloadDirectory(sandbox, "/workspace");
-    console.log(`[deploy] Downloaded ${files.length} files, deploying to Vercel...`);
-    deployUrl = await deployToVercel(project.name, files, vercelTeamId);
+    if (project.github_repo_url) {
+      // Deploy from GitHub repo (required path)
+      const repoFullName = project.github_repo_url
+        .replace("https://github.com/", "");
+      console.log(`[deploy] Deploying from GitHub: ${repoFullName}`);
+      deployUrl = await deployFromGitHub(repoFullName, project.name, vercelTeamId);
+    } else {
+      // Fallback: download files and upload to Vercel
+      console.log(`[deploy] No GitHub repo, falling back to file upload...`);
+      const files = await downloadDirectory(sandbox, "/workspace");
+      console.log(`[deploy] Downloaded ${files.length} files, deploying to Vercel...`);
+      deployUrl = await deployToVercel(project.name, files, vercelTeamId);
+    }
 
     console.log(`[deploy] Deployment successful: ${deployUrl}`);
 
