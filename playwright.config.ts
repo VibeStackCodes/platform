@@ -16,7 +16,13 @@ export default defineConfig({
   },
   projects: [
     {
-      name: 'chromium',
+      name: 'mock',
+      testMatch: /full-flow/,
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: 'real',
+      testMatch: /real-generation/,
       use: { ...devices['Desktop Chrome'] },
     },
   ],

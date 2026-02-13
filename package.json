@@ -13,7 +13,10 @@
     "test": "vitest",
     "test:ui": "vitest --ui",
     "test:coverage": "vitest --coverage",
-    "appbench": "tsx scripts/run-appbench.ts"
+    "appbench": "tsx scripts/run-appbench.ts",
+    "test:e2e": "playwright test",
+    "test:e2e:mock": "playwright test --project=mock",
+    "test:e2e:real": "playwright test --project=real"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.42",
