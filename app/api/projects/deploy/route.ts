@@ -78,19 +78,13 @@ export async function POST(req: NextRequest) {
 
     let deployUrl: string;
 
-    if (project.github_repo_url) {
-      // Deploy from GitHub repo (preferred)
-      const repoFullName = project.github_repo_url
-        .replace("https://github.com/", "");
-      console.log(`[deploy] Deploying from GitHub: ${repoFullName}`);
-      deployUrl = await deployFromGitHub(repoFullName, project.name, vercelTeamId);
-    } else {
-      // Fallback: download files and upload to Vercel
-      console.log(`[deploy] No GitHub repo, falling back to file upload...`);
-      const files = await downloadDirectory(sandbox, "/workspace");
-      console.log(`[deploy] Downloaded ${files.length} files, deploying to Vercel...`);
-      deployUrl = await deployToVercel(project.name, files, vercelTeamId);
-    }
+    console.log(`[deploy] Project: ${project.name}, GitHub: ${project.github_repo_url || 'none'}, Sandbox: ${project.sandbox_id}`);
+
+    // Always deploy from sandbox files (reliable) — GitHub push may fail silently
+    console.log(`[deploy] Downloading files from sandbox for deployment...`);
+    const files = await downloadDirectory(sandbox, "/workspace");
+    console.log(`[deploy] Downloaded ${files.length} files, deploying to Vercel...`);
+    deployUrl = await deployToVercel(project.name, files, vercelTeamId);
 
     console.log(`[deploy] Deployment successful: ${deployUrl}`);
 
@@ -335,6 +329,22 @@ async function waitForDeploymentReady(
     }
 
     if (deployment.readyState === "ERROR" || deployment.readyState === "CANCELED") {
+      // Try to fetch build logs for debugging
+      try {
+        const logsResponse = await fetch(
+          `https://api.vercel.com/v3/deployments/${deploymentId}/events${teamId ? `?teamId=${teamId}` : ""}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        if (logsResponse.ok) {
+          const events = await logsResponse.json();
+          const errorEvents = events
+            .filter((e: { type: string }) => e.type === "error" || e.type === "stderr")
+            .slice(-10);
+          console.error("[deploy] Build error logs:", JSON.stringify(errorEvents, null, 2));
+        }
+      } catch {
+        // Ignore log fetch errors
+      }
       throw new Error(`Deployment failed with state: ${deployment.readyState}`);
     }
   }
