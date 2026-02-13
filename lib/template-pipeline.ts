@@ -124,21 +124,28 @@ export async function runPipeline(
         { cwd: '/workspace', timeout: 120 }
       );
     } catch (error) {
-      console.warn('[pipeline] bun install failed (non-fatal):', error);
+      throw new Error(`Dependency installation failed: ${error instanceof Error ? error.message : String(error)}`);
     }
 
     emit({ type: 'checkpoint', label: 'Installing dependencies', status: 'complete' });
   }
 
-  // 6. Git commit all generated files
+  // 6. Init git repo + commit all generated files
   try {
-    const commitResult = await runCommand(
+    await runCommand(
       sandbox,
-      'cd /workspace && git add -A && git commit -m "feat: generate app from templates" && git rev-parse --short HEAD',
-      'git-commit',
+      'git init && git config user.email "vibestack@generated.app" && git config user.name "VibeStack"',
+      'git-init',
       { cwd: '/workspace', timeout: 30 }
     );
-    const hash = commitResult.stdout.trim().split('\n').pop() || 'unknown';
+    await sandbox.git.add('/workspace', ['.']);
+    const commitResponse = await sandbox.git.commit(
+      '/workspace',
+      'feat: generate app from templates',
+      'VibeStack',
+      'vibestack@generated.app',
+    );
+    const hash = commitResponse.sha?.slice(0, 7) || 'unknown';
 
     emit({
       type: 'layer_commit',
@@ -148,7 +155,7 @@ export async function runPipeline(
       files: allFiles.map(f => f.path),
     });
   } catch (error) {
-    console.warn('[pipeline] Git commit failed (non-fatal):', error);
+    throw new Error(`Git commit failed: ${error instanceof Error ? error.message : String(error)}`);
   }
 
   console.log(`[pipeline] ✓ Pipeline complete: ${allFiles.length} files`);
