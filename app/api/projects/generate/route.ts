@@ -28,7 +28,7 @@ export const maxDuration = 300;
  */
 export async function POST(req: NextRequest) {
   const body: GenerateRequest = await req.json();
-  const { prompt, chatPlan, model = "claude-sonnet-4-5-20250929" } = body;
+  const { projectId: existingProjectId, prompt, chatPlan, model = "claude-sonnet-4-5-20250929" } = body;
 
   if (!chatPlan) {
     return new Response(
@@ -65,22 +65,43 @@ export async function POST(req: NextRequest) {
       let projectId: string | null = null;
 
       try {
-        // Create project record
-        const { data: project, error: insertError } = await supabase
-          .from("projects")
-          .insert({
-            user_id: user.id,
-            name: chatPlan.appName,
-            prompt,
-            status: "generating",
-            plan: chatPlan,
-            model,
-          })
-          .select()
-          .single();
-
-        if (insertError || !project) {
-          throw new Error(`Failed to create project: ${insertError?.message}`);
+        // Reuse existing project (from chat) or create a new one
+        let project;
+        if (existingProjectId) {
+          const { data, error } = await supabase
+            .from("projects")
+            .update({
+              name: chatPlan.appName,
+              prompt,
+              status: "generating",
+              plan: chatPlan,
+              model,
+            })
+            .eq("id", existingProjectId)
+            .eq("user_id", user.id)
+            .select()
+            .single();
+          if (error || !data) {
+            throw new Error(`Failed to update project: ${error?.message}`);
+          }
+          project = data;
+        } else {
+          const { data, error } = await supabase
+            .from("projects")
+            .insert({
+              user_id: user.id,
+              name: chatPlan.appName,
+              prompt,
+              status: "generating",
+              plan: chatPlan,
+              model,
+            })
+            .select()
+            .single();
+          if (error || !data) {
+            throw new Error(`Failed to create project: ${error?.message}`);
+          }
+          project = data;
         }
         projectId = project.id;
 
@@ -105,68 +126,101 @@ export async function POST(req: NextRequest) {
           });
         }
 
+        // Start Supabase project creation in parallel with generation (non-blocking)
         let supabaseProjectId = existingProject?.supabase_project_id ?? null;
-        if (!supabaseProjectId) {
-          try {
-            const supabaseProject = await createSupabaseProject(chatPlan.appName);
-            supabaseProjectId = supabaseProject.id;
-          } catch (e) {
-            console.warn("[generate] Supabase project creation failed (non-fatal):", e);
-          }
-        }
+        const supabasePromise = !supabaseProjectId
+          ? createSupabaseProject(chatPlan.appName)
+              .then((p) => { supabaseProjectId = p.id; })
+              .catch((e) => console.warn("[generate] Supabase project creation failed (non-fatal):", e))
+          : Promise.resolve();
 
         await supabase
           .from("projects")
-          .update({ sandbox_id: sandbox.id, ...(supabaseProjectId ? { supabase_project_id: supabaseProjectId } : {}) })
+          .update({ sandbox_id: sandbox.id })
           .eq("id", project.id);
 
-        // Stage 2: Template Pipeline
+        // Stage 2: Template Pipeline (runs in parallel with Supabase provisioning)
         emit({ type: "stage_update", stage: "generating" });
 
         const generatedFiles = await runPipeline(chatPlan, sandbox, emit);
 
-        // Stage 3: Build Verification
+        // Stage 3: Build Verification (gate — must pass before GitHub push)
         emit({ type: "stage_update", stage: "verifying_build" });
-        await verifyAndFix(sandbox, generatedFiles, model, emit);
-
-        // Stage 3.5: Push to GitHub (non-fatal)
-        let githubRepoUrl: string | null = null;
+        let buildPassed = false;
         try {
-          emit({ type: 'checkpoint', label: 'Pushing to GitHub', status: 'active' });
+          const verifyTimeout = new Promise<boolean>((_, reject) =>
+            setTimeout(() => reject(new Error("Build verification timed out (5 min)")), 300_000)
+          );
+          buildPassed = await Promise.race([
+            verifyAndFix(sandbox, generatedFiles, model, emit),
+            verifyTimeout,
+          ]);
+        } catch (verifyError) {
+          console.warn("[generate] Build verification error:", verifyError);
+          emit({ type: "checkpoint", label: "Build verification (timed out)", status: "complete" });
+        }
 
-          const repoName = buildRepoName(chatPlan.appName, project.id);
-          const { cloneUrl, htmlUrl } = await createRepo(repoName);
-          const token = await getInstallationToken();
+        // Wait for Supabase project to be ready before GitHub push
+        await supabasePromise;
+        if (supabaseProjectId) {
+          await supabase
+            .from("projects")
+            .update({ supabase_project_id: supabaseProjectId })
+            .eq("id", project.id);
+        }
 
-          await pushToGitHub(sandbox, cloneUrl, token);
+        // Stage 3.5: Push to GitHub — only if build passed
+        let githubRepoUrl: string | null = null;
+        if (!buildPassed) {
+          console.warn('[generate] Skipping GitHub push — build verification failed');
+          emit({ type: 'checkpoint', label: 'Pushing to GitHub (skipped — build failed)', status: 'complete' });
+        } else {
+          try {
+            emit({ type: 'checkpoint', label: 'Pushing to GitHub', status: 'active' });
 
-          githubRepoUrl = htmlUrl;
-          emit({ type: 'checkpoint', label: 'Pushing to GitHub', status: 'complete' });
-          console.log(`✓ Pushed to GitHub: ${htmlUrl}`);
-        } catch (githubError) {
-          console.warn('[generate] GitHub push failed (non-fatal):', githubError);
-          emit({ type: 'checkpoint', label: 'Pushing to GitHub (skipped)', status: 'complete' });
+            const repoName = buildRepoName(chatPlan.appName, project.id);
+            const { cloneUrl, htmlUrl } = await createRepo(repoName);
+            const token = await getInstallationToken();
+
+            await pushToGitHub(sandbox, cloneUrl, token);
+
+            githubRepoUrl = htmlUrl;
+            emit({ type: 'checkpoint', label: 'Pushing to GitHub', status: 'complete' });
+            console.log(`✓ Pushed to GitHub: ${htmlUrl}`);
+          } catch (githubError) {
+            console.warn('[generate] GitHub push failed (non-fatal):', githubError);
+            emit({ type: 'checkpoint', label: 'Pushing to GitHub (skipped)', status: 'complete' });
+          }
         }
 
         // Stage 4: Completion
         emit({ type: "stage_update", stage: "complete" });
 
-        const previewUrl = await getPreviewUrl(sandbox, 3000);
-        const codeServerUrl = await getPreviewUrl(sandbox, 13337);
-
-        emit({ type: "preview_ready", url: previewUrl.url });
-        emit({ type: "code_server_ready", url: codeServerUrl.url });
+        let previewUrlStr: string | null = null;
+        let codeServerUrlStr: string | null = null;
+        try {
+          const previewUrl = await getPreviewUrl(sandbox, 3000);
+          const codeServerUrl = await getPreviewUrl(sandbox, 13337);
+          previewUrlStr = previewUrl.url;
+          codeServerUrlStr = codeServerUrl.url;
+          emit({ type: "preview_ready", url: previewUrlStr });
+          emit({ type: "code_server_ready", url: codeServerUrlStr });
+        } catch (previewError) {
+          console.warn('[generate] Preview URL fetch failed (non-fatal):', previewError);
+        }
 
         const eagerDeployUrl = process.env.VERCEL_WILDCARD_PROJECT_ID
           ? `https://${buildAppSlug(chatPlan.appName, project.id)}.vibestack.site`
           : undefined;
 
+        const finalStatus = buildPassed ? "complete" : "build_failed";
+
         await supabase
           .from("projects")
           .update({
-            status: "complete",
-            preview_url: previewUrl.url,
-            code_server_url: codeServerUrl.url,
+            status: finalStatus,
+            ...(previewUrlStr ? { preview_url: previewUrlStr } : {}),
+            ...(codeServerUrlStr ? { code_server_url: codeServerUrlStr } : {}),
             ...(githubRepoUrl ? { github_repo_url: githubRepoUrl } : {}),
             ...(eagerDeployUrl ? { deploy_url: eagerDeployUrl } : {}),
           })
@@ -175,7 +229,7 @@ export async function POST(req: NextRequest) {
         emit({
           type: "complete",
           projectId: project.id,
-          urls: { preview: previewUrl.url, codeServer: codeServerUrl.url },
+          urls: { preview: previewUrlStr || '', codeServer: codeServerUrlStr || '' },
           requirementResults: [],
         });
 
