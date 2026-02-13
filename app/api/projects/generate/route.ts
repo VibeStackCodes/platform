@@ -304,13 +304,29 @@ function buildMockGenerateResponse(chatPlan: ChatPlan) {
       };
       const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-      // Provisioning
+      // Stage 1: Provisioning
       emit({ type: "stage_update", stage: "provisioning" });
-      await delay(800);
+      await delay(400);
 
-      // Classify features and generate mock files
+      // Stage 2: Scaffold phase
       emit({ type: "stage_update", stage: "generating" });
+      emit({ type: "checkpoint", label: "Layer 0: scaffold and config", status: "active" });
+      await delay(300);
+      emit({ type: "checkpoint", label: "Layer 0: scaffold and config", status: "complete" });
+      emit({ type: "checkpoint", label: "Installing dependencies", status: "active" });
+      await delay(200);
+      emit({ type: "checkpoint", label: "Installing dependencies", status: "complete" });
 
+      // Stage 2.5: Dev server + preview (early)
+      emit({ type: "checkpoint", label: "Starting dev server", status: "active" });
+      await delay(200);
+      emit({ type: "preview_ready", url: "http://localhost:3000" });
+      emit({ type: "checkpoint", label: "Starting dev server", status: "complete" });
+
+      // Database ready (local migration)
+      emit({ type: "checkpoint", label: "Database ready", status: "complete" });
+
+      // Stage 3: Feature phase (files trigger HMR)
       const tasks = classifyFeatures(chatPlan.features);
       for (const task of tasks) {
         try {
@@ -343,13 +359,19 @@ function buildMockGenerateResponse(chatPlan: ChatPlan) {
         }
       }
 
-      // Build verification
+      // Stage 4: Build verification (tsc --noEmit)
       emit({ type: "stage_update", stage: "verifying_build" });
-      await delay(600);
+      emit({ type: "checkpoint", label: "Build verification", status: "active" });
+      await delay(400);
+      emit({ type: "checkpoint", label: "Build verification", status: "complete" });
 
-      // Complete
+      // Stage 5: GitHub push
+      emit({ type: "checkpoint", label: "Pushing to GitHub", status: "active" });
+      await delay(200);
+      emit({ type: "checkpoint", label: "Pushing to GitHub", status: "complete" });
+
+      // Stage 6: Complete
       emit({ type: "stage_update", stage: "complete" });
-      emit({ type: "preview_ready", url: "http://localhost:3000" });
       emit({ type: "code_server_ready", url: "http://localhost:13337" });
       emit({
         type: "complete",
