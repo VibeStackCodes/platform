@@ -119,13 +119,10 @@ export async function createSupabaseProject(
   }
 
   // Generate a secure password if not provided
+  const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*";
   const password =
     dbPassword ||
-    Array.from({ length: 24 }, () =>
-      "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*".charAt(
-        Math.floor(Math.random() * 68)
-      )
-    ).join("");
+    Array.from(crypto.getRandomValues(new Uint8Array(24)), (b) => chars[b % chars.length]).join("");
 
   // Sanitize project name (Supabase requires lowercase alphanumeric + hyphens)
   const sanitizedName = name

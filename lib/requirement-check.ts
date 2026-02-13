@@ -7,6 +7,7 @@ import { getOpenAIClient, FAST_MODEL, FIX_MODEL, REASONING_PRESETS, isOpenAIMode
 import { zodTextFormat } from 'openai/helpers/zod';
 import { z } from 'zod';
 import { PlaywrightTestSchema } from './schemas';
+import { stripCodeFences } from './utils';
 
 /**
  * Playwright Requirement Checker Module
@@ -105,10 +106,7 @@ TEST FILE CONTENT:`;
     let testContent = text.trim();
 
     // Strip markdown fences if present
-    if (testContent.startsWith('```')) {
-      testContent = testContent.replace(/^```(?:typescript|ts)?\s*\n/, '');
-      testContent = testContent.replace(/\n```\s*$/, '');
-    }
+    testContent = stripCodeFences(testContent);
 
     console.log('✓ Generated Playwright test file');
     return testContent;
@@ -285,10 +283,7 @@ FIXED FILE CONTENT:`;
         fixedContent = text.trim();
 
         // Strip markdown fences if present
-        if (fixedContent.startsWith('```')) {
-          fixedContent = fixedContent.replace(/^```(?:typescript|tsx|jsx|javascript)?\s*\n/, '');
-          fixedContent = fixedContent.replace(/\n```\s*$/, '');
-        }
+        fixedContent = stripCodeFences(fixedContent);
       }
 
       // Update and upload

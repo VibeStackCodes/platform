@@ -4,6 +4,7 @@ import { runCommand } from './sandbox';
 import { resolveModel } from './models';
 import { generateText } from 'ai';
 import { getOpenAIClient, FIX_MODEL, REASONING_PRESETS, isOpenAIModel } from './openai-client';
+import { stripCodeFences } from './utils';
 
 /**
  * Live Fixer — watches dev server for errors and fixes them in real-time.
@@ -164,9 +165,7 @@ FIXED CONTENT:`;
         reasoning: { effort: REASONING_PRESETS.fixing },
       });
       let text = response.output_text?.trim() || '';
-      if (text.startsWith('```')) {
-        text = text.replace(/^```(?:typescript|tsx)?\s*\n/, '').replace(/\n```\s*$/, '');
-      }
+      text = stripCodeFences(text);
       return text;
     }
 
@@ -177,9 +176,7 @@ FIXED CONTENT:`;
       temperature: 0.3,
     });
     let fixed = text.trim();
-    if (fixed.startsWith('```')) {
-      fixed = fixed.replace(/^```(?:typescript|tsx)?\s*\n/, '').replace(/\n```\s*$/, '');
-    }
+    fixed = stripCodeFences(fixed);
     return fixed;
   }
 }

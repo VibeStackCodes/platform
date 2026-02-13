@@ -1,4 +1,5 @@
 import type { EntityConfig, FeatureSpec } from './types';
+import { pluralizeTable } from './utils';
 
 /**
  * Extract EntityConfig from ChatPlan features.
@@ -34,10 +35,4 @@ export function extractAllEntities(features: FeatureSpec[]): EntityConfig[] {
   }
 
   return configs;
-}
-
-function pluralizeTable(name: string): string {
-  if (name.endsWith('s')) return name + 'es';
-  if (name.endsWith('y') && !/[aeiou]y$/.test(name)) return name.slice(0, -1) + 'ies';
-  return name + 's';
 }

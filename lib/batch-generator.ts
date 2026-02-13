@@ -18,6 +18,7 @@
 import { getOpenAIClient, CODEGEN_MODEL, REASONING_PRESETS } from './openai-client';
 import { buildFilePrompt } from './injector';
 import type { Plan } from './types';
+import { stripCodeFences } from './utils';
 
 // ============================================================================
 // Types
@@ -174,12 +175,9 @@ async function downloadBatchResults(
         let fileContent = responseBody?.output_text || '';
 
         // Strip markdown fences if present
-        if (fileContent.startsWith('```')) {
-          fileContent = fileContent.replace(/^```(?:typescript|tsx|jsx|javascript|ts|js)?\s*\n/, '');
-          fileContent = fileContent.replace(/\n```\s*$/, '');
-        }
+        fileContent = stripCodeFences(fileContent);
 
-        files.set(filePath, fileContent.trim());
+        files.set(filePath, fileContent);
       } else {
         console.error(`Batch file failed: ${filePath}`, result.error);
         failedFiles.push(filePath);

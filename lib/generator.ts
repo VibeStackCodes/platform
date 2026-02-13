@@ -1,10 +1,11 @@
 import { streamText } from 'ai';
 import type { Sandbox } from '@daytonaio/sdk';
 import type { Plan, FileSpec, StreamEvent } from './types';
-import { uploadFile, runCommand } from './sandbox';
+import { uploadFile } from './sandbox';
 import { buildFilePrompt } from './injector';
 import { resolveModel } from './models';
 import { getOpenAIClient, CODEGEN_MODEL, REASONING_PRESETS, isOpenAIModel } from './openai-client';
+import { stripCodeFences } from './utils';
 
 /** Descriptive labels for each generation layer */
 const LAYER_LABELS: Record<number, string> = {
@@ -125,13 +126,15 @@ export async function generateFiles(
     const label = LAYER_LABELS[layer] || `layer ${layer} files`;
     const filePaths = layerFiles.map(f => f.path).join(' ');
     try {
-      const commitResult = await runCommand(
-        sandbox,
-        `cd /workspace && git add ${filePaths} && git commit -m "feat: add ${label}" && git rev-parse --short HEAD`,
-        `git-layer-${layer}`,
-        { cwd: '/workspace', timeout: 30 }
+      const fileList = layerFiles.map(f => f.path);
+      await sandbox.git.add('/workspace', fileList);
+      const commitResponse = await sandbox.git.commit(
+        '/workspace',
+        `feat: add ${label}`,
+        'VibeStack',
+        'vibestack@generated.app',
       );
-      const hash = commitResult.stdout.trim().split('\n').pop() || 'unknown';
+      const hash = commitResponse.sha?.slice(0, 7) || 'unknown';
       console.log(`✓ Committed layer ${layer}: ${label} (${hash})`);
 
       emit({
@@ -361,7 +364,7 @@ async function generateLayerWithStreaming(
         }
 
         // Strip markdown fences if present
-        content = stripMarkdownFences(content);
+        content = stripCodeFences(content);
 
         // Store generated content
         generatedContents.set(fileSpec.path, content);
@@ -413,21 +416,3 @@ function groupFilesByLayer(plan: Plan): Map<number, typeof plan.files> {
   return grouped;
 }
 
-/**
- * Strip markdown fences from generated content
- */
-function stripMarkdownFences(content: string): string {
-  let cleaned = content.trim();
-
-  // Remove opening fence with optional language
-  if (cleaned.startsWith('```')) {
-    cleaned = cleaned.replace(/^```(?:typescript|tsx|jsx|javascript|ts|js)?\s*\n/, '');
-  }
-
-  // Remove closing fence
-  if (cleaned.endsWith('```')) {
-    cleaned = cleaned.replace(/\n```\s*$/, '');
-  }
-
-  return cleaned;
-}

@@ -1,4 +1,5 @@
 import type { EntityField, FeatureSpec, TemplateTask } from './types';
+import { pluralizeTable } from './utils';
 
 // Fields the CRUD template hardcodes — strip from entity.fields to prevent TS2300 duplicates
 const TEMPLATE_RESERVED_FIELDS = new Set(['id', 'created_at', 'updated_at']);
@@ -88,10 +89,4 @@ export function classifyFeatures(features: FeatureSpec[]): TemplateTask[] {
   }
 
   return tasks;
-}
-
-function pluralizeTable(name: string): string {
-  if (name.endsWith('s')) return name + 'es';
-  if (name.endsWith('y') && !/[aeiou]y$/.test(name)) return name.slice(0, -1) + 'ies';
-  return name + 's';
 }

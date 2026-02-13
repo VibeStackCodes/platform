@@ -6,6 +6,7 @@ import { resolveModel } from './models';
 import { getOpenAIClient, FIX_MODEL, REASONING_PRESETS, isOpenAIModel } from './openai-client';
 import { zodTextFormat } from 'openai/helpers/zod';
 import { ErrorAnalysisSchema, type ErrorAnalysis } from './schemas';
+import { stripCodeFences } from './utils';
 
 /**
  * Build Verifier Module
@@ -543,10 +544,7 @@ FIXED FILE CONTENT:`;
       }
 
       // Strip markdown fences if present
-      if (fixedContent.startsWith('```')) {
-        fixedContent = fixedContent.replace(/^```(?:typescript|tsx|jsx|javascript)?\s*\n/, '');
-        fixedContent = fixedContent.replace(/\n```\s*$/, '');
-      }
+      fixedContent = stripCodeFences(fixedContent);
 
       return fixedContent;
     }
@@ -562,10 +560,7 @@ FIXED FILE CONTENT:`;
     let fixedContent = text.trim();
 
     // Strip markdown fences if present
-    if (fixedContent.startsWith('```')) {
-      fixedContent = fixedContent.replace(/^```(?:typescript|tsx|jsx|javascript)?\s*\n/, '');
-      fixedContent = fixedContent.replace(/\n```\s*$/, '');
-    }
+    fixedContent = stripCodeFences(fixedContent);
 
     return fixedContent;
   } catch (error) {

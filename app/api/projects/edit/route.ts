@@ -5,12 +5,13 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@/lib/supabase-server";
+import { getOpenAIClient, FIX_MODEL } from "@/lib/openai-client";
 import { getDaytonaClient } from "@/lib/sandbox";
 import { uploadFile } from "@/lib/sandbox";
 import { verifyAndFix } from "@/lib/verifier";
 import { buildFilePrompt } from "@/lib/injector";
+import { stripCodeFences } from "@/lib/utils";
 import type { EditRequest, GenerationState, Plan, FileSpec } from "@/lib/types";
 
 /**
@@ -22,7 +23,7 @@ export async function POST(req: NextRequest) {
   try {
     // Parse request
     const body: EditRequest = await req.json();
-    const { projectId, instruction, model = "claude-sonnet-4-5-20250929" } = body;
+    const { projectId, instruction, model = FIX_MODEL } = body;
 
     if (!projectId || !instruction) {
       return NextResponse.json(
@@ -104,10 +105,6 @@ export async function POST(req: NextRequest) {
     // ====================================================================
     // Step 2: Re-generate Affected Files
     // ====================================================================
-    const anthropic = new Anthropic({
-      apiKey: process.env.ANTHROPIC_API_KEY,
-    });
-
     const modifiedFiles: Array<{ path: string; content: string }> = [];
 
     for (const filePath of affectedFilePaths) {
@@ -127,24 +124,16 @@ export async function POST(req: NextRequest) {
         plan
       );
 
-      // Generate file with Claude
-      const response = await anthropic.messages.create({
+      // Generate file with OpenAI
+      const client = getOpenAIClient();
+      const response = await client.responses.create({
         model,
-        max_tokens: 4096,
-        messages: [
-          {
-            role: "user",
-            content: prompt,
-          },
-        ],
+        input: [{ role: "user", content: prompt }],
       });
-
-      const content = response.content[0].type === "text"
-        ? response.content[0].text
-        : "";
+      const content = response.output_text;
 
       // Extract code from markdown if needed
-      const cleanedContent = extractCode(content);
+      const cleanedContent = stripCodeFences(content);
 
       // Upload to sandbox
       await uploadFile(sandbox, cleanedContent, `/workspace/${filePath}`);
@@ -231,10 +220,6 @@ async function identifyAffectedFiles(
   plan: Plan,
   model: string
 ): Promise<string[]> {
-  const anthropic = new Anthropic({
-    apiKey: process.env.ANTHROPIC_API_KEY,
-  });
-
   const fileList = plan.files.map((f) => `- ${f.path}: ${f.description}`).join("\n");
 
   const prompt = `You are analyzing an edit instruction for a Next.js application to determine which files need to be modified.
@@ -254,18 +239,12 @@ Return ONLY a JSON array of file paths, nothing else. Example:
 
 If no files need modification, return an empty array: []`;
 
-  const response = await anthropic.messages.create({
+  const client = getOpenAIClient();
+  const response = await client.responses.create({
     model,
-    max_tokens: 1024,
-    messages: [
-      {
-        role: "user",
-        content: prompt,
-      },
-    ],
+    input: [{ role: "user", content: prompt }],
   });
-
-  const content = response.content[0].type === "text" ? response.content[0].text : "[]";
+  const content = response.output_text;
 
   try {
     const filePaths: string[] = JSON.parse(content.trim());
@@ -320,17 +299,3 @@ Return the complete modified file content.`;
   return editPrompt;
 }
 
-/**
- * Extract code from markdown code blocks
- */
-function extractCode(content: string): string {
-  // Remove markdown code block fences if present
-  const codeBlockRegex = /```(?:\w+)?\n([\s\S]*?)```/;
-  const match = content.match(codeBlockRegex);
-
-  if (match) {
-    return match[1].trim();
-  }
-
-  return content.trim();
-}

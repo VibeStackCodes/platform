@@ -4,6 +4,7 @@ import { resolveModel } from './models';
 import { getOpenAIClient, PLAN_MODEL, REASONING_PRESETS, isOpenAIModel } from './openai-client';
 import type { Plan } from './types';
 import { PlanSchema } from './schemas';
+import { stripCodeFences } from './utils';
 
 /**
  * Planner Module
@@ -216,11 +217,7 @@ export async function generatePlan(
 
       // Strip markdown fences if present
       let rawResponse = text.trim();
-      if (rawResponse.startsWith('```json')) {
-        rawResponse = rawResponse.replace(/^```json\s*\n/, '').replace(/\n```\s*$/, '');
-      } else if (rawResponse.startsWith('```')) {
-        rawResponse = rawResponse.replace(/^```\s*\n/, '').replace(/\n```\s*$/, '');
-      }
+      rawResponse = stripCodeFences(rawResponse);
 
       // Parse JSON
       plan = JSON.parse(rawResponse);
