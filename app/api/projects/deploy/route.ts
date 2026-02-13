@@ -100,13 +100,8 @@ export async function POST(req: NextRequest) {
     if (wildcardProjectId) {
       const appSlug = buildAppSlug(project.name, projectId);
       const customDomain = `${appSlug}.vibestack.site`;
-      try {
-        deployUrl = await assignCustomDomain(customDomain, wildcardProjectId);
-        console.log(`[deploy] Custom domain assigned: ${deployUrl}`);
-      } catch (domainError) {
-        console.warn("[deploy] Custom domain assignment failed (non-fatal):", domainError);
-        // Keep the original Vercel URL as fallback
-      }
+      deployUrl = await assignCustomDomain(customDomain, wildcardProjectId);
+      console.log(`[deploy] Custom domain assigned: ${deployUrl}`);
     }
 
     // Update project with deploy URL
@@ -119,8 +114,7 @@ export async function POST(req: NextRequest) {
       .eq("id", projectId);
 
     if (updateError) {
-      console.error("[deploy] Failed to update project:", updateError);
-      // Don't fail the request - deployment was successful
+      throw new Error(`Failed to update project status: ${updateError.message}`);
     }
 
     return NextResponse.json({
@@ -218,8 +212,8 @@ async function deployToVercel(
 }
 
 /**
- * Deploy by creating a Vercel project linked to a GitHub repo.
- * Vercel auto-deploys from the main branch.
+ * Deploy by creating a Vercel project linked to a GitHub repo,
+ * then triggering an explicit deployment with gitSource.
  */
 async function deployFromGitHub(
   repoFullName: string,
@@ -233,8 +227,24 @@ async function deployFromGitHub(
 
   const defaultTeamId = process.env.VERCEL_TEAM_ID;
   const finalTeamId = teamId || defaultTeamId;
+  const slug = projectName.toLowerCase().replace(/[^a-z0-9-]/g, "-");
 
-  // Create Vercel project linked to GitHub repo
+  // Step 1: Get numeric GitHub repo ID (required by Vercel v13 API)
+  const ghToken = process.env.GITHUB_TOKEN;
+  const ghRes = await fetch(`https://api.github.com/repos/${repoFullName}`, {
+    headers: {
+      Accept: "application/vnd.github+json",
+      ...(ghToken ? { Authorization: `Bearer ${ghToken}` } : {}),
+    },
+  });
+  if (!ghRes.ok) {
+    throw new Error(`Failed to fetch GitHub repo info: ${await ghRes.text()}`);
+  }
+  const ghRepo = (await ghRes.json()) as { id: number; default_branch: string };
+  const repoId = ghRepo.id;
+  console.log(`[deploy] GitHub repo ${repoFullName}: id=${repoId}, branch=${ghRepo.default_branch}`);
+
+  // Step 2: Create Vercel project linked to GitHub repo
   const projectResponse = await fetch(
     `https://api.vercel.com/v10/projects${finalTeamId ? `?teamId=${finalTeamId}` : ""}`,
     {
@@ -244,7 +254,7 @@ async function deployFromGitHub(
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        name: projectName.toLowerCase().replace(/[^a-z0-9-]/g, "-"),
+        name: slug,
         framework: "vite",
         buildCommand: "bun run build",
         installCommand: "bun install",
@@ -257,14 +267,17 @@ async function deployFromGitHub(
     }
   );
 
-  if (!projectResponse.ok) {
-    const error = await projectResponse.text();
-    throw new Error(`Vercel project creation failed: ${error}`);
+  if (projectResponse.ok) {
+    const project = await projectResponse.json();
+    console.log(`[deploy] Vercel project created: ${project.id}`);
+  } else if (projectResponse.status === 409) {
+    console.log(`[deploy] Vercel project "${slug}" already exists, continuing...`);
+  } else {
+    const errorBody = await projectResponse.text();
+    throw new Error(`Vercel project creation failed: ${errorBody}`);
   }
 
-  const vercelProject = (await projectResponse.json()) as { id: string };
-
-  // Trigger deployment from latest commit
+  // Step 3: Create explicit deployment with gitSource (doesn't rely on Vercel GitHub App)
   const deployResponse = await fetch(
     `https://api.vercel.com/v13/deployments${finalTeamId ? `?teamId=${finalTeamId}` : ""}`,
     {
@@ -274,26 +287,25 @@ async function deployFromGitHub(
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        name: projectName.toLowerCase().replace(/[^a-z0-9-]/g, "-"),
-        project: vercelProject.id,
-        target: "production",
+        name: slug,
         gitSource: {
           type: "github",
-          repo: repoFullName,
-          ref: "main",
+          repoId,
+          ref: ghRepo.default_branch,
         },
+        target: "production",
       }),
     }
   );
 
   if (!deployResponse.ok) {
     const error = await deployResponse.text();
-    throw new Error(`Vercel deployment failed: ${error}`);
+    throw new Error(`Vercel deployment creation failed: ${error}`);
   }
 
   const deployment: VercelDeployment = await deployResponse.json();
   const deployUrl = `https://${deployment.url}`;
-  console.log(`[deploy] GitHub deployment created: ${deployUrl} (${deployment.id})`);
+  console.log(`[deploy] Deployment created: ${deployUrl} (${deployment.id})`);
 
   await waitForDeploymentReady(deployment.id, finalTeamId, vercelToken);
 
