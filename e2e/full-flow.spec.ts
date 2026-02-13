@@ -317,6 +317,17 @@ test.describe('VibeStack E2E', () => {
 
   test.describe('Edit/Iterate (mock)', () => {
     test('post-generation edit returns mock response', async ({ page }) => {
+      // Mock the generation API to return a quick SSE "complete" event
+      // so that generationStatus transitions to "complete" and textarea is re-enabled
+      await page.route('**/api/projects/generate', async (route) => {
+        const sseBody = 'data: {"type":"file_start","path":"src/App.tsx"}\n\ndata: {"type":"file_complete","path":"src/App.tsx","linesOfCode":10}\n\ndata: {"type":"complete"}\n\n';
+        await route.fulfill({
+          status: 200,
+          contentType: 'text/event-stream',
+          body: sseBody,
+        });
+      });
+
       await page.goto('/project/mock-edit-test');
       await waitForHydration(page);
 
@@ -334,11 +345,14 @@ test.describe('VibeStack E2E', () => {
       await textarea.press('Enter');
       await expect(page.getByText('TaskFlow', { exact: true })).toBeVisible({ timeout: 15_000 });
 
-      // Turn 4: approve → start_generation
+      // Turn 4: approve → start_generation (triggers /api/projects/generate mock)
       await page.getByRole('button', { name: /Approve & Generate/i }).click();
       await expect(
         page.getByText(/Plan approved|Generating|Generation Complete/i).first()
       ).toBeVisible({ timeout: 30_000 });
+
+      // Wait for mock generation to complete (textarea re-enabled)
+      await expect(textarea).toBeEnabled({ timeout: 15_000 });
 
       // Turn 5: send edit instruction
       await textarea.fill('Add a dark mode toggle to the header');
