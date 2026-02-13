@@ -1,0 +1,30 @@
+import { useState, useEffect } from 'react';
+import { supabase } from '@/lib/supabase';
+
+export function useRealtime{{pascalCase channel}}s<T extends { id: string }>(tableName: string) {
+  const [items, setItems] = useState<T[]>([]);
+  const [connected, setConnected] = useState(false);
+
+  useEffect(() => {
+    supabase.from(tableName).select('*').order('created_at', { ascending: false })
+      .then(({ data }) => setItems((data as T[]) ?? []));
+
+    const channel = supabase
+      .channel(`${tableName}-changes`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: tableName },
+        (payload) => {
+          const eventType = payload.eventType;
+          setItems(prev => {
+            if (eventType === 'INSERT') return [payload.new as T, ...prev];
+            if (eventType === 'UPDATE') return prev.map(i => i.id === (payload.new as T).id ? payload.new as T : i);
+            if (eventType === 'DELETE') return prev.filter(i => i.id !== (payload.old as T).id);
+            return prev;
+          });
+        })
+      .subscribe((status) => setConnected(status === 'SUBSCRIBED'));
+
+    return () => { channel.unsubscribe(); };
+  }, [tableName]);
+
+  return { items, connected };
+}

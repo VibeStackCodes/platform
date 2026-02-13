@@ -1,0 +1,37 @@
+import { useState } from 'react';
+import { Plus } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { use{{pascalCase entity}}s } from '@/hooks/use-{{entity}}s';
+import { {{pascalCase entity}}Form } from '@/components/{{entity}}-form';
+import { {{pascalCase entity}}List } from '@/components/{{entity}}-list';
+import type { Create{{pascalCase entity}}Input } from '@/types/{{entity}}';
+
+export default function {{pascalCase entity}}sPage() {
+  const { items, loading, create, remove } = use{{pascalCase entity}}s();
+  const [showForm, setShowForm] = useState(false);
+
+  const handleCreate = async (data: Create{{pascalCase entity}}Input) => {
+    await create(data);
+    setShowForm(false);
+  };
+
+  return (
+    <div className="container mx-auto max-w-4xl py-8 px-4">
+      <div className="flex items-center justify-between mb-8">
+        <h1 className="text-3xl font-bold">{{pascalCase entity}}s</h1>
+        <Button onClick={() => setShowForm(!showForm)}><Plus className="h-4 w-4 mr-2" />Add {{pascalCase entity}}</Button>
+      </div>
+      {showForm && (
+        <div className="mb-8 p-6 border rounded-[var(--radius)]">
+          <h2 className="text-lg font-semibold mb-4">New {{pascalCase entity}}</h2>
+          <{{pascalCase entity}}Form onSubmit={handleCreate} onCancel={() => setShowForm(false)} />
+        </div>
+      )}
+      {loading ? (
+        <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[hsl(var(--primary))]" /></div>
+      ) : (
+        <{{pascalCase entity}}List items={items} onDelete={remove} />
+      )}
+    </div>
+  );
+}

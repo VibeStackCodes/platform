@@ -1,0 +1,11 @@
+import { Routes, Route } from 'react-router';
+
+export default function App() {
+  return (
+    <div className="min-h-screen bg-background text-foreground">
+      <Routes>
+        <Route path="/" element={<div className="flex items-center justify-center min-h-screen"><h1 className="text-4xl font-bold">{{appName}}</h1></div>} />
+      </Routes>
+    </div>
+  );
+}

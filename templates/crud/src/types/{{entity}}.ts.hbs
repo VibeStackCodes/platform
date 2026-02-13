@@ -1,0 +1,14 @@
+export interface {{pascalCase entity}} {
+  id: string;
+{{#each fields}}
+  {{name}}: {{#if (eq type "text")}}string{{/if}}{{#if (eq type "number")}}number{{/if}}{{#if (eq type "boolean")}}boolean{{/if}}{{#if (eq type "enum")}}{{#each enumValues}}'{{this}}'{{#unless @last}} | {{/unless}}{{/each}}{{/if}}{{#if (eq type "uuid")}}string{{/if}}{{#if (eq type "timestamp")}}string{{/if}}{{#if (eq type "json")}}Record<string, unknown>{{/if}};
+{{/each}}
+{{#each belongsTo}}
+  {{this}}_id: string;
+{{/each}}
+  created_at: string;
+  updated_at: string;
+}
+
+export type Create{{pascalCase entity}}Input = Omit<{{pascalCase entity}}, 'id' | 'created_at' | 'updated_at'>;
+export type Update{{pascalCase entity}}Input = Partial<Create{{pascalCase entity}}Input>;
