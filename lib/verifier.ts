@@ -22,7 +22,7 @@ import { ErrorAnalysisSchema, type ErrorAnalysis } from './schemas';
 // Constants
 // ============================================================================
 
-const MAX_FIX_RETRIES = 5;
+const MAX_FIX_RETRIES = 3;
 const RETRY_DELAY_MS = 3000;
 
 // ============================================================================
@@ -224,7 +224,7 @@ export function parseBuildErrors(output: string): BuildError[] {
  * Verify build and iteratively fix errors
  *
  * Process:
- * 1. Run `bun run build` in sandbox
+ * 1. Run `tsc --noEmit` in sandbox
  * 2. Check exit code and parse errors
  * 3. For OpenAI models: use structured error analysis to determine fix order
  * 4. For other models: use regex parsing and group by file
@@ -256,6 +256,12 @@ export async function verifyAndFix(
   while (attempt < MAX_FIX_RETRIES) {
     attempt++;
     console.log(`\n=== Build Verification Attempt ${attempt}/${MAX_FIX_RETRIES} ===`);
+
+    emit({
+      type: 'checkpoint',
+      label: `Build attempt ${attempt}/${MAX_FIX_RETRIES}`,
+      status: 'active',
+    });
 
     // Run build
     const buildResult = await runBuild(sandbox);
@@ -399,15 +405,15 @@ export async function verifyAndFix(
 // ============================================================================
 
 /**
- * Run npm build in sandbox and get output
+ * Run TypeScript type checking in sandbox and get output
  */
 async function runBuild(sandbox: Sandbox): Promise<{ exitCode: number; stdout: string; stderr?: string }> {
   try {
     const result = await runCommand(
       sandbox,
-      'bun run build',
+      'tsc --noEmit',
       'build-verify',
-      { cwd: '/workspace', timeout: 300 }
+      { cwd: '/workspace', timeout: 60 }
     );
 
     return {

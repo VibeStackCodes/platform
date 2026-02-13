@@ -6,9 +6,39 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase-server";
-import { downloadDirectory, getDaytonaClient } from "@/lib/sandbox";
+import { downloadDirectory, getDaytonaClient, runCommand } from "@/lib/sandbox";
 import { buildAppSlug } from "@/lib/slug";
 import type { DeployRequest } from "@/lib/types";
+
+/**
+ * Build the project in sandbox with production env vars
+ */
+async function buildInSandbox(
+  sandbox: any,
+  supabaseUrl: string,
+  supabaseAnonKey: string,
+): Promise<Array<{ path: string; content: Buffer }>> {
+  // Write production env vars
+  await sandbox.fs.uploadFile(
+    Buffer.from(`VITE_SUPABASE_URL=${supabaseUrl}\nVITE_SUPABASE_ANON_KEY=${supabaseAnonKey}\n`),
+    '/workspace/.env.production'
+  );
+
+  // Run production build
+  const result = await runCommand(
+    sandbox,
+    'bun run build',
+    'prod-build',
+    { cwd: '/workspace', timeout: 120 }
+  );
+
+  if (result.exitCode !== 0) {
+    throw new Error(`Production build failed: ${result.stdout}\n${result.stderr || ''}`);
+  }
+
+  // Download dist/
+  return await downloadDirectory(sandbox, '/workspace/dist');
+}
 
 /**
  * POST /api/projects/deploy
@@ -92,7 +122,13 @@ export async function POST(req: NextRequest) {
 
     let vercelProjectSlug: string;
 
-    if (project.github_repo_url) {
+    if (project.sandbox_id && project.supabase_url && project.supabase_anon_key) {
+      console.log(`[deploy] Pre-built deploy: building in sandbox...`);
+      const builtFiles = await buildInSandbox(sandbox, project.supabase_url, project.supabase_anon_key);
+      console.log(`[deploy] Built ${builtFiles.length} files, deploying to Vercel...`);
+      deployUrl = await deployToVercel(project.name, builtFiles, vercelTeamId, supabaseEnvVars);
+      vercelProjectSlug = project.name.toLowerCase().replace(/[^a-z0-9-]/g, "-");
+    } else if (project.github_repo_url) {
       // Deploy from GitHub repo (required path)
       const repoFullName = project.github_repo_url
         .replace("https://github.com/", "");
