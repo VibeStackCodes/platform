@@ -293,7 +293,7 @@ test.describe('Real Generation Pipeline', () => {
 
       // Verify deployed site is reachable
       let siteStatus = 0;
-      for (let attempt = 0; attempt < 5; attempt++) {
+      for (let attempt = 0; attempt < 12; attempt++) {
         try {
           const siteResponse = await fetch(deployData.deployUrl);
           siteStatus = siteResponse.status;

@@ -113,7 +113,7 @@ export async function createSupabaseProject(
   dbPassword?: string,
   plan: string = "free"
 ): Promise<SupabaseProject> {
-  const orgId = process.env.SUPABASE_ORG_ID;
+  const orgId = process.env.SUPABASE_E2E_ORG_ID || process.env.SUPABASE_ORG_ID;
   if (!orgId) {
     throw new Error("SUPABASE_ORG_ID environment variable is required");
   }
@@ -127,11 +127,19 @@ export async function createSupabaseProject(
       )
     ).join("");
 
+  // Sanitize project name (Supabase requires lowercase alphanumeric + hyphens)
+  const sanitizedName = name
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 63);
+
   // Create the project
   const createResponse = await mgmtFetch("/projects", {
     method: "POST",
     body: JSON.stringify({
-      name,
+      name: sanitizedName,
       organization_id: orgId,
       region,
       plan,
