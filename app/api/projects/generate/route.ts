@@ -135,7 +135,49 @@ export async function POST(req: NextRequest) {
 
         // Stage 2: Scaffold Phase — write layer 0 files + install dependencies
         emit({ type: "stage_update", stage: "generating" });
-        const { scaffoldFiles, featureFiles, allMigrations } = await runScaffoldPhase(chatPlan, sandbox, emit);
+        const { scaffoldFiles, featureFiles, allMigrations, schemaContract } = await runScaffoldPhase(chatPlan, sandbox, emit);
+
+        // Stage 2.1: Derive SQL + Types from SchemaContract (deterministic, no LLM fix loops)
+        if (schemaContract) {
+          const { validateContract } = await import("@/lib/schema-contract");
+          const { contractToSQL } = await import("@/lib/contract-to-sql");
+          const { contractToTypes } = await import("@/lib/contract-to-types");
+
+          const validation = validateContract(schemaContract);
+          if (!validation.valid) {
+            throw new Error(`Schema contract invalid: ${validation.errors.join('; ')}`);
+          }
+
+          const migrationSQL = contractToSQL(schemaContract);
+          const typesTS = contractToTypes(schemaContract);
+
+          const { uploadFile: upload } = await import("@/lib/sandbox");
+          await upload(sandbox, migrationSQL, '/workspace/supabase/migrations/001_init.sql');
+          await upload(sandbox, typesTS, '/workspace/src/types/database.types.ts');
+
+          const migrationFile = scaffoldFiles.find(f => f.path === 'supabase/migrations/001_init.sql');
+          if (migrationFile) migrationFile.content = migrationSQL;
+          scaffoldFiles.push({ path: 'src/types/database.types.ts', content: typesTS, layer: 0 });
+
+          const { validateMigration } = await import("@/lib/local-supabase");
+          await validateMigration(sandbox, migrationSQL);
+
+          allMigrations.splice(0, allMigrations.length, migrationSQL);
+          emit({ type: "checkpoint", label: "Database ready", status: "complete" });
+        } else if (allMigrations.length > 0) {
+          // Fallback: legacy raw SQL path (templates without schema)
+          const migrationContent = allMigrations.join('\n\n-- ---\n\n');
+          const { applyLocalMigration } = await import("@/lib/local-supabase");
+          const validatedSQL = await applyLocalMigration(sandbox, migrationContent, model);
+          allMigrations.splice(0, allMigrations.length, validatedSQL);
+          const migrationFile = scaffoldFiles.find(f => f.path === 'supabase/migrations/001_init.sql');
+          if (migrationFile) {
+            migrationFile.content = validatedSQL;
+            const { uploadFile: upload } = await import("@/lib/sandbox");
+            await upload(sandbox, validatedSQL, '/workspace/supabase/migrations/001_init.sql');
+          }
+          emit({ type: "checkpoint", label: "Database ready", status: "complete" });
+        }
 
         // Stage 2.5: Start dev server + emit preview URL (HMR ready)
         emit({ type: "checkpoint", label: "Starting dev server", status: "active" });
@@ -143,14 +185,6 @@ export async function POST(req: NextRequest) {
         emit({ type: "preview_ready", url: previewUrlStr });
         emit({ type: "checkpoint", label: "Starting dev server", status: "complete" });
         console.log(`✓ Dev server started: ${previewUrlStr}`);
-
-        // Apply migration to local Postgres (instant — <1s)
-        if (allMigrations.length > 0) {
-          const migrationContent = allMigrations.join('\n\n-- ---\n\n');
-          const { applyLocalMigration } = await import("@/lib/local-supabase");
-          await applyLocalMigration(sandbox, migrationContent);
-          emit({ type: "checkpoint", label: "Database ready", status: "complete" });
-        }
 
         // Start live error fixer in parallel
         const { LiveFixer } = await import("@/lib/live-fixer");

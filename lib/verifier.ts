@@ -23,7 +23,7 @@ import { stripCodeFences } from './utils';
 // Constants
 // ============================================================================
 
-const MAX_FIX_RETRIES = 3;
+const MAX_FIX_RETRIES = 2;
 const RETRY_DELAY_MS = 3000;
 
 // ============================================================================
@@ -349,15 +349,15 @@ export async function verifyAndFix(
       filesToFix = Object.keys(errorsByFile).filter(f => f !== 'unknown');
     }
 
-    // Fix each file with errors
-    for (const filePath of filesToFix) {
+    // Fix all files with errors in parallel
+    const fixPromises = filesToFix.map(async (filePath) => {
       const fileErrors = errorsByFile[filePath];
-      if (!fileErrors) continue;
+      if (!fileErrors) return;
 
       const originalContent = generatedContents.get(filePath);
       if (!originalContent) {
         console.warn(`Cannot fix ${filePath}: original content not found`);
-        continue;
+        return;
       }
 
       try {
@@ -391,7 +391,9 @@ export async function verifyAndFix(
       } catch (error) {
         console.error(`Failed to fix ${filePath}:`, error);
       }
-    }
+    });
+
+    await Promise.all(fixPromises);
 
     // Wait before retry
     if (attempt < MAX_FIX_RETRIES) {

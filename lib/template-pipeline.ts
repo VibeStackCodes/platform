@@ -1,5 +1,6 @@
 import type { Sandbox } from '@daytonaio/sdk';
 import type { ChatPlan, StreamEvent, GeneratedFile } from './types';
+import type { SchemaContract, TableDef, EnumDef, SeedRow } from './schema-contract';
 import { classifyFeatures } from './feature-classifier';
 import { executeTemplate, groupByLayer } from './template-registry';
 import { uploadFile, runCommand } from './sandbox';
@@ -25,6 +26,7 @@ interface ScaffoldPhaseResult {
   featureFiles: GeneratedFile[];
   allDeps: Record<string, string>;
   allMigrations: string[];
+  schemaContract: SchemaContract | null;
 }
 
 /**
@@ -44,6 +46,7 @@ export async function runScaffoldPhase(
   const allFiles: GeneratedFile[] = [];
   const allMigrations: string[] = [];
   const allDeps: Record<string, string> = {};
+  const schemaFragments: Partial<SchemaContract>[] = [];
   const layerGroups = groupByLayer(tasks);
 
   for (let layerIdx = 0; layerIdx < layerGroups.length; layerIdx++) {
@@ -65,6 +68,7 @@ export async function runScaffoldPhase(
     for (const result of results) {
       allFiles.push(...result.files);
       if (result.migration) allMigrations.push(result.migration);
+      if (result.schema) schemaFragments.push(result.schema);
       Object.assign(allDeps, result.dependencies);
     }
 
@@ -74,6 +78,11 @@ export async function runScaffoldPhase(
       status: 'complete',
     });
   }
+
+  // Merge schema fragments
+  const schemaContract = schemaFragments.length > 0
+    ? mergeSchemaContracts(schemaFragments)
+    : null;
 
   // 2.5. Install shadcn components (after scaffold, before file write)
   if (chatPlan.shadcnComponents && chatPlan.shadcnComponents.length > 0) {
@@ -157,6 +166,7 @@ export async function runScaffoldPhase(
     featureFiles,
     allDeps,
     allMigrations,
+    schemaContract,
   };
 }
 
@@ -218,6 +228,36 @@ export async function runFeaturePhase(
 
   console.log(`[pipeline] ✓ Feature phase complete: ${featureFiles.length} files written`);
   return generatedContents;
+}
+
+/**
+ * Merge multiple partial SchemaContract fragments into a single contract.
+ * Deduplicates tables by name (last occurrence wins).
+ * Merges enums by name (last occurrence wins).
+ * Concatenates seedData.
+ */
+export function mergeSchemaContracts(
+  fragments: Partial<SchemaContract>[],
+): SchemaContract {
+  const tableMap = new Map<string, TableDef>();
+  const enumMap = new Map<string, EnumDef>();
+  const seedData: SeedRow[] = [];
+
+  for (const fragment of fragments) {
+    for (const table of fragment.tables ?? []) {
+      tableMap.set(table.name, table);
+    }
+    for (const e of fragment.enums ?? []) {
+      enumMap.set(e.name, e);
+    }
+    seedData.push(...(fragment.seedData ?? []));
+  }
+
+  return {
+    tables: Array.from(tableMap.values()),
+    enums: enumMap.size > 0 ? Array.from(enumMap.values()) : undefined,
+    seedData: seedData.length > 0 ? seedData : undefined,
+  };
 }
 
 /**
