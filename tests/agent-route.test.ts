@@ -45,6 +45,18 @@ describe('POST /api/agent', () => {
     mockGetUser.mockResolvedValue({ id: 'user-123', email: 'test@test.com' } as any);
   });
 
+  it('returns 400 when request body is invalid JSON', async () => {
+    const req = new Request('http://localhost:3000/api/agent', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: 'not valid json{',
+    });
+    const res = await POST(req as any);
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toContain('Invalid');
+  });
+
   it('returns 400 when message is missing', async () => {
     const req = createRequest({ projectId: 'proj-1' });
     const res = await POST(req as any);
@@ -288,5 +300,25 @@ describe('POST /api/agent', () => {
     expect(progressEvents).toHaveLength(2);
     expect(progressEvents[0]).toMatchObject({ message: 'Step 1' });
     expect(progressEvents[1]).toMatchObject({ message: 'Step 2' });
+  });
+
+  it('handles chunks with no payload at all', async () => {
+    async function* chunks() {
+      yield { type: 'agent-execution-start' };
+      yield { type: 'agent-execution-end', payload: null };
+    }
+    mockNetwork.mockResolvedValue(chunks() as any);
+
+    const req = createRequest({ message: 'Build an app', projectId: 'proj-1' });
+    const res = await POST(req as any);
+    const events = await readSSEEvents(res);
+
+    const agentStart = events.find((e: any) => e.type === 'agent_start');
+    expect(agentStart).toBeDefined();
+    expect((agentStart as any).agentId).toBe('unknown');
+
+    const agentComplete = events.find((e: any) => e.type === 'agent_complete');
+    expect(agentComplete).toBeDefined();
+    expect((agentComplete as any).agentId).toBe('unknown');
   });
 });

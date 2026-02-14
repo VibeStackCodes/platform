@@ -18,7 +18,15 @@ import { getUser } from '@/lib/supabase-server';
 export const maxDuration = 300;
 
 export async function POST(request: NextRequest) {
-  const body = await request.json();
+  let body: { message?: string; projectId?: string };
+  try {
+    body = await request.json();
+  } catch {
+    return new Response(JSON.stringify({ error: 'Invalid request body' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
   const { message, projectId } = body;
 
   if (!message || !projectId) {
