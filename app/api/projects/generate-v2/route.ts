@@ -1,14 +1,13 @@
 /**
  * Generation API Route v2 (Agent Pipeline)
  *
- * SSE streaming endpoint using the 4-agent Mastra pipeline with plan approval
+ * SSE streaming endpoint using Mastra createWorkflow pipeline
  */
 
 import { NextRequest } from 'next/server';
 import { createSSEStream } from '@/lib/sse';
 import type { StreamEvent } from '@/lib/types';
-import { runGenerationWorkflow, TraceCollector } from '@/lib/agents';
-import type { AgentEvent } from '@/lib/agents';
+import { createGenerationWorkflow } from '@/lib/agents';
 
 export const maxDuration = 300;
 
@@ -24,50 +23,32 @@ export async function POST(request: NextRequest) {
   }
 
   return createSSEStream(async (emit: (event: StreamEvent) => void) => {
-    const collector = new TraceCollector(projectId);
-
-    // Bridge AgentEvent to StreamEvent
-    const emitAgentEvent = (event: AgentEvent) => {
-      collector.record(event);
-      // AgentEvent types match StreamEvent types we added
-      emit(event as StreamEvent);
-    };
-
     try {
       emit({ type: 'stage_update', stage: 'generating' });
 
-      const workflow = runGenerationWorkflow(prompt, emitAgentEvent);
+      // Create workflow with SSE emitter bound to steps
+      // TODO: pass sandbox instance when integrated with Daytona lifecycle
+      const workflow = createGenerationWorkflow(emit);
+      const run = await workflow.createRun();
 
-      // Step through the async generator
-      let result = await workflow.next();
-
-      while (!result.done) {
-        const state = result.value;
-
-        if (state.phase === 'awaiting-approval') {
-          // Emit plan for client display
-          emit({
-            type: 'plan_ready',
-            plan: state.plan as Record<string, unknown>,
-          } as StreamEvent);
-
-          // Auto-approve for now (future: suspend and wait for user)
-          result = await workflow.next(true);
-        } else {
-          result = await workflow.next();
-        }
-      }
-
-      // Emit summary
-      const summary = collector.getSummary();
-      emit({
-        type: 'checkpoint',
-        label: `Agent pipeline complete: ${summary.completedAgents} agents, ${summary.totalTokens} tokens`,
-        status: 'complete',
+      const result = await run.start({
+        inputData: { prompt, projectId },
       });
 
-      emit({ type: 'stage_update', stage: 'complete' });
-
+      if (result.status === 'success') {
+        emit({
+          type: 'checkpoint',
+          label: 'Agent pipeline complete',
+          status: 'complete',
+        });
+        emit({ type: 'stage_update', stage: 'complete' });
+      } else {
+        emit({
+          type: 'error',
+          message: `Workflow ${result.status}`,
+          stage: 'error',
+        });
+      }
     } catch (error) {
       emit({
         type: 'error',
