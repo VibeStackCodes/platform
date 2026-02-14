@@ -7,7 +7,7 @@ AI-powered app builder — users describe an app, the platform generates a full 
 ```bash
 pnpm dev              # Next.js dev server on :3000
 pnpm build            # Production build (matches Vercel)
-pnpm lint             # ESLint (next/core-web-vitals + typescript)
+pnpm lint             # OxLint (670+ rules, replaces ESLint)
 pnpm test             # Vitest unit/integration tests
 pnpm test:e2e:mock    # Playwright E2E with mock mode (no external services)
 pnpm test:e2e:real    # Playwright E2E against real Supabase/Daytona
@@ -153,5 +153,5 @@ Key detail: the platform itself is Next.js, but **generated apps are Vite + Reac
 - React 19 — use `use()` hook, no `forwardRef` needed
 - shadcn/ui components in `components/ui/`
 - Tailwind v4 (CSS-first config, no `tailwind.config.ts`)
-- ESLint: `next/core-web-vitals` + `next/typescript`
+- OxLint: replaces ESLint (670+ rules, 50-100x faster)
 - Imports use `@/` path alias
