@@ -91,8 +91,11 @@ export function ProjectLayout({
   }, [expiresAt, fetchSandboxUrls]);
 
   // Supabase realtime for non-sandbox fields (supabase project, etc.)
+  // Only subscribe when we still need the supabase project ID — avoid connecting
+  // a WebSocket that immediately gets torn down (causes console WS error noise).
+  const needsRealtimeSub = !supabaseProjectId;
   useEffect(() => {
-    if (supabaseProjectId) return;
+    if (!needsRealtimeSub) return;
 
     const supabase = createBrowserClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -118,7 +121,7 @@ export function ProjectLayout({
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [projectId, supabaseProjectId]);
+  }, [projectId, needsRealtimeSub]);
 
   return (
     <div className="flex h-screen">
