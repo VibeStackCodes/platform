@@ -273,16 +273,19 @@ export async function POST(req: NextRequest) {
             emit({ type: "checkpoint", label: "Applying database migrations", status: "complete" });
           }
 
-          // Seed database with realistic data
+          // Seed database with deterministic data from SchemaContract
           emit({ type: "checkpoint", label: "Seeding database", status: "active" });
           try {
-            const { seedRemoteDatabase } = await import("@/lib/seed-remote");
-            const tableNames = schemaContract
-              ? schemaContract.tables.map(t => t.name)
-              : [];
-            if (tableNames.length > 0) {
-              const seedResult = await seedRemoteDatabase(sp, tableNames);
-              console.log(`[generate] Seeded ${seedResult.tablesSeeded} tables (${seedResult.rowsInserted} rows)`);
+            if (schemaContract && schemaContract.tables.length > 0) {
+              const { contractToSeedSQL } = await import("@/lib/contract-to-seed");
+              const { runMigration: runSeedSQL } = await import("@/lib/supabase-mgmt");
+              const seedSQL = contractToSeedSQL(schemaContract);
+              const seedResult = await runSeedSQL(sp.id, seedSQL);
+              if (seedResult.success) {
+                console.log(`[generate] Seeded ${schemaContract.tables.length} tables`);
+              } else {
+                console.warn(`[generate] Seeding failed (non-fatal): ${seedResult.error}`);
+              }
             }
           } catch (seedError) {
             // Seeding is non-fatal — app works without seed data

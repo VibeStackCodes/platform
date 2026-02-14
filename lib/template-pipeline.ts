@@ -131,9 +131,16 @@ export async function runScaffoldPhase(
   const featureFiles = allFiles.filter(f => f.layer > 0);
 
   // 5. Write scaffold files only
+  // Skip files already present in the snapshot (identical config files).
+  // Uploading them would trigger unnecessary Vite restarts + dep re-optimization.
+  const SNAPSHOT_FILES = new Set(['vite.config.ts', 'tsconfig.json', 'tsconfig.app.json']);
+  const filesToUpload = scaffoldFiles.filter(
+    f => !SNAPSHOT_FILES.has(f.path)
+  );
+
   emit({ type: 'stage_update', stage: 'generating' });
 
-  for (const file of scaffoldFiles) {
+  for (const file of filesToUpload) {
     emit({ type: 'file_start', path: file.path, layer: file.layer });
 
     await uploadFile(sandbox, file.content, `/workspace/${file.path}`);
@@ -145,13 +152,20 @@ export async function runScaffoldPhase(
     console.log(`[pipeline] ✓ ${file.path} (${linesOfCode} lines)`);
   }
 
-  // 6. Install dependencies
-  if (Object.keys(allDeps).length > 0) {
+  // 6. Install dependencies — only if templates introduced deps not in the snapshot
+  const SNAPSHOT_DEPS = new Set([
+    'react', 'react-dom', 'react-router', '@supabase/supabase-js',
+    'lucide-react', 'clsx', 'tailwind-merge', 'zod',
+    'class-variance-authority', 'radix-ui', '@electric-sql/pglite',
+    '@vitejs/plugin-react', 'typescript', 'vite',
+    '@types/react', '@types/react-dom', 'tailwindcss', '@tailwindcss/vite',
+  ]);
+  const newDeps = Object.entries(allDeps).filter(([pkg]) => !SNAPSHOT_DEPS.has(pkg));
+
+  if (newDeps.length > 0) {
     emit({ type: 'checkpoint', label: 'Installing dependencies', status: 'active' });
 
-    const depsList = Object.entries(allDeps)
-      .map(([pkg, ver]) => `${pkg}@${ver}`)
-      .join(' ');
+    const depsList = newDeps.map(([pkg, ver]) => `${pkg}@${ver}`).join(' ');
 
     try {
       await runCommand(

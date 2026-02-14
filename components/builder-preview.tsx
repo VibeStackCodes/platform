@@ -86,7 +86,7 @@ export function BuilderPreview({
       <div className="relative flex-1">
         <div className={`absolute inset-0 ${activeTab === "preview" ? "" : "invisible"}`}>
           {previewUrl ? (
-            <WebPreview defaultUrl={previewUrl} className="h-full">
+            <WebPreview key={previewUrl} defaultUrl={previewUrl} className="h-full">
               <WebPreviewBody src={previewUrl} className="h-full" />
             </WebPreview>
           ) : (
