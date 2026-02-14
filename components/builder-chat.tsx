@@ -95,6 +95,7 @@ interface BuilderChatProps {
   projectId: string;
   initialPrompt?: string;
   initialMessages?: Array<{ id: string; role: "user" | "assistant" | "system"; parts: Array<Record<string, unknown>> }>;
+  onGenerationComplete?: () => void;
 }
 
 const SUGGESTIONS = [
@@ -104,7 +105,7 @@ const SUGGESTIONS = [
   "A real-time chat application",
 ];
 
-export function BuilderChat({ projectId, initialPrompt, initialMessages }: BuilderChatProps) {
+export function BuilderChat({ projectId, initialPrompt, initialMessages, onGenerationComplete }: BuilderChatProps) {
   const [model, setModel] = useState("gpt-5.2");
   const [generationStatus, setGenerationStatus] = useState<
     "idle" | "generating" | "complete" | "error"
@@ -278,6 +279,7 @@ export function BuilderChat({ projectId, initialPrompt, initialMessages }: Build
         break;
       case "complete":
         setGenerationStatus("complete");
+        onGenerationComplete?.();
         break;
       case "error":
         setGenerationStatus("error");

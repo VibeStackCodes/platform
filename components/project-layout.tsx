@@ -126,7 +126,7 @@ export function ProjectLayout({
   return (
     <div className="flex h-screen">
       <div className="w-2/5 border-r">
-        <BuilderChat projectId={projectId} initialPrompt={initialPrompt} initialMessages={initialMessages} />
+        <BuilderChat projectId={projectId} initialPrompt={initialPrompt} initialMessages={initialMessages} onGenerationComplete={fetchSandboxUrls} />
       </div>
       <div className="w-3/5">
         <BuilderPreview
