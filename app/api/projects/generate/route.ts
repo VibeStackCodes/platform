@@ -9,7 +9,7 @@ import { createRepo, getInstallationToken, buildRepoName } from "@/lib/github";
 import { buildAppSlug } from "@/lib/slug";
 import { runPipeline, runScaffoldPhase, runFeaturePhase } from "@/lib/template-pipeline";
 import { verifyAndFix } from "@/lib/verifier";
-import { createSandbox, getSandbox, getPreviewUrl, pushToGitHub, waitForDevServer } from "@/lib/sandbox";
+import { createSandbox, getSandbox, findSandboxByProject, getPreviewUrl, pushToGitHub, waitForDevServer } from "@/lib/sandbox";
 import { createSupabaseProject } from "@/lib/supabase-mgmt";
 import type { GenerateRequest, StreamEvent, ChatPlan } from "@/lib/types";
 import { classifyFeatures } from "@/lib/feature-classifier";
@@ -29,7 +29,7 @@ export const maxDuration = 300;
  */
 export async function POST(req: NextRequest) {
   const body: GenerateRequest = await req.json();
-  const { projectId: existingProjectId, prompt, chatPlan, model = "claude-sonnet-4-5-20250929" } = body;
+  const { projectId: existingProjectId, prompt, chatPlan, model = "gpt-5.2" } = body;
 
   if (!chatPlan) {
     return new Response(
@@ -103,37 +103,70 @@ export async function POST(req: NextRequest) {
         emit({ type: "stage_update", stage: "provisioning" });
 
         let sandbox;
-        // Poll for pre-provisioned sandbox (chat route may still be writing it)
+        let previewUrlStr: string;
+        let codeServerUrlStr: string;
+
+        // Check DB for pre-provisioned sandbox (chat route writes sandbox_id + URLs)
         const { data: existingProject } = await supabase
           .from("projects")
-          .select("sandbox_id, supabase_project_id")
+          .select("sandbox_id, preview_url, code_server_url, supabase_project_id, github_repo_url")
           .eq("id", project.id)
           .single();
 
-        let sandboxId = existingProject?.sandbox_id;
-        if (!sandboxId) {
-          // Wait up to 8s for chat route's fire-and-forget provisioning to complete
-          for (let i = 0; i < 4; i++) {
-            await new Promise(r => setTimeout(r, 2000));
-            const { data: poll } = await supabase
-              .from("projects")
-              .select("sandbox_id")
-              .eq("id", project.id)
-              .single();
-            if (poll?.sandbox_id) { sandboxId = poll.sandbox_id; break; }
+        const sandboxId = existingProject?.sandbox_id;
+
+        if (sandboxId && existingProject?.preview_url) {
+          // Fast path: sandbox + URLs already provisioned by chat route
+          sandbox = await getSandbox(sandboxId);
+          previewUrlStr = existingProject.preview_url;
+          codeServerUrlStr = existingProject.code_server_url || (await getPreviewUrl(sandbox, 13337)).url;
+          console.log(`✓ Reusing pre-provisioned sandbox: ${sandbox.id}`);
+        } else if (sandboxId) {
+          // Sandbox exists but URLs not yet written — get them from Daytona directly
+          sandbox = await getSandbox(sandboxId);
+          emit({ type: "checkpoint", label: "Waiting for dev server", status: "active" });
+          const [preview, codeServer] = await Promise.all([
+            waitForDevServer(sandbox),
+            getPreviewUrl(sandbox, 13337),
+          ]);
+          previewUrlStr = preview.url;
+          codeServerUrlStr = codeServer.url;
+        } else {
+          // No sandbox yet — check Daytona by label, then create as last resort
+          sandbox = await findSandboxByProject(project.id);
+          if (!sandbox) {
+            sandbox = await createSandbox({
+              language: "typescript",
+              labels: { project: project.id, app: chatPlan.appName, type: "vibestack-generated" },
+            });
+            console.log(`✓ Created new sandbox: ${sandbox.id}`);
+          } else {
+            console.log(`✓ Found sandbox via Daytona label: ${sandbox.id}`);
           }
+          emit({ type: "checkpoint", label: "Waiting for dev server", status: "active" });
+          const [preview, codeServer] = await Promise.all([
+            waitForDevServer(sandbox),
+            getPreviewUrl(sandbox, 13337),
+          ]);
+          previewUrlStr = preview.url;
+          codeServerUrlStr = codeServer.url;
         }
 
-        if (sandboxId) {
-          sandbox = await getSandbox(sandboxId);
-          console.log(`✓ Reusing pre-provisioned sandbox: ${sandbox.id}`);
-        } else {
-          sandbox = await createSandbox({
-            language: "typescript",
-            labels: { app: chatPlan.appName, type: "vibestack-generated" },
-          });
-          // Dev server auto-starts via snapshot entrypoint
-        }
+        emit({ type: "preview_ready", url: previewUrlStr });
+        emit({ type: "code_server_ready", url: codeServerUrlStr });
+        emit({ type: "checkpoint", label: "Waiting for dev server", status: "complete" });
+        console.log(`✓ Dev server: ${previewUrlStr}`);
+
+        // TODO: Phase 2 — store *.preview.vibestack.app URL (non-expiring Cloudflare proxy)
+        // See docs/plans/2026-02-14-sandbox-preview-architecture-design.md
+        // Signed Daytona URLs expire — client fetches fresh from /api/projects/[id]/sandbox-urls
+        await supabase
+          .from("projects")
+          .update({
+            sandbox_id: sandbox.id,
+            code_server_url: codeServerUrlStr,
+          })
+          .eq("id", project.id);
 
         // Supabase project creation (runs in parallel with generation)
         let supabaseProject: import("@/lib/types").SupabaseProject | null = null;
@@ -142,23 +175,6 @@ export async function POST(req: NextRequest) {
           ? createSupabaseProject(chatPlan.appName)
               .then((p) => { supabaseProject = p; supabaseProjectId = p.id; })
           : Promise.resolve();
-
-        // Dev server auto-starts via snapshot entrypoint — just wait for it + get URL
-        emit({ type: "checkpoint", label: "Waiting for dev server", status: "active" });
-        const [{ url: previewUrlStr }] = await Promise.all([
-          waitForDevServer(sandbox),
-          // Write sandbox_id to DB in parallel
-          supabase.from("projects").update({ sandbox_id: sandbox.id }).eq("id", project.id),
-        ]);
-        emit({ type: "preview_ready", url: previewUrlStr });
-        emit({ type: "checkpoint", label: "Waiting for dev server", status: "complete" });
-        console.log(`✓ Dev server ready: ${previewUrlStr}`);
-
-        // Write preview URL to DB immediately so Supabase realtime updates the iframe
-        await supabase
-          .from("projects")
-          .update({ preview_url: previewUrlStr })
-          .eq("id", project.id);
 
         // Stage 2: Scaffold Phase — write layer 0 files + install dependencies
         emit({ type: "stage_update", stage: "generating" });
@@ -275,22 +291,24 @@ export async function POST(req: NextRequest) {
           emit({ type: "checkpoint", label: "Seeding database", status: "complete" });
         }
 
-        // Stage 4: Push to GitHub
-        emit({ type: 'checkpoint', label: 'Pushing to GitHub', status: 'active' });
-        const repoName = buildRepoName(chatPlan.appName, project.id);
-        const { cloneUrl, htmlUrl } = await createRepo(repoName);
-        const token = await getInstallationToken();
-        await pushToGitHub(sandbox, cloneUrl, token);
-        const githubRepoUrl = htmlUrl;
-        emit({ type: 'checkpoint', label: 'Pushing to GitHub', status: 'complete' });
-        console.log(`✓ Pushed to GitHub: ${htmlUrl}`);
+        // Stage 4: Push to GitHub (fallback — repo usually created during provisioning)
+        let githubRepoUrl = existingProject?.github_repo_url ?? null;
+        if (!githubRepoUrl) {
+          // Provisioning didn't create the repo — create + push now
+          emit({ type: 'checkpoint', label: 'Pushing to GitHub', status: 'active' });
+          const repoName = buildRepoName(chatPlan.appName, project.id);
+          const { cloneUrl, htmlUrl } = await createRepo(repoName);
+          const token = await getInstallationToken();
+          await pushToGitHub(sandbox, cloneUrl, token);
+          githubRepoUrl = htmlUrl;
+          emit({ type: 'checkpoint', label: 'Pushing to GitHub', status: 'complete' });
+          console.log(`✓ Pushed to GitHub (fallback): ${htmlUrl}`);
+        } else {
+          emit({ type: 'checkpoint', label: 'Pushing to GitHub', status: 'complete' });
+          console.log(`✓ GitHub repo already exists: ${githubRepoUrl}`);
+        }
 
-        // Stage 5: Code Server URL
-        const codeServerUrl = await getPreviewUrl(sandbox, 13337);
-        const codeServerUrlStr = codeServerUrl.url;
-        emit({ type: "code_server_ready", url: codeServerUrlStr });
-
-        // Stage 6: Completion
+        // Stage 5: Completion
         emit({ type: "stage_update", stage: "complete" });
 
         const wildcardDomain = process.env.VERCEL_WILDCARD_DOMAIN;
@@ -302,7 +320,6 @@ export async function POST(req: NextRequest) {
           .from("projects")
           .update({
             status: "complete",
-            preview_url: previewUrlStr,
             code_server_url: codeServerUrlStr,
             github_repo_url: githubRepoUrl,
             ...(eagerDeployUrl ? { deploy_url: eagerDeployUrl } : {}),

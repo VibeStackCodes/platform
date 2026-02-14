@@ -60,8 +60,6 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
       initialPrompt={project.status === "pending" ? project.prompt : undefined}
       initialMessages={initialMessages}
       initialSandboxId={project.sandbox_id}
-      initialPreviewUrl={project.preview_url}
-      initialCodeServerUrl={project.code_server_url}
       initialSupabaseUrl={project.supabase_url}
       initialSupabaseProjectId={project.supabase_project_id}
     />

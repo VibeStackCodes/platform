@@ -1,4 +1,5 @@
 import { Daytona, Sandbox } from '@daytonaio/sdk';
+import { createRepo, getInstallationToken, buildRepoName } from './github';
 
 /**
  * Daytona Sandbox Wrapper
@@ -54,6 +55,27 @@ export function getDaytonaClient(): Daytona {
   }
 
   return daytonaClient;
+}
+
+/**
+ * Find an existing sandbox by project label.
+ * Returns the first sandbox matching the project ID, or null.
+ */
+export async function findSandboxByProject(projectId: string): Promise<Sandbox | null> {
+  const daytona = getDaytonaClient();
+  try {
+    const result = await daytona.list({ project: projectId }, 1, 1);
+    if (result.items.length > 0) {
+      // list() returns lightweight objects — get the full sandbox
+      const sandbox = await daytona.get(result.items[0].id);
+      console.log(`✓ Found sandbox by project label: ${sandbox.id}`);
+      return sandbox;
+    }
+    return null;
+  } catch (error) {
+    console.warn(`[sandbox] findSandboxByProject failed:`, error);
+    return null;
+  }
 }
 
 /**
@@ -384,18 +406,15 @@ export async function pushToGitHub(
   token: string,
   workDir: string = '/workspace'
 ): Promise<void> {
-  // Build authenticated URL: https://x-access-token:TOKEN@github.com/org/repo.git
   const authedUrl = cloneUrl.replace('https://', `https://x-access-token:${token}@`);
 
-  // Add remote with embedded auth token
+  // git init + remote add have no SDK equivalent
   await runCommand(
     sandbox,
-    `git remote add origin ${authedUrl}`,
+    `git init && git config user.email "vibestack@generated.app" && git config user.name "VibeStack" && git remote add origin ${authedUrl}`,
     'git-remote-add',
-    { cwd: workDir, timeout: 15 }
+    { cwd: workDir, timeout: 30 }
   );
-
-  // Rename default branch to main (sandbox git init creates 'master')
   await runCommand(
     sandbox,
     'git branch -M main',
@@ -403,13 +422,8 @@ export async function pushToGitHub(
     { cwd: workDir, timeout: 10 }
   );
 
-  // Push via shell git (Daytona's native git.push can fail silently)
-  await runCommand(
-    sandbox,
-    'git push -u origin main',
-    'git-push',
-    { cwd: workDir, timeout: 60 }
-  );
+  // Push using Daytona native git binding
+  await sandbox.git.push(workDir, 'x-access-token', token);
 
   console.log(`✓ Git push to ${cloneUrl} completed`);
 }
@@ -496,19 +510,68 @@ export async function provisionProject(
   supabaseClient: any,
 ): Promise<void> {
   try {
-    // Only pre-provision sandbox — Supabase project is created by the generate route
-    // (avoids double-creation which hits the free tier 2-project limit)
     const sandbox = await createSandbox({
       language: 'typescript',
       autoStopInterval: 60,
       labels: { project: projectId, app: appName, type: 'vibestack-generated' },
     });
 
-    // Dev server auto-starts via snapshot entrypoint (OpenVSCode + bun dev in tmux)
+    // Get all URLs immediately — dev server auto-starts via snapshot entrypoint
+    const [{ url: previewUrl }, { url: codeServerUrl }] = await Promise.all([
+      waitForDevServer(sandbox),
+      getPreviewUrl(sandbox, 13337),
+    ]);
 
+    // Create GitHub repo and init git in sandbox — source of truth from day one
+    let githubRepoUrl: string | null = null;
+    try {
+      const repoName = buildRepoName(appName, projectId);
+      const { cloneUrl, htmlUrl } = await createRepo(repoName);
+      const token = await getInstallationToken();
+      const authedUrl = cloneUrl.replace('https://', `https://x-access-token:${token}@`);
+
+      // git init + remote add have no SDK equivalent
+      await runCommand(
+        sandbox,
+        `git init && git config user.email "vibestack@generated.app" && git config user.name "VibeStack" && git remote add origin ${authedUrl}`,
+        'git-init',
+        { cwd: '/workspace', timeout: 30 }
+      );
+      // Rename default branch to main
+      await runCommand(
+        sandbox,
+        'git branch -M main',
+        'git-rename-branch',
+        { cwd: '/workspace', timeout: 10 }
+      );
+      // Commit snapshot code as initial commit
+      await sandbox.git.add('/workspace', ['.']);
+      await sandbox.git.commit(
+        '/workspace',
+        'chore: initial project scaffolding',
+        'VibeStack',
+        'vibestack@generated.app',
+      );
+      // Push using Daytona native git binding
+      await sandbox.git.push('/workspace', 'x-access-token', token);
+
+      githubRepoUrl = htmlUrl;
+      console.log(`✓ GitHub repo created and initialized: ${htmlUrl}`);
+    } catch (error) {
+      // Non-fatal: generate route will create repo as fallback
+      console.warn(`[provisionProject] GitHub init failed (will retry in generate):`, error);
+    }
+
+    // TODO: Phase 2 — store *.preview.vibestack.app URL (non-expiring Cloudflare proxy)
+    // See docs/plans/2026-02-14-sandbox-preview-architecture-design.md
+    // Signed Daytona URLs expire — client fetches fresh from /api/projects/[id]/sandbox-urls
     await supabaseClient
       .from('projects')
-      .update({ sandbox_id: sandbox.id })
+      .update({
+        sandbox_id: sandbox.id,
+        code_server_url: codeServerUrl,
+        ...(githubRepoUrl ? { github_repo_url: githubRepoUrl } : {}),
+      })
       .eq('id', projectId);
 
     console.log(`✓ Sandbox pre-provisioned: ${sandbox.id}`);
@@ -516,6 +579,20 @@ export async function provisionProject(
     console.error(`[provisionProject] Failed for ${projectId}:`, error);
     // Don't throw — this is fire-and-forget. Generation route will create its own if needed.
   }
+}
+
+/**
+ * Push the current working tree to origin main.
+ * Used after incremental commits during generation.
+ * Uses Daytona native git.push() with installation token auth.
+ */
+export async function pushToOrigin(
+  sandbox: Sandbox,
+  workDir: string = '/workspace'
+): Promise<void> {
+  const token = await getInstallationToken();
+  await sandbox.git.push(workDir, 'x-access-token', token);
+  console.log('✓ Pushed to origin main');
 }
 
 // ============================================================================
