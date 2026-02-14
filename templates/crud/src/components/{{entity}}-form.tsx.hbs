@@ -35,6 +35,12 @@ export function {{pascalCase entity}}Form({ onSubmit, onCancel, loading }: {{pas
         <input id="{{name}}" type="checkbox" checked={!!formData["{{name}}"]} onChange={(e) => setFormData(prev => ({ ...prev, ["{{name}}"]: e.target.checked }))} className="h-4 w-4" />
 {{else if (eq type "number")}}
         <Input id="{{name}}" type="number" value={formData["{{name}}"] ?? ''} onChange={(e) => setFormData(prev => ({ ...prev, ["{{name}}"]: Number(e.target.value) }))} {{#if required}}required{{/if}} />
+{{else if (eq type "enum")}}
+        <select id="{{name}}" value={(formData["{{name}}"] as string) ?? ''} onChange={(e) => setFormData(prev => ({ ...prev, ["{{name}}"]: e.target.value as Create{{pascalCase ../entity}}Input["{{name}}"] }))} className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" {{#if required}}required{{/if}}>
+          <option value="">Select {{name}}</option>
+          {{#each enumValues}}<option value="{{this}}">{{this}}</option>
+          {{/each}}
+        </select>
 {{else}}
         <Input id="{{name}}" type="text" value={(formData["{{name}}"] as string) ?? ''} onChange={(e) => setFormData(prev => ({ ...prev, ["{{name}}"]: e.target.value }))} {{#if required}}required{{/if}} />
 {{/if}}

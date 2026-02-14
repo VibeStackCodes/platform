@@ -14,7 +14,7 @@ import {{pascalCase this.pluralName}}Page from './pages/{{this.pluralName}}';
 {{#if hasMessaging}}
 import { ChatPanel } from './components/chat-panel';
 {{/if}}
-import { {{#if hasDashboard}}LayoutDashboard, {{/if}}{{#if entities.length}}Table2, {{/if}}{{#if hasMessaging}}MessageSquare, {{/if}}{{#if hasAuth}}LogOut, {{/if}}Home } from 'lucide-react';
+import { {{#if hasDashboard}}LayoutDashboard{{else}}Home{{/if}}{{#if entities.length}}, Table2{{/if}}{{#if hasMessaging}}, MessageSquare{{/if}}{{#if hasAuth}}, LogOut{{/if}} } from 'lucide-react';
 
 function Sidebar() {
   const location = useLocation();
