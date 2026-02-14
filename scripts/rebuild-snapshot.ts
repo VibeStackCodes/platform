@@ -31,6 +31,8 @@ async function main() {
     .runCommands('bun install')
     // Install tsc globally so build verification can run bare `tsc --noEmit`
     .runCommands('bun add -g typescript')
+    // Install OxLint globally — single Rust binary, used for auto-fix + lint diagnostics
+    .runCommands('bun install -g oxlint')
     // Pre-warm Vite + TypeScript caches with minimal scaffold
     .addLocalFile('snapshot/warmup-scaffold/vite.config.ts', '/workspace/vite.config.ts')
     .addLocalFile('snapshot/warmup-scaffold/tsconfig.json', '/workspace/tsconfig.json')
