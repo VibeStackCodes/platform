@@ -61,13 +61,13 @@ export class TraceCollector {
     return [...this.events];
   }
 
-  getSummary() {
+  getSummary(): { totalAgents: number; completedAgents: number; totalTokens: number; totalDurationMs: number } {
     const traces = this.getTraces();
     return {
       totalAgents: traces.length,
       completedAgents: traces.filter(t => t.status === 'completed').length,
-      totalTokens: traces.reduce((sum, t) => sum + (t.tokensUsed || 0), 0),
-      totalDurationMs: traces.reduce((sum, t) => sum + (t.durationMs || 0), 0),
+      totalTokens: traces.reduce((sum, t) => sum + (t.tokensUsed ?? 0), 0),
+      totalDurationMs: traces.reduce((sum, t) => sum + (t.durationMs ?? 0), 0),
     };
   }
 }
