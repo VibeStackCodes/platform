@@ -89,6 +89,35 @@ function parseOxlintOutput(output: string): DiagnosticError[] {
 }
 
 // ============================================================================
+// Auto-Fix
+// ============================================================================
+
+/**
+ * Run oxlint --fix --fix-suggestions in the sandbox to auto-fix trivial
+ * lint violations (unused imports, let→const, arrow bodies, etc.) at zero
+ * API cost before running AI-powered fixes.
+ *
+ * Uses --fix (safe, no behavior change) + --fix-suggestions (may alter
+ * behavior but safe for generated code we fully own).
+ * Does NOT use --fix-dangerously (changes type definitions/logic operators).
+ */
+export async function autoFixLintErrors(sandbox: Sandbox): Promise<string> {
+  try {
+    const result = await runCommand(
+      sandbox,
+      'oxlint src/ --fix --fix-suggestions 2>&1 || true',
+      'oxlint-autofix',
+      { cwd: '/workspace', timeout: 30 },
+    );
+    console.log(`[layer-diagnostics] oxlint --fix completed (exit ${result.exitCode})`);
+    return result.stdout;
+  } catch (err) {
+    console.warn('[layer-diagnostics] oxlint --fix failed (non-fatal):', err);
+    return '';
+  }
+}
+
+// ============================================================================
 // Main Entry Point
 // ============================================================================
 
