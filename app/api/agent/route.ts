@@ -57,12 +57,17 @@ export async function POST(request: NextRequest) {
       });
 
       for await (const chunk of result) {
+        // Cast payload for flexible access — Mastra's NetworkChunkType
+        // has strict types but runtime payloads may include extra fields
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const payload = (chunk as any).payload ?? {};
+
         switch (chunk.type) {
           case 'agent-execution-start':
             emit({
               type: 'agent_start',
-              agentId: chunk.payload?.agentId ?? 'unknown',
-              agentName: chunk.payload?.agentName ?? 'Agent',
+              agentId: payload.agentId ?? 'unknown',
+              agentName: payload.agentName ?? payload.agentId ?? 'Agent', // SDK doesn't expose agentName, fallback to agentId
               phase: 0,
             });
             break;
@@ -70,33 +75,34 @@ export async function POST(request: NextRequest) {
           case 'agent-execution-event-text-delta':
             emit({
               type: 'agent_progress',
-              agentId: chunk.payload?.agentId ?? 'unknown',
-              message: chunk.payload?.textDelta ?? '',
+              agentId: payload.agentId ?? payload?.payload?.id ?? 'unknown',
+              message: payload.text ?? payload?.payload?.text ?? payload.textDelta ?? '',
             });
             break;
 
           case 'agent-execution-end':
             emit({
               type: 'agent_complete',
-              agentId: chunk.payload?.agentId ?? 'unknown',
-              tokensUsed: chunk.payload?.tokensUsed ?? 0,
-              durationMs: chunk.payload?.durationMs ?? 0,
+              agentId: payload.agentId ?? 'unknown',
+              tokensUsed: payload.usage?.totalTokens ?? payload.tokensUsed ?? 0,
+              durationMs: payload.durationMs ?? 0,
             });
             break;
 
           case 'tool-execution-end':
-            if (chunk.payload?.toolName === 'write-file') {
+            if (payload.toolName === 'write-file') {
+              const toolResult = payload.result as Record<string, unknown> | undefined;
               emit({
                 type: 'file_complete',
-                path: chunk.payload?.result?.path ?? '',
-                linesOfCode: chunk.payload?.result?.bytesWritten ?? 0,
+                path: (toolResult?.path as string) ?? '',
+                linesOfCode: (toolResult?.bytesWritten as number) ?? 0,
               });
             } else {
               emit({
                 type: 'agent_artifact',
-                agentId: chunk.payload?.agentId ?? 'unknown',
+                agentId: payload.agentId ?? payload.primitiveId ?? 'unknown',
                 artifactType: 'tool-result',
-                artifactName: chunk.payload?.toolName ?? 'unknown',
+                artifactName: payload.toolName ?? 'unknown',
               });
             }
             break;
@@ -112,7 +118,7 @@ export async function POST(request: NextRequest) {
           case 'workflow-execution-suspended':
             emit({
               type: 'plan_ready',
-              plan: chunk.payload?.suspendPayload ?? {},
+              plan: payload.suspendPayload ?? {},
             });
             break;
         }

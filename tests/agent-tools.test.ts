@@ -43,7 +43,7 @@ describe('Sandbox Tools', () => {
   });
 
   it('writeFileTool has correct input schema', () => {
-    const schema = writeFileTool.inputSchema;
+    const schema = writeFileTool.inputSchema!;
     const valid = schema.safeParse({
       sandboxId: 'abc',
       path: 'src/App.tsx',
@@ -53,25 +53,25 @@ describe('Sandbox Tools', () => {
   });
 
   it('readFileTool has correct input schema', () => {
-    const schema = readFileTool.inputSchema;
+    const schema = readFileTool.inputSchema!;
     const valid = schema.safeParse({ sandboxId: 'abc', path: 'src/App.tsx' });
     expect(valid.success).toBe(true);
   });
 
   it('listFilesTool has correct input schema', () => {
-    const schema = listFilesTool.inputSchema;
+    const schema = listFilesTool.inputSchema!;
     const valid = schema.safeParse({ sandboxId: 'abc', directory: 'src' });
     expect(valid.success).toBe(true);
   });
 
   it('createDirectoryTool has correct input schema', () => {
-    const schema = createDirectoryTool.inputSchema;
+    const schema = createDirectoryTool.inputSchema!;
     const valid = schema.safeParse({ sandboxId: 'abc', path: 'src/components' });
     expect(valid.success).toBe(true);
   });
 
   it('runCommandTool has correct input schema', () => {
-    const schema = runCommandTool.inputSchema;
+    const schema = runCommandTool.inputSchema!;
     const valid = schema.safeParse({
       sandboxId: 'abc',
       command: 'bun run build',
@@ -88,25 +88,25 @@ describe('Sandbox Tools', () => {
   });
 
   it('runBuildTool has correct input schema', () => {
-    const schema = runBuildTool.inputSchema;
+    const schema = runBuildTool.inputSchema!;
     const valid = schema.safeParse({ sandboxId: 'abc' });
     expect(valid.success).toBe(true);
   });
 
   it('runLintTool has correct input schema', () => {
-    const schema = runLintTool.inputSchema;
+    const schema = runLintTool.inputSchema!;
     const valid = schema.safeParse({ sandboxId: 'abc' });
     expect(valid.success).toBe(true);
   });
 
   it('runTypeCheckTool has correct input schema', () => {
-    const schema = runTypeCheckTool.inputSchema;
+    const schema = runTypeCheckTool.inputSchema!;
     const valid = schema.safeParse({ sandboxId: 'abc' });
     expect(valid.success).toBe(true);
   });
 
   it('validateSQLTool input accepts SQL string (no sandboxId needed)', () => {
-    const schema = validateSQLTool.inputSchema;
+    const schema = validateSQLTool.inputSchema!;
     const valid = schema.safeParse({ sql: 'CREATE TABLE test (id uuid PRIMARY KEY);' });
     expect(valid.success).toBe(true);
 
@@ -116,7 +116,7 @@ describe('Sandbox Tools', () => {
   });
 
   it('getPreviewUrlTool has optional port with default', () => {
-    const schema = getPreviewUrlTool.inputSchema;
+    const schema = getPreviewUrlTool.inputSchema!;
     const valid = schema.safeParse({ sandboxId: 'abc' });
     expect(valid.success).toBe(true);
 
@@ -125,7 +125,7 @@ describe('Sandbox Tools', () => {
   });
 
   it('createSandboxTool does not require sandboxId', () => {
-    const schema = createSandboxTool.inputSchema;
+    const schema = createSandboxTool.inputSchema!;
     const valid = schema.safeParse({});
     expect(valid.success).toBe(true);
 
@@ -137,7 +137,7 @@ describe('Sandbox Tools', () => {
   });
 
   it('pushToGitHubTool has correct input schema', () => {
-    const schema = pushToGitHubTool.inputSchema;
+    const schema = pushToGitHubTool.inputSchema!;
     const valid = schema.safeParse({
       sandboxId: 'abc',
       cloneUrl: 'https://github.com/user/repo.git',
@@ -147,7 +147,7 @@ describe('Sandbox Tools', () => {
   });
 
   it('deployToVercelTool has correct input schema', () => {
-    const schema = deployToVercelTool.inputSchema;
+    const schema = deployToVercelTool.inputSchema!;
     const valid = schema.safeParse({
       projectId: 'proj_123',
       repoUrl: 'https://github.com/user/repo',
@@ -156,7 +156,7 @@ describe('Sandbox Tools', () => {
   });
 
   it('searchDocsTool input accepts library and query', () => {
-    const schema = searchDocsTool.inputSchema;
+    const schema = searchDocsTool.inputSchema!;
     const valid = schema.safeParse({
       library: 'react',
       query: 'useEffect cleanup',
@@ -165,7 +165,7 @@ describe('Sandbox Tools', () => {
   });
 
   it('tools that require sandboxId reject missing sandboxId', () => {
-    const schema = writeFileTool.inputSchema;
+    const schema = writeFileTool.inputSchema!;
     const invalid = schema.safeParse({ path: 'src/App.tsx', content: 'hello' });
     expect(invalid.success).toBe(false);
   });
@@ -195,7 +195,7 @@ describe('Sandbox Tools', () => {
   });
 
   it('writeFileTool outputSchema matches expected structure', () => {
-    const schema = writeFileTool.outputSchema;
+    const schema = writeFileTool.outputSchema!;
     const valid = schema.safeParse({
       success: true,
       path: 'src/App.tsx',
@@ -205,7 +205,7 @@ describe('Sandbox Tools', () => {
   });
 
   it('readFileTool outputSchema matches expected structure', () => {
-    const schema = readFileTool.outputSchema;
+    const schema = readFileTool.outputSchema!;
     const valid = schema.safeParse({
       content: 'file content',
       exists: true,
@@ -214,7 +214,7 @@ describe('Sandbox Tools', () => {
   });
 
   it('validateSQLTool outputSchema matches expected structure', () => {
-    const schema = validateSQLTool.outputSchema;
+    const schema = validateSQLTool.outputSchema!;
     const validResult = schema.safeParse({ valid: true });
     expect(validResult.success).toBe(true);
 
@@ -226,7 +226,7 @@ describe('Sandbox Tools', () => {
   });
 
   it('listFilesTool outputSchema matches expected structure', () => {
-    const schema = listFilesTool.outputSchema;
+    const schema = listFilesTool.outputSchema!;
     const valid = schema.safeParse({
       files: ['file1.ts', 'file2.ts'],
       count: 2,
@@ -235,7 +235,7 @@ describe('Sandbox Tools', () => {
   });
 
   it('runCommandTool outputSchema matches expected structure', () => {
-    const schema = runCommandTool.outputSchema;
+    const schema = runCommandTool.outputSchema!;
     const valid = schema.safeParse({
       exitCode: 0,
       stdout: 'command output',
@@ -245,7 +245,7 @@ describe('Sandbox Tools', () => {
   });
 
   it('getPreviewUrlTool outputSchema matches expected structure', () => {
-    const schema = getPreviewUrlTool.outputSchema;
+    const schema = getPreviewUrlTool.outputSchema!;
     const valid = schema.safeParse({
       url: 'https://preview.daytona.io/abc',
       port: 3000,

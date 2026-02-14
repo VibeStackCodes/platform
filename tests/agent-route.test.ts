@@ -271,15 +271,18 @@ describe('POST /api/agent', () => {
     const res = await POST(req as any);
     const events = await readSSEEvents(res);
 
-    const agentStart = events.find((e: any) => e.type === 'agent_start');
+    const agentStart = events.find((e: any) => e.type === 'agent_start') as Record<string, unknown> | undefined;
+    expect(agentStart).toBeDefined();
     expect(agentStart?.agentId).toBe('unknown');
     expect(agentStart?.agentName).toBe('Agent');
 
-    const agentComplete = events.find((e: any) => e.type === 'agent_complete');
+    const agentComplete = events.find((e: any) => e.type === 'agent_complete') as Record<string, unknown> | undefined;
+    expect(agentComplete).toBeDefined();
     expect(agentComplete?.tokensUsed).toBe(0);
     expect(agentComplete?.durationMs).toBe(0);
 
-    const artifact = events.find((e: any) => e.type === 'agent_artifact');
+    const artifact = events.find((e: any) => e.type === 'agent_artifact') as Record<string, unknown> | undefined;
+    expect(artifact).toBeDefined();
     expect(artifact?.agentId).toBe('unknown');
   });
 

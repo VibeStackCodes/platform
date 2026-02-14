@@ -170,7 +170,7 @@ export const runCommandTool = createTool({
     return {
       exitCode: result.exitCode,
       stdout: result.result,
-      stderr: result.error || '',
+      stderr: result.exitCode !== 0 ? result.result : '',
     };
   },
 });
