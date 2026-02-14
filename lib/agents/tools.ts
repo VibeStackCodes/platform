@@ -26,7 +26,7 @@ export const writeFileTool = createTool({
     path: z.string(),
     bytesWritten: z.number(),
   }),
-  execute: async (inputData) => {
+  execute: async (inputData, _context) => {
     const sandbox = await getSandbox(inputData.sandboxId);
     const fullPath = `/workspace/${inputData.path}`;
     await sandbox.fs.uploadFile(Buffer.from(inputData.content), fullPath);
@@ -49,7 +49,7 @@ export const readFileTool = createTool({
     content: z.string(),
     exists: z.boolean(),
   }),
-  execute: async (inputData) => {
+  execute: async (inputData, _context) => {
     const sandbox = await getSandbox(inputData.sandboxId);
     const fullPath = `/workspace/${inputData.path}`;
     try {
@@ -78,7 +78,7 @@ export const listFilesTool = createTool({
     files: z.array(z.string()),
     count: z.number(),
   }),
-  execute: async (inputData) => {
+  execute: async (inputData, _context) => {
     const sandbox = await getSandbox(inputData.sandboxId);
     const fullPath = `/workspace/${inputData.directory}`;
 
@@ -116,7 +116,7 @@ export const createDirectoryTool = createTool({
     success: z.boolean(),
     path: z.string(),
   }),
-  execute: async (inputData) => {
+  execute: async (inputData, _context) => {
     const sandbox = await getSandbox(inputData.sandboxId);
     const fullPath = `/workspace/${inputData.path}`;
 
@@ -151,7 +151,7 @@ export const runCommandTool = createTool({
     stdout: z.string(),
     stderr: z.string(),
   }),
-  execute: async (inputData) => {
+  execute: async (inputData, _context) => {
     const sandbox = await getSandbox(inputData.sandboxId);
     const workDir = inputData.cwd || '/workspace';
 
@@ -180,7 +180,7 @@ export const runBuildTool = createTool({
     exitCode: z.number(),
     output: z.string(),
   }),
-  execute: async (inputData) => {
+  execute: async (inputData, _context) => {
     const sandbox = await getSandbox(inputData.sandboxId);
 
     const result = await sandbox.process.executeCommand(
@@ -207,7 +207,7 @@ export const runLintTool = createTool({
     exitCode: z.number(),
     output: z.string(),
   }),
-  execute: async (inputData) => {
+  execute: async (inputData, _context) => {
     const sandbox = await getSandbox(inputData.sandboxId);
 
     const result = await sandbox.process.executeCommand(
@@ -234,7 +234,7 @@ export const runTypeCheckTool = createTool({
     exitCode: z.number(),
     output: z.string(),
   }),
-  execute: async (inputData) => {
+  execute: async (inputData, _context) => {
     const sandbox = await getSandbox(inputData.sandboxId);
 
     const result = await sandbox.process.executeCommand(
@@ -281,7 +281,7 @@ export const validateSQLTool = createTool({
     valid: z.boolean(),
     error: z.string().optional(),
   }),
-  execute: async (inputData) => {
+  execute: async (inputData, _context) => {
     const sandbox = await getSandbox(inputData.sandboxId);
 
     // Create a PGlite validation script
@@ -342,7 +342,7 @@ export const getPreviewUrlTool = createTool({
     port: z.number(),
     expiresAt: z.string(),
   }),
-  execute: async (inputData) => {
+  execute: async (inputData, _context) => {
     const sandbox = await getSandbox(inputData.sandboxId);
     const port = inputData.port || 3000;
 
@@ -366,7 +366,7 @@ export const createSandboxTool = createTool({
     sandboxId: z.string(),
     success: z.boolean(),
   }),
-  execute: async (inputData) => {
+  execute: async (inputData, _context) => {
     const sandbox = await createSandboxFn({
       language: 'typescript',
       autoStopInterval: 60,
@@ -396,7 +396,7 @@ export const pushToGitHubTool = createTool({
     success: z.boolean(),
     message: z.string(),
   }),
-  execute: async (inputData) => {
+  execute: async (inputData, _context) => {
     const sandbox = await getSandbox(inputData.sandboxId);
 
     await pushToGitHubFn(sandbox, inputData.cloneUrl, inputData.token);
@@ -420,7 +420,7 @@ export const deployToVercelTool = createTool({
     deploymentId: z.string(),
     status: z.string(),
   }),
-  execute: async (inputData) => {
+  execute: async (inputData, _context) => {
     // Placeholder — will use @vercel/client in full implementation
     return {
       deploymentUrl: `https://${inputData.projectId}.vercel.app`,
@@ -444,7 +444,7 @@ export const searchDocsTool = createTool({
   outputSchema: z.object({
     results: z.string().describe('Documentation results'),
   }),
-  execute: async (inputData) => {
+  execute: async (inputData, _context) => {
     // Placeholder — will be connected to Context7 MCP or web search
     return {
       results: `Documentation for ${inputData.library}: ${inputData.query} (integration pending)`,

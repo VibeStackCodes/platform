@@ -16,7 +16,22 @@ export {
 export type { AgentId } from './registry';
 
 // Tools
-export { createSandboxTools } from './tools';
+export {
+  writeFileTool,
+  readFileTool,
+  listFilesTool,
+  createDirectoryTool,
+  runCommandTool,
+  runBuildTool,
+  runLintTool,
+  runTypeCheckTool,
+  validateSQLTool,
+  getPreviewUrlTool,
+  createSandboxTool,
+  pushToGitHubTool,
+  deployToVercelTool,
+  searchDocsTool,
+} from './tools';
 
 // Workflow
 export { createGenerationWorkflow } from './workflow';
