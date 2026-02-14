@@ -6,7 +6,7 @@ import { buildFilePrompt } from './injector';
 import { resolveModel } from './models';
 import { getOpenAIClient, CODEGEN_MODEL, REASONING_PRESETS, isOpenAIModel } from './openai-client';
 import { stripCodeFences } from './utils';
-import { runLayerDiagnostics } from './layer-diagnostics';
+import { runLayerDiagnostics, autoFixLintErrors } from './layer-diagnostics';
 import { fixLayerErrors } from './layer-fixer';
 
 /** Descriptive labels for each generation layer */
@@ -159,14 +159,20 @@ export async function generateFiles(
       console.warn(`Git commit for layer ${layer} failed (non-fatal):`, error);
     }
 
-    // Per-layer diagnostics: run tsc + oxlint, fix errors before next layer
+    // Per-layer diagnostics: auto-fix trivials, then run tsc + oxlint, fix remaining with AI
     // Skip on final layer — the build verifier handles that with retries
     if (layer < maxLayer) {
       try {
+        // Step 1: Auto-fix trivial lint violations (free, instant, no API cost)
+        await autoFixLintErrors(sandbox);
+
+        // Step 2: Run diagnostics (tsc + oxlint) on remaining issues
         const diagnostics = await runLayerDiagnostics(sandbox, writtenFiles, pendingFiles);
         if (diagnostics.totalErrors > 0) {
           console.log(`[generator] Layer ${layer}: ${diagnostics.totalErrors} errors found, fixing...`);
           emit({ type: 'checkpoint', label: `Fixing layer ${layer} errors`, status: 'active' });
+
+          // Step 3: AI fix only for what oxlint couldn't fix
           const { fixedFiles } = await fixLayerErrors(sandbox, diagnostics, generatedContents, model, emit);
           // Update generatedContents with fixed versions
           for (const path of fixedFiles) {
