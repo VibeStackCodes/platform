@@ -88,27 +88,6 @@ describe('contractToSQL', () => {
     expect(enumIdx).toBeLessThan(tableIdx);
   });
 
-  it('generates seed data INSERTs after tables', () => {
-    const contract: SchemaContract = {
-      tables: [{
-        name: 'categories',
-        columns: [
-          { name: 'id', type: 'uuid', primaryKey: true, default: 'gen_random_uuid()' },
-          { name: 'name', type: 'text', nullable: false },
-        ],
-      }],
-      seedData: [{
-        table: 'categories',
-        rows: [{ name: 'General' }, { name: 'Urgent' }],
-      }],
-    };
-    const sql = contractToSQL(contract);
-    const tableIdx = sql.indexOf('CREATE TABLE');
-    const insertIdx = sql.indexOf('INSERT INTO categories');
-    expect(insertIdx).toBeGreaterThan(tableIdx);
-    expect(sql).toContain("'General'");
-    expect(sql).toContain("'Urgent'");
-  });
 
   it('generates FK REFERENCES with ON DELETE CASCADE', () => {
     const contract: SchemaContract = {
@@ -169,22 +148,4 @@ describe('contractToSQL', () => {
     expect(sql).toContain('EXECUTE FUNCTION update_updated_at()');
   });
 
-  it('serializes jsonb seed data correctly', () => {
-    const contract: SchemaContract = {
-      tables: [{
-        name: 'settings',
-        columns: [
-          { name: 'id', type: 'uuid', primaryKey: true },
-          { name: 'config', type: 'jsonb' },
-        ],
-      }],
-      seedData: [{
-        table: 'settings',
-        rows: [{ config: { theme: 'dark', lang: 'en' } }],
-      }],
-    };
-    const sql = contractToSQL(contract);
-    expect(sql).toContain('INSERT INTO settings');
-    expect(sql).toContain('{"theme":"dark","lang":"en"}');
-  });
 });

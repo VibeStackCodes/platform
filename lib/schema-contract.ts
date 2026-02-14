@@ -39,15 +39,9 @@ export interface EnumDef {
   values: string[];
 }
 
-export interface SeedRow {
-  table: string;
-  rows: Record<string, unknown>[];
-}
-
 export interface SchemaContract {
   tables: TableDef[];
   enums?: EnumDef[];
-  seedData?: SeedRow[];
 }
 
 export interface ValidationResult {

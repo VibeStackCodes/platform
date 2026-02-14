@@ -66,21 +66,6 @@ $$ LANGUAGE plpgsql;`
     }
   }
 
-  // 4. Seed data
-  for (const seed of contract.seedData ?? []) {
-    for (const row of seed.rows) {
-      const cols = Object.keys(row);
-      if (cols.length === 0) continue; // skip empty rows (all columns auto-generated)
-      const vals = Object.values(row).map(v =>
-        typeof v === 'string' ? `'${v.replace(/'/g, "''")}'` :
-        v === null ? 'NULL' :
-        typeof v === 'object' ? `'${JSON.stringify(v).replace(/'/g, "''")}'` :
-        String(v)
-      );
-      parts.push(`INSERT INTO ${seed.table} (${cols.join(', ')}) VALUES (${vals.join(', ')});`);
-    }
-  }
-
   return parts.join('\n\n');
 }
 

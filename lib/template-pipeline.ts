@@ -1,8 +1,6 @@
 import type { Sandbox } from '@daytonaio/sdk';
 import type { ChatPlan, StreamEvent, GeneratedFile } from './types';
-import type { SchemaContract, TableDef, EnumDef, SeedRow } from './schema-contract';
-import { faker } from '@faker-js/faker';
-import { generateAllSeedData } from './seed-generator';
+import type { SchemaContract, TableDef, EnumDef } from './schema-contract';
 import { classifyFeatures } from './feature-classifier';
 import { executeTemplate, groupByLayer } from './template-registry';
 import { uploadFile, runCommand } from './sandbox';
@@ -236,14 +234,12 @@ export async function runFeaturePhase(
  * Merge multiple partial SchemaContract fragments into a single contract.
  * Deduplicates tables by name (last occurrence wins).
  * Merges enums by name (last occurrence wins).
- * Concatenates seedData.
  */
 export function mergeSchemaContracts(
   fragments: Partial<SchemaContract>[],
 ): SchemaContract {
   const tableMap = new Map<string, TableDef>();
   const enumMap = new Map<string, EnumDef>();
-  const seedData: SeedRow[] = [];
 
   for (const fragment of fragments) {
     for (const table of fragment.tables ?? []) {
@@ -252,7 +248,6 @@ export function mergeSchemaContracts(
     for (const e of fragment.enums ?? []) {
       enumMap.set(e.name, e);
     }
-    seedData.push(...(fragment.seedData ?? []));
   }
 
   // Auto-create stub tables for unresolved FK references.
@@ -289,15 +284,9 @@ export function mergeSchemaContracts(
     console.log(`[pipeline] Auto-created stub table "${name}" for unresolved FK reference`);
   }
 
-  // Generate seed data for all tables in topological order (parents first)
-  const allTables = Array.from(tableMap.values());
-  const seedUserIds = Array.from({ length: 3 }, () => faker.string.uuid());
-  const finalSeedData = generateAllSeedData(allTables, 5, seedUserIds);
-
   return {
     tables: Array.from(tableMap.values()),
     enums: enumMap.size > 0 ? Array.from(enumMap.values()) : undefined,
-    seedData: finalSeedData.length > 0 ? finalSeedData : undefined,
   };
 }
 

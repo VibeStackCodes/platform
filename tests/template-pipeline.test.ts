@@ -91,45 +91,4 @@ describe('mergeSchemaContracts', () => {
     }
   });
 
-  it('generates seed data for tables without required external FKs', () => {
-    const fragments: Partial<SchemaContract>[] = [
-      {
-        tables: [{
-          name: 'categories',
-          columns: [
-            { name: 'id', type: 'uuid', primaryKey: true, default: 'gen_random_uuid()' },
-            { name: 'title', type: 'text', nullable: false },
-            { name: 'description', type: 'text' },
-          ],
-        }],
-      },
-    ];
-
-    const merged = mergeSchemaContracts(fragments);
-    expect(merged.seedData).toBeDefined();
-    expect(merged.seedData!.length).toBeGreaterThan(0);
-    const catSeed = merged.seedData!.find(s => s.table === 'categories');
-    expect(catSeed).toBeDefined();
-    expect(catSeed!.rows.length).toBe(5);
-  });
-
-  it('skips seed data for tables with required external FK (auth.users)', () => {
-    const fragments: Partial<SchemaContract>[] = [
-      {
-        tables: [{
-          name: 'profiles',
-          columns: [
-            { name: 'id', type: 'uuid', primaryKey: true, default: 'gen_random_uuid()' },
-            { name: 'user_id', type: 'uuid', references: { table: 'auth.users', column: 'id' } },
-            { name: 'display_name', type: 'text' },
-          ],
-        }],
-      },
-    ];
-
-    const merged = mergeSchemaContracts(fragments);
-    const profilesSeed = merged.seedData!.find(s => s.table === 'profiles');
-    expect(profilesSeed).toBeDefined();
-    expect(profilesSeed!.rows.length).toBe(0);
-  });
 });

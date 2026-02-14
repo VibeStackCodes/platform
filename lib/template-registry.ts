@@ -6,7 +6,6 @@ import type { TemplateTask, DesignTokens, GeneratedFile, TemplateName } from './
 import { pluralizeTable } from './utils';
 import { colord } from 'colord';
 import type { SchemaContract, TableDef, ColumnDef, SQLType } from './schema-contract';
-import { generateSeedData } from './seed-generator';
 
 // ============================================================================
 // Handlebars Helpers
@@ -200,7 +199,7 @@ export function executeTemplate(
   if (task.template === 'crud') {
     const tableDef = buildTableDefFromConfig(task.config);
     if (tableDef) {
-      schema = { tables: [tableDef], seedData: [generateSeedData(tableDef, 5, [])] };
+      schema = { tables: [tableDef] };
     }
   } else if (task.template === 'auth') {
     // Auth template produces a profiles table (commonly referenced by other entities)
@@ -220,7 +219,7 @@ export function executeTemplate(
         { name: 'Users can insert own profile', operation: 'INSERT', withCheck: '(select auth.uid()) = user_id' },
       ],
     };
-    schema = { tables: [profilesTable], seedData: [generateSeedData(profilesTable, 5, [])] };
+    schema = { tables: [profilesTable] };
   } else if (task.template === 'messaging') {
     const messagesTable: TableDef = {
       name: 'messages',
@@ -236,7 +235,7 @@ export function executeTemplate(
         { name: 'Authenticated users can send messages', operation: 'INSERT', withCheck: '(select auth.uid()) = user_id' },
       ],
     };
-    schema = { tables: [messagesTable], seedData: [generateSeedData(messagesTable, 5, [])] };
+    schema = { tables: [messagesTable] };
   }
 
   // Render non-SQL Handlebars templates
