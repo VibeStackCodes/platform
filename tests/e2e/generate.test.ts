@@ -424,9 +424,12 @@ describe('verifyAndFix', () => {
     const events: StreamEvent[] = [];
     const mockEmit = (event: StreamEvent) => events.push(event);
 
-    // Mock build failure then success
+    // Mock build failure then success (autofix calls pass through)
     let buildAttempts = 0;
-    runCommand.mockImplementation(() => {
+    runCommand.mockImplementation((_sandbox: any, command: string) => {
+      if (command.includes('oxlint')) {
+        return Promise.resolve({ exitCode: 0, stdout: '' });
+      }
       buildAttempts++;
       if (buildAttempts === 1) {
         return Promise.resolve({
@@ -498,10 +501,15 @@ describe('verifyAndFix', () => {
     const events: StreamEvent[] = [];
     const mockEmit = (event: StreamEvent) => events.push(event);
 
-    // Mock persistent build failure with parseable errors
-    runCommand.mockResolvedValue({
-      exitCode: 1,
-      stdout: 'lib/types.ts(1,1): error TS1005: Syntax error: persistent failure',
+    // Mock persistent build failure with parseable errors (autofix calls pass through)
+    runCommand.mockImplementation((_sandbox: any, command: string) => {
+      if (command.includes('oxlint')) {
+        return Promise.resolve({ exitCode: 0, stdout: '' });
+      }
+      return Promise.resolve({
+        exitCode: 1,
+        stdout: 'lib/types.ts(1,1): error TS1005: Syntax error: persistent failure',
+      });
     });
 
     // Mock error analysis
@@ -543,8 +551,9 @@ describe('verifyAndFix', () => {
     );
 
     // MAX_FIX_RETRIES is 2 in verifier.ts
+    // runCommand called 4 times: 2 autofix + 2 build attempts
     expect(result).toBe(false);
-    expect(runCommand).toHaveBeenCalledTimes(2);
+    expect(runCommand).toHaveBeenCalledTimes(4);
   });
 });
 
