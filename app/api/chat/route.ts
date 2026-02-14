@@ -2,7 +2,7 @@ import { streamText, convertToModelMessages, stepCountIs } from 'ai';
 import { MockLanguageModelV3 } from 'ai/test';
 import type { UIMessage } from 'ai';
 import { resolveModel } from '@/lib/models';
-import { chatTools } from '@/lib/chat-tools';
+import { createChatTools, chatTools } from '@/lib/chat-tools';
 import { BUILDER_SYSTEM_PROMPT } from '@/lib/system-prompt';
 import { createClient } from '@/lib/supabase-server';
 import { MOCK_CHAT_PLAN } from '@/lib/mock-data';
@@ -15,7 +15,7 @@ import { MOCK_CHAT_PLAN } from '@/lib/mock-data';
 
 const MOCK_MODE = process.env.NEXT_PUBLIC_MOCK_MODE === 'true';
 
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 export async function POST(req: Request) {
   if (!MOCK_MODE) {
@@ -61,11 +61,13 @@ export async function POST(req: Request) {
 
   const modelMessages = await convertToModelMessages(messages);
 
+  const tools = createChatTools({ projectId: _projectId, model: modelId });
+
   const result = streamText({
     model: resolveModel(modelId),
     system: BUILDER_SYSTEM_PROMPT,
     messages: modelMessages,
-    tools: chatTools,
+    tools,
     stopWhen: stepCountIs(10),
     maxOutputTokens: 16384,
   });
@@ -132,20 +134,12 @@ function buildMockChatResponse(messages: UIMessage[]) {
   } else if (turnNumber === 3) {
     streamResult = toolCallStreamResult('mock-plan', 'show_plan', MOCK_CHAT_PLAN);
   } else {
-    // Turn 4+: simulate edit response — reuse toolCallStreamResult pattern
-    // but emit a simple text-delta instead of tool-input parts
-    const editText = "I've updated 2 files based on your instruction: `src/components/header.tsx` and `src/index.css`. The changes have been applied and the build verified successfully.";
-    streamResult = {
-      stream: new ReadableStream({
-        async start(controller) {
-          controller.enqueue({ type: 'text-start' as const, id: 'edit-delta' });
-          controller.enqueue({ type: 'text-delta' as const, id: 'edit-delta', delta: editText });
-          controller.enqueue({ type: 'finish' as const, finishReason: 'stop' as const, usage: { inputTokens: 0, outputTokens: 0 } });
-          controller.close();
-        },
-      }),
-    };
-
+    // Turn 4+: simulate edit_code tool call with mock result
+    streamResult = toolCallStreamResult('mock-edit', 'edit_code', {
+      instruction: 'Change the header color to blue',
+      searchQueries: ['Header', 'header'],
+      reasoning: 'The user wants to modify the header component styling',
+    });
   }
 
   const mockModel = new MockLanguageModelV3({

@@ -304,7 +304,10 @@ export type StreamEvent =
   | CompleteEvent
   | ErrorEvent
   | CheckpointEvent
-  | LayerCommitEvent;
+  | LayerCommitEvent
+  | EditStartEvent
+  | EditFileEvent
+  | EditCompleteEvent;
 
 export interface StageUpdateEvent {
   type: "stage_update";
@@ -386,4 +389,32 @@ export interface LayerCommitEvent {
   hash: string;
   message: string;
   files: string[];
+}
+
+export interface EditStartEvent {
+  type: "edit_start";
+  instruction: string;
+}
+
+export interface EditFileEvent {
+  type: "edit_file";
+  path: string;
+  status: "searching" | "editing" | "uploading" | "complete";
+}
+
+export interface EditCompleteEvent {
+  type: "edit_complete";
+  filesModified: string[];
+  buildPassed: boolean;
+}
+
+// ============================================================================
+// Edit Result
+// ============================================================================
+
+export interface EditResult {
+  filesModified: string[];
+  symbolsFound: number;
+  buildPassed: boolean;
+  error?: string;
 }
