@@ -200,7 +200,13 @@ export async function POST(req: NextRequest) {
           await upload(sandbox, typesTS, '/workspace/src/types/database.types.ts');
 
           const migrationFile = scaffoldFiles.find(f => f.path === 'supabase/migrations/001_init.sql');
-          if (migrationFile) migrationFile.content = migrationSQL;
+          if (migrationFile) {
+            migrationFile.content = migrationSQL;
+          } else {
+            // No template produced a .sql.hbs — ensure contract-derived migration is in scaffoldFiles
+            // so it propagates to generatedContents and gets applied to remote Supabase
+            scaffoldFiles.push({ path: 'supabase/migrations/001_init.sql', content: migrationSQL, layer: 0 });
+          }
           scaffoldFiles.push({ path: 'src/types/database.types.ts', content: typesTS, layer: 0 });
 
           const { validateMigration } = await import("@/lib/local-supabase");
