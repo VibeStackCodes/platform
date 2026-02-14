@@ -256,6 +256,23 @@ export async function POST(req: NextRequest) {
             }
             emit({ type: "checkpoint", label: "Applying database migrations", status: "complete" });
           }
+
+          // Seed database with realistic data
+          emit({ type: "checkpoint", label: "Seeding database", status: "active" });
+          try {
+            const { seedRemoteDatabase } = await import("@/lib/seed-remote");
+            const tableNames = schemaContract
+              ? schemaContract.tables.map(t => t.name)
+              : [];
+            if (tableNames.length > 0) {
+              const seedResult = await seedRemoteDatabase(sp, tableNames);
+              console.log(`[generate] Seeded ${seedResult.tablesSeeded} tables (${seedResult.rowsInserted} rows)`);
+            }
+          } catch (seedError) {
+            // Seeding is non-fatal — app works without seed data
+            console.warn(`[generate] Seeding failed (non-fatal):`, seedError);
+          }
+          emit({ type: "checkpoint", label: "Seeding database", status: "complete" });
         }
 
         // Stage 4: Push to GitHub
