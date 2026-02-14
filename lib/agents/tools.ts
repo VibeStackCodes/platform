@@ -24,10 +24,10 @@ export function createSandboxTools(sandbox: Sandbox) {
       path: z.string(),
       linesOfCode: z.number(),
     }),
-    execute: async ({ path, content }) => {
-      const fullPath = `/workspace/${path}`;
-      await sandbox.fs.uploadFile(Buffer.from(content), fullPath);
-      const linesOfCode = content.split('\n').length;
+    execute: async (inputData, context) => {
+      const fullPath = `/workspace/${inputData.path}`;
+      await sandbox.fs.uploadFile(Buffer.from(inputData.content), fullPath);
+      const linesOfCode = inputData.content.split('\n').length;
       return {
         success: true,
         path: fullPath,
@@ -46,8 +46,8 @@ export function createSandboxTools(sandbox: Sandbox) {
       content: z.string(),
       exists: z.boolean(),
     }),
-    execute: async ({ path }) => {
-      const fullPath = `/workspace/${path}`;
+    execute: async (inputData, context) => {
+      const fullPath = `/workspace/${inputData.path}`;
       try {
         const buffer = await sandbox.fs.downloadFile(fullPath);
         return {
@@ -71,7 +71,7 @@ export function createSandboxTools(sandbox: Sandbox) {
       exitCode: z.number(),
       output: z.string(),
     }),
-    execute: async () => {
+    execute: async (inputData, context) => {
       const result = await sandbox.process.executeCommand(
         'bun run build',
         '/workspace',
@@ -93,7 +93,7 @@ export function createSandboxTools(sandbox: Sandbox) {
       exitCode: z.number(),
       output: z.string(),
     }),
-    execute: async () => {
+    execute: async (inputData, context) => {
       const result = await sandbox.process.executeCommand(
         'oxlint --fix',
         '/workspace',
