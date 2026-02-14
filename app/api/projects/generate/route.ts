@@ -9,7 +9,7 @@ import { createRepo, getInstallationToken, buildRepoName } from "@/lib/github";
 import { buildAppSlug } from "@/lib/slug";
 import { runPipeline, runScaffoldPhase, runFeaturePhase } from "@/lib/template-pipeline";
 import { verifyAndFix } from "@/lib/verifier";
-import { createSandbox, getSandbox, findSandboxByProject, getPreviewUrl, pushToGitHub, waitForDevServer } from "@/lib/sandbox";
+import { createSandbox, getSandbox, findSandboxByProject, getPreviewUrl, getCodeServerLink, pushToGitHub, waitForDevServer } from "@/lib/sandbox";
 import { createSupabaseProject } from "@/lib/supabase-mgmt";
 import type { GenerateRequest, StreamEvent, ChatPlan } from "@/lib/types";
 import { classifyFeatures } from "@/lib/feature-classifier";
@@ -119,18 +119,18 @@ export async function POST(req: NextRequest) {
           // Fast path: sandbox + URLs already provisioned by chat route
           sandbox = await getSandbox(sandboxId);
           previewUrlStr = existingProject.preview_url;
-          codeServerUrlStr = existingProject.code_server_url || (await getPreviewUrl(sandbox, 13337)).url;
+          codeServerUrlStr = existingProject.code_server_url || await getCodeServerLink(sandbox);
           console.log(`✓ Reusing pre-provisioned sandbox: ${sandbox.id}`);
         } else if (sandboxId) {
           // Sandbox exists but URLs not yet written — get them from Daytona directly
           sandbox = await getSandbox(sandboxId);
           emit({ type: "checkpoint", label: "Waiting for dev server", status: "active" });
-          const [preview, codeServer] = await Promise.all([
+          const [preview, codeServerUrl] = await Promise.all([
             waitForDevServer(sandbox),
-            getPreviewUrl(sandbox, 13337),
+            getCodeServerLink(sandbox),
           ]);
           previewUrlStr = preview.url;
-          codeServerUrlStr = codeServer.url;
+          codeServerUrlStr = codeServerUrl;
         } else {
           // No sandbox yet — check Daytona by label, then create as last resort
           sandbox = await findSandboxByProject(project.id);
@@ -144,12 +144,12 @@ export async function POST(req: NextRequest) {
             console.log(`✓ Found sandbox via Daytona label: ${sandbox.id}`);
           }
           emit({ type: "checkpoint", label: "Waiting for dev server", status: "active" });
-          const [preview, codeServer] = await Promise.all([
+          const [preview, codeServerUrl] = await Promise.all([
             waitForDevServer(sandbox),
-            getPreviewUrl(sandbox, 13337),
+            getCodeServerLink(sandbox),
           ]);
           previewUrlStr = preview.url;
-          codeServerUrlStr = codeServer.url;
+          codeServerUrlStr = codeServerUrl;
         }
 
         emit({ type: "preview_ready", url: previewUrlStr });

@@ -10,7 +10,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { findSandboxByProject, getPreviewUrl, waitForDevServer, waitForCodeServer } from "@/lib/sandbox";
+import { findSandboxByProject, getPreviewUrl, getCodeServerLink, waitForDevServer, waitForCodeServer } from "@/lib/sandbox";
 
 export async function GET(
   _req: NextRequest,
@@ -26,18 +26,20 @@ export async function GET(
   try {
     const expiresInSeconds = 3600; // 1 hour
 
-    // Wait for both servers to be ready before returning signed URLs
-    const [, , preview, codeServer] = await Promise.all([
+    // Wait for both servers to be ready before returning URLs
+    // Preview uses signed URL (works in iframes); code server uses preview link
+    // (signed URLs have a proxy bug that corrupts OpenVSCode HTML in browsers)
+    const [, , preview, codeServerUrl] = await Promise.all([
       waitForDevServer(sandbox),
       waitForCodeServer(sandbox),
       getPreviewUrl(sandbox, 3000),
-      getPreviewUrl(sandbox, 13337),
+      getCodeServerLink(sandbox),
     ]);
 
     return NextResponse.json({
       sandboxId: sandbox.id,
       previewUrl: preview.url,
-      codeServerUrl: codeServer.url,
+      codeServerUrl,
       expiresAt: new Date(Date.now() + expiresInSeconds * 1000).toISOString(),
     });
   } catch {

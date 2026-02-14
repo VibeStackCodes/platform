@@ -115,6 +115,7 @@ export async function createSandbox(config: SandboxConfig = {}): Promise<Sandbox
       labels: config.labels || {},
       ephemeral: false,
       snapshot: snapshotId,
+      public: true, // Public preview links work in iframes without auth headers
     }, {
       timeout: 60, // 60 second creation timeout
     });
@@ -363,6 +364,18 @@ export async function getPreviewUrl(
 }
 
 /**
+ * Get the preview link URL for the code server (OpenVSCode on port 13337).
+ * Uses getPreviewLink instead of getSignedPreviewUrl because the signed URL
+ * proxy has a bug that appends JSON error bytes after HTML in browser contexts,
+ * corrupting OpenVSCode's workbench initialization.
+ * Requires sandbox created with public: true so the URL works in iframes.
+ */
+export async function getCodeServerLink(sandbox: Sandbox): Promise<string> {
+  const link = await sandbox.getPreviewLink(13337);
+  return link.url;
+}
+
+/**
  * Start the Vite dev server in the background.
  * Returns preview URL immediately — HMR will pick up file changes.
  */
@@ -525,10 +538,10 @@ export async function provisionProject(
     });
 
     // Wait for both servers started by snapshot entrypoint, then get URLs
-    const [, , { url: codeServerUrl }] = await Promise.all([
+    const [, , codeServerUrl] = await Promise.all([
       waitForDevServer(sandbox),
       waitForCodeServer(sandbox),
-      getPreviewUrl(sandbox, 13337),
+      getCodeServerLink(sandbox),
     ]);
 
     // Create GitHub repo and init git in sandbox — source of truth from day one
