@@ -1,7 +1,7 @@
 import type { Sandbox } from '@daytonaio/sdk';
 import type { EditResult } from './types';
 import { searchSymbols, getMultiFileSymbols, formatSymbolIndex } from './lsp';
-import { runLayerDiagnostics } from './layer-diagnostics';
+import { runLayerDiagnostics, autoFixLintErrors } from './layer-diagnostics';
 import { fixLayerErrors } from './layer-fixer';
 import { downloadFile, uploadFile, pushToOrigin, runCommand } from './sandbox';
 import { getOpenAIClient, CODEGEN_MODEL, REASONING_PRESETS, isOpenAIModel } from './openai-client';
@@ -130,6 +130,9 @@ export async function executeEdit(options: {
     for (const [path, content] of modifiedFiles) {
       await uploadFile(sandbox, content, `/workspace/${path}`);
     }
+
+    // Step 5.5: Auto-fix trivial lint issues in modified files
+    await autoFixLintErrors(sandbox);
 
     // Step 6: Run diagnostics on modified files
     const writtenFiles = new Set(modifiedFiles.keys());
