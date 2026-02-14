@@ -105,17 +105,14 @@ describe('Sandbox Tools', () => {
     expect(valid.success).toBe(true);
   });
 
-  it('validateSQLTool input accepts sandboxId and SQL string', () => {
+  it('validateSQLTool input accepts SQL string (no sandboxId needed)', () => {
     const schema = validateSQLTool.inputSchema;
-    const valid = schema.safeParse({
-      sandboxId: 'abc',
-      sql: 'CREATE TABLE test (id uuid PRIMARY KEY);',
-    });
+    const valid = schema.safeParse({ sql: 'CREATE TABLE test (id uuid PRIMARY KEY);' });
     expect(valid.success).toBe(true);
 
-    // Should require both sandboxId and sql
-    const missingId = schema.safeParse({ sql: 'SELECT 1' });
-    expect(missingId.success).toBe(false);
+    // Should NOT require sandboxId
+    const sqlOnly = schema.safeParse({ sql: 'SELECT 1' });
+    expect(sqlOnly.success).toBe(true);
   });
 
   it('getPreviewUrlTool has optional port with default', () => {

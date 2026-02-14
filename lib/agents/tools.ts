@@ -9,6 +9,11 @@ import { getSandbox, createSandbox as createSandboxFn, getPreviewUrl as getPrevi
  * Tools that need sandbox access take `sandboxId` as an input parameter.
  */
 
+/** Escape a string for safe use in shell commands */
+function escapeShellArg(arg: string): string {
+  return `'${arg.replace(/'/g, "'\\''")}'`;
+}
+
 // ============================================================================
 // File Operations
 // ============================================================================
@@ -83,7 +88,7 @@ export const listFilesTool = createTool({
     const fullPath = `/workspace/${inputData.directory}`;
 
     const result = await sandbox.process.executeCommand(
-      `find ${fullPath} -type f ! -path "*/node_modules/*" ! -path "*/.next/*" ! -path "*/.git/*" | sort`,
+      `find ${escapeShellArg(fullPath)} -type f ! -path "*/node_modules/*" ! -path "*/.next/*" ! -path "*/.git/*" | sort`,
       '/workspace',
       undefined,
       30
@@ -121,7 +126,7 @@ export const createDirectoryTool = createTool({
     const fullPath = `/workspace/${inputData.path}`;
 
     await sandbox.process.executeCommand(
-      `mkdir -p ${fullPath}`,
+      `mkdir -p ${escapeShellArg(fullPath)}`,
       '/workspace',
       undefined,
       10
@@ -255,26 +260,10 @@ export const runTypeCheckTool = createTool({
 // SQL Validation
 // ============================================================================
 
-const AUTH_STUBS = `
-DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN CREATE ROLE authenticated; END IF; END $$;
-DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN CREATE ROLE anon; END IF; END $$;
-DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'service_role') THEN CREATE ROLE service_role; END IF; END $$;
-CREATE SCHEMA IF NOT EXISTS auth;
-CREATE TABLE IF NOT EXISTS auth.users (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  email text,
-  role text DEFAULT 'authenticated'
-);
-CREATE OR REPLACE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$ SELECT gen_random_uuid() $$;
-CREATE OR REPLACE FUNCTION auth.role() RETURNS text LANGUAGE sql STABLE AS $$ SELECT 'authenticated'::text $$;
-CREATE OR REPLACE FUNCTION auth.jwt() RETURNS jsonb LANGUAGE sql STABLE AS $$ SELECT '{}'::jsonb $$;
-`;
-
 export const validateSQLTool = createTool({
   id: 'validate-sql',
-  description: 'Validate SQL migration against PGlite in sandbox',
+  description: 'Validate SQL migration against PGlite (runs locally, no sandbox needed)',
   inputSchema: z.object({
-    sandboxId: z.string().describe('Daytona sandbox ID'),
     sql: z.string().describe('SQL migration to validate'),
   }),
   outputSchema: z.object({
@@ -282,47 +271,25 @@ export const validateSQLTool = createTool({
     error: z.string().optional(),
   }),
   execute: async (inputData, _context) => {
-    const sandbox = await getSandbox(inputData.sandboxId);
-
-    // Create a PGlite validation script
-    const script = `
-import { PGlite } from '@electric-sql/pglite';
-
-const db = new PGlite();
-try {
-  await db.exec(${JSON.stringify(AUTH_STUBS)});
-  await db.exec(${JSON.stringify(inputData.sql)});
-  console.log('MIGRATION_OK');
-} catch (e) {
-  console.error('MIGRATION_ERROR:', e.message);
-  process.exit(1);
-} finally {
-  await db.close();
-}
-`;
-
-    await sandbox.fs.uploadFile(
-      Buffer.from(script),
-      '/workspace/validate-sql.mjs'
-    );
-
-    const result = await sandbox.process.executeCommand(
-      'bun /workspace/validate-sql.mjs',
-      '/workspace',
-      undefined,
-      30
-    );
-
-    if (result.exitCode !== 0) {
-      const output = `${result.result}\n${result.error || ''}`.trim();
-      const match = output.match(/MIGRATION_ERROR:\s*(.+)/);
-      return {
-        valid: false,
-        error: match?.[1] || output,
-      };
+    const { PGlite } = await import('@electric-sql/pglite');
+    const pg = new PGlite();
+    try {
+      // AUTH_STUBS required for RLS policies
+      await pg.exec(`
+        CREATE SCHEMA IF NOT EXISTS auth;
+        CREATE OR REPLACE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$ SELECT '00000000-0000-0000-0000-000000000000'::uuid $$;
+        CREATE ROLE authenticated;
+        CREATE ROLE anon;
+        CREATE ROLE service_role;
+        GRANT ALL ON SCHEMA public TO authenticated, anon, service_role;
+      `);
+      await pg.exec(inputData.sql);
+      return { valid: true };
+    } catch (e) {
+      return { valid: false, error: e instanceof Error ? e.message : String(e) };
+    } finally {
+      await pg.close();
     }
-
-    return { valid: true };
   },
 });
 
@@ -410,7 +377,7 @@ export const pushToGitHubTool = createTool({
 
 export const deployToVercelTool = createTool({
   id: 'deploy-to-vercel',
-  description: 'Deploy a project to Vercel (placeholder — integration pending)',
+  description: 'Deploy a project to Vercel [PLACEHOLDER — returns mock response, integration pending]',
   inputSchema: z.object({
     projectId: z.string().describe('VibeStack project ID'),
     repoUrl: z.string().describe('GitHub repository URL'),
@@ -436,7 +403,7 @@ export const deployToVercelTool = createTool({
 
 export const searchDocsTool = createTool({
   id: 'search-docs',
-  description: 'Search library documentation for API patterns (placeholder — integration pending)',
+  description: 'Search library documentation [PLACEHOLDER — returns mock response, Context7 integration pending]',
   inputSchema: z.object({
     library: z.string().describe('Library name (e.g., react, drizzle-orm, supabase)'),
     query: z.string().describe('Search query'),
