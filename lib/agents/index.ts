@@ -2,12 +2,21 @@
  * Barrel export for Mastra agent system
  */
 
+// Schemas (unchanged)
 export * from './schemas';
-export * from './registry';
-export * from './observability';
-export * from './tools';
-export { selectAgents, buildPlanPrompt, plannerAgent } from './planner';
-export { clarifyRequirements, generatePlan, assembleTeam, runAgent, runPhase } from './steps';
-export type { AgentArtifact, AgentContext } from './steps';
-export { runGenerationWorkflow } from './workflow';
-export type { WorkflowState, WorkflowPhase } from './workflow';
+
+// Agents + Mastra instance
+export {
+  mastra,
+  plannerAgent,
+  dataArchitectAgent,
+  frontendEngineerAgent,
+  qaEngineerAgent,
+} from './registry';
+export type { AgentId } from './registry';
+
+// Tools
+export { createSandboxTools } from './tools';
+
+// Workflow
+export { createGenerationWorkflow } from './workflow';
