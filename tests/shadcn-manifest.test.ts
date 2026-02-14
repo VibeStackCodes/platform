@@ -32,4 +32,18 @@ describe('generateShadcnManifest', () => {
     const json = JSON.stringify(manifest);
     expect(() => JSON.parse(json)).not.toThrow();
   });
+
+  it('separates components from utility exports', () => {
+    const manifest = generateShadcnManifest();
+    const button = manifest['button'];
+    expect(button.components).toContain('Button');
+    expect(button.components).not.toContain('buttonVariants');
+    expect(button.exports).toContain('buttonVariants'); // still in full exports
+  });
+
+  it('includes requires field for components with dependencies', () => {
+    const manifest = generateShadcnManifest();
+    const dialog = manifest['dialog'];
+    expect(dialog.requires).toContain('button');
+  });
 });

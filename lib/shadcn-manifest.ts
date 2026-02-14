@@ -4,6 +4,7 @@ import path from 'node:path';
 export interface ComponentEntry {
   import: string;
   exports: string[];
+  components: string[];  // PascalCase-only subset of exports
   deps: Record<string, string>;
   requires?: string[];
 }
@@ -52,15 +53,21 @@ export function generateShadcnManifest(): ComponentManifest {
   const manifest: ComponentManifest = {};
   const files = fs.readdirSync(REGISTRY_DIR).filter(f => f.endsWith('.tsx'));
 
+  if (files.length === 0) {
+    throw new Error(`No .tsx files found in ${REGISTRY_DIR}`);
+  }
+
   for (const file of files) {
     const name = path.basename(file, '.tsx');
     const source = fs.readFileSync(path.join(REGISTRY_DIR, file), 'utf-8');
     const exports = extractExports(source);
+    const components = exports.filter(name => /^[A-Z]/.test(name));
     const depEntry = depsData[name] ?? { deps: {} };
 
     manifest[name] = {
       import: `@/components/ui/${name}`,
       exports,
+      components,
       deps: depEntry.deps ?? {},
       ...(depEntry.requires ? { requires: depEntry.requires } : {}),
     };
