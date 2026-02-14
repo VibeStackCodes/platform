@@ -24,7 +24,23 @@ export function contractToSQL(contract: SchemaContract): string {
     parts.push(`CREATE TYPE ${e.name} AS ENUM (${e.values.map(v => `'${v}'`).join(', ')});`);
   }
 
-  // 2. Tables in topological order
+  // 2. updated_at trigger function (emitted once, before tables)
+  const hasUpdatedAt = contract.tables.some(t =>
+    t.columns.some(c => c.name === 'updated_at')
+  );
+  if (hasUpdatedAt) {
+    parts.push(
+`CREATE OR REPLACE FUNCTION update_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;`
+    );
+  }
+
+  // 3. Tables in topological order
   const sorted = topologicalSort(contract.tables);
   for (const table of sorted) {
     parts.push(generateCreateTable(table));
@@ -36,15 +52,30 @@ export function contractToSQL(contract: SchemaContract): string {
         parts.push(generatePolicy(table.name, policy));
       }
     }
+
+    // FK indexes
+    for (const col of table.columns) {
+      if (col.references) {
+        parts.push(`CREATE INDEX idx_${table.name}_${col.name} ON ${table.name} (${col.name});`);
+      }
+    }
+
+    // updated_at trigger
+    if (table.columns.some(c => c.name === 'updated_at')) {
+      parts.push(`CREATE TRIGGER trg_${table.name}_updated_at BEFORE UPDATE ON ${table.name} FOR EACH ROW EXECUTE FUNCTION update_updated_at();`);
+    }
   }
 
-  // 3. Seed data
+  // 4. Seed data
   for (const seed of contract.seedData ?? []) {
     for (const row of seed.rows) {
       const cols = Object.keys(row);
+      if (cols.length === 0) continue; // skip empty rows (all columns auto-generated)
       const vals = Object.values(row).map(v =>
         typeof v === 'string' ? `'${v.replace(/'/g, "''")}'` :
-        v === null ? 'NULL' : String(v)
+        v === null ? 'NULL' :
+        typeof v === 'object' ? `'${JSON.stringify(v).replace(/'/g, "''")}'` :
+        String(v)
       );
       parts.push(`INSERT INTO ${seed.table} (${cols.join(', ')}) VALUES (${vals.join(', ')});`);
     }

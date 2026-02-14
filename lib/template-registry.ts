@@ -6,6 +6,7 @@ import type { TemplateTask, DesignTokens, GeneratedFile, TemplateName } from './
 import { pluralizeTable } from './utils';
 import { colord } from 'colord';
 import type { SchemaContract, TableDef, ColumnDef, SQLType } from './schema-contract';
+import { generateSeedData } from './seed-generator';
 
 // ============================================================================
 // Handlebars Helpers
@@ -160,10 +161,10 @@ function buildTableDefFromConfig(config: Record<string, unknown>): TableDef | nu
     name: tableName,
     columns,
     rlsPolicies: [
-      { name: `Users can view own ${tableName}`, operation: 'SELECT', using: 'auth.uid() = user_id' },
-      { name: `Users can insert own ${tableName}`, operation: 'INSERT', withCheck: 'auth.uid() = user_id' },
-      { name: `Users can update own ${tableName}`, operation: 'UPDATE', using: 'auth.uid() = user_id' },
-      { name: `Users can delete own ${tableName}`, operation: 'DELETE', using: 'auth.uid() = user_id' },
+      { name: `Users can view own ${tableName}`, operation: 'SELECT', using: '(select auth.uid()) = user_id' },
+      { name: `Users can insert own ${tableName}`, operation: 'INSERT', withCheck: '(select auth.uid()) = user_id' },
+      { name: `Users can update own ${tableName}`, operation: 'UPDATE', using: '(select auth.uid()) = user_id' },
+      { name: `Users can delete own ${tableName}`, operation: 'DELETE', using: '(select auth.uid()) = user_id' },
     ],
   };
 }
@@ -199,45 +200,43 @@ export function executeTemplate(
   if (task.template === 'crud') {
     const tableDef = buildTableDefFromConfig(task.config);
     if (tableDef) {
-      schema = { tables: [tableDef] };
+      schema = { tables: [tableDef], seedData: [generateSeedData(tableDef, 5, [])] };
     }
   } else if (task.template === 'auth') {
     // Auth template produces a profiles table (commonly referenced by other entities)
-    schema = {
-      tables: [{
-        name: 'profiles',
-        columns: [
-          { name: 'id', type: 'uuid', primaryKey: true, default: 'gen_random_uuid()' },
-          { name: 'user_id', type: 'uuid', nullable: false, unique: true, references: { table: 'auth.users', column: 'id' } },
-          { name: 'display_name', type: 'text' },
-          { name: 'avatar_url', type: 'text' },
-          { name: 'created_at', type: 'timestamptz', nullable: false, default: 'now()' },
-          { name: 'updated_at', type: 'timestamptz', nullable: false, default: 'now()' },
-        ],
-        rlsPolicies: [
-          { name: 'Users can view all profiles', operation: 'SELECT', using: 'true' },
-          { name: 'Users can update own profile', operation: 'UPDATE', using: 'auth.uid() = user_id' },
-          { name: 'Users can insert own profile', operation: 'INSERT', withCheck: 'auth.uid() = user_id' },
-        ],
-      }],
+    const profilesTable: TableDef = {
+      name: 'profiles',
+      columns: [
+        { name: 'id', type: 'uuid', primaryKey: true, default: 'gen_random_uuid()' },
+        { name: 'user_id', type: 'uuid', nullable: false, unique: true, references: { table: 'auth.users', column: 'id' } },
+        { name: 'display_name', type: 'text' },
+        { name: 'avatar_url', type: 'text' },
+        { name: 'created_at', type: 'timestamptz', nullable: false, default: 'now()' },
+        { name: 'updated_at', type: 'timestamptz', nullable: false, default: 'now()' },
+      ],
+      rlsPolicies: [
+        { name: 'Users can view all profiles', operation: 'SELECT', using: 'true' },
+        { name: 'Users can update own profile', operation: 'UPDATE', using: '(select auth.uid()) = user_id' },
+        { name: 'Users can insert own profile', operation: 'INSERT', withCheck: '(select auth.uid()) = user_id' },
+      ],
     };
+    schema = { tables: [profilesTable], seedData: [generateSeedData(profilesTable, 5, [])] };
   } else if (task.template === 'messaging') {
-    schema = {
-      tables: [{
-        name: 'messages',
-        columns: [
-          { name: 'id', type: 'uuid', primaryKey: true, default: 'gen_random_uuid()' },
-          { name: 'content', type: 'text', nullable: false },
-          { name: 'channel_id', type: 'text', nullable: false, default: "'default'" },
-          { name: 'user_id', type: 'uuid', nullable: false, references: { table: 'auth.users', column: 'id' } },
-          { name: 'created_at', type: 'timestamptz', nullable: false, default: 'now()' },
-        ],
-        rlsPolicies: [
-          { name: 'Users can view messages', operation: 'SELECT', using: 'true' },
-          { name: 'Authenticated users can send messages', operation: 'INSERT', withCheck: 'auth.uid() = user_id' },
-        ],
-      }],
+    const messagesTable: TableDef = {
+      name: 'messages',
+      columns: [
+        { name: 'id', type: 'uuid', primaryKey: true, default: 'gen_random_uuid()' },
+        { name: 'content', type: 'text', nullable: false },
+        { name: 'channel_id', type: 'text', nullable: false, default: "'default'" },
+        { name: 'user_id', type: 'uuid', nullable: false, references: { table: 'auth.users', column: 'id' } },
+        { name: 'created_at', type: 'timestamptz', nullable: false, default: 'now()' },
+      ],
+      rlsPolicies: [
+        { name: 'Users can view messages', operation: 'SELECT', using: 'true' },
+        { name: 'Authenticated users can send messages', operation: 'INSERT', withCheck: '(select auth.uid()) = user_id' },
+      ],
     };
+    schema = { tables: [messagesTable], seedData: [generateSeedData(messagesTable, 5, [])] };
   }
 
   // Render non-SQL Handlebars templates

@@ -1,6 +1,8 @@
 import type { Sandbox } from '@daytonaio/sdk';
 import type { ChatPlan, StreamEvent, GeneratedFile } from './types';
 import type { SchemaContract, TableDef, EnumDef, SeedRow } from './schema-contract';
+import { faker } from '@faker-js/faker';
+import { generateAllSeedData } from './seed-generator';
 import { classifyFeatures } from './feature-classifier';
 import { executeTemplate, groupByLayer } from './template-registry';
 import { uploadFile, runCommand } from './sandbox';
@@ -253,10 +255,49 @@ export function mergeSchemaContracts(
     seedData.push(...(fragment.seedData ?? []));
   }
 
+  // Auto-create stub tables for unresolved FK references.
+  // This ensures cross-template references (e.g., ward_assignments → beds)
+  // always resolve, making the contract self-consistent by construction.
+  const externalTables = new Set(['auth.users']);
+  const missingTables = new Set<string>();
+  for (const table of tableMap.values()) {
+    for (const col of table.columns) {
+      if (col.references) {
+        const ref = col.references.table;
+        if (!tableMap.has(ref) && !externalTables.has(ref)) {
+          missingTables.add(ref);
+        }
+      }
+    }
+  }
+  for (const name of missingTables) {
+    tableMap.set(name, {
+      name,
+      columns: [
+        { name: 'id', type: 'uuid', primaryKey: true, default: 'gen_random_uuid()' },
+        { name: 'user_id', type: 'uuid', nullable: false, references: { table: 'auth.users', column: 'id' } },
+        { name: 'created_at', type: 'timestamptz', nullable: false, default: 'now()' },
+        { name: 'updated_at', type: 'timestamptz', nullable: false, default: 'now()' },
+      ],
+      rlsPolicies: [
+        { name: `Users can view own ${name}`, operation: 'SELECT', using: '(select auth.uid()) = user_id' },
+        { name: `Users can insert own ${name}`, operation: 'INSERT', withCheck: '(select auth.uid()) = user_id' },
+        { name: `Users can update own ${name}`, operation: 'UPDATE', using: '(select auth.uid()) = user_id' },
+        { name: `Users can delete own ${name}`, operation: 'DELETE', using: '(select auth.uid()) = user_id' },
+      ],
+    });
+    console.log(`[pipeline] Auto-created stub table "${name}" for unresolved FK reference`);
+  }
+
+  // Generate seed data for all tables in topological order (parents first)
+  const allTables = Array.from(tableMap.values());
+  const seedUserIds = Array.from({ length: 3 }, () => faker.string.uuid());
+  const finalSeedData = generateAllSeedData(allTables, 5, seedUserIds);
+
   return {
     tables: Array.from(tableMap.values()),
     enums: enumMap.size > 0 ? Array.from(enumMap.values()) : undefined,
-    seedData: seedData.length > 0 ? seedData : undefined,
+    seedData: finalSeedData.length > 0 ? finalSeedData : undefined,
   };
 }
 

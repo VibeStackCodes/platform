@@ -129,4 +129,62 @@ describe('contractToSQL', () => {
     const sql = contractToSQL(contract);
     expect(sql).toContain('post_id UUID REFERENCES posts(id) ON DELETE CASCADE');
   });
+
+  it('generates FK indexes for columns with references', () => {
+    const contract: SchemaContract = {
+      tables: [
+        {
+          name: 'posts',
+          columns: [{ name: 'id', type: 'uuid', primaryKey: true }],
+        },
+        {
+          name: 'comments',
+          columns: [
+            { name: 'id', type: 'uuid', primaryKey: true },
+            { name: 'post_id', type: 'uuid', references: { table: 'posts', column: 'id' } },
+            { name: 'user_id', type: 'uuid', references: { table: 'auth.users', column: 'id' } },
+          ],
+        },
+      ],
+    };
+    const sql = contractToSQL(contract);
+    expect(sql).toContain('CREATE INDEX idx_comments_post_id ON comments (post_id)');
+    expect(sql).toContain('CREATE INDEX idx_comments_user_id ON comments (user_id)');
+  });
+
+  it('generates updated_at trigger function and per-table triggers', () => {
+    const contract: SchemaContract = {
+      tables: [{
+        name: 'items',
+        columns: [
+          { name: 'id', type: 'uuid', primaryKey: true },
+          { name: 'title', type: 'text' },
+          { name: 'updated_at', type: 'timestamptz', default: 'now()' },
+        ],
+      }],
+    };
+    const sql = contractToSQL(contract);
+    expect(sql).toContain('CREATE OR REPLACE FUNCTION update_updated_at()');
+    expect(sql).toContain('CREATE TRIGGER trg_items_updated_at BEFORE UPDATE ON items');
+    expect(sql).toContain('EXECUTE FUNCTION update_updated_at()');
+  });
+
+  it('serializes jsonb seed data correctly', () => {
+    const contract: SchemaContract = {
+      tables: [{
+        name: 'settings',
+        columns: [
+          { name: 'id', type: 'uuid', primaryKey: true },
+          { name: 'config', type: 'jsonb' },
+        ],
+      }],
+      seedData: [{
+        table: 'settings',
+        rows: [{ config: { theme: 'dark', lang: 'en' } }],
+      }],
+    };
+    const sql = contractToSQL(contract);
+    expect(sql).toContain('INSERT INTO settings');
+    expect(sql).toContain('{"theme":"dark","lang":"en"}');
+  });
 });
