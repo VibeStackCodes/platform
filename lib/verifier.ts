@@ -7,6 +7,7 @@ import { getOpenAIClient, FIX_MODEL, REASONING_PRESETS, isOpenAIModel } from './
 import { zodTextFormat } from 'openai/helpers/zod';
 import { ErrorAnalysisSchema, type ErrorAnalysis } from './schemas';
 import { stripCodeFences } from './utils';
+import { autoFixLintErrors } from './layer-diagnostics';
 
 /**
  * Build Verifier Module
@@ -271,6 +272,9 @@ export async function verifyAndFix(
       label: `Build attempt ${attempt}/${MAX_FIX_RETRIES}`,
       status: 'active',
     });
+
+    // Auto-fix trivial lint violations before build
+    await autoFixLintErrors(sandbox);
 
     // Run build
     const buildResult = await runBuild(sandbox);
