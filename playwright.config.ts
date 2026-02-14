@@ -7,6 +7,7 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   workers: 1,
   reporter: 'html',
+  globalSetup: './e2e/global-setup.ts',
   timeout: 60_000,
   use: {
     baseURL: 'http://localhost:3000',
@@ -31,5 +32,8 @@ export default defineConfig({
     url: 'http://localhost:3000',
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
+    env: {
+      SUPABASE_E2E_ORG_ID: 'zieajexturdwfcjjfolu', // Testing org override
+    },
   },
 });

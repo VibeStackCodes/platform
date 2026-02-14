@@ -110,10 +110,10 @@ export class LiveFixer {
       });
     }
 
-    // Fix each file with real errors
-    for (const [filePath, errors] of Array.from(errorsByFile.entries())) {
+    // Fix all files with real errors in parallel
+    const fixPromises = Array.from(errorsByFile.entries()).map(async ([filePath, errors]) => {
       const content = this.fileContents.get(filePath);
-      if (!content) continue;
+      if (!content) return;
 
       console.log(`[live-fixer] Fixing ${errors.length} errors in ${filePath}`);
       this.emit({ type: 'build_fix', file: filePath, attempt: 0 });
@@ -130,7 +130,9 @@ export class LiveFixer {
       } catch (err) {
         console.warn(`[live-fixer] Failed to fix ${filePath}:`, err);
       }
-    }
+    });
+
+    await Promise.all(fixPromises);
   }
 
   private async _fixFile(

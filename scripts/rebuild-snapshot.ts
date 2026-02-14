@@ -18,12 +18,19 @@ async function main() {
   console.log('Building snapshot image...');
 
   // Use official Bun image — bun is on PATH, includes Node.js compat
+  const OPENVSCODE_VERSION = 'v1.98.2';
   const image = Image.base('oven/bun:1-debian')
-    .runCommands('apt-get update && apt-get install -y git curl && rm -rf /var/lib/apt/lists/*')
+    .runCommands('apt-get update && apt-get install -y git curl tmux && rm -rf /var/lib/apt/lists/*')
+    // Install OpenVSCode Server (browser IDE on port 13337)
+    .runCommands(
+      `curl -fsSL https://github.com/gitpod-io/openvscode-server/releases/download/openvscode-server-${OPENVSCODE_VERSION}/openvscode-server-${OPENVSCODE_VERSION}-linux-x64.tar.gz | tar xz -C /opt && mv /opt/openvscode-server-${OPENVSCODE_VERSION}-linux-x64 /opt/openvscode-server`
+    )
     // Pre-cache common deps (includes PGlite for migration validation)
     .workdir('/workspace')
     .addLocalFile('scripts/snapshot-package.json', '/workspace/package.json')
     .runCommands('bun install')
+    // Install tsc globally so build verification can run bare `tsc --noEmit`
+    .runCommands('bun add -g typescript')
     // Pre-warm Vite + TypeScript caches with minimal scaffold
     .addLocalFile('snapshot/warmup-scaffold/vite.config.ts', '/workspace/vite.config.ts')
     .addLocalFile('snapshot/warmup-scaffold/tsconfig.json', '/workspace/tsconfig.json')
@@ -39,18 +46,21 @@ async function main() {
       'bun run dev &>/dev/null & DEV_PID=$! && sleep 8 && kill $DEV_PID 2>/dev/null || true'
     )
     .runCommands('npx tsc --noEmit 2>/dev/null || true')
-    // Clean up warmup source but keep caches (.vite/, tsconfig.tsbuildinfo, node_modules/)
-    .runCommands(
-      'rm -rf /workspace/src /workspace/index.html /workspace/env.d.ts /workspace/vite.config.ts /workspace/tsconfig.json /workspace/tsconfig.app.json'
-    );
+    // Entrypoint script: starts OpenVSCode + bun dev in tmux
+    .addLocalFile('snapshot/entrypoint.sh', '/opt/entrypoint.sh')
+    .runCommands('chmod +x /opt/entrypoint.sh')
+    // Hint in new terminal sessions about tmux dev server
+    .addLocalFile('snapshot/bashrc-extra.sh', '/tmp/bashrc-extra.sh')
+    .runCommands('cat /tmp/bashrc-extra.sh >> /root/.bashrc && rm /tmp/bashrc-extra.sh');
 
   // Delete existing snapshot if it exists
   try {
     const existing = await daytona.snapshot.get(SNAPSHOT_NAME);
     console.log(`Deleting existing snapshot: ${SNAPSHOT_NAME}`);
     await daytona.snapshot.delete(existing);
-    // Wait for server-side cleanup
-    await new Promise(resolve => setTimeout(resolve, 5000));
+    // Wait for server-side cleanup (deletion is async)
+    console.log('Waiting for snapshot deletion to propagate...');
+    await new Promise(resolve => setTimeout(resolve, 15000));
   } catch {
     // Snapshot doesn't exist yet, that's fine
   }
@@ -60,6 +70,7 @@ async function main() {
     {
       name: SNAPSHOT_NAME,
       image,
+      entrypoint: ['/opt/entrypoint.sh'],
       resources: { cpu: 2, memory: 4, disk: 10 },
     },
     { onLogs: (chunk: string) => process.stdout.write(chunk), timeout: 600 },

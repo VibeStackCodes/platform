@@ -358,10 +358,14 @@ export async function startDevServer(
     // Dev server runs forever — errors are expected when sandbox shuts down
   });
 
-  // Wait for server to start (poll port 3000)
-  await waitForServerReady(sandbox, 3000, 30);
+  return waitForDevServer(sandbox);
+}
 
-  // Get preview URL
+/**
+ * Wait for an already-running dev server (started by snapshot entrypoint) and return its URL.
+ */
+export async function waitForDevServer(sandbox: Sandbox): Promise<{ url: string }> {
+  await waitForServerReady(sandbox, 3000, 30);
   const preview = await getPreviewUrl(sandbox, 3000);
   return { url: preview.url };
 }
@@ -499,6 +503,8 @@ export async function provisionProject(
       autoStopInterval: 60,
       labels: { project: projectId, app: appName, type: 'vibestack-generated' },
     });
+
+    // Dev server auto-starts via snapshot entrypoint (OpenVSCode + bun dev in tmux)
 
     await supabaseClient
       .from('projects')

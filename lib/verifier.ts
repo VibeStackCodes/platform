@@ -422,9 +422,9 @@ async function runBuild(sandbox: Sandbox): Promise<{ exitCode: number; stdout: s
   try {
     const result = await runCommand(
       sandbox,
-      'tsc --noEmit',
+      'bun run build',
       'build-verify',
-      { cwd: '/workspace', timeout: 60 }
+      { cwd: '/workspace', timeout: 120 }
     );
 
     return {

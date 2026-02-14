@@ -9,7 +9,7 @@ import { createRepo, getInstallationToken, buildRepoName } from "@/lib/github";
 import { buildAppSlug } from "@/lib/slug";
 import { runPipeline, runScaffoldPhase, runFeaturePhase } from "@/lib/template-pipeline";
 import { verifyAndFix } from "@/lib/verifier";
-import { createSandbox, getSandbox, getPreviewUrl, pushToGitHub, startDevServer } from "@/lib/sandbox";
+import { createSandbox, getSandbox, getPreviewUrl, pushToGitHub, waitForDevServer } from "@/lib/sandbox";
 import { createSupabaseProject } from "@/lib/supabase-mgmt";
 import type { GenerateRequest, StreamEvent, ChatPlan } from "@/lib/types";
 import { classifyFeatures } from "@/lib/feature-classifier";
@@ -103,21 +103,36 @@ export async function POST(req: NextRequest) {
         emit({ type: "stage_update", stage: "provisioning" });
 
         let sandbox;
-        // Check if sandbox was pre-provisioned during chat
+        // Poll for pre-provisioned sandbox (chat route may still be writing it)
         const { data: existingProject } = await supabase
           .from("projects")
           .select("sandbox_id, supabase_project_id")
           .eq("id", project.id)
           .single();
 
-        if (existingProject?.sandbox_id) {
-          sandbox = await getSandbox(existingProject.sandbox_id);
+        let sandboxId = existingProject?.sandbox_id;
+        if (!sandboxId) {
+          // Wait up to 8s for chat route's fire-and-forget provisioning to complete
+          for (let i = 0; i < 4; i++) {
+            await new Promise(r => setTimeout(r, 2000));
+            const { data: poll } = await supabase
+              .from("projects")
+              .select("sandbox_id")
+              .eq("id", project.id)
+              .single();
+            if (poll?.sandbox_id) { sandboxId = poll.sandbox_id; break; }
+          }
+        }
+
+        if (sandboxId) {
+          sandbox = await getSandbox(sandboxId);
           console.log(`✓ Reusing pre-provisioned sandbox: ${sandbox.id}`);
         } else {
           sandbox = await createSandbox({
             language: "typescript",
             labels: { app: chatPlan.appName, type: "vibestack-generated" },
           });
+          // Dev server auto-starts via snapshot entrypoint
         }
 
         // Supabase project creation (runs in parallel with generation)
@@ -128,9 +143,21 @@ export async function POST(req: NextRequest) {
               .then((p) => { supabaseProject = p; supabaseProjectId = p.id; })
           : Promise.resolve();
 
+        // Dev server auto-starts via snapshot entrypoint — just wait for it + get URL
+        emit({ type: "checkpoint", label: "Waiting for dev server", status: "active" });
+        const [{ url: previewUrlStr }] = await Promise.all([
+          waitForDevServer(sandbox),
+          // Write sandbox_id to DB in parallel
+          supabase.from("projects").update({ sandbox_id: sandbox.id }).eq("id", project.id),
+        ]);
+        emit({ type: "preview_ready", url: previewUrlStr });
+        emit({ type: "checkpoint", label: "Waiting for dev server", status: "complete" });
+        console.log(`✓ Dev server ready: ${previewUrlStr}`);
+
+        // Write preview URL to DB immediately so Supabase realtime updates the iframe
         await supabase
           .from("projects")
-          .update({ sandbox_id: sandbox.id })
+          .update({ preview_url: previewUrlStr })
           .eq("id", project.id);
 
         // Stage 2: Scaffold Phase — write layer 0 files + install dependencies
@@ -144,62 +171,28 @@ export async function POST(req: NextRequest) {
           const { contractToTypes } = await import("@/lib/contract-to-types");
 
           const validation = validateContract(schemaContract);
-          if (validation.valid) {
-            // Contract is clean — derive SQL + types deterministically
-            const migrationSQL = contractToSQL(schemaContract);
-            const typesTS = contractToTypes(schemaContract);
-
-            const { uploadFile: upload } = await import("@/lib/sandbox");
-            await upload(sandbox, migrationSQL, '/workspace/supabase/migrations/001_init.sql');
-            await upload(sandbox, typesTS, '/workspace/src/types/database.types.ts');
-
-            const migrationFile = scaffoldFiles.find(f => f.path === 'supabase/migrations/001_init.sql');
-            if (migrationFile) migrationFile.content = migrationSQL;
-            scaffoldFiles.push({ path: 'src/types/database.types.ts', content: typesTS, layer: 0 });
-
-            const { validateMigration } = await import("@/lib/local-supabase");
-            await validateMigration(sandbox, migrationSQL);
-
-            allMigrations.splice(0, allMigrations.length, migrationSQL);
-            emit({ type: "checkpoint", label: "Database ready", status: "complete" });
-          } else {
-            // Contract has cross-reference issues — fall back to legacy LLM-fix path
-            console.warn(`[generate] Schema contract invalid, falling back to LLM fix: ${validation.errors.join('; ')}`);
-            const migrationContent = allMigrations.join('\n\n-- ---\n\n');
-            if (migrationContent.trim().length > 0) {
-              const { applyLocalMigration } = await import("@/lib/local-supabase");
-              const validatedSQL = await applyLocalMigration(sandbox, migrationContent, model);
-              allMigrations.splice(0, allMigrations.length, validatedSQL);
-              const migrationFile = scaffoldFiles.find(f => f.path === 'supabase/migrations/001_init.sql');
-              if (migrationFile) {
-                migrationFile.content = validatedSQL;
-                const { uploadFile: upload } = await import("@/lib/sandbox");
-                await upload(sandbox, validatedSQL, '/workspace/supabase/migrations/001_init.sql');
-              }
-            }
-            emit({ type: "checkpoint", label: "Database ready", status: "complete" });
+          if (!validation.valid) {
+            throw new Error(`Schema contract invalid (deterministic pipeline bug): ${validation.errors.join('; ')}`);
           }
-        } else if (allMigrations.length > 0) {
-          // Fallback: legacy raw SQL path (templates without schema)
-          const migrationContent = allMigrations.join('\n\n-- ---\n\n');
-          const { applyLocalMigration } = await import("@/lib/local-supabase");
-          const validatedSQL = await applyLocalMigration(sandbox, migrationContent, model);
-          allMigrations.splice(0, allMigrations.length, validatedSQL);
+
+          // Contract is clean — derive SQL + types deterministically
+          const migrationSQL = contractToSQL(schemaContract);
+          const typesTS = contractToTypes(schemaContract);
+
+          const { uploadFile: upload } = await import("@/lib/sandbox");
+          await upload(sandbox, migrationSQL, '/workspace/supabase/migrations/001_init.sql');
+          await upload(sandbox, typesTS, '/workspace/src/types/database.types.ts');
+
           const migrationFile = scaffoldFiles.find(f => f.path === 'supabase/migrations/001_init.sql');
-          if (migrationFile) {
-            migrationFile.content = validatedSQL;
-            const { uploadFile: upload } = await import("@/lib/sandbox");
-            await upload(sandbox, validatedSQL, '/workspace/supabase/migrations/001_init.sql');
-          }
+          if (migrationFile) migrationFile.content = migrationSQL;
+          scaffoldFiles.push({ path: 'src/types/database.types.ts', content: typesTS, layer: 0 });
+
+          const { validateMigration } = await import("@/lib/local-supabase");
+          await validateMigration(sandbox, migrationSQL);
+
+          allMigrations.splice(0, allMigrations.length, migrationSQL);
           emit({ type: "checkpoint", label: "Database ready", status: "complete" });
         }
-
-        // Stage 2.5: Start dev server + emit preview URL (HMR ready)
-        emit({ type: "checkpoint", label: "Starting dev server", status: "active" });
-        const { url: previewUrlStr } = await startDevServer(sandbox);
-        emit({ type: "preview_ready", url: previewUrlStr });
-        emit({ type: "checkpoint", label: "Starting dev server", status: "complete" });
-        console.log(`✓ Dev server started: ${previewUrlStr}`);
 
         // Start live error fixer in parallel
         const { LiveFixer } = await import("@/lib/live-fixer");
