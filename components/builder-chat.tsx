@@ -88,8 +88,8 @@ import {
 } from "@/components/ai-elements/commit";
 import { PromptBar } from "@/components/prompt-bar";
 import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
-import { Bot, Rocket, CheckCircle2 } from "lucide-react";
-import type { StreamEvent, ChatPlan, BuildError, CheckpointEvent, LayerCommitEvent, FeatureSpec } from "@/lib/types";
+import { Bot, Rocket, CheckCircle2, Pencil, Search, FileCode2, CircleAlert } from "lucide-react";
+import type { StreamEvent, ChatPlan, BuildError, CheckpointEvent, LayerCommitEvent, FeatureSpec, EditResult } from "@/lib/types";
 
 interface BuilderChatProps {
   projectId: string;
@@ -543,6 +543,80 @@ export function BuilderChat({ projectId, initialPrompt, initialMessages }: Build
                         // Tool: start_generation
                         case "tool-start_generation":
                           return null;
+
+                        // Tool: edit_code
+                        case "tool-edit_code": {
+                          if (part.state === "input-streaming") {
+                            return (
+                              <Tool key={key}>
+                                <ToolHeader
+                                  title="Editing code"
+                                  type={part.type}
+                                  state={part.state}
+                                />
+                              </Tool>
+                            );
+                          }
+                          const editInput = part.input as {
+                            instruction?: string;
+                            searchQueries?: string[];
+                            reasoning?: string;
+                          };
+                          const editOutput = part.output as EditResult | { status: string; message: string } | undefined;
+                          const isEditComplete = part.state === "output-available";
+
+                          return (
+                            <ChainOfThought key={key} defaultOpen>
+                              <ChainOfThoughtHeader>
+                                <Pencil className="mr-1.5 inline size-3.5" />
+                                Editing code
+                              </ChainOfThoughtHeader>
+                              <ChainOfThoughtContent>
+                                {editInput?.reasoning && (
+                                  <ChainOfThoughtStep
+                                    label="Analysis"
+                                    description={editInput.reasoning}
+                                    status="complete"
+                                  />
+                                )}
+                                {editInput?.searchQueries && (
+                                  <ChainOfThoughtStep
+                                    label="Searching"
+                                    description={editInput.searchQueries.map(q => `"${q}"`).join(', ')}
+                                    status={isEditComplete ? "complete" : "active"}
+                                  />
+                                )}
+                                {isEditComplete && editOutput && 'filesModified' in editOutput && (
+                                  <>
+                                    <ChainOfThoughtStep
+                                      label={`Modified ${editOutput.filesModified.length} file(s)`}
+                                      description={editOutput.filesModified.join(', ')}
+                                      status="complete"
+                                    />
+                                    <div className="mt-2 flex items-center gap-2 text-sm">
+                                      {editOutput.buildPassed ? (
+                                        <span className="flex items-center gap-1 text-green-600 dark:text-green-400">
+                                          <CheckCircle2 className="size-3.5" />
+                                          Build passed
+                                        </span>
+                                      ) : (
+                                        <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400">
+                                          <CircleAlert className="size-3.5" />
+                                          Build has issues
+                                        </span>
+                                      )}
+                                    </div>
+                                  </>
+                                )}
+                                {isEditComplete && editOutput && 'status' in editOutput && editOutput.status === 'error' && (
+                                  <div className="mt-2 text-sm text-red-500">
+                                    {editOutput.message}
+                                  </div>
+                                )}
+                              </ChainOfThoughtContent>
+                            </ChainOfThought>
+                          );
+                        }
 
                         default:
                           return null;

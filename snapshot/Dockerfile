@@ -2,6 +2,9 @@ FROM oven/bun:1-debian
 
 RUN apt-get update && apt-get install -y git curl && rm -rf /var/lib/apt/lists/*
 
+# Install OxLint globally — single Rust binary, much lighter than ESLint + plugins
+RUN bun install -g oxlint
+
 # Pre-cache common deps (includes PGlite for migration validation)
 WORKDIR /workspace
 COPY package-base.json /workspace/package.json

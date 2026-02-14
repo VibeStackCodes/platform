@@ -6,6 +6,8 @@ import { buildFilePrompt } from './injector';
 import { resolveModel } from './models';
 import { getOpenAIClient, CODEGEN_MODEL, REASONING_PRESETS, isOpenAIModel } from './openai-client';
 import { stripCodeFences } from './utils';
+import { runLayerDiagnostics } from './layer-diagnostics';
+import { fixLayerErrors } from './layer-fixer';
 
 /** Descriptive labels for each generation layer */
 const LAYER_LABELS: Record<number, string> = {
@@ -66,6 +68,10 @@ export async function generateFiles(
 ): Promise<Map<string, string>> {
   const generatedContents = new Map<string, string>();
 
+  // Track written vs pending files for per-layer diagnostics
+  const writtenFiles = new Set<string>();
+  const pendingFiles = new Set(plan.files.map(f => f.path));
+
   // Group files by layer
   const filesByLayer = groupFilesByLayer(plan);
   const maxLayer = Math.max(...Array.from(filesByLayer.keys()));
@@ -122,9 +128,14 @@ export async function generateFiles(
       throw new Error(`Layer ${layer} incomplete: failed to generate ${missingFiles.length} file(s): ${missingPaths}`);
     }
 
+    // Update file tracking sets
+    for (const f of layerFiles) {
+      writtenFiles.add(f.path);
+      pendingFiles.delete(f.path);
+    }
+
     // Git commit this layer's files
     const label = LAYER_LABELS[layer] || `layer ${layer} files`;
-    const filePaths = layerFiles.map(f => f.path).join(' ');
     try {
       const fileList = layerFiles.map(f => f.path);
       await sandbox.git.add('/workspace', fileList);
@@ -146,6 +157,27 @@ export async function generateFiles(
       });
     } catch (error) {
       console.warn(`Git commit for layer ${layer} failed (non-fatal):`, error);
+    }
+
+    // Per-layer diagnostics: run tsc + oxlint, fix errors before next layer
+    // Skip on final layer — the build verifier handles that with retries
+    if (layer < maxLayer) {
+      try {
+        const diagnostics = await runLayerDiagnostics(sandbox, writtenFiles, pendingFiles);
+        if (diagnostics.totalErrors > 0) {
+          console.log(`[generator] Layer ${layer}: ${diagnostics.totalErrors} errors found, fixing...`);
+          emit({ type: 'checkpoint', label: `Fixing layer ${layer} errors`, status: 'active' });
+          const { fixedFiles } = await fixLayerErrors(sandbox, diagnostics, generatedContents, model, emit);
+          // Update generatedContents with fixed versions
+          for (const path of fixedFiles) {
+            const buf = await sandbox.fs.downloadFile(`/workspace/${path}`);
+            generatedContents.set(path, buf.toString('utf-8'));
+          }
+          emit({ type: 'checkpoint', label: `Fixing layer ${layer} errors`, status: 'complete' });
+        }
+      } catch (err) {
+        console.warn(`[generator] Layer ${layer} diagnostics failed (non-fatal):`, err);
+      }
     }
 
     emit({

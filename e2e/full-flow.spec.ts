@@ -358,9 +358,9 @@ test.describe('VibeStack E2E', () => {
       await textarea.fill('Add a dark mode toggle to the header');
       await textarea.press('Enter');
 
-      // Should get mock edit response
+      // Should get mock edit_code tool response — shows reasoning and search queries
       await expect(
-        page.getByText(/updated 2 files/i).first()
+        page.getByText(/Editing code/i).first()
       ).toBeVisible({ timeout: 15_000 });
     });
   });
