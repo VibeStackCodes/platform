@@ -63,6 +63,7 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
       initialPreviewUrl={project.preview_url}
       initialCodeServerUrl={project.code_server_url}
       initialSupabaseUrl={project.supabase_url}
+      initialSupabaseProjectId={project.supabase_project_id}
     />
   );
 }

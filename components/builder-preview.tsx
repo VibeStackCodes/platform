@@ -4,7 +4,8 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { WebPreview, WebPreviewBody } from "@/components/ai-elements/web-preview";
-import { ExternalLink, Rocket } from "lucide-react";
+import { Rocket } from "lucide-react";
+import { DatabaseManager } from "@/components/supabase-manager/database";
 
 interface BuilderPreviewProps {
   projectId: string;
@@ -12,6 +13,7 @@ interface BuilderPreviewProps {
   previewUrl?: string;
   codeServerUrl?: string;
   supabaseUrl?: string;
+  supabaseProjectId?: string;
 }
 
 export function BuilderPreview({
@@ -20,6 +22,7 @@ export function BuilderPreview({
   previewUrl,
   codeServerUrl,
   supabaseUrl,
+  supabaseProjectId,
 }: BuilderPreviewProps) {
   const [activeTab, setActiveTab] = useState("preview");
 
@@ -117,29 +120,13 @@ export function BuilderPreview({
         </TabsContent>
 
         {/* Database Tab */}
-        <TabsContent value="database" className="h-[calc(100%-4rem)] p-4">
-          {supabaseUrl ? (
-            <div className="flex h-full flex-col items-center justify-center">
-              <p className="mb-4 text-sm text-muted-foreground">
-                Your Supabase project database
-              </p>
-              <Button variant="outline" asChild>
-                <a
-                  href={supabaseUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center"
-                >
-                  Open Supabase Studio
-                  <ExternalLink className="ml-2 size-4" />
-                </a>
-              </Button>
-            </div>
+        <TabsContent value="database" className="h-[calc(100%-4rem)] p-0">
+          {supabaseProjectId ? (
+            <DatabaseManager projectRef={supabaseProjectId} />
           ) : (
             <div className="flex h-full items-center justify-center text-muted-foreground">
               <div className="text-center">
-                <p className="text-sm">Database link will appear here once the project is generated</p>
-                <p className="mt-2 text-xs">Supabase Studio URL</p>
+                <p className="text-sm">Database will appear here once the project is generated</p>
               </div>
             </div>
           )}

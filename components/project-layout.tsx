@@ -13,6 +13,7 @@ interface ProjectLayoutProps {
   initialPreviewUrl?: string;
   initialCodeServerUrl?: string;
   initialSupabaseUrl?: string;
+  initialSupabaseProjectId?: string;
 }
 
 export function ProjectLayout({
@@ -23,11 +24,13 @@ export function ProjectLayout({
   initialPreviewUrl,
   initialCodeServerUrl,
   initialSupabaseUrl,
+  initialSupabaseProjectId,
 }: ProjectLayoutProps) {
   const [sandboxId, setSandboxId] = useState(initialSandboxId);
   const [previewUrl, setPreviewUrl] = useState(initialPreviewUrl);
   const [codeServerUrl, setCodeServerUrl] = useState(initialCodeServerUrl);
   const [supabaseUrl, setSupabaseUrl] = useState(initialSupabaseUrl);
+  const [supabaseProjectId, setSupabaseProjectId] = useState(initialSupabaseProjectId);
 
   useEffect(() => {
     const supabase = createBrowserClient(
@@ -51,6 +54,7 @@ export function ProjectLayout({
           if (row.preview_url) setPreviewUrl(row.preview_url as string);
           if (row.code_server_url) setCodeServerUrl(row.code_server_url as string);
           if (row.supabase_url) setSupabaseUrl(row.supabase_url as string);
+          if (row.supabase_project_id) setSupabaseProjectId(row.supabase_project_id as string);
         },
       )
       .subscribe();
@@ -72,6 +76,7 @@ export function ProjectLayout({
           previewUrl={previewUrl}
           codeServerUrl={codeServerUrl}
           supabaseUrl={supabaseUrl}
+          supabaseProjectId={supabaseProjectId}
         />
       </div>
     </div>
