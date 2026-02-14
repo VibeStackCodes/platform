@@ -42,6 +42,26 @@ export async function runScaffoldPhase(
   const tasks = classifyFeatures(chatPlan.features);
   console.log(`[pipeline] Classified ${chatPlan.features.length} features → ${tasks.length} template tasks`);
 
+  // 1.5. Enrich scaffold config with feature metadata so App.tsx can generate
+  // proper imports, routes, and navigation for all classified features
+  const scaffoldTask = tasks.find(t => t.template === 'scaffold');
+  if (scaffoldTask) {
+    const featureTasks = tasks.filter(t => t.template !== 'scaffold');
+    scaffoldTask.config = {
+      ...scaffoldTask.config,
+      appName: chatPlan.appName,
+      hasAuth: featureTasks.some(t => t.template === 'auth'),
+      hasDashboard: featureTasks.some(t => t.template === 'dashboard'),
+      hasMessaging: featureTasks.some(t => t.template === 'messaging'),
+      entities: featureTasks
+        .filter(t => t.template === 'crud')
+        .map(t => ({
+          name: t.config.entity as string,
+          pluralName: t.config.tableName as string,
+        })),
+    };
+  }
+
   // 2. Execute templates by layer
   const allFiles: GeneratedFile[] = [];
   const allMigrations: string[] = [];
