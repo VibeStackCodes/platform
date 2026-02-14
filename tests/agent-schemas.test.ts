@@ -5,6 +5,9 @@ import {
   FrontendArtifactSchema,
   QAResultArtifactSchema,
   AgentEventSchema,
+  InfraProvisionResultSchema,
+  CodeReviewResultSchema,
+  DeploymentResultSchema,
 } from '@/lib/agents/schemas';
 
 describe('ClarifiedRequirementsSchema', () => {
@@ -100,5 +103,43 @@ describe('AgentEventSchema', () => {
     const event = { type: 'unknown_event', agentId: 'planner' };
     const result = AgentEventSchema.safeParse(event);
     expect(result.success).toBe(false);
+  });
+});
+
+describe('InfraProvisionResultSchema', () => {
+  it('validates sandbox + supabase provision result', () => {
+    const valid = {
+      sandboxId: 'sandbox-123',
+      previewUrl: 'https://preview.daytona.io/abc',
+      supabaseProjectId: 'proj-456',
+      supabaseUrl: 'https://abc.supabase.co',
+      supabaseAnonKey: 'eyJ...',
+    };
+    expect(InfraProvisionResultSchema.safeParse(valid).success).toBe(true);
+  });
+});
+
+describe('CodeReviewResultSchema', () => {
+  it('validates review with issues', () => {
+    const valid = {
+      filesReviewed: ['src/App.tsx', 'src/lib/hooks.ts'],
+      issues: [
+        { file: 'src/App.tsx', line: 15, severity: 'warning', message: 'Unused import' },
+      ],
+      passed: false,
+    };
+    expect(CodeReviewResultSchema.safeParse(valid).success).toBe(true);
+  });
+});
+
+describe('DeploymentResultSchema', () => {
+  it('validates successful deployment', () => {
+    const valid = {
+      repoUrl: 'https://github.com/VibeStackCodes-Generated/my-app',
+      deploymentUrl: 'https://my-app.vercel.app',
+      deploymentId: 'dpl-123',
+      status: 'success',
+    };
+    expect(DeploymentResultSchema.safeParse(valid).success).toBe(true);
   });
 });

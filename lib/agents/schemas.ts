@@ -164,6 +164,52 @@ export const QAResultArtifactSchema = z.object({
 export type QAResultArtifact = z.infer<typeof QAResultArtifactSchema>;
 
 /**
+ * Infrastructure provision result output from infra agent
+ */
+export const InfraProvisionResultSchema = z.object({
+  sandboxId: z.string().describe('Daytona sandbox ID'),
+  previewUrl: z.string().describe('Preview URL for the sandbox'),
+  supabaseProjectId: z.string().describe('Generated Supabase project ID'),
+  supabaseUrl: z.string().describe('Supabase project URL'),
+  supabaseAnonKey: z.string().describe('Supabase anonymous key'),
+});
+
+export type InfraProvisionResult = z.infer<typeof InfraProvisionResultSchema>;
+
+/**
+ * Review issue
+ */
+const ReviewIssueSchema = z.object({
+  file: z.string().describe('File path'),
+  line: z.number().optional().describe('Line number'),
+  severity: z.enum(['error', 'warning', 'info']).describe('Issue severity'),
+  message: z.string().describe('Issue description'),
+});
+
+/**
+ * Code review result output from code reviewer agent
+ */
+export const CodeReviewResultSchema = z.object({
+  filesReviewed: z.array(z.string()).describe('List of files reviewed'),
+  issues: z.array(ReviewIssueSchema).describe('Issues found during review'),
+  passed: z.boolean().describe('Whether code review passed'),
+});
+
+export type CodeReviewResult = z.infer<typeof CodeReviewResultSchema>;
+
+/**
+ * Deployment result output from devops agent
+ */
+export const DeploymentResultSchema = z.object({
+  repoUrl: z.string().describe('GitHub repository URL'),
+  deploymentUrl: z.string().describe('Vercel deployment URL'),
+  deploymentId: z.string().describe('Vercel deployment ID'),
+  status: z.enum(['success', 'failed', 'pending']).describe('Deployment status'),
+});
+
+export type DeploymentResult = z.infer<typeof DeploymentResultSchema>;
+
+/**
  * Agent event discriminated union for SSE streaming
  */
 export const AgentEventSchema = z.discriminatedUnion('type', [
