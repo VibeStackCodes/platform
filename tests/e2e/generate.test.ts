@@ -8,8 +8,9 @@
  * - Full pipeline orchestration
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import type { Plan, FileSpec, StreamEvent } from '@/lib/types';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { Plan, StreamEvent } from '@/lib/types';
+import type { Sandbox } from '@daytonaio/sdk';
 
 // ============================================================================
 // Mock Setup
@@ -268,7 +269,7 @@ describe('generatePlan', () => {
 
 describe('generateFiles', () => {
   let generateFiles: typeof import('@/lib/generator').generateFiles;
-  let uploadFile: any;
+  let uploadFile: ReturnType<typeof vi.fn>;
 
   beforeEach(async () => {
     vi.clearAllMocks();
@@ -285,7 +286,7 @@ describe('generateFiles', () => {
 
     // Setup streaming mock that immediately emits events
     const mockStream = {
-      on: vi.fn((eventName: string, handler: Function) => {
+      on: vi.fn((eventName: string, handler: (chunk: string) => void) => {
         if (eventName === 'text') {
           // Immediately emit chunks synchronously
           handler('export type User = ');
@@ -303,7 +304,7 @@ describe('generateFiles', () => {
       fs: {
         uploadFile: vi.fn(),
       },
-    } as any;
+    } as unknown as Sandbox;
 
     // Execute
     await generateFiles(
@@ -349,7 +350,7 @@ describe('generateFiles', () => {
         throw new Error('Generation failed');
       }
       return Promise.resolve({
-        on: vi.fn((eventName: string, handler: Function) => {
+        on: vi.fn((eventName: string, handler: (chunk: string) => void) => {
           if (eventName === 'text') {
             setTimeout(() => handler('content'), 10);
           }
@@ -361,7 +362,7 @@ describe('generateFiles', () => {
     const mockSandbox = {
       id: 'test-sandbox',
       fs: { uploadFile: vi.fn() },
-    } as any;
+    } as unknown as Sandbox;
 
     // Execute - should throw when layer fails
     await expect(
@@ -391,7 +392,7 @@ describe('generateFiles', () => {
 
 describe('verifyAndFix', () => {
   let verifyAndFix: typeof import('@/lib/verifier').verifyAndFix;
-  let runCommand: any;
+  let runCommand: ReturnType<typeof vi.fn>;
 
   beforeEach(async () => {
     vi.clearAllMocks();
@@ -421,7 +422,7 @@ describe('verifyAndFix', () => {
           stdout: 'Build successful',
         }),
       },
-    } as any;
+    } as unknown as Sandbox;
 
     const generatedContents = new Map([
       ['lib/types.ts', 'export type User = { id: string };'],
@@ -479,7 +480,7 @@ describe('verifyAndFix', () => {
         createSession: vi.fn(),
         executeSessionCommand: runCommand,
       },
-    } as any;
+    } as unknown as Sandbox;
 
     const generatedContents = new Map([
       ['lib/types.ts', 'export type Usre = { id: string };'], // Typo
@@ -536,7 +537,7 @@ describe('verifyAndFix', () => {
         createSession: vi.fn(),
         executeSessionCommand: runCommand,
       },
-    } as any;
+    } as unknown as Sandbox;
 
     const generatedContents = new Map([['lib/types.ts', 'invalid code']]);
 
@@ -580,7 +581,7 @@ describe('Full Pipeline Orchestration', () => {
     });
 
     const mockStream = {
-      on: vi.fn((eventName: string, handler: Function) => {
+      on: vi.fn((eventName: string, handler: (chunk: string) => void) => {
         if (eventName === 'text') {
           // Immediately emit content
           handler('generated content');
@@ -608,7 +609,7 @@ describe('Full Pipeline Orchestration', () => {
           stdout: 'Build successful',
         }),
       },
-    } as any;
+    } as unknown as Sandbox;
 
     // Execute full pipeline
     const plan = await generatePlan('Build a dashboard');

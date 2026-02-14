@@ -1,4 +1,5 @@
 import { Daytona, Sandbox } from '@daytonaio/sdk';
+import type { SupabaseClient } from '@supabase/supabase-js';
 
 /**
  * Daytona Sandbox Wrapper
@@ -164,7 +165,7 @@ export async function runCommand(
     timeout?: number;
   } = {}
 ): Promise<CommandResult> {
-  const { cwd, env, async: isAsync = false, timeout = 300 } = options;
+  const { cwd, env: _env, async: isAsync = false, timeout = 300 } = options;
 
   try {
     // Create session if it doesn't exist
@@ -180,13 +181,13 @@ export async function runCommand(
     }
 
     // Execute command in session
+    // Note: env vars are not supported via SessionExecuteRequest - set them at sandbox level
     const response = await sandbox.process.executeSessionCommand(
       sessionId,
       {
         command,
-        var: env,
         async: isAsync,
-      } as any,
+      },
       timeout
     );
 
@@ -451,7 +452,7 @@ export async function downloadDirectory(
 export async function provisionProject(
   projectId: string,
   appName: string,
-  supabaseClient: any,
+  supabaseClient: SupabaseClient,
 ): Promise<void> {
   try {
     const { createSupabaseProject } = await import('@/lib/supabase-mgmt');

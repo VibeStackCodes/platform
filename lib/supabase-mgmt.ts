@@ -169,9 +169,9 @@ export async function createSupabaseProject(
         throw new Error(`Failed to fetch API keys: ${await keysResponse.text()}`);
       }
 
-      const keys = await keysResponse.json();
-      const anonKey = keys.find((k: any) => k.name === "anon")?.api_key;
-      const serviceRoleKey = keys.find((k: any) => k.name === "service_role")?.api_key;
+      const keys = await keysResponse.json() as Array<{ name: string; api_key: string }>;
+      const anonKey = keys.find((k) => k.name === "anon")?.api_key;
+      const serviceRoleKey = keys.find((k) => k.name === "service_role")?.api_key;
 
       if (!anonKey || !serviceRoleKey) {
         throw new Error("Failed to retrieve API keys from project");
