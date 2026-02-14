@@ -543,6 +543,140 @@ Rules for shared/:
 
 ---
 
+## Defensive Architecture — Preventing Agents From Breaking Code
+
+Five layers of defense, from cheapest to most comprehensive.
+
+### Layer 1: Structural Isolation
+
+Module boundaries prevent agents from accidentally editing unrelated code.
+
+CLAUDE.md rule:
+```
+## Scope Discipline
+- Only modify files directly related to your task
+- NEVER modify files in other capability modules
+- NEVER modify shared/ unless your task explicitly requires it
+- If your task requires changes in multiple modules, list all affected
+  modules before making any changes and run tests for ALL of them
+```
+
+### Layer 2: Pre-Change Verification
+
+Run tests **before** modifying code, not just after. This establishes a baseline and makes responsibility clear.
+
+CLAUDE.md rule:
+```
+## Before Modifying Any File
+1. Run the co-located test FIRST to establish baseline
+2. Confirm it passes
+3. Make your change
+4. Run the test AGAIN
+5. If a test that passed before now fails, YOUR CHANGE broke it — fix it
+
+If the test was already failing before your change, STOP.
+Do not modify a file whose tests are already broken. Report the
+pre-existing failure and ask for guidance.
+```
+
+### Layer 3: Contract Compatibility Tests
+
+When module A depends on module B's `contract.ts`, a compatibility test detects interface breakage at the boundary.
+
+```typescript
+// capabilities/sandbox-lifecycle/contract.compat.test.ts
+import { type SchemaContract, createTestSchemaContract } from "../schema-pipeline/contract"
+import type { SandboxConfig } from "./contract"
+
+describe("contract compatibility: sandbox-lifecycle <-> schema-pipeline", () => {
+  it("SandboxConfig accepts SchemaContract from schema-pipeline", () => {
+    const contract: SchemaContract = createTestSchemaContract()
+    const config: SandboxConfig = { contract, snapshotId: "snap-123", projectId: "proj-456" }
+    expect(config.contract.tables.length).toBeGreaterThan(0)
+  })
+
+  it("SchemaContract shape has required fields", () => {
+    const contract = createTestSchemaContract()
+    expect(contract).toHaveProperty("tables")
+    expect(contract).toHaveProperty("enums")
+  })
+})
+```
+
+CLAUDE.md rule:
+```
+## After Modifying Any contract.ts
+1. Grep for all importers of your module's contract
+2. Run their contract.compat.test.ts files
+3. Never commit a contract.ts change that breaks a compatibility test
+```
+
+### Layer 4: Behavioral Snapshot Tests
+
+For critical functions, snapshot tests capture exact input/output pairs. These catch silent behavior changes where code compiles and unit tests pass, but output has changed.
+
+```typescript
+// capabilities/schema-pipeline/convert-contract-to-sql.snapshot.test.ts
+describe("contract-to-sql behavioral snapshots", () => {
+  const fixtures = ["simple-blog", "ecommerce", "chat-app"]
+  for (const fixture of fixtures) {
+    it(`produces stable SQL for ${fixture}`, () => {
+      const contract = JSON.parse(readFileSync(`${FIXTURES_DIR}/${fixture}.contract.json`, "utf-8"))
+      const sql = convertContractToSqlMigration(contract)
+      expect(sql).toMatchSnapshot()
+    })
+  }
+})
+```
+
+CLAUDE.md rule:
+```
+## Snapshot Tests
+- Files ending in .snapshot.test.ts capture exact behavioral output
+- If a snapshot test fails after your change:
+  - INTENTIONAL change → update snapshot, note why in commit message
+  - ACCIDENTAL change → your refactor changed behavior, fix it
+- NEVER auto-update snapshots without reviewing the diff
+```
+
+### Layer 5: Affected-Module Test Runner
+
+A script that determines which modules are affected by a change (including transitive dependents) and runs all their tests.
+
+```bash
+# scripts/test-affected.sh
+CHANGED=$(git diff --name-only HEAD)
+DIRECT_MODULES=$(echo "$CHANGED" | grep "capabilities/" | cut -d'/' -f2 | sort -u)
+AFFECTED_MODULES="$DIRECT_MODULES"
+for mod in $DIRECT_MODULES; do
+  DEPENDENTS=$(grep -rl "from.*$mod/contract" capabilities/*/contract.ts 2>/dev/null \
+    | cut -d'/' -f2 | sort -u)
+  AFFECTED_MODULES="$AFFECTED_MODULES $DEPENDENTS"
+done
+for mod in $(echo "$AFFECTED_MODULES" | tr ' ' '\n' | sort -u); do
+  pnpm test "capabilities/$mod/"
+done
+```
+
+CLAUDE.md rule:
+```
+## Before Committing
+Run `pnpm test:affected` to test all modules affected by your changes.
+Do NOT commit if any affected test fails.
+```
+
+### Defense Summary
+
+| Breakage Type | Caught By |
+|--------------|-----------|
+| Agent edits wrong file | Layer 1 (structural isolation) |
+| Agent introduces regression in own file | Layer 2 (pre/post test) |
+| Agent changes contract, breaks consumers | Layer 3 (compat tests) |
+| Agent refactors, silently changes behavior | Layer 4 (snapshots) |
+| Agent change has transitive effects | Layer 5 (affected runner) |
+
+---
+
 ## When to Break These Rules
 
 - **Tiny projects (<500 lines)**: One flat directory is fine. MODULE.md overhead isn't worth it until 3+ modules.

@@ -182,10 +182,136 @@ Place one in every `capabilities/<name>/` directory:
 
 ---
 
+## Defensive Rules (add to CLAUDE.md template)
+
+Append these sections to the CLAUDE.md template above, inside the markdown code fence:
+
+```markdown
+## Scope Discipline
+- Only modify files directly related to your task
+- NEVER modify files in other capability modules
+- NEVER modify shared/ unless your task explicitly requires it
+- If your task requires changes in multiple modules, list all affected
+  modules BEFORE making any changes and run tests for ALL of them
+
+## Before Modifying Any File
+1. Run the co-located test FIRST: `{{test-command}} <path-to-test>`
+2. Confirm it passes (establishes baseline)
+3. Make your change
+4. Run the test AGAIN
+5. If a test that passed before now fails, YOUR CHANGE broke it — fix it
+
+If the test was already failing before your change, STOP.
+Do not modify a file whose tests are already broken. Report the
+pre-existing failure and ask for guidance.
+
+## After Modifying Any contract.ts
+1. Grep for all importers: `Grep("from.*<your-module>/contract")`
+2. Run their `contract.compat.test.ts` files
+3. Never commit a contract.ts change that breaks a compatibility test
+4. Run `{{sync-types-command}}` if the type has a `@synced-from` annotation
+
+## Snapshot Tests
+- Files ending in `.snapshot.test.ts` capture exact behavioral output
+- If a snapshot test fails after your change:
+  - INTENTIONAL change -> update snapshot: `{{test-command}} --update-snapshots <path>`
+  - ACCIDENTAL change -> your refactor changed behavior, fix it
+- NEVER auto-update snapshots without reviewing the diff
+
+## Before Committing
+Run `pnpm test:affected` to test all modules affected by your changes.
+This tests your module AND all modules that depend on it transitively.
+Do NOT commit if any affected test fails.
+```
+
+---
+
+## Companion: `contract.compat.test.ts` Template
+
+Place in any module that imports another module's `contract.ts`:
+
+```typescript
+// capabilities/{{your-module}}/contract.compat.test.ts
+
+import {
+  type {{ImportedType}},
+  {{createTestHelper}}
+} from "../{{other-module}}/contract"
+import type { {{YourType}} } from "./contract"
+
+describe("contract compatibility: {{your-module}} <-> {{other-module}}", () => {
+  it("{{YourType}} accepts {{ImportedType}} from {{other-module}}", () => {
+    const imported: {{ImportedType}} = {{createTestHelper}}()
+    const local: {{YourType}} = {
+      ...imported,
+      // ... your module's additional fields
+    }
+    expect(local).toBeDefined()
+  })
+
+  it("{{ImportedType}} shape has required fields", () => {
+    const imported = {{createTestHelper}}()
+    // List every field your module depends on
+    // If other-module removes one, this test fails BEFORE your code runs
+    expect(imported).toHaveProperty("{{field1}}")
+    expect(imported).toHaveProperty("{{field2}}")
+  })
+})
+```
+
+---
+
+## Companion: `scripts/test-affected.sh` Template
+
+Place at `scripts/test-affected.sh`:
+
+```bash
+#!/bin/bash
+# Finds all modules affected by current changes (direct + transitive)
+# and runs their tests.
+
+CHANGED=$(git diff --name-only HEAD)
+DIRECT_MODULES=$(echo "$CHANGED" | grep "capabilities/" | cut -d'/' -f2 | sort -u)
+
+AFFECTED_MODULES="$DIRECT_MODULES"
+for mod in $DIRECT_MODULES; do
+  DEPENDENTS=$(grep -rl "from.*$mod/contract" capabilities/*/contract.ts 2>/dev/null \
+    | cut -d'/' -f2 | sort -u)
+  AFFECTED_MODULES="$AFFECTED_MODULES $DEPENDENTS"
+done
+
+UNIQUE_MODULES=$(echo "$AFFECTED_MODULES" | tr ' ' '\n' | sort -u)
+
+if [ -z "$UNIQUE_MODULES" ]; then
+  echo "No capability modules affected by current changes."
+  exit 0
+fi
+
+echo "Affected modules:"
+echo "$UNIQUE_MODULES" | while read mod; do echo "  - $mod"; done
+echo ""
+
+FAILED=0
+for mod in $UNIQUE_MODULES; do
+  echo "=== Testing: capabilities/$mod/ ==="
+  {{test-command}} "capabilities/$mod/" || FAILED=1
+done
+
+if [ "$FAILED" -eq 1 ]; then
+  echo "FAIL: Some affected module tests failed."
+  exit 1
+fi
+
+echo "All affected module tests passed."
+```
+
+---
+
 ## Setup Checklist
 
 When applying this template to an existing project:
 
+**Structure:**
 1. [ ] Copy the CLAUDE.md template, fill in all `{{placeholders}}`
 2. [ ] Create `CODEBASE.yaml` at project root
 3. [ ] Create `capabilities/` directory structure
@@ -193,9 +319,20 @@ When applying this template to an existing project:
 5. [ ] Create `contract.ts` at each module boundary
 6. [ ] Create `MODULE.md` in each capability directory
 7. [ ] Move tests to co-locate with implementation
+
+**Type sync:**
 8. [ ] Create `shared/golden-types/` for canonical type definitions
 9. [ ] Add `@synced-from` annotations to copied types in `contract.ts`
 10. [ ] Create `scripts/sync-golden-types.ts`
-11. [ ] Create `scripts/validate-module.ts`
-12. [ ] Add pre-commit hook for structure validation
-13. [ ] Add CI step for import boundary + type sync checks
+
+**Defensive testing:**
+11. [ ] Add `contract.compat.test.ts` for every cross-module contract dependency
+12. [ ] Add `.snapshot.test.ts` for critical deterministic functions
+13. [ ] Create `scripts/test-affected.sh` (use template above)
+14. [ ] Add `test:affected` script to `package.json`
+
+**Automation:**
+15. [ ] Create `scripts/validate-module.ts`
+16. [ ] Add pre-commit hook for structure validation
+17. [ ] Add CI step for import boundary + type sync checks
+18. [ ] Add CI step for `pnpm test:affected` on PRs
