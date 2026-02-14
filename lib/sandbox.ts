@@ -1,5 +1,4 @@
 import { Daytona, Sandbox } from '@daytonaio/sdk';
-import type { SupabaseClient } from '@supabase/supabase-js';
 
 /**
  * Daytona Sandbox Wrapper
@@ -440,60 +439,3 @@ export async function downloadDirectory(
   }
 }
 
-// ============================================================================
-// Early Provisioning
-// ============================================================================
-
-/**
- * Provision sandbox + Supabase project in background.
- * Called fire-and-forget from chat route on first message.
- * Creates with short autoStopInterval (10min) — abandoned sandboxes self-destruct.
- */
-export async function provisionProject(
-  projectId: string,
-  appName: string,
-  supabaseClient: SupabaseClient,
-): Promise<void> {
-  try {
-    const { createSupabaseProject } = await import('@/lib/supabase-mgmt');
-
-    const [sandbox, supabaseProject] = await Promise.all([
-      createSandbox({
-        language: 'typescript',
-        autoStopInterval: 10,
-        labels: { project: projectId, app: appName, type: 'vibestack-generated' },
-      }),
-      createSupabaseProject(appName),
-    ]);
-
-    await supabaseClient
-      .from('projects')
-      .update({
-        sandbox_id: sandbox.id,
-        supabase_project_id: supabaseProject.id,
-      })
-      .eq('id', projectId);
-
-    console.log(`✓ Project provisioned: sandbox=${sandbox.id}, supabase=${supabaseProject.id}`);
-  } catch (error) {
-    console.error(`[provisionProject] Failed for ${projectId}:`, error);
-    // Don't throw — this is fire-and-forget. Generation route will create its own if needed.
-  }
-}
-
-// ============================================================================
-// Sandbox Destruction
-// ============================================================================
-
-/**
- * Destroy a sandbox and clean up all resources
- */
-export async function destroySandbox(sandbox: Sandbox): Promise<void> {
-  try {
-    await sandbox.delete(30); // 30 second timeout
-    console.log(`✓ Sandbox destroyed: ${sandbox.id}`);
-  } catch (error) {
-    console.error(`Failed to destroy sandbox ${sandbox.id}:`, error);
-    throw new Error(`Sandbox destruction failed: ${error instanceof Error ? error.message : String(error)}`);
-  }
-}

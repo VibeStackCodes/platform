@@ -93,32 +93,6 @@ export interface ChatPlan {
 }
 
 // ============================================================================
-// Template Pipeline Types
-// ============================================================================
-
-export type TemplateName = 'scaffold' | 'auth' | 'crud' | 'realtime' | 'dashboard' | 'messaging';
-
-export interface TemplateTask {
-  template: TemplateName;
-  config: Record<string, unknown>;
-  llmTask?: string;
-}
-
-export interface EntityConfig {
-  entity: string;
-  tableName: string;
-  fields: EntityField[];
-  belongsTo?: string[];
-  hasRealtime?: boolean;
-}
-
-export interface GeneratedFile {
-  path: string;
-  content: string;
-  layer: number;
-}
-
-// ============================================================================
 // Plan (full technical plan, expanded server-side)
 // ============================================================================
 
@@ -212,22 +186,6 @@ export interface GenerationState {
 }
 
 // ============================================================================
-// Supabase Project (from Management API)
-// ============================================================================
-
-export interface SupabaseProject {
-  id: string;
-  name: string;
-  orgId: string;
-  region: string;
-  dbHost: string;
-  dbPassword: string;
-  anonKey: string;
-  serviceRoleKey: string;
-  url: string;
-}
-
-// ============================================================================
 // Platform Database Types
 // ============================================================================
 
@@ -264,13 +222,6 @@ export interface Project {
 // ============================================================================
 // API Request Types
 // ============================================================================
-
-export interface GenerateRequest {
-  projectId?: string;
-  prompt?: string;
-  chatPlan: ChatPlan;
-  model?: string;
-}
 
 export interface EditRequest {
   projectId: string;
