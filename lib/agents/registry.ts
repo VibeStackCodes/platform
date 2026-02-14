@@ -1,31 +1,19 @@
+import { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
-import { anthropic } from '@ai-sdk/anthropic';
 
 /**
- * Model routing based on cost tiers
- * - ARCHITECT_MODEL: High-capability model for planning, schema design, and code generation
- * - VALIDATOR_MODEL: Faster, cheaper model for build validation and targeted fixes
+ * Model routing based on cost tiers (OpenAI)
+ * - ARCHITECT: High-capability for planning, schema design, code generation
+ * - VALIDATOR: Fast, cheap for build verification and targeted fixes
  */
-const ARCHITECT_MODEL = anthropic('claude-sonnet-4-5-20250929');
-const VALIDATOR_MODEL = anthropic('claude-haiku-4-5-20251001');
+const ARCHITECT_MODEL = 'openai/gpt-5.2';
+const VALIDATOR_MODEL = 'openai/gpt-5-mini';
 
-/**
- * Agent IDs (string literals for type safety)
- */
 export type AgentId = 'planner' | 'data-architect' | 'frontend-engineer' | 'qa-engineer';
 
-/**
- * Planner Agent
- *
- * Responsibilities:
- * - Clarify user requirements
- * - Extract app name, features, and entities
- * - Generate execution plans with phase definitions
- * - Default to sensible choices when requirements are underspecified
- */
-const plannerAgent = new Agent({
+export const plannerAgent = new Agent({
   id: 'planner',
-  name: 'planner',
+  name: 'Planner',
   model: ARCHITECT_MODEL,
   instructions: `You are a requirements analysis and planning expert.
 
@@ -41,7 +29,7 @@ Your role:
    - Phases (Planning & Data Architecture, Frontend Generation, Build Verification & QA)
    - Agent assignments for each phase
    - Estimated duration
-   - Model selection rationale (Sonnet for complex work, Haiku for validation)
+   - Model selection rationale
 
 Be concise and decisive. When requirements are unclear, default to modern, sensible choices:
 - Style: modern, minimal
@@ -50,22 +38,12 @@ Be concise and decisive. When requirements are unclear, default to modern, sensi
 - Auth: Supabase Auth
 - Database: PostgreSQL with Supabase conventions
 
-Output structured data only — no conversational fluff.`,
+Output structured data only.`,
 });
 
-/**
- * Data Architect Agent
- *
- * Responsibilities:
- * - Design PostgreSQL schemas with Supabase conventions
- * - Generate complete SQL migration scripts
- * - Apply RLS policies using auth.uid()
- * - Use uuid PKs with gen_random_uuid()
- * - Use timestamptz for timestamps
- */
-const dataArchitect = new Agent({
+export const dataArchitectAgent = new Agent({
   id: 'data-architect',
-  name: 'data-architect',
+  name: 'Data Architect',
   model: ARCHITECT_MODEL,
   instructions: `You are a PostgreSQL database architect specializing in Supabase conventions.
 
@@ -92,19 +70,9 @@ Supabase RLS patterns:
 Output production-ready, valid PostgreSQL 15+ SQL. No placeholder comments.`,
 });
 
-/**
- * Frontend Engineer Agent
- *
- * Responsibilities:
- * - Generate production-ready React 19 components
- * - Use TypeScript strict mode (no any types)
- * - Apply Tailwind v4 for styling
- * - Use Radix UI primitives for accessibility
- * - Ensure every file is complete and type-safe
- */
-const frontendEngineer = new Agent({
+export const frontendEngineerAgent = new Agent({
   id: 'frontend-engineer',
-  name: 'frontend-engineer',
+  name: 'Frontend Engineer',
   model: ARCHITECT_MODEL,
   instructions: `You are a senior frontend engineer specializing in React 19 and TypeScript.
 
@@ -133,67 +101,41 @@ Your role:
 Output complete, production-ready code. No shortcuts, no placeholders.`,
 });
 
-/**
- * QA Engineer Agent
- *
- * Responsibilities:
- * - Run builds and collect error output
- * - Diagnose TypeScript errors and module resolution issues
- * - Generate minimal, targeted fixes
- * - Iterate up to 3 times before escalating
- */
-const qaEngineer = new Agent({
+export const qaEngineerAgent = new Agent({
   id: 'qa-engineer',
-  name: 'qa-engineer',
-  model: VALIDATOR_MODEL, // Cheaper model for classification + targeted fixes
+  name: 'QA Engineer',
+  model: VALIDATOR_MODEL,
   instructions: `You are a QA engineer focused on build verification and error resolution.
 
 Your role:
-1. Run \`bun run build\` and capture output
+1. Run builds using the run-build tool and capture output
 2. Parse error messages:
    - TypeScript errors (tsc)
    - Module resolution errors
    - Missing dependencies
    - Type mismatches
 
-3. Generate minimal fixes:
+3. Generate minimal fixes using the write-file tool:
    - Fix only what's broken (no refactoring)
    - Add missing imports
    - Fix type errors
    - Resolve module paths
-   - Add missing dependencies to package.json
 
 4. Iterate:
    - Attempt up to 3 build cycles
    - If still failing after 3 attempts, report errors for escalation
 
-Focus on speed and precision. Use Haiku's fast inference for quick error classification.`,
+Use the available tools to run builds and write fixes directly.`,
 });
 
 /**
- * Agent registry mapping IDs to Agent instances
+ * Central Mastra instance — registers all agents for shared logging and discovery
  */
-export const AGENT_REGISTRY: Record<AgentId, Agent> = {
-  planner: plannerAgent,
-  'data-architect': dataArchitect,
-  'frontend-engineer': frontendEngineer,
-  'qa-engineer': qaEngineer,
-};
-
-/**
- * Phase definitions with agent assignments
- */
-export const PHASE_AGENTS: Record<number, AgentId[]> = {
-  1: ['planner', 'data-architect'],
-  2: ['frontend-engineer'],
-  3: ['qa-engineer'],
-};
-
-/**
- * Phase display names
- */
-export const PHASE_NAMES: Record<number, string> = {
-  1: 'Planning & Data Architecture',
-  2: 'Frontend Generation',
-  3: 'Build Verification & QA',
-};
+export const mastra = new Mastra({
+  agents: {
+    planner: plannerAgent,
+    'data-architect': dataArchitectAgent,
+    'frontend-engineer': frontendEngineerAgent,
+    'qa-engineer': qaEngineerAgent,
+  },
+});
