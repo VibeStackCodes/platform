@@ -10,6 +10,7 @@
         "@ai-sdk/react": "^3.0.84",
         "@anthropic-ai/sdk": "^0.74.0",
         "@daytonaio/sdk": "^0.141.0",
+        "@hookform/resolvers": "^5.2.2",
         "@octokit/auth-app": "^8.2.0",
         "@radix-ui/react-use-controllable-state": "^1.2.2",
         "@rive-app/react-webgl2": "^4.26.2",
@@ -50,6 +51,7 @@
         "radix-ui": "^1.4.3",
         "react": "19.2.3",
         "react-dom": "19.2.3",
+        "react-hook-form": "^7.71.1",
         "react-jsx-parser": "^2.4.1",
         "shiki": "^3.22.0",
         "slugify": "^1.6.6",
@@ -364,6 +366,8 @@
     "@grpc/proto-loader": ["@grpc/proto-loader@0.8.0", "", { "dependencies": { "lodash.camelcase": "4.3.0", "long": "5.3.2", "protobufjs": "7.5.4", "yargs": "17.7.2" }, "bin": { "proto-loader-gen-types": "build/bin/proto-loader-gen-types.js" } }, "sha512-rc1hOQtjIWGxcxpb9aHAfLpIctjEnsDehj0DAiVfBlmT84uvR0uUtN2hEi/ecvWVjXUGf5qPF4qEgiLOx1YIMQ=="],
 
     "@hono/node-server": ["@hono/node-server@1.19.9", "", { "peerDependencies": { "hono": "4.11.9" } }, "sha512-vHL6w3ecZsky+8P5MD+eFfaGTyCeOHUIFYMGpQGbrBTSmNNoxv0if69rEZ5giu36weC5saFuznL411gRX7bJDw=="],
+
+    "@hookform/resolvers": ["@hookform/resolvers@5.2.2", "", { "dependencies": { "@standard-schema/utils": "^0.3.0" }, "peerDependencies": { "react-hook-form": "^7.55.0" } }, "sha512-A/IxlMLShx3KjV/HeTcTfaMxdwy690+L/ZADoeaTltLx+CVuzkeVIPuybK3jrRfw7YZnmdKsVVHAlEPIAEUNlA=="],
 
     "@humanfs/core": ["@humanfs/core@0.19.1", "", {}, "sha512-5DyQ4+1JEUzejeK1JGICcideyfUbGixgS9jNgex5nqkW+cY7WZhxBigmieN5Qnw9ZosSNVC9KQKyb+GUaGyKUA=="],
 
@@ -992,6 +996,8 @@
     "@snaplet/seed": ["@snaplet/seed@0.98.0", "", { "dependencies": { "@inquirer/prompts": "^5.0.2", "@langchain/core": "^0.2.18", "@langchain/groq": "^0.0.15", "@langchain/openai": "^0.2.4", "@prisma/generator-helper": "5.14.0-dev.34", "@prisma/internals": "5.14.0-dev.34", "@scaleleap/pg-format": "^1.0.0", "@total-typescript/ts-reset": "^0.5.1", "ansi-escapes": "^6.2.1", "c12": "^1.10.0", "change-case": "^5.4.4", "debug": "^4.3.4", "dedent": "^1.5.3", "execa": "^8.0.1", "exit-hook": "^4.0.0", "find-up": "^7.0.0", "fs-extra": "^11.2.0", "inflection": "^3.0.0", "javascript-stringify": "^2.1.0", "json-schema-library": "^9.3.4", "kleur": "^4.1.5", "multimatch": "^7.0.0", "ora": "^8.0.1", "quicktype-core": "23.0.149", "remeda": "^1.61.0", "sqlstring": "^2.3.3", "terminal-link": "^3.0.0", "uuid": "^9.0.1", "yargs": "^17.7.2", "zod": "^3.23.5" }, "peerDependencies": { "@prisma/client": ">=5", "@snaplet/copycat": ">=2", "@types/better-sqlite3": "*", "@types/pg": "*", "better-sqlite3": ">=9", "mysql2": ">=3", "pg": ">=8", "postgres": ">=3" }, "optionalPeers": ["@prisma/client", "@types/better-sqlite3", "@types/pg", "better-sqlite3", "mysql2", "pg", "postgres"], "bin": { "snaplet-seed": "bin/cli.js" } }, "sha512-qLh7e596mKbY3DZW1CryhYyZdFJ/irAU760t00ac1VHsx/1Brfu3jpc6Bq69XBRZ6I3/nqPDlRckVP//bpFUMQ=="],
 
     "@standard-schema/spec": ["@standard-schema/spec@1.1.0", "", {}, "sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w=="],
+
+    "@standard-schema/utils": ["@standard-schema/utils@0.3.0", "", {}, "sha512-e7Mew686owMaPJVNNLs55PUvgz371nKgwsc4vxE49zsODpJEnxgxRo2y/OKrqueavXgZNMDVj3DdHFlaSAeU8g=="],
 
     "@streamdown/cjk": ["@streamdown/cjk@1.0.2", "", { "dependencies": { "remark-cjk-friendly": "1.2.3", "remark-cjk-friendly-gfm-strikethrough": "1.2.3", "unist-util-visit": "5.1.0" }, "peerDependencies": { "react": "19.2.3" } }, "sha512-5OOuZjj2Lnae92Zmg2gA5hloSbcKj25gv+QY4iKbYI+iRsiGWbgmYxmgxNUSO9SR6BKOCy783UHN1HM/QEUpdw=="],
 
@@ -2618,6 +2624,8 @@
     "react": ["react@19.2.3", "", {}, "sha512-Ku/hhYbVjOQnXDZFv2+RibmLFGwFdeeKHFcOTlrt7xplBnya5OGn/hIRDsqDiSUcfORsDC7MPxwork8jBwsIWA=="],
 
     "react-dom": ["react-dom@19.2.3", "", { "dependencies": { "scheduler": "0.27.0" }, "peerDependencies": { "react": "19.2.3" } }, "sha512-yELu4WmLPw5Mr/lmeEpox5rw3RETacE++JgHqQzd2dg+YbJuat3jH4ingc+WPZhxaoFzdv9y33G+F7Nl5O0GBg=="],
+
+    "react-hook-form": ["react-hook-form@7.71.1", "", { "peerDependencies": { "react": "^16.8.0 || ^17 || ^18 || ^19" } }, "sha512-9SUJKCGKo8HUSsCO+y0CtqkqI5nNuaDqTxyqPsZPqIwudpj4rCrAz/jZV+jn57bx5gtZKOh3neQu94DXMc+w5w=="],
 
     "react-is": ["react-is@16.13.1", "", {}, "sha512-24e6ynE2H+OKt4kqsOvNd8kBpV65zoxbA4BVsEOB3ARVWQki/DHzaUoC5KuON/BiccDaCCTZBuOcfZs70kR8bQ=="],
 
