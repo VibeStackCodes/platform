@@ -32,7 +32,7 @@ export async function POST(req: Request) {
     }
   }
 
-  const { messages, projectId: _projectId, model: modelId = 'claude-sonnet-4-5-20250929' } =
+  const { messages, projectId: _projectId, model: modelId = 'gpt-5.2' } =
     (await req.json()) as {
       messages: UIMessage[];
       projectId: string;

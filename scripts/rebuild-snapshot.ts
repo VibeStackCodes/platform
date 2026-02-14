@@ -27,7 +27,7 @@ async function main() {
     )
     // Pre-cache common deps (includes PGlite for migration validation)
     .workdir('/workspace')
-    .addLocalFile('scripts/snapshot-package.json', '/workspace/package.json')
+    .addLocalFile('snapshot/package-base.json', '/workspace/package.json')
     .runCommands('bun install')
     // Install tsc globally so build verification can run bare `tsc --noEmit`
     .runCommands('bun add -g typescript')

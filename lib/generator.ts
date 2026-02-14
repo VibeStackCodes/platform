@@ -54,7 +54,7 @@ const LAYER_LABELS: Record<number, string> = {
  * @param sandbox - Daytona sandbox instance
  * @param supabaseUrl - Supabase project URL
  * @param supabaseAnonKey - Supabase anonymous key
- * @param model - Model to use (e.g., 'gpt-5.2', 'claude-sonnet-4-5')
+ * @param model - Model to use (e.g., 'gpt-5.2', 'gpt-5-mini')
  * @param emit - Event emitter for UI updates
  * @returns Map of file paths to generated content
  */

@@ -31,9 +31,9 @@ import { GlobeIcon, ChevronDownIcon } from "lucide-react";
 import type { ChatStatus } from "ai";
 
 const models = [
-  { id: "claude-sonnet-4-5-20250929", name: "Claude Sonnet 4.5", provider: "anthropic" as const },
-  { id: "claude-opus-4-6", name: "Claude Opus 4.6", provider: "anthropic" as const },
   { id: "gpt-5.2", name: "GPT-5.2", provider: "openai" as const },
+  { id: "gpt-5.1-codex-max", name: "GPT-5.1 Codex Max", provider: "openai" as const },
+  { id: "gpt-5-mini", name: "GPT-5 Mini", provider: "openai" as const },
 ];
 
 interface PromptBarProps {
@@ -99,21 +99,6 @@ export function PromptBar({
               <ModelSelectorInput placeholder="Search models..." />
               <ModelSelectorList>
                 <ModelSelectorEmpty>No models found.</ModelSelectorEmpty>
-                <ModelSelectorGroup heading="Anthropic">
-                  {models.filter((m) => m.provider === "anthropic").map((m) => (
-                    <ModelSelectorItem
-                      key={m.id}
-                      value={m.id}
-                      onSelect={() => {
-                        setModel(m.id);
-                        setSelectorOpen(false);
-                      }}
-                    >
-                      <ModelSelectorLogo provider={m.provider} />
-                      <ModelSelectorName>{m.name}</ModelSelectorName>
-                    </ModelSelectorItem>
-                  ))}
-                </ModelSelectorGroup>
                 <ModelSelectorGroup heading="OpenAI">
                   {models.filter((m) => m.provider === "openai").map((m) => (
                     <ModelSelectorItem

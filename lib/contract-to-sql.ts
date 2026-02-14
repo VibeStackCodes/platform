@@ -31,12 +31,16 @@ export function contractToSQL(contract: SchemaContract): string {
   if (hasUpdatedAt) {
     parts.push(
 `CREATE OR REPLACE FUNCTION update_updated_at()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = ''
+AS $$
 BEGIN
   NEW.updated_at = now();
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;`
+$$;`
     );
   }
 
@@ -88,13 +92,22 @@ function generateCreateTable(table: TableDef): string {
   return `CREATE TABLE IF NOT EXISTS ${table.name} (\n${colDefs.join(',\n')}\n);`;
 }
 
+/**
+ * Wrap bare auth.uid() calls in a subselect for per-statement caching.
+ * `auth.uid()` → `(select auth.uid())` — Postgres caches the subselect result
+ * across all rows in a single statement, avoiding per-row function evaluation.
+ */
+function cacheAuthCalls(expr: string): string {
+  return expr.replace(/(?<!\(select\s)auth\.uid\(\)/g, '(select auth.uid())');
+}
+
 function generatePolicy(
   tableName: string,
   policy: { name: string; operation: string; using?: string; withCheck?: string },
 ): string {
-  let sql = `CREATE POLICY "${policy.name}" ON ${tableName} FOR ${policy.operation}`;
-  if (policy.using) sql += ` USING (${policy.using})`;
-  if (policy.withCheck) sql += ` WITH CHECK (${policy.withCheck})`;
+  let sql = `CREATE POLICY "${policy.name}" ON ${tableName} FOR ${policy.operation} TO authenticated`;
+  if (policy.using) sql += ` USING (${cacheAuthCalls(policy.using)})`;
+  if (policy.withCheck) sql += ` WITH CHECK (${cacheAuthCalls(policy.withCheck)})`;
   return sql + ';';
 }
 

@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { WebPreview, WebPreviewBody } from "@/components/ai-elements/web-preview";
 import { Rocket } from "lucide-react";
 import { DatabaseManager } from "@/components/supabase-manager/database";
@@ -18,13 +17,21 @@ interface BuilderPreviewProps {
 
 export function BuilderPreview({
   projectId,
-  sandboxId,
   previewUrl,
   codeServerUrl,
-  supabaseUrl,
   supabaseProjectId,
 }: BuilderPreviewProps) {
   const [activeTab, setActiveTab] = useState("preview");
+  // Track which tabs have been visited — lazy mount, then keep mounted
+  const [mountedTabs, setMountedTabs] = useState<Set<string>>(new Set(["preview"]));
+
+  const switchTab = (tab: string) => {
+    setActiveTab(tab);
+    setMountedTabs((prev) => {
+      if (prev.has(tab)) return prev;
+      return new Set(prev).add(tab);
+    });
+  };
 
   const handleDeploy = async () => {
     try {
@@ -56,82 +63,62 @@ export function BuilderPreview({
         </Button>
       </div>
 
-      {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1">
-        <div className="border-b px-4">
-          <TabsList>
-            <TabsTrigger value="preview">Preview</TabsTrigger>
-            <TabsTrigger value="code">Code</TabsTrigger>
-            <TabsTrigger value="database">Database</TabsTrigger>
-          </TabsList>
+      {/* Tab bar */}
+      <div className="border-b px-4">
+        <div className="inline-flex h-9 items-center justify-center rounded-lg bg-muted p-1 text-muted-foreground">
+          {(["preview", "code", "database"] as const).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => switchTab(tab)}
+              className={`inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-1 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+                activeTab === tab
+                  ? "bg-background text-foreground shadow"
+                  : "hover:bg-background/50 hover:text-foreground"
+              }`}
+            >
+              {tab.charAt(0).toUpperCase() + tab.slice(1)}
+            </button>
+          ))}
         </div>
+      </div>
 
-        {/* Preview Tab */}
-        <TabsContent value="preview" className="h-[calc(100%-4rem)] p-0">
+      {/* Panels: lazy-mount on first visit, then keep mounted with CSS visibility */}
+      <div className="relative flex-1">
+        <div className={`absolute inset-0 ${activeTab === "preview" ? "" : "invisible"}`}>
           {previewUrl ? (
             <WebPreview defaultUrl={previewUrl} className="h-full">
               <WebPreviewBody src={previewUrl} className="h-full" />
             </WebPreview>
           ) : (
-            <div className="flex h-full items-center justify-center text-muted-foreground">
-              <div className="text-center">
-                {sandboxId ? (
-                  <>
-                    <div className="mb-3 size-5 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent mx-auto" />
-                    <p className="text-sm">Sandbox warming up...</p>
-                    <p className="mt-2 text-xs text-muted-foreground/60">Preview will appear once generation starts</p>
-                  </>
-                ) : (
-                  <>
-                    <p className="text-sm">Preview will appear here once the project is generated</p>
-                    <p className="mt-2 text-xs">Port 3000 from Daytona sandbox</p>
-                  </>
-                )}
-              </div>
-            </div>
+            <div className="h-full" />
           )}
-        </TabsContent>
+        </div>
 
-        {/* Code Tab */}
-        <TabsContent value="code" className="h-[calc(100%-4rem)] p-0">
-          {codeServerUrl ? (
-            <iframe
-              src={codeServerUrl}
-              className="h-full w-full border-0"
-              title="Code Editor"
-            />
-          ) : (
-            <div className="flex h-full items-center justify-center text-muted-foreground">
-              <div className="text-center">
-                {sandboxId ? (
-                  <>
-                    <div className="mb-3 size-5 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent mx-auto" />
-                    <p className="text-sm">Code editor warming up...</p>
-                  </>
-                ) : (
-                  <>
-                    <p className="text-sm">Code editor will appear here once the project is generated</p>
-                    <p className="mt-2 text-xs">Port 13337 (code-server) from Daytona sandbox</p>
-                  </>
-                )}
-              </div>
-            </div>
-          )}
-        </TabsContent>
+        {mountedTabs.has("code") && (
+          <div className={`absolute inset-0 ${activeTab === "code" ? "" : "invisible"}`}>
+            {codeServerUrl ? (
+              <iframe
+                src={codeServerUrl}
+                className="h-full w-full border-0"
+                title="Code Editor"
+                allow="clipboard-read; clipboard-write; cross-origin-isolated"
+              />
+            ) : (
+              <div className="h-full" />
+            )}
+          </div>
+        )}
 
-        {/* Database Tab */}
-        <TabsContent value="database" className="h-[calc(100%-4rem)] p-0">
-          {supabaseProjectId ? (
-            <DatabaseManager projectRef={supabaseProjectId} />
-          ) : (
-            <div className="flex h-full items-center justify-center text-muted-foreground">
-              <div className="text-center">
-                <p className="text-sm">Database will appear here once the project is generated</p>
-              </div>
-            </div>
-          )}
-        </TabsContent>
-      </Tabs>
+        {mountedTabs.has("database") && (
+          <div className={`absolute inset-0 ${activeTab === "database" ? "" : "invisible"}`}>
+            {supabaseProjectId ? (
+              <DatabaseManager projectRef={supabaseProjectId} />
+            ) : (
+              <div className="h-full" />
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

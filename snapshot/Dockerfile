@@ -1,6 +1,14 @@
 FROM oven/bun:1-debian
 
-RUN apt-get update && apt-get install -y git curl && rm -rf /var/lib/apt/lists/*
+# System deps: git, curl, tmux (entrypoint uses tmux for dev server session)
+RUN apt-get update && apt-get install -y git curl tmux && rm -rf /var/lib/apt/lists/*
+
+# Install OpenVSCode Server (VS Code in the browser)
+# Provides in-browser IDE on port 13337 for the Code tab
+ARG OPENVSCODE_RELEASE=v1.106.3
+RUN curl -fsSL "https://github.com/gitpod-io/openvscode-server/releases/download/openvscode-server-${OPENVSCODE_RELEASE}/openvscode-server-${OPENVSCODE_RELEASE}-linux-x64.tar.gz" \
+    | tar xz -C /opt \
+    && mv "/opt/openvscode-server-${OPENVSCODE_RELEASE}-linux-x64" /opt/openvscode-server
 
 # Install OxLint globally — single Rust binary, much lighter than ESLint + plugins
 RUN bun install -g oxlint
@@ -16,8 +24,8 @@ RUN bun install
 COPY warmup-scaffold/ /workspace/
 RUN bun run dev &>/dev/null & DEV_PID=$! && sleep 8 && kill $DEV_PID 2>/dev/null || true
 RUN npx tsc --noEmit 2>/dev/null || true
-# Clean up warmup source but keep caches (.vite/, tsconfig.tsbuildinfo)
-RUN rm -rf /workspace/src /workspace/index.html /workspace/env.d.ts \
-    /workspace/vite.config.ts /workspace/tsconfig.json /workspace/tsconfig.app.json
 
-CMD ["sleep", "infinity"]
+# Entrypoint starts dev server (tmux) + OpenVSCode Server (foreground)
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+ENTRYPOINT ["/entrypoint.sh"]

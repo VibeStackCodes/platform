@@ -97,7 +97,7 @@ async function runBenchmark(
   promptId: string,
   promptName: string,
   prompt: string,
-  model: string = 'claude-sonnet-4-5-20250929'
+  model: string = 'gpt-5.2'
 ): Promise<BenchmarkResult> {
   const startTime = Date.now();
   let plan: Plan | null = null;

@@ -15,7 +15,7 @@ import { useListTables } from '@/hooks/use-tables';
 import { useQuery } from '@tanstack/react-query';
 
 // Helper to generate a Zod schema from the table's column definitions
-function generateZodSchema(table: any): z.ZodObject<any> {
+export function generateZodSchema(table: any): z.ZodObject<any> {
   if (!table || !table.columns) {
     return z.object({});
   }
@@ -53,7 +53,7 @@ function generateZodSchema(table: any): z.ZodObject<any> {
   return z.object(shape);
 }
 
-const getPrimaryKeys = (table: any): string[] => {
+export const getPrimaryKeys = (table: any): string[] => {
   if (!table || !table.primary_keys) return [];
   return table.primary_keys.map((pk: any) => pk.name);
 };

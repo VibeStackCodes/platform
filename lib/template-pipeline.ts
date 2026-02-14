@@ -3,7 +3,7 @@ import type { ChatPlan, StreamEvent, GeneratedFile } from './types';
 import type { SchemaContract, TableDef, EnumDef } from './schema-contract';
 import { classifyFeatures } from './feature-classifier';
 import { executeTemplate, groupByLayer } from './template-registry';
-import { uploadFile, runCommand } from './sandbox';
+import { uploadFile, runCommand, pushToOrigin } from './sandbox';
 import { installShadcnComponents } from './shadcn-installer';
 
 /**
@@ -147,12 +147,12 @@ export async function runScaffoldPhase(
     emit({ type: 'checkpoint', label: 'Installing dependencies', status: 'complete' });
   }
 
-  // 7. Init git repo
+  // 7. Ensure git is initialized (idempotent — no-op if provisionProject already did it)
   try {
     await runCommand(
       sandbox,
       'git init && git config user.email "vibestack@generated.app" && git config user.name "VibeStack"',
-      'git-init',
+      'git-init-scaffold',
       { cwd: '/workspace', timeout: 30 }
     );
   } catch (error) {
@@ -222,6 +222,14 @@ export async function runFeaturePhase(
       message: 'feat: generate app from templates',
       files: allFiles.map(f => f.path),
     });
+
+    // Push generation commit to GitHub (repo initialized during provisioning)
+    try {
+      await pushToOrigin(sandbox);
+    } catch (pushError) {
+      // Non-fatal: Stage 4 in generate route will handle push as fallback
+      console.warn(`[pipeline] Git push failed (will retry in Stage 4):`, pushError);
+    }
   } catch (error) {
     throw new Error(`Git commit failed: ${error instanceof Error ? error.message : String(error)}`);
   }

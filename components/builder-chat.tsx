@@ -105,7 +105,7 @@ const SUGGESTIONS = [
 ];
 
 export function BuilderChat({ projectId, initialPrompt, initialMessages }: BuilderChatProps) {
-  const [model, setModel] = useState("claude-sonnet-4-5-20250929");
+  const [model, setModel] = useState("gpt-5.2");
   const [generationStatus, setGenerationStatus] = useState<
     "idle" | "generating" | "complete" | "error"
   >("idle");

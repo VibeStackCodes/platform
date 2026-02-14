@@ -10,7 +10,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { findSandboxByProject, getPreviewUrl, waitForDevServer } from "@/lib/sandbox";
+import { findSandboxByProject, getPreviewUrl, waitForDevServer, waitForCodeServer } from "@/lib/sandbox";
 
 export async function GET(
   _req: NextRequest,
@@ -26,8 +26,10 @@ export async function GET(
   try {
     const expiresInSeconds = 3600; // 1 hour
 
-    const [, preview, codeServer] = await Promise.all([
+    // Wait for both servers to be ready before returning signed URLs
+    const [, , preview, codeServer] = await Promise.all([
       waitForDevServer(sandbox),
+      waitForCodeServer(sandbox),
       getPreviewUrl(sandbox, 3000),
       getPreviewUrl(sandbox, 13337),
     ]);

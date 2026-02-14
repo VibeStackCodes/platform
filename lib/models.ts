@@ -1,4 +1,3 @@
-import { anthropic } from '@ai-sdk/anthropic';
 import { openai } from '@ai-sdk/openai';
 import type { LanguageModel } from 'ai';
 
@@ -11,14 +10,12 @@ import type { LanguageModel } from 'ai';
  */
 
 export type ModelId =
-  | 'claude-sonnet-4-5-20250929'
-  | 'claude-opus-4-6'
   | 'gpt-5.2'
   | 'gpt-5.1-codex-max'
   | 'gpt-5-mini'
   | 'gpt-5-nano';
 
-type Provider = 'anthropic' | 'openai';
+type Provider = 'openai';
 
 interface ModelInfo {
   id: ModelId;
@@ -27,8 +24,6 @@ interface ModelInfo {
 }
 
 export const AVAILABLE_MODELS: ModelInfo[] = [
-  { id: 'claude-sonnet-4-5-20250929', name: 'Claude Sonnet 4.5', provider: 'anthropic' },
-  { id: 'claude-opus-4-6', name: 'Claude Opus 4.6', provider: 'anthropic' },
   { id: 'gpt-5.2', name: 'GPT-5.2', provider: 'openai' },
   { id: 'gpt-5.1-codex-max', name: 'GPT-5.1 Codex Max', provider: 'openai' },
   { id: 'gpt-5-mini', name: 'GPT-5 Mini', provider: 'openai' },
@@ -40,11 +35,6 @@ export const AVAILABLE_MODELS: ModelInfo[] = [
  */
 export function resolveModel(modelId: string): LanguageModel {
   switch (modelId) {
-    case 'claude-sonnet-4-5':
-    case 'claude-sonnet-4-5-20250929':
-      return anthropic('claude-sonnet-4-5-20250929');
-    case 'claude-opus-4-6':
-      return anthropic('claude-opus-4-6');
     case 'gpt-5.2':
       return openai.chat('gpt-5.2');
     case 'gpt-5.1-codex-max':
@@ -54,7 +44,7 @@ export function resolveModel(modelId: string): LanguageModel {
     case 'gpt-5-nano':
       return openai.chat('gpt-5-nano');
     default:
-      // Fallback: try as an Anthropic model ID
-      return anthropic(modelId);
+      // Fallback: default to GPT-5.2
+      return openai.chat('gpt-5.2');
   }
 }

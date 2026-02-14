@@ -71,10 +71,4 @@ export function isOpenAIModel(modelId: string): boolean {
   return modelId.startsWith('gpt-') || modelId.startsWith('o1') || modelId.startsWith('o3') || modelId.startsWith('o4');
 }
 
-/**
- * Check if a model ID is an Anthropic model (should use AI SDK)
- */
-export function isAnthropicModel(modelId: string): boolean {
-  return modelId.startsWith('claude-');
-}
 

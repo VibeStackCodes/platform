@@ -10,6 +10,8 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Plus, ExternalLink } from "lucide-react";
 import Link from "next/link";
 
+const MOCK_MODE = process.env.NEXT_PUBLIC_MOCK_MODE === "true";
+
 export default async function DashboardPage() {
   const user = await getUser();
 
@@ -17,17 +19,22 @@ export default async function DashboardPage() {
     redirect("/");
   }
 
-  const supabase = await createClient();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let projects: any[] | null = null;
 
-  // Fetch user's projects
-  const { data: projects, error } = await supabase
-    .from("projects")
-    .select("*")
-    .eq("user_id", user.id)
-    .order("created_at", { ascending: false });
+  if (!MOCK_MODE) {
+    const supabase = await createClient();
 
-  if (error) {
-    console.error("Error fetching projects:", error);
+    const { data, error } = await supabase
+      .from("projects")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("Error fetching projects:", error);
+    }
+    projects = data;
   }
 
   return (

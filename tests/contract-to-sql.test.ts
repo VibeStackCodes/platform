@@ -67,8 +67,8 @@ describe('contractToSQL', () => {
     };
     const sql = contractToSQL(contract);
     expect(sql).toContain('ALTER TABLE items ENABLE ROW LEVEL SECURITY');
-    expect(sql).toContain('CREATE POLICY "Users can view own" ON items FOR SELECT USING (auth.uid() = user_id)');
-    expect(sql).toContain('CREATE POLICY "Users can insert own" ON items FOR INSERT WITH CHECK (auth.uid() = user_id)');
+    expect(sql).toContain('CREATE POLICY "Users can view own" ON items FOR SELECT TO authenticated USING ((select auth.uid()) = user_id)');
+    expect(sql).toContain('CREATE POLICY "Users can insert own" ON items FOR INSERT TO authenticated WITH CHECK ((select auth.uid()) = user_id)');
   });
 
   it('generates enums before tables', () => {
@@ -144,6 +144,8 @@ describe('contractToSQL', () => {
     };
     const sql = contractToSQL(contract);
     expect(sql).toContain('CREATE OR REPLACE FUNCTION update_updated_at()');
+    expect(sql).toContain('SECURITY INVOKER');
+    expect(sql).toContain("SET search_path = ''");
     expect(sql).toContain('CREATE TRIGGER trg_items_updated_at BEFORE UPDATE ON items');
     expect(sql).toContain('EXECUTE FUNCTION update_updated_at()');
   });

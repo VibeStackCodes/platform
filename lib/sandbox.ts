@@ -392,6 +392,14 @@ export async function waitForDevServer(sandbox: Sandbox): Promise<{ url: string 
   return { url: preview.url };
 }
 
+/**
+ * Wait for the code server (OpenVSCode Server) to be ready on port 13337.
+ * Started by the snapshot entrypoint — may take a few seconds to boot.
+ */
+export async function waitForCodeServer(sandbox: Sandbox, maxAttempts: number = 15): Promise<void> {
+  await waitForServerReady(sandbox, 13337, maxAttempts);
+}
+
 // ============================================================================
 // GitHub Push
 // ============================================================================
@@ -516,9 +524,10 @@ export async function provisionProject(
       labels: { project: projectId, app: appName, type: 'vibestack-generated' },
     });
 
-    // Get all URLs immediately — dev server auto-starts via snapshot entrypoint
-    const [{ url: previewUrl }, { url: codeServerUrl }] = await Promise.all([
+    // Wait for both servers started by snapshot entrypoint, then get URLs
+    const [, , { url: codeServerUrl }] = await Promise.all([
       waitForDevServer(sandbox),
+      waitForCodeServer(sandbox),
       getPreviewUrl(sandbox, 13337),
     ]);
 
