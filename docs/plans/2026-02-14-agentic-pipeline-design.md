@@ -307,23 +307,121 @@ export async function POST(request: NextRequest) {
 | Biome config | Auto-formatting in sandbox |
 | Upstash rate limiting | Route middleware |
 
+## Deterministic Tool Chains
+
+### Chain 1: Drizzle ORM (replaces Kysely + contractToSQL + contractToTypes)
+
+```
+SchemaContract
+  -> contractToDrizzleSchema()    // NEW: generates pgTable() definitions
+  -> drizzle-kit generate         // SQL migrations (replaces contractToSQL)
+  -> $inferSelect / $inferInsert  // TypeScript types (replaces contractToTypes)
+  -> createSelectSchema()         // Validation schemas (FREE from Drizzle)
+  -> createInsertSchema()         // Form validation schemas (FREE)
+```
+
+Single schema file produces SQL, types, AND validation. Eliminates type/SQL drift by construction.
+
+### Chain 2: Valibot + Standard Schema (replaces Zod in generated apps)
+
+```
+Drizzle schema -> createInsertSchema() via Standard Schema
+  -> Valibot validation (~0.5KB vs Zod's 13.2KB)
+  -> tRPC v11 / Hono RPC input (Standard Schema native)
+  -> TanStack Form field validation (Standard Schema native)
+```
+
+Keep Zod in platform (agent schemas). Valibot in generated apps (97% smaller bundle).
+
+### Chain 3: TanStack Router (replaces React Router)
+
+```
+SchemaContract (entities)
+  -> generate file-based route tree
+  -> @tanstack/router-plugin/vite -> __routeTree.gen.ts
+  -> All <Link>, useParams(), useSearch() compile-time checked
+  -> Search params validated via Valibot (Standard Schema)
+```
+
+Mistyped route = compile error, not runtime bug. QA catches every broken link via `tsc --noEmit`.
+
+### Chain 4: tRPC v11 / Hono RPC (typed API boundary)
+
+Backend Engineer generates tRPC router using Drizzle schemas for input validation. Frontend Engineer imports client type — autocomplete on every API call. No API contract can be violated because it doesn't compile.
+
+- tRPC v11: Standard Schema support, SSE subscriptions, FormData support
+- Hono RPC: Lighter for Vite SPA apps, no code generation needed
+
+### Chain 5: Tailwind v4 @theme + Design Tokens
+
+```
+SchemaContract.designPreferences
+  -> generate @theme CSS block (CSS variables)
+  -> Tailwind v4 generates utilities from those variables
+  -> bg-primary without --color-primary = BUILD FAILURE
+```
+
+### Chain 6: tsgo + OxC (10x faster build validation)
+
+```
+tsgo --noEmit (0.5s vs 5s) -> oxlint --type-aware -> vite build
+```
+
+Enables QA continuous validation — type-check after every file write, not just at the end.
+
+### Chain 7: Layered imports (circular dependency prevention)
+
+```
+Layer 0: db/         (Drizzle schema, imports nothing)
+Layer 1: api/        (tRPC/Hono, imports from db/)
+Layer 2: hooks/      (React Query, imports from api/)
+Layer 3: components/ (UI, imports from hooks/)
+Layer 4: routes/     (TanStack Router, imports from components/ + hooks/)
+```
+
+Backend and Frontend agents work on separate layers. Circular deps impossible by construction.
+
+### The Full Unbroken Chain
+
+```
+SchemaContract -> contractToDrizzleSchema() -> pgTable() definitions
+  -> drizzle-kit (SQL) + $infer (types) + createSchema (validation)
+  -> PGlite validates SQL
+  -> tRPC/Hono uses validation schemas as input
+  -> TanStack Router type-checks all links
+  -> tsgo --noEmit (0.5s) validates everything
+  -> vite build produces bundle
+```
+
+Every arrow is deterministic. Every boundary is type-checked. No LLM retry needed.
+
 ## Dependencies
 
-### Add
+### Add (Platform)
 - `@upstash/ratelimit` — rate limiting
-- `biome` (in sandbox snapshot) — code formatting
-- `axe-core` (in sandbox snapshot) — accessibility validation
-- `kysely` (in sandbox snapshot + generated apps) — type-safe SQL queries
-- `@sentry/react` (in sandbox snapshot + generated apps) — error tracking
+- `effect` ^3.x — typed error handling in pipeline (optional, platform only)
+
+### Add (Generated App Snapshot)
+- `drizzle-orm` ^0.38 — type-safe ORM (replaces Kysely)
+- `drizzle-kit` ^0.30 — programmatic migration generation
+- `valibot` ^1.0 — validation (replaces Zod in generated apps, 97% smaller)
+- `@tanstack/react-router` ^1.x — type-safe routing (replaces React Router)
+- `@tanstack/router-plugin` — Vite plugin for route code generation
+- `@sentry/react` — error tracking
+- `biome` — code formatting
+- `axe-core` — accessibility validation
 
 ### Remove
 - `@ai-sdk/anthropic` — not used (OpenAI models only)
 - `handlebars` — no more templates
 - `change-case` — was for template helpers
+- `kysely` — replaced by Drizzle ORM
+- `react-router` — replaced by TanStack Router
+- `zod` (from generated apps only) — replaced by Valibot
 
 ### Keep
 - `@mastra/core@^1.4.0` — Agent, .network(), Memory, Evals
 - `@ai-sdk/openai` — model provider
 - `@daytonaio/sdk` — sandbox management
-- `zod` — schema validation
+- `zod` (platform only) — agent schema validation
 - `@electric-sql/pglite` — SQL validation
