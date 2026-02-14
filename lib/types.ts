@@ -301,7 +301,14 @@ export type StreamEvent =
   | CompleteEvent
   | ErrorEvent
   | CheckpointEvent
-  | LayerCommitEvent;
+  | LayerCommitEvent
+  | AgentStartEvent
+  | AgentProgressEvent
+  | AgentArtifactEvent
+  | AgentCompleteEvent
+  | PhaseStartEvent
+  | PhaseCompleteEvent
+  | PlanReadyEvent;
 
 export interface StageUpdateEvent {
   type: "stage_update";
@@ -383,4 +390,53 @@ export interface LayerCommitEvent {
   hash: string;
   message: string;
   files: string[];
+}
+
+// ============================================================================
+// Agent Pipeline Events
+// ============================================================================
+
+export interface AgentStartEvent {
+  type: "agent_start";
+  agentId: string;
+  agentName: string;
+  phase: number;
+}
+
+export interface AgentProgressEvent {
+  type: "agent_progress";
+  agentId: string;
+  message: string;
+}
+
+export interface AgentArtifactEvent {
+  type: "agent_artifact";
+  agentId: string;
+  artifactType: string;
+  artifactName: string;
+}
+
+export interface AgentCompleteEvent {
+  type: "agent_complete";
+  agentId: string;
+  tokensUsed: number;
+  durationMs: number;
+}
+
+export interface PhaseStartEvent {
+  type: "phase_start";
+  phase: number;
+  phaseName: string;
+  agentCount: number;
+}
+
+export interface PhaseCompleteEvent {
+  type: "phase_complete";
+  phase: number;
+  phaseName: string;
+}
+
+export interface PlanReadyEvent {
+  type: "plan_ready";
+  plan: Record<string, unknown>;
 }
