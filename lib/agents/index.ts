@@ -4,3 +4,5 @@
 
 export * from './schemas';
 export * from './registry';
+export * from './observability';
+export * from './tools';

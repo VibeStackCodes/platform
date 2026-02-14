@@ -3,7 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "pnpm": {
-    "ignoredBuiltDependencies": ["sharp", "unrs-resolver"]
+    "ignoredBuiltDependencies": [
+      "sharp",
+      "unrs-resolver"
+    ]
   },
   "scripts": {
     "dev": "next dev",
@@ -21,6 +24,7 @@
     "@ai-sdk/react": "^3.0.84",
     "@anthropic-ai/sdk": "^0.74.0",
     "@daytonaio/sdk": "^0.141.0",
+    "@mastra/core": "^1.4.0",
     "@octokit/auth-app": "^8.2.0",
     "@radix-ui/react-use-controllable-state": "^1.2.2",
     "@rive-app/react-webgl2": "^4.26.2",
