@@ -53,9 +53,10 @@ export async function POST(req: Request) {
       ? textParts[0].text
       : 'New Project';
     import('@/lib/sandbox').then(({ provisionProject }) => {
-      // Use projectId as temp name — the plan's appName isn't known yet at this point.
+      // Use first words of user prompt as temp name — buildRepoName adds vibestack- prefix.
       // The generate route will use chatPlan.appName for the real Supabase project.
-      provisionProject(_projectId, `vibestack-${_projectId.slice(0, 8)}`, supabase).catch(console.error);
+      const tempName = promptText.split(/\s+/).slice(0, 5).join(' ');
+      provisionProject(_projectId, tempName, supabase).catch(console.error);
     });
   }
 
