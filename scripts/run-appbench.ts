@@ -4,11 +4,14 @@
  *
  * Benchmarks the generation pipeline against 6 standard application types.
  * Measures plan quality, build success rate, and requirement coverage.
+ *
+ * TODO: Migrate appbench to use agent architecture
  */
 
 import { generatePlan } from '../lib/planner';
-import { generateFiles } from '../lib/generator';
-import { verifyAndFix } from '../lib/verifier';
+// TODO: Migrate to agent architecture - these modules have been deleted
+// import { generateFiles } from '../lib/generator';
+// import { verifyAndFix } from '../lib/verifier';
 import { runPlaywrightCheck } from '../lib/requirement-check';
 import { createSandbox, destroySandbox } from '../lib/sandbox';
 import { createSupabaseProject, deleteSupabaseProject, setupSchema } from '../lib/supabase-mgmt';
@@ -382,6 +385,13 @@ function printSummaryTable(results: BenchmarkResult[]) {
 // ============================================================================
 
 async function main() {
+  // TODO: Migrate to agent architecture before re-enabling appbench
+  throw new Error(
+    'AppBench requires migration to agent architecture. ' +
+    'The old generator.ts and verifier.ts modules have been replaced with the Mastra agent system. ' +
+    'See lib/agents/ for the new architecture.'
+  );
+
   console.log('Starting AppBench Evaluation...\n');
   console.log(`Benchmarking ${BENCHMARK_PROMPTS.length} application types\n`);
 

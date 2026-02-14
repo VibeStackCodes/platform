@@ -2,18 +2,22 @@
  * Barrel export for Mastra agent system
  */
 
-// Schemas (unchanged)
+// Schemas
 export * from './schemas';
 
 // Agents + Mastra instance
 export {
   mastra,
-  plannerAgent,
-  dataArchitectAgent,
-  frontendEngineerAgent,
-  qaEngineerAgent,
+  supervisorAgent,
+  analystAgent,
+  infraAgent,
+  dbaAgent,
+  backendAgent,
+  frontendAgent,
+  reviewerAgent,
+  qaAgent,
+  devOpsAgent,
 } from './registry';
-export type { AgentId } from './registry';
 
 // Tools
 export {
@@ -32,6 +36,3 @@ export {
   deployToVercelTool,
   searchDocsTool,
 } from './tools';
-
-// Workflow
-export { createGenerationWorkflow } from './workflow';

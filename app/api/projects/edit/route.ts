@@ -9,7 +9,8 @@ import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@/lib/supabase-server";
 import { getDaytonaClient } from "@/lib/sandbox";
 import { uploadFile } from "@/lib/sandbox";
-import { verifyAndFix } from "@/lib/verifier";
+// TODO: Replace with agent-based verification when edit route is migrated to agent architecture
+// import { verifyAndFix } from "@/lib/verifier";
 import { buildFilePrompt } from "@/lib/injector";
 import type { EditRequest, GenerationState, Plan, FileSpec } from "@/lib/types";
 
@@ -167,15 +168,16 @@ export async function POST(req: NextRequest) {
       existingFiles.set(path, content);
     }
 
+    // TODO: Replace with agent-based verification when edit route is migrated to agent architecture
     // Run verifyAndFix (without emit callback for non-streaming route)
-    await verifyAndFix(
-      sandbox,
-      existingFiles,
-      model,
-      () => {} // No-op emit function
-    );
+    // await verifyAndFix(
+    //   sandbox,
+    //   existingFiles,
+    //   model,
+    //   () => {} // No-op emit function
+    // );
 
-    console.log("[edit] Build verified");
+    console.log("[edit] Build verification skipped (needs migration to agent architecture)");
 
     // ====================================================================
     // Step 4: Update Project State
