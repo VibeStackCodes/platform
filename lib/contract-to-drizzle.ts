@@ -23,12 +23,19 @@ function snakeToCamel(str: string): string {
 }
 
 /**
+ * Words that end in 's' but are not plurals
+ */
+const NON_PLURAL_S = new Set(['status', 'address', 'progress', 'access', 'process', 'analysis', 'bus', 'canvas']);
+
+/**
  * Convert table name to PascalCase singular type name
  * "tasks" → "Task", "user_profiles" → "UserProfile"
  */
 function toTypeName(tableName: string): string {
   // Remove trailing 's' for singular (simple heuristic)
-  const singular = tableName.endsWith('s') ? tableName.slice(0, -1) : tableName;
+  const singular = (tableName.endsWith('s') && !NON_PLURAL_S.has(tableName))
+    ? tableName.slice(0, -1)
+    : tableName;
   // Convert to PascalCase
   return singular
     .split('_')
@@ -52,7 +59,7 @@ function topologicalSort(tables: TableDef[]): TableDef[] {
 
   for (const t of tables) {
     for (const col of t.columns) {
-      if (col.references && tableMap.has(col.references.table)) {
+      if (col.references && tableMap.has(col.references.table) && col.references.table !== t.name) {
         // t depends on col.references.table → edge from ref → t
         adj.get(col.references.table)!.push(t.name);
         inDegree.set(t.name, (inDegree.get(t.name) ?? 0) + 1);
@@ -90,6 +97,9 @@ function generateColumn(col: ColumnDef, tableMap: Set<string>): string {
   // Special handling for timestamptz → timestamp(name, { withTimezone: true })
   if (col.type === 'timestamptz') {
     chain = `${drizzleType}('${col.name}', { withTimezone: true })`;
+  } else if (col.type === 'bigint') {
+    // bigint requires mode option for JSON compatibility
+    chain = `${drizzleType}('${col.name}', { mode: 'number' })`;
   } else {
     chain = `${drizzleType}('${col.name}')`;
   }
@@ -121,7 +131,7 @@ function generateColumn(col: ColumnDef, tableMap: Set<string>): string {
   if (col.references && tableMap.has(col.references.table)) {
     const refTableVar = snakeToCamel(col.references.table);
     const refCol = snakeToCamel(col.references.column);
-    chain += `.references(() => ${refTableVar}.${refCol})`;
+    chain += `.references(() => ${refTableVar}.${refCol}, { onDelete: 'cascade' })`;
   }
 
   return `  ${propName}: ${chain}`;
