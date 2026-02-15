@@ -76,7 +76,7 @@ export async function POST(req: NextRequest) {
             currency: "usd",
             product_data: {
               name: "VibeStack Pro",
-              description: "Unlimited project generations with priority support",
+              description: "2,000 credits/month (~7 app generations) with priority support",
             },
             unit_amount: 2000, // $20.00
             recurring: {

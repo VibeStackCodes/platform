@@ -56,7 +56,11 @@ export async function POST(req: NextRequest) {
         // Update user plan to 'pro'
         const { error } = await supabase
           .from("profiles")
-          .update({ plan: "pro" })
+          .update({
+            plan: "pro",
+            credits_monthly: 2000,
+            credits_remaining: 2000,
+          })
           .eq("id", userId);
 
         if (error) {
@@ -86,13 +90,50 @@ export async function POST(req: NextRequest) {
         // Downgrade user plan to 'free'
         const { error: updateError } = await supabase
           .from("profiles")
-          .update({ plan: "free" })
+          .update({
+            plan: "free",
+            credits_monthly: 200,
+            credits_remaining: 200,
+            credits_reset_at: null,
+          })
           .eq("id", profile.id);
 
         if (updateError) {
           console.error("Failed to downgrade user plan:", updateError);
         } else {
           console.log(`User ${profile.id} downgraded to Free plan`);
+        }
+        break;
+      }
+
+      case "invoice.paid": {
+        const invoice = event.data.object as Stripe.Invoice;
+        const customerId = invoice.customer as string;
+
+        // Only process subscription renewals (not initial payment)
+        if (!invoice.parent?.subscription_details) break;
+
+        const { data: profile, error: fetchError } = await supabase
+          .from("profiles")
+          .select("id, credits_monthly")
+          .eq("stripe_customer_id", customerId)
+          .single();
+
+        if (fetchError || !profile) break;
+
+        // Reset credits for the new billing period
+        const { error: updateError } = await supabase
+          .from("profiles")
+          .update({
+            credits_remaining: profile.credits_monthly,
+            credits_reset_at: new Date(
+              (invoice.lines.data[0]?.period?.end ?? 0) * 1000
+            ).toISOString(),
+          })
+          .eq("id", profile.id);
+
+        if (!updateError) {
+          console.log(`User ${profile.id} credits reset to ${profile.credits_monthly}`);
         }
         break;
       }
