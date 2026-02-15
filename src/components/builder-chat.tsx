@@ -104,6 +104,7 @@ export function BuilderChat({
   const [pendingClarification, setPendingClarification] = useState<ClarificationQuestion[] | null>(
     null,
   )
+  const [resumeRunId, setResumeRunId] = useState<string | null>(null)
   const [userCredits, setUserCredits] = useState<{
     credits_remaining: number
     credits_monthly: number
@@ -229,6 +230,7 @@ export function BuilderChat({
           break
         case 'clarification_request':
           setPendingClarification(event.questions)
+          setResumeRunId(event.runId)
           break
       }
     },
@@ -390,10 +392,67 @@ export function BuilderChat({
     sendChatMessage(suggestion)
   }
 
-  const handleClarificationSubmit = (answersText: string) => {
-    setPendingClarification(null)
-    sendChatMessage(answersText)
-  }
+  const handleClarificationSubmit = useCallback(
+    async (answersText: string) => {
+      setPendingClarification(null)
+
+      if (!resumeRunId) {
+        sendChatMessage(answersText)
+        return
+      }
+
+      const userMessage: ChatMessage = {
+        id: `user-${Date.now()}`,
+        role: 'user',
+        content: answersText,
+      }
+      setMessages((prev) => [...prev, userMessage])
+      setChatStatus('streaming')
+
+      const assistantId = `assistant-${Date.now()}`
+      setMessages((prev) => [...prev, { id: assistantId, role: 'assistant', content: '' }])
+
+      abortControllerRef.current?.abort()
+      const abortController = new AbortController()
+      abortControllerRef.current = abortController
+
+      try {
+        const response = await fetch('/api/agent/resume', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ runId: resumeRunId, answers: answersText }),
+          signal: abortController.signal,
+        })
+
+        if (!response.ok || !response.body) {
+          throw new Error(`Resume failed: ${response.status}`)
+        }
+
+        const reader = response.body.getReader()
+        const decoder = new TextDecoder()
+        let buffer = ''
+
+        try {
+          while (true) {
+            const { done, value } = await reader.read()
+            if (done) break
+            buffer += decoder.decode(value, { stream: true })
+            buffer = parseSSEBuffer(buffer, null, handleGenerationEvent)
+          }
+        } finally {
+          reader.releaseLock()
+        }
+      } catch (err) {
+        if (err instanceof Error && err.name === 'AbortError') return
+        setChatError(err instanceof Error ? err : new Error('Resume failed'))
+        setMessages((prev) => prev.filter((m) => m.id !== assistantId || m.content.length > 0))
+      } finally {
+        setChatStatus('ready')
+        setResumeRunId(null)
+      }
+    },
+    [resumeRunId, parseSSEBuffer, handleGenerationEvent, sendChatMessage],
+  )
 
   const _handleStartGeneration = useCallback(
     async (chatPlan: ChatPlan) => {

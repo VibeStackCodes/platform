@@ -440,4 +440,5 @@ export interface ClarificationQuestion {
 export interface ClarificationRequestEvent {
   type: 'clarification_request'
   questions: ClarificationQuestion[]
+  runId: string
 }

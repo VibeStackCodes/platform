@@ -54,8 +54,26 @@ export const analystStep = createStep({
   id: 'analyst',
   inputSchema: z.object({ prompt: z.string() }),
   outputSchema: AnalystOutputSchema,
-  execute: async ({ inputData }) => {
-    const result = await analystAgent.generate(inputData.prompt, {
+  execute: async ({ inputData, suspend, resumeData }) => {
+    const resumePayload = resumeData as { answers?: string } | undefined
+    const prompt = resumePayload?.answers
+      ? `${inputData.prompt}\n\nUser's answers to clarification questions:\n${resumePayload.answers}`
+      : inputData.prompt
+
+    if (!resumeData) {
+      const checkResult = await analystAgent.generate(prompt, { maxSteps: 2 })
+      for (const step of checkResult.steps ?? []) {
+        for (const tc of step.toolCalls ?? []) {
+          // biome-ignore lint/suspicious/noExplicitAny: ToolCallChunk has dynamic structure
+          const toolCall = tc as any
+          if (toolCall.toolName === 'ask-clarifying-questions') {
+            return suspend({ questions: toolCall.args.questions })
+          }
+        }
+      }
+    }
+
+    const result = await analystAgent.generate(prompt, {
       structuredOutput: { schema: AnalystOutputSchema },
     })
     return result.object

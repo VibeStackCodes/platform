@@ -15,6 +15,7 @@
  *   - Emits credits_used event to client
  */
 
+import crypto from 'node:crypto'
 import { sql } from 'drizzle-orm'
 import { Hono } from 'hono'
 import type { WorkflowStreamEvent } from '@mastra/core/workflows'
@@ -31,6 +32,19 @@ export const agentRoutes = new Hono()
 
 // Apply auth middleware to all routes
 agentRoutes.use('*', authMiddleware)
+
+// biome-ignore lint/suspicious/noExplicitAny: Mastra Run type is complex generic
+const activeRuns = new Map<
+  string,
+  { run: any; userId: string; projectId: string; model: string; createdAt: number }
+>()
+
+setInterval(() => {
+  const cutoff = Date.now() - 3600_000
+  for (const [id, entry] of activeRuns) {
+    if (entry.createdAt < cutoff) activeRuns.delete(id)
+  }
+}, 1800_000)
 
 /** Map workflow step IDs to human-readable phase names */
 const STEP_PHASES: Record<string, { name: string; phase: number }> = {
@@ -53,6 +67,204 @@ const STEP_PHASES: Record<string, { name: string; phase: number }> = {
   'prepare-qa-input': { name: 'Preparing validation', phase: 7 },
   'final-qa-gate': { name: 'Running QA checks', phase: 7 },
   'assemble-output': { name: 'Assembling results', phase: 8 },
+}
+
+async function processWorkflowStream(
+  // biome-ignore lint/suspicious/noExplicitAny: WorkflowRunOutput has complex generic type
+  output: any,
+  emit: (event: StreamEvent) => void,
+  signal: AbortSignal,
+  user: { id: string },
+  projectId: string,
+  model: string,
+  runId: string,
+): Promise<void> {
+  for await (const event of output.fullStream) {
+    if (signal.aborted) {
+      console.log('[agent] Client disconnected, stopping stream')
+      break
+    }
+
+    const wfEvent = event as WorkflowStreamEvent
+
+    switch (wfEvent.type) {
+      case 'workflow-start':
+        emit({
+          type: 'stage_update',
+          stage: 'generating',
+        })
+        break
+
+      case 'workflow-step-start': {
+        const stepId = wfEvent.payload?.id ?? ''
+        const phaseInfo = STEP_PHASES[stepId]
+        if (phaseInfo) {
+          emit({
+            type: 'phase_start',
+            phase: phaseInfo.phase,
+            phaseName: phaseInfo.name,
+            agentCount: 1,
+          })
+          emit({
+            type: 'checkpoint',
+            label: phaseInfo.name,
+            status: 'active',
+          })
+        }
+        break
+      }
+
+      case 'workflow-step-finish': {
+        const stepId = wfEvent.payload?.id ?? ''
+        const phaseInfo = STEP_PHASES[stepId]
+        if (phaseInfo) {
+          emit({
+            type: 'checkpoint',
+            label: `${phaseInfo.name} complete`,
+            status: 'complete',
+          })
+          emit({
+            type: 'phase_complete',
+            phase: phaseInfo.phase,
+            phaseName: phaseInfo.name,
+          })
+        }
+        break
+      }
+
+      case 'workflow-step-result': {
+        const stepId = wfEvent.payload?.id ?? ''
+        const status = wfEvent.payload?.status
+
+        if (stepId === 'write-migration' && status === 'success') {
+          emit({
+            type: 'file_complete',
+            path: 'supabase/migrations/001_initial.sql',
+            linesOfCode: 0,
+          })
+        }
+
+        if (stepId === 'final-qa-gate' && wfEvent.payload?.output) {
+          const qa = wfEvent.payload.output as {
+            typecheckPassed?: boolean
+            lintPassed?: boolean
+            buildPassed?: boolean
+            typecheckOutput?: string
+            lintOutput?: string
+            buildOutput?: string
+          }
+          if (!qa.typecheckPassed || !qa.lintPassed || !qa.buildPassed) {
+            const errors = []
+            if (!qa.typecheckPassed)
+              errors.push({
+                file: 'tsc',
+                message: qa.typecheckOutput ?? 'Type check failed',
+                raw: qa.typecheckOutput ?? '',
+              })
+            if (!qa.lintPassed)
+              errors.push({ file: 'lint', message: qa.lintOutput ?? 'Lint failed', raw: qa.lintOutput ?? '' })
+            if (!qa.buildPassed)
+              errors.push({
+                file: 'build',
+                message: qa.buildOutput ?? 'Build failed',
+                raw: qa.buildOutput ?? '',
+              })
+            emit({ type: 'build_error', errors })
+          }
+        }
+        break
+      }
+
+      case 'workflow-step-output':
+        processNestedEvent(wfEvent.payload?.output, emit)
+        break
+
+      case 'workflow-step-suspended': {
+        const suspendPayload = wfEvent.payload?.suspendPayload
+        if (suspendPayload?.questions && Array.isArray(suspendPayload.questions)) {
+          emit({
+            type: 'clarification_request',
+            questions: suspendPayload.questions,
+            runId: runId,
+          })
+        } else {
+          emit({
+            type: 'plan_ready',
+            plan: suspendPayload ?? {},
+          })
+        }
+        break
+      }
+
+      case 'workflow-finish': {
+        const wfStatus = wfEvent.payload?.workflowStatus
+        if (wfStatus === 'success') {
+          emit({
+            type: 'checkpoint',
+            label: 'Pipeline complete',
+            status: 'complete',
+          })
+        } else if (wfStatus === 'failed') {
+          // biome-ignore lint/suspicious/noExplicitAny: workflow payload has dynamic structure
+          const errorMsg =
+            typeof (wfEvent.payload as any)?.error === 'string'
+              ? (wfEvent.payload as any).error
+              : 'Pipeline failed'
+          emit({
+            type: 'error',
+            message: errorMsg,
+            stage: 'error',
+          })
+        }
+        break
+      }
+
+      case 'workflow-canceled':
+        emit({
+          type: 'error',
+          message: 'Workflow was canceled',
+          stage: 'error',
+        })
+        break
+
+      default:
+        if (process.env.NODE_ENV === 'development') {
+          console.log(
+            `[agent] Unhandled workflow event: ${wfEvent.type}`,
+            JSON.stringify(wfEvent.payload ?? {}).slice(0, 200),
+          )
+        }
+        break
+    }
+  }
+
+  const usage = await output.usage
+  const totalTokens = (usage?.inputTokens ?? 0) + (usage?.outputTokens ?? 0)
+
+  if (totalTokens > 0) {
+    const creditsUsed = Math.ceil(totalTokens / 1000)
+
+    await db.execute(sql`SELECT deduct_credits(
+      ${user.id}::uuid,
+      ${creditsUsed}::int,
+      ${projectId}::uuid,
+      ${model}::text,
+      ${'generation'}::text,
+      ${usage?.inputTokens ?? 0}::int,
+      ${usage?.outputTokens ?? 0}::int,
+      ${totalTokens}::int
+    )`)
+
+    const updatedCredits = await getUserCredits(user.id)
+    emit({
+      type: 'credits_used',
+      creditsUsed,
+      creditsRemaining: updatedCredits?.creditsRemaining ?? 0,
+      tokensTotal: totalTokens,
+    })
+  }
+
+  emit({ type: 'stage_update', stage: 'complete' })
 }
 
 /**
@@ -90,19 +302,6 @@ function processNestedEvent(
           path: (result?.path as string) ?? '',
           linesOfCode: (result?.bytesWritten as number) ?? 0,
         })
-      } else if (toolName === 'ask-clarifying-questions') {
-        const args = payload.args as Record<string, unknown> | undefined
-        const questions = args?.questions
-        if (Array.isArray(questions)) {
-          emit({
-            type: 'clarification_request',
-            questions: questions as Array<{
-              question: string
-              selectionMode: 'single' | 'multiple'
-              options: Array<{ label: string; description: string }>
-            }>,
-          })
-        }
       } else {
         emit({
           type: 'agent_artifact',
@@ -193,184 +392,19 @@ agentRoutes.post('/', async (c) => {
 
   // Get the workflow and create a run
   const workflow = mastra.getWorkflow('appGeneration')
-  const run = await workflow.createRun()
+  const runId = crypto.randomUUID()
+  const run = await workflow.createRun({ runId })
+  activeRuns.set(runId, { run, userId: user.id, projectId, model, createdAt: Date.now() })
 
   // Return SSE stream
   return createSSEStream(async (emit: (event: StreamEvent) => void, signal: AbortSignal) => {
     try {
       emit({ type: 'stage_update', stage: 'generating' })
-
-      // Start the workflow stream (returns WorkflowRunOutput directly, not a Promise)
       const output = run.stream({
         inputData: { userMessage: message, projectId },
         requestContext,
       })
-
-      // Iterate over workflow stream events
-      for await (const event of output.fullStream) {
-        // Break early if client disconnected
-        if (signal.aborted) {
-          console.log('[agent] Client disconnected, stopping stream')
-          break
-        }
-
-        const wfEvent = event as WorkflowStreamEvent
-
-        switch (wfEvent.type) {
-          case 'workflow-start':
-            emit({
-              type: 'stage_update',
-              stage: 'generating',
-            })
-            break
-
-          case 'workflow-step-start': {
-            const stepId = wfEvent.payload?.id ?? ''
-            const phaseInfo = STEP_PHASES[stepId]
-            if (phaseInfo) {
-              emit({
-                type: 'phase_start',
-                phase: phaseInfo.phase,
-                phaseName: phaseInfo.name,
-                agentCount: 1,
-              })
-              emit({
-                type: 'checkpoint',
-                label: phaseInfo.name,
-                status: 'active',
-              })
-            }
-            break
-          }
-
-          case 'workflow-step-finish': {
-            const stepId = wfEvent.payload?.id ?? ''
-            const phaseInfo = STEP_PHASES[stepId]
-            if (phaseInfo) {
-              emit({
-                type: 'checkpoint',
-                label: `${phaseInfo.name} complete`,
-                status: 'complete',
-              })
-              emit({
-                type: 'phase_complete',
-                phase: phaseInfo.phase,
-                phaseName: phaseInfo.name,
-              })
-            }
-            break
-          }
-
-          case 'workflow-step-result': {
-            const stepId = wfEvent.payload?.id ?? ''
-            const status = wfEvent.payload?.status
-
-            // Emit file_complete events for write-migration step
-            if (stepId === 'write-migration' && status === 'success') {
-              emit({
-                type: 'file_complete',
-                path: 'supabase/migrations/001_initial.sql',
-                linesOfCode: 0,
-              })
-            }
-
-            // Emit QA results from final-qa-gate
-            if (stepId === 'final-qa-gate' && wfEvent.payload?.output) {
-              const qa = wfEvent.payload.output as {
-                typecheckPassed?: boolean
-                lintPassed?: boolean
-                buildPassed?: boolean
-                typecheckOutput?: string
-                lintOutput?: string
-                buildOutput?: string
-              }
-              if (!qa.typecheckPassed || !qa.lintPassed || !qa.buildPassed) {
-                const errors = []
-                if (!qa.typecheckPassed)
-                  errors.push({ file: 'tsc', message: qa.typecheckOutput ?? 'Type check failed', raw: qa.typecheckOutput ?? '' })
-                if (!qa.lintPassed)
-                  errors.push({ file: 'lint', message: qa.lintOutput ?? 'Lint failed', raw: qa.lintOutput ?? '' })
-                if (!qa.buildPassed)
-                  errors.push({ file: 'build', message: qa.buildOutput ?? 'Build failed', raw: qa.buildOutput ?? '' })
-                emit({ type: 'build_error', errors })
-              }
-            }
-            break
-          }
-
-          case 'workflow-step-output':
-            // Nested agent events (from codeGenStep → pmAgent → sub-agents)
-            processNestedEvent(wfEvent.payload?.output, emit)
-            break
-
-          case 'workflow-step-suspended':
-            emit({
-              type: 'plan_ready',
-              plan: wfEvent.payload?.suspendPayload ?? {},
-            })
-            break
-
-          case 'workflow-finish': {
-            const wfStatus = wfEvent.payload?.workflowStatus
-            if (wfStatus === 'success') {
-              emit({
-                type: 'checkpoint',
-                label: 'Pipeline complete',
-                status: 'complete',
-              })
-            }
-            break
-          }
-
-          case 'workflow-canceled':
-            emit({
-              type: 'error',
-              message: 'Workflow was canceled',
-              stage: 'error',
-            })
-            break
-
-          default:
-            // Log unhandled for debugging
-            if (process.env.NODE_ENV === 'development') {
-              console.log(
-                `[agent] Unhandled workflow event: ${wfEvent.type}`,
-                JSON.stringify(wfEvent.payload ?? {}).slice(0, 200),
-              )
-            }
-            break
-        }
-      }
-
-      // Get token usage from workflow execution
-      const usage = await output.usage
-      const totalTokens = (usage?.inputTokens ?? 0) + (usage?.outputTokens ?? 0)
-
-      // Deduct credits after successful completion
-      if (totalTokens > 0) {
-        const creditsUsed = Math.ceil(totalTokens / 1000)
-
-        await db.execute(sql`SELECT deduct_credits(
-          ${user.id}::uuid,
-          ${creditsUsed}::int,
-          ${projectId}::uuid,
-          ${model}::text,
-          ${'generation'}::text,
-          ${usage?.inputTokens ?? 0}::int,
-          ${usage?.outputTokens ?? 0}::int,
-          ${totalTokens}::int
-        )`)
-
-        const updatedCredits = await getUserCredits(user.id)
-        emit({
-          type: 'credits_used',
-          creditsUsed,
-          creditsRemaining: updatedCredits?.creditsRemaining ?? 0,
-          tokensTotal: totalTokens,
-        })
-      }
-
-      emit({ type: 'stage_update', stage: 'complete' })
+      await processWorkflowStream(output, emit, signal, user, projectId, model, runId)
     } catch (error) {
       if (signal.aborted) {
         console.log('[agent] Stream aborted by client')
@@ -381,6 +415,52 @@ agentRoutes.post('/', async (c) => {
         message: error instanceof Error ? error.message : 'Agent pipeline failed',
         stage: 'error',
       })
+    } finally {
+      activeRuns.delete(runId)
+    }
+  })
+})
+
+agentRoutes.post('/resume', async (c) => {
+  let body: { runId?: string; answers?: string }
+  try {
+    body = await c.req.json()
+  } catch {
+    return c.json({ error: 'Invalid request body' }, 400)
+  }
+
+  const { runId, answers } = body
+  if (!runId || !answers) {
+    return c.json({ error: 'Missing runId or answers' }, 400)
+  }
+
+  const stored = activeRuns.get(runId)
+  if (!stored) {
+    return c.json({ error: 'Run not found or expired' }, 404)
+  }
+
+  const user = c.var.user
+  if (stored.userId !== user.id) {
+    return c.json({ error: 'Unauthorized' }, 403)
+  }
+
+  return createSSEStream(async (emit: (event: StreamEvent) => void, signal: AbortSignal) => {
+    try {
+      const output = stored.run.resumeStream({
+        resumeData: { answers },
+        step: 'analyst',
+      })
+
+      await processWorkflowStream(output, emit, signal, user, stored.projectId, stored.model, runId)
+    } catch (error) {
+      if (signal.aborted) return
+      emit({
+        type: 'error',
+        message: error instanceof Error ? error.message : 'Resume failed',
+        stage: 'error',
+      })
+    } finally {
+      activeRuns.delete(runId)
     }
   })
 })
