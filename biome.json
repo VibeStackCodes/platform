@@ -28,29 +28,5 @@
       "arrowParentheses": "always"
     }
   },
-  "linter": {
-    "enabled": true,
-    "rules": {
-      "recommended": true,
-      "a11y": { "recommended": true },
-      "correctness": {
-        "recommended": true,
-        "noUnusedVariables": "error",
-        "useExhaustiveDependencies": "warn"
-      },
-      "security": { "recommended": true, "noDangerouslySetInnerHtml": "error" },
-      "style": { "useConst": "error", "useImportType": "error", "useExportType": "error" },
-      "suspicious": { "noExplicitAny": "warn", "noArrayIndexKey": "error" }
-    }
-  },
-  "overrides": [
-    {
-      "includes": ["**/*.test.ts", "**/*.spec.ts"],
-      "linter": {
-        "rules": {
-          "suspicious": { "noExplicitAny": "off", "noThenProperty": "off" }
-        }
-      }
-    }
-  ]
+  "linter": { "enabled": false }
 }

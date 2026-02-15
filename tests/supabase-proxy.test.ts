@@ -20,6 +20,7 @@ vi.mock('@server/lib/db/client', () => {
     where: vi.fn(function (this: any) {
       return this
     }),
+    // oxlint-disable-next-line unicorn/no-thenable
     then: vi.fn(),
   })
 

@@ -9,7 +9,7 @@ interface CreditDisplayProps {
   resetAt?: string | null
 }
 
-export function CreditDisplay({ remaining, monthly, plan, resetAt }: CreditDisplayProps) {
+export function CreditDisplay({ remaining, monthly, plan: _plan, resetAt: _resetAt }: CreditDisplayProps) {
   const pct = monthly > 0 ? (remaining / monthly) * 100 : 0
   const isLow = pct < 20
 

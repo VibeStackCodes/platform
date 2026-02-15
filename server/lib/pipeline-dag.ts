@@ -14,7 +14,7 @@ export interface Stage<TCtx> {
 export async function runDAG<TCtx>(stages: Stage<TCtx>[], ctx: TCtx): Promise<void> {
   const completed = new Set<string>()
   const running = new Map<string, Promise<void>>()
-  const stageMap = new Map(stages.map((s) => [s.name, s]))
+  const _stageMap = new Map(stages.map((s) => [s.name, s]))
 
   while (completed.size < stages.length) {
     // Find stages ready to run (all deps completed, not running, not completed)

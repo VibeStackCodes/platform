@@ -2,7 +2,7 @@
 
 import { and, asc, desc, eq } from 'drizzle-orm'
 import { db } from './client'
-import { chatMessages, profiles, projects, usageEvents } from './schema'
+import { chatMessages, profiles, projects } from './schema'
 
 // ── Project Queries ──────────────────────────────────────────────
 

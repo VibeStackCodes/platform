@@ -1,5 +1,5 @@
 import { checkCredits } from '@server/lib/credits'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 describe('Credit System', () => {
   it('checkCredits returns user credits', async () => {
@@ -55,6 +55,7 @@ describe('Credit System', () => {
     expect(Math.ceil(1000 / 1000)).toBe(1)
     expect(Math.ceil(1001 / 1000)).toBe(2)
     expect(Math.ceil(999 / 1000)).toBe(1)
+    // oxlint-disable-next-line oxc/erasing-op -- intentional: verifying 0 tokens = 0 credits
     expect(Math.ceil(0 / 1000)).toBe(0)
   })
 })

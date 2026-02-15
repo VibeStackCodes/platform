@@ -22,7 +22,7 @@ async function waitForHydration(page: Page) {
   await page.waitForTimeout(1000)
 }
 
-async function fillPromptAndSubmit(page: Page, prompt: string) {
+async function _fillPromptAndSubmit(page: Page, prompt: string) {
   await page.evaluate((val) => {
     const textarea = document.querySelector('textarea[name="message"]') as HTMLTextAreaElement
     const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')!

@@ -98,7 +98,7 @@ export function BuilderChat({
   const [buildErrors, setBuildErrors] = useState<BuildError[]>([])
   const [checkpoints, setCheckpoints] = useState<CheckpointEvent[]>([])
   const [layerCommits, setLayerCommits] = useState<LayerCommitEvent[]>([])
-  const [activeAgents, setActiveAgents] = useState<
+  const [_activeAgents, setActiveAgents] = useState<
     { id: string; name: string; status: 'running' | 'complete'; message?: string }[]
   >([])
   const [pendingClarification, setPendingClarification] = useState<ClarificationQuestion[] | null>(
@@ -394,7 +394,7 @@ export function BuilderChat({
     sendChatMessage(answersText)
   }
 
-  const handleStartGeneration = useCallback(
+  const _handleStartGeneration = useCallback(
     async (chatPlan: ChatPlan) => {
       setGenerationStatus('generating')
       setGenerationFiles([])

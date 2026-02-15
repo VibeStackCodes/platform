@@ -1,5 +1,5 @@
 // lib/contract-to-seed.ts
-import type { ColumnDef, SchemaContract, SQLType, TableDef } from './schema-contract'
+import type { ColumnDef, SchemaContract, TableDef } from './schema-contract'
 
 /**
  * Generate deterministic INSERT SQL from a SchemaContract.

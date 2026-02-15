@@ -1,4 +1,4 @@
-import { type ComponentManifest, generateShadcnManifest } from '@server/lib/shadcn-manifest'
+import { generateShadcnManifest } from '@server/lib/shadcn-manifest'
 import { describe, expect, it } from 'vitest'
 
 describe('generateShadcnManifest', () => {

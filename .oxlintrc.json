@@ -1,0 +1,57 @@
+{
+  "$schema": "https://raw.githubusercontent.com/nicolo-ribaudo/oxc-project/json-schema/npm/oxlint/configuration_schema.json",
+  "plugins": ["react", "typescript", "import", "unicorn", "oxc"],
+  "env": { "browser": true, "es2024": true, "node": true },
+  "settings": {
+    "react": { "runtime": "automatic" }
+  },
+  "categories": {
+    "correctness": "error",
+    "suspicious": "warn",
+    "perf": "warn"
+  },
+  "rules": {
+    // React 19 automatic JSX transform — no need to import React
+    "react/react-in-jsx-scope": "off",
+
+    // TypeScript strict rules (warn, not error — pre-existing)
+    "typescript/no-explicit-any": "warn",
+    "typescript/no-non-null-assertion": "warn",
+
+    // Import hygiene
+    "import/no-duplicates": "error",
+    "import/no-self-import": "error",
+
+    // React rules
+    "react/jsx-no-duplicate-props": "error",
+    "react/no-children-prop": "error",
+    "react/no-danger-with-children": "error",
+
+    // Unicorn rules we want
+    "unicorn/no-instanceof-array": "error",
+    "unicorn/prefer-node-protocol": "error",
+
+    // Intentionally off — Biome handles style/formatting
+    "no-mixed-spaces-and-tabs": "off",
+    "no-trailing-spaces": "off",
+
+    // Too noisy for this codebase
+    "typescript/no-require-imports": "off",
+    "unicorn/prefer-event-target": "off",
+    "unicorn/consistent-function-scoping": "off",
+
+    // Acceptable in SSE/streaming code and Mastra agent loops
+    "no-await-in-loop": "off",
+
+    // Side-effect CSS/module imports are intentional
+    "no-unassigned-import": "off"
+  },
+  "ignorePatterns": [
+    "node_modules",
+    "dist",
+    ".mastra",
+    "coverage",
+    "*.gen.ts",
+    "drizzle/"
+  ]
+}

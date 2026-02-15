@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { CreditsUsedEvent, StreamEvent, UsageEvent, UserCredits } from '@/lib/types'
+import type { StreamEvent, UsageEvent, UserCredits } from '@/lib/types'
 
 describe('Credits Types', () => {
   it('UserCredits interface has required fields', () => {

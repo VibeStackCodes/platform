@@ -8,9 +8,9 @@ AI-powered app builder — users describe an app, the platform generates a full 
 pnpm dev              # Vite SPA + Hono API server (concurrently)
 pnpm build            # Vite client build + server typecheck
 pnpm preview          # Vite preview of built client
-pnpm lint             # Biome (linter + formatter, replaces ESLint/OxLint)
-pnpm lint:fix         # Biome auto-fix
-pnpm format           # Biome format
+pnpm lint             # OxLint (670+ rules, 50-100x faster than ESLint)
+pnpm lint:fix         # OxLint auto-fix
+pnpm format           # Biome format (formatter only)
 pnpm test             # Vitest unit/integration tests
 pnpm test:e2e:mock    # Playwright E2E with mock mode (no external services)
 pnpm test:e2e:real    # Playwright E2E against real Supabase/Daytona
@@ -32,7 +32,7 @@ pnpm db:studio        # Drizzle Kit studio (DB browser)
 - **Payments**: Stripe (checkout, webhooks)
 - **Deployment**: Vercel (Hono via `@hono/vercel`, client via `dist/client/`)
 - **Monitoring**: Sentry (client + server + AI agent instrumentation)
-- **Linting**: Biome (linter + formatter, replaces ESLint/OxLint)
+- **Linting**: OxLint (670+ rules, oxc-based) + Biome (formatter only)
 - **Testing**: Vitest (unit), Playwright (E2E)
 - **Package manager**: pnpm
 
@@ -246,6 +246,7 @@ Key detail: both the platform and generated apps now use Vite + React.
 - React 19 — use `use()` hook, no `forwardRef` needed
 - shadcn/ui components in `src/components/ui/`
 - Tailwind v4 (CSS-first config, no `tailwind.config.ts`)
-- Biome: replaces ESLint/OxLint (linter + formatter in one, 100x faster)
+- OxLint: linter (670+ rules, oxc parser, 50-100x faster than ESLint)
+- Biome: formatter only (single quotes, no semicolons, trailing commas)
 - Client imports use `@/` path alias (→ `src/`)
 - Server code uses relative imports within `server/`

@@ -193,7 +193,7 @@ export async function runCommand(
     timeout?: number
   } = {},
 ): Promise<CommandResult> {
-  const { cwd, env: _env, async: isAsync = false, timeout = 300 } = options
+  const { cwd: _cwd, env: _env, async: isAsync = false, timeout = 300 } = options
 
   try {
     // Create session if it doesn't exist

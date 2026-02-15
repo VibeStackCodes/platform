@@ -1,5 +1,5 @@
 // lib/contract-to-sql.ts
-import type { ColumnDef, SchemaContract, TableDef } from './schema-contract'
+import type { SchemaContract, TableDef } from './schema-contract'
 
 const SQL_TYPE_MAP: Record<string, string> = {
   uuid: 'UUID',

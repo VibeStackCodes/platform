@@ -20,7 +20,7 @@ function LoginPage() {
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
 
-  async function redirectAfterAuth(userId: string) {
+  async function redirectAfterAuth(_userId: string) {
     const pendingPrompt = sessionStorage.getItem(PENDING_PROMPT_KEY)
     if (pendingPrompt) {
       sessionStorage.removeItem(PENDING_PROMPT_KEY)
