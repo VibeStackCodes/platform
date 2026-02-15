@@ -1,5 +1,0 @@
-{
-  "$schema": "https://raw.githubusercontent.com/nicolo-ribaudo/oxc-project_oxc/json-schema/npm/oxlint/configuration_schema.json",
-  "rules": {},
-  "ignorePatterns": [".next", "out", "build"]
-}
