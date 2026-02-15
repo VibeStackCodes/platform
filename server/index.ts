@@ -1,6 +1,8 @@
-// server/index.ts
+// server/index.ts — must import sentry first for instrumentation
+import './sentry'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
+import { sentry } from '@hono/sentry'
 import { handle } from 'hono/vercel'
 
 import { agentRoutes } from './routes/agent'
@@ -16,6 +18,9 @@ const app = new Hono().basePath('/api')
 
 // Global middleware
 app.use('*', cors())
+if (process.env.SENTRY_DSN) {
+  app.use('*', sentry({ dsn: process.env.SENTRY_DSN }))
+}
 
 // Health check
 app.get('/health', (c) => c.json({ status: 'ok' }))
