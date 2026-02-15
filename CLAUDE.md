@@ -34,8 +34,9 @@ pnpm test:e2e:real    # Playwright E2E against real Supabase/Daytona
 ```
 app/
   api/
-    chat/          # AI chat endpoint (streaming)
-    projects/      # Project CRUD + generate route (SSE pipeline)
+    chat/          # AI chat endpoint (Vercel AI SDK, streaming)
+    agent/         # Mastra agent pipeline endpoint (SSE)
+    projects/      # Project CRUD, deploy, sandbox-urls
     stripe/        # Stripe webhooks
     supabase-proxy/ # Proxies queries to generated app's Supabase
   auth/            # Auth callback routes
@@ -47,39 +48,44 @@ components/
   builder-chat.tsx  # Chat panel in builder
   builder-preview.tsx # Live preview iframe
 lib/
-  sandbox.ts        # Daytona sandbox lifecycle (create, get, destroy)
-  template-pipeline.ts # Orchestrates scaffold → features → verify
-  schema-contract.ts   # SchemaContract type — single source of truth
-  contract-to-sql.ts   # SchemaContract → deterministic SQL migration
+  agents/
+    registry.ts      # 9 agents + supervisor network (Mastra)
+    tools.ts         # 18 Mastra tools (sandbox, GitHub, Supabase, Vercel)
+    schemas.ts       # Zod schemas for agent inputs/outputs
+    index.ts         # Barrel exports
+  sandbox.ts         # Daytona sandbox lifecycle (create, get, destroy)
+  schema-contract.ts # SchemaContract type — single source of truth
+  contract-to-sql.ts # SchemaContract → deterministic SQL migration
   contract-to-types.ts # SchemaContract → TypeScript types
-  generator.ts         # AI code generation (features, pages, components)
-  verifier.ts          # Runs `bun run build` in sandbox to validate
-  github.ts            # GitHub App integration (create repo, push)
-  seed-remote.ts       # Seeds generated DB via @snaplet/seed
-  local-supabase.ts    # PGlite-based local SQL validation
-templates/             # Handlebars templates for generated app scaffolds
-  scaffold/            # Base app structure
-  auth/ crud/ dashboard/ messaging/ realtime/  # Feature templates
-supabase/migrations/   # Platform DB migrations
+  contract-to-drizzle.ts # SchemaContract → Drizzle ORM schema
+  github.ts          # GitHub App integration (create repo, push)
+  supabase-mgmt.ts   # Supabase Management API (create project, run migration)
+  local-supabase.ts  # PGlite-based local SQL validation
+  sse.ts             # SSE stream helper
+  types.ts           # Shared types (StreamEvent, Plan, Project, etc.)
+supabase/migrations/ # Platform DB migrations
+snapshot/            # Daytona sandbox Docker image (Vite + React base)
 ```
 
 ### Generation Pipeline
 
-1. **Chat route** → user describes app → AI extracts requirements
-2. **Generate route** (SSE) → orchestrates full pipeline:
-   - `SchemaContract` created from requirements (contract-first)
-   - `contract-to-sql.ts` generates deterministic SQL migration
-   - `local-supabase.ts` validates SQL via PGlite (one-shot, no retry)
-   - Scaffold templates applied in Daytona sandbox
-   - Feature templates injected per feature classification
-   - `verifier.ts` runs `bun run build` in sandbox
-   - GitHub push → Vercel deploy → Supabase DB provisioned
+1. **Chat route** (`/api/chat`) → user describes app → AI extracts requirements via `useChat` (Vercel AI SDK)
+2. **Agent route** (`/api/agent`) → Mastra supervisor network orchestrates 9 agents:
+   - **Planner**: Extracts requirements, creates `SchemaContract`
+   - **Data Architect**: Generates SQL migration, validates via PGlite
+   - **Frontend Engineer**: Generates React components in sandbox
+   - **QA Engineer**: Runs `bun run build`, fixes errors
+   - **Infra Agent**: Creates Supabase project, GitHub repo
+   - **DevOps Agent**: Deploys to Vercel
+   - SSE bridge maps Mastra `NetworkChunkType` → `StreamEvent` types
 3. **Preview** delivered via `BuilderPreview` subscribing to Supabase realtime on `projects` table
 
 ### Key Patterns
 
 - **Contract-first**: `SchemaContract` → all downstream artifacts (SQL, types, seed). Never retry LLM generation — fix the contract or generator if wrong.
-- **SSE streaming**: Generate route streams progress events to client via `lib/sse.ts`.
+- **Agent architecture**: 9 Mastra agents with supervisor `.network()` routing. Model tiers: `gpt-4o` (orchestrator/codegen), `gpt-4o-mini` (validator).
+- **Two-flow frontend**: Chat phase uses Vercel AI SDK (`useChat` → `/api/chat`), generation phase uses raw SSE (`fetch` → `/api/agent`).
+- **SSE streaming**: Agent route streams progress events to client via `lib/sse.ts`.
 - **Mock mode**: `NEXT_PUBLIC_MOCK_MODE=true` bypasses auth middleware and Supabase queries for E2E testing.
 - **Path alias**: `@/*` maps to project root.
 
@@ -123,6 +129,35 @@ Required in `.env.local`:
 - Real E2E: `pnpm test:e2e:real` — requires all env vars set
 - Sequential (not parallel) — tests share auth state
 - Global setup: `e2e/global-setup.ts`
+
+## Branch Merge Protocol (NON-NEGOTIABLE)
+
+When merging a feature branch (especially from a worktree), **always verify the merged result before committing**:
+
+```bash
+# 1. Merge without committing
+git merge --no-commit feature/branch-name
+
+# 2. Install deps (package.json may have changed)
+pnpm install
+
+# 3. Verify the MERGED code compiles
+npx tsc --noEmit
+
+# 4. Run the FULL test suite (not just branch tests)
+pnpm test
+
+# 5. Only then commit
+git commit
+```
+
+**Why**: Branch tests only cover branch code. Main may have evolved independently — new files importing modules the branch deleted, new deps the branch's `package.json` removed, etc. These **merge-boundary failures** are invisible until you run `tsc` and `test` on the combined result.
+
+**Common merge-boundary issues**:
+- Deps removed by branch but still needed by main's frontend code
+- Main added functions to a module the branch rewrote (e.g., `sandbox.ts`)
+- Test files on main referencing modules the branch deleted
+- Type exports removed by branch but still imported by main's components
 
 ## Gotchas
 

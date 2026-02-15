@@ -537,18 +537,74 @@ export const getGitHubTokenTool = createTool({
 
 export const searchDocsTool = createTool({
   id: 'search-docs',
-  description: 'Search library documentation [PLACEHOLDER — returns mock response, Context7 integration pending]',
+  description: 'Search library documentation by fetching from official docs sites',
   inputSchema: z.object({
-    library: z.string().describe('Library name (e.g., react, drizzle-orm, supabase)'),
-    query: z.string().describe('Search query'),
+    library: z.string().describe('Library name (e.g., react, supabase, shadcn-ui, vite, tailwindcss, tanstack-router)'),
+    query: z.string().describe('What to search for'),
   }),
   outputSchema: z.object({
-    results: z.string().describe('Documentation results'),
+    results: z.string().describe('Documentation content or guidance'),
+    source: z.string().describe('Source URL or reference'),
   }),
   execute: async (inputData, _context) => {
-    // Placeholder — will be connected to Context7 MCP or web search
-    return {
-      results: `Documentation for ${inputData.library}: ${inputData.query} (integration pending)`,
+    // Curated documentation references for libraries used in generated apps
+    const docUrls: Record<string, string> = {
+      'react': 'https://react.dev/reference/react',
+      'supabase': 'https://supabase.com/docs/reference/javascript/introduction',
+      'supabase-auth': 'https://supabase.com/docs/guides/auth',
+      'supabase-rls': 'https://supabase.com/docs/guides/database/postgres/row-level-security',
+      'shadcn-ui': 'https://ui.shadcn.com/docs/components',
+      'vite': 'https://vite.dev/guide/',
+      'tailwindcss': 'https://tailwindcss.com/docs',
+      'tanstack-router': 'https://tanstack.com/router/latest/docs/framework/react/overview',
+      'tanstack-query': 'https://tanstack.com/query/latest/docs/framework/react/overview',
+      'drizzle-orm': 'https://orm.drizzle.team/docs/overview',
+      'valibot': 'https://valibot.dev/guides/introduction/',
+      'biome': 'https://biomejs.dev/guides/getting-started/',
     };
+
+    const lib = inputData.library.toLowerCase().replace(/\s+/g, '-');
+    const url = docUrls[lib];
+
+    if (!url) {
+      return {
+        results: `No curated docs for "${inputData.library}". Available libraries: ${Object.keys(docUrls).join(', ')}. Use your training knowledge for this library.`,
+        source: 'built-in',
+      };
+    }
+
+    try {
+      const response = await fetch(url, {
+        headers: { 'Accept': 'text/html' },
+        signal: AbortSignal.timeout(5000),
+      });
+
+      if (!response.ok) {
+        return {
+          results: `Documentation for ${inputData.library} is at ${url}. Use your training knowledge for: ${inputData.query}`,
+          source: url,
+        };
+      }
+
+      // Extract text content (strip HTML tags for a rough plaintext)
+      const html = await response.text();
+      const text = html
+        .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+        .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 4000); // Limit to ~4K chars
+
+      return {
+        results: `Documentation excerpt from ${inputData.library}:\n${text}\n\nQuery: ${inputData.query}`,
+        source: url,
+      };
+    } catch {
+      return {
+        results: `Could not fetch docs for ${inputData.library}. Reference: ${url}. Use your training knowledge for: ${inputData.query}`,
+        source: url,
+      };
+    }
   },
 });

@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  return createSSEStream(async (emit: (event: StreamEvent) => void) => {
+  return createSSEStream(async (emit: (event: StreamEvent) => void, signal: AbortSignal) => {
     try {
       emit({ type: 'stage_update', stage: 'generating' });
 
@@ -57,6 +57,12 @@ export async function POST(request: NextRequest) {
       });
 
       for await (const chunk of result) {
+        // Break early if client disconnected
+        if (signal.aborted) {
+          console.log('[agent] Client disconnected, stopping stream');
+          break;
+        }
+
         // Cast payload for flexible access — Mastra's NetworkChunkType
         // has strict types but runtime payloads may include extra fields
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -67,7 +73,7 @@ export async function POST(request: NextRequest) {
             emit({
               type: 'agent_start',
               agentId: payload.agentId ?? 'unknown',
-              agentName: payload.agentName ?? payload.agentId ?? 'Agent', // SDK doesn't expose agentName, fallback to agentId
+              agentName: payload.agentName ?? payload.agentId ?? 'Agent',
               phase: 0,
             });
             break;
@@ -86,6 +92,15 @@ export async function POST(request: NextRequest) {
               agentId: payload.agentId ?? 'unknown',
               tokensUsed: payload.usage?.totalTokens ?? payload.tokensUsed ?? 0,
               durationMs: payload.durationMs ?? 0,
+            });
+            break;
+
+          case 'tool-execution-start':
+            emit({
+              type: 'agent_artifact',
+              agentId: payload.agentId ?? payload.primitiveId ?? 'unknown',
+              artifactType: 'tool-start',
+              artifactName: payload.toolName ?? 'unknown',
             });
             break;
 
@@ -121,11 +136,22 @@ export async function POST(request: NextRequest) {
               plan: payload.suspendPayload ?? {},
             });
             break;
+
+          default:
+            // Log unhandled chunk types for debugging (non-critical)
+            if (process.env.NODE_ENV === 'development') {
+              console.log(`[agent] Unhandled chunk type: ${chunk.type}`, JSON.stringify(payload).slice(0, 200));
+            }
+            break;
         }
       }
 
       emit({ type: 'stage_update', stage: 'complete' });
     } catch (error) {
+      if (signal.aborted) {
+        console.log('[agent] Stream aborted by client');
+        return;
+      }
       emit({
         type: 'error',
         message: error instanceof Error ? error.message : 'Agent pipeline failed',

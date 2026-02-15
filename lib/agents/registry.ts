@@ -22,6 +22,7 @@ import {
   createGitHubRepoTool,
   getGitHubTokenTool,
 } from './tools';
+import { generateShadcnManifest } from '@/lib/shadcn-manifest';
 
 /**
  * Model routing based on cost tiers (OpenAI)
@@ -34,6 +35,22 @@ const CODEGEN_MODEL = 'openai/gpt-4o';
 const VALIDATOR_MODEL = 'openai/gpt-4o-mini';
 
 /**
+ * Lazily generate shadcn component manifest for frontend agent context
+ */
+let _manifestCache: string | null = null;
+function getShadcnManifestString(): string {
+  if (!_manifestCache) {
+    try {
+      const manifest = generateShadcnManifest();
+      _manifestCache = JSON.stringify(manifest, null, 2);
+    } catch {
+      _manifestCache = '{}';
+    }
+  }
+  return _manifestCache;
+}
+
+/**
  * Analyst Agent
  * Converses with user to extract and clarify requirements
  */
@@ -42,25 +59,24 @@ export const analystAgent = new Agent({
   name: 'Analyst',
   model: ORCHESTRATOR_MODEL,
   description: 'Converses with users to extract and clarify app requirements',
-  instructions: `You are a requirements analysis expert.
+  instructions: `You are a requirements analyst for VibeStack, an AI app builder that generates Vite + React + Supabase applications.
 
 Your role:
-1. Clarify user requirements by extracting:
-   - App name and description
-   - Target audience
-   - Core features (categorize as: auth, crud, dashboard, messaging, realtime, custom)
-   - Technical constraints
-   - Design preferences (style, color, font)
+1. Extract structured requirements from user descriptions:
+   - App name and one-line description
+   - Core features (categorize each as: auth, crud, dashboard, messaging, realtime, custom)
+   - Data entities with fields and relationships
+   - Design preferences (colors, fonts, layout style)
 
-2. Ask targeted questions when requirements are unclear
-3. Default to modern, sensible choices when appropriate:
-   - Style: modern, minimal
-   - Color: blue (#3b82f6)
-   - Font: Inter
-   - Auth: Supabase Auth
-   - Database: PostgreSQL with Supabase conventions
+2. Apply smart defaults when unspecified:
+   - Auth: Supabase Auth with email/password + Google OAuth
+   - Styling: Modern minimal with Tailwind CSS v4, primary blue (#3b82f6), Inter font
+   - Database: PostgreSQL via Supabase with RLS enabled on all tables
+   - State: TanStack Query for server state management
 
-Be concise and decisive. Output structured data only.`,
+3. Ask ONE clarifying question at a time when critical requirements are ambiguous.
+
+Output structured JSON with: appName, description, features[], entities[], designTokens.`,
   tools: {
     searchDocs: searchDocsTool,
   },
@@ -75,20 +91,21 @@ export const infraAgent = new Agent({
   name: 'Infrastructure Engineer',
   model: VALIDATOR_MODEL,
   description: 'Provisions sandbox environment and GitHub repository',
-  instructions: `You are an infrastructure provisioning specialist.
+  instructions: `You are the infrastructure engineer for VibeStack app generation.
 
 Your role:
-1. Create Daytona sandbox using the create-sandbox tool
-2. Verify sandbox health by running basic commands
-3. Generate preview URL for live development
-4. Create GitHub repository for code hosting
+1. Create a Daytona sandbox for the generated app
+2. Create a Supabase project for the database
+3. Create a GitHub repository for code hosting
+4. Verify all infrastructure is healthy before reporting ready
 
-Tools available:
-- create-sandbox: Create a new Daytona sandbox
-- run-command: Execute commands in sandbox
-- get-preview-url: Get signed preview URL
+Execution order:
+1. create-sandbox → verify with run-command (echo test)
+2. create-supabase-project → wait for ACTIVE_HEALTHY status
+3. create-github-repo → verify repo exists
 
-Always verify each step completes successfully before proceeding.`,
+Report the sandboxId, supabase project details, and GitHub clone URL to the supervisor.
+Always verify each step succeeded. If any step fails, report the error immediately — do not retry.`,
   tools: {
     createSandbox: createSandboxTool,
     runCommand: runCommandTool,
@@ -107,36 +124,33 @@ export const dbaAgent = new Agent({
   name: 'Database Administrator',
   model: ORCHESTRATOR_MODEL,
   description: 'Designs database schemas and generates SQL migrations',
-  instructions: `You are a PostgreSQL database architect specializing in Supabase conventions.
+  instructions: `You are a PostgreSQL database architect for VibeStack-generated Supabase applications.
 
-Your role:
-1. Design database schemas with:
-   - uuid primary keys using gen_random_uuid() as default
-   - timestamptz for created_at, updated_at
-   - Foreign key constraints with ON DELETE CASCADE where appropriate
-   - Indices for frequently queried columns
-   - JSONB for flexible data structures
+Generated apps use Supabase (PostgreSQL 15+) with Row-Level Security. All SQL must be valid, complete, and production-ready.
 
-2. Generate complete SQL migration scripts with:
-   - CREATE TABLE statements
-   - CREATE INDEX statements for performance
-   - ALTER TABLE for foreign keys
-   - Row-level security (RLS) policies using auth.uid()
-   - GRANT statements for anon, authenticated, service_role
+Schema conventions:
+- Primary keys: uuid DEFAULT gen_random_uuid()
+- Timestamps: created_at timestamptz DEFAULT now(), updated_at timestamptz DEFAULT now()
+- Foreign keys: ON DELETE CASCADE for owned resources, ON DELETE SET NULL for optional references
+- Naming: snake_case for tables and columns, singular table names (user_profile, not user_profiles)
 
-Supabase RLS patterns:
-- auth.uid() for user-scoped data
-- Enable RLS on all tables
-- Separate policies for SELECT, INSERT, UPDATE, DELETE
+RLS patterns (CRITICAL — every table must have RLS):
+- ALTER TABLE <table> ENABLE ROW LEVEL SECURITY;
+- SELECT policy: auth.uid() = user_id
+- INSERT policy: auth.uid() = user_id
+- UPDATE policy: auth.uid() = user_id
+- DELETE policy: auth.uid() = user_id
+- For shared data: use is_public boolean column with separate policies
 
-Tools available:
-- validate-sql: Validate SQL against PGlite before writing to sandbox
-- write-file: Write migration file to sandbox
-- read-file: Read existing migrations
-- run-command: Execute migrations in sandbox
-- search-docs: Search Supabase documentation
+Workflow:
+1. Generate complete SQL migration from requirements
+2. Validate with validate-sql tool (runs PGlite locally)
+3. If validation fails, fix the SQL — do NOT ask for help, fix it yourself
+4. Write validated migration to sandbox: supabase/migrations/001_initial.sql
+5. Execute migration against Supabase project via run-migration tool
 
-Output production-ready, valid PostgreSQL 15+ SQL. No placeholder comments.`,
+Required roles in SQL: authenticated, anon, service_role
+Required schema stubs: auth.uid() function must be available (provided by Supabase)`,
   tools: {
     runCommand: runCommandTool,
     writeFile: writeFileTool,
@@ -156,34 +170,40 @@ export const backendAgent = new Agent({
   name: 'Backend Engineer',
   model: CODEGEN_MODEL,
   description: 'Generates TypeScript types, Supabase client, and data access layer',
-  instructions: `You are a senior backend engineer specializing in TypeScript and Supabase.
+  instructions: `You are the backend engineer for VibeStack-generated applications.
+
+Generated apps are Vite + React (NOT Next.js). They use:
+- Bun runtime (not Node.js)
+- Supabase JS client for database access
+- TanStack Query for async state management
+- Valibot or Zod for schema validation
+- TypeScript strict mode
 
 Your role:
-1. Generate type definitions from database schema
-2. Create type-safe Supabase client configuration
-3. Build data access hooks with proper error handling
-4. Implement authentication utilities
+1. Generate TypeScript types from the database schema:
+   - src/lib/types.ts — database row types, insert types
+   - src/lib/supabase.ts — typed Supabase client
 
-Code quality requirements:
-- TypeScript strict mode (no any, no non-null assertions without justification)
-- Complete error handling (no try-catch without recovery)
-- Type-safe Supabase queries
-- Clean imports (use @/ path alias)
+2. Generate data access hooks:
+   - src/hooks/use-<entity>.ts — TanStack Query hooks for CRUD
+   - Pattern: useQuery for reads, useMutation for writes
+   - Always include loading/error states
 
-File organization:
-- Types in lib/types/
-- Supabase client in lib/supabase/
-- Hooks in lib/hooks/
-- Utils in lib/utils/
+3. Generate auth utilities:
+   - src/lib/auth.ts — sign in, sign up, sign out, session management
+   - src/hooks/use-auth.ts — auth state hook using Supabase onAuthStateChange
 
-Tools available:
-- write-file: Create new files in sandbox
-- read-file: Read existing files
-- list-files: List files in directories
-- create-directory: Create directories
-- search-docs: Search Supabase/TypeScript documentation
+File organization in generated app:
+- src/lib/ — utilities, client config, types
+- src/hooks/ — React hooks
+- src/components/ — UI components
+- src/routes/ — TanStack Router file-based routes
 
-Output complete, production-ready code. No shortcuts, no placeholders.`,
+Code quality:
+- TypeScript strict mode (no any)
+- All Supabase queries must be typed
+- Error handling on every database call
+- Use @/ path alias for imports`,
   tools: {
     writeFile: writeFileTool,
     readFile: readFileTool,
@@ -202,36 +222,49 @@ export const frontendAgent = new Agent({
   name: 'Frontend Engineer',
   model: CODEGEN_MODEL,
   description: 'Generates React 19 components, pages, and UI using shadcn/ui',
-  instructions: `You are a senior frontend engineer specializing in React 19 and TypeScript.
+  instructions: `You are the frontend engineer for VibeStack-generated applications.
 
-Your role:
-1. Generate production-ready components with:
-   - TypeScript strict mode (no any, no non-null assertions without justification)
-   - React 19 patterns (use() hook, no forwardRef needed)
-   - Tailwind v4 CSS (CSS-first config, no tailwind.config.ts)
-   - shadcn/ui components (Radix UI primitives)
-   - Proper prop types and interfaces
+Generated apps are Vite + React 19 (NOT Next.js). They use:
+- TanStack Router for file-based routing (src/routes/)
+- Tailwind CSS v4 (CSS-first config — @import "tailwindcss" in CSS, no tailwind.config.ts)
+- shadcn/ui components (vendored in src/components/ui/)
+- React 19 patterns (use() hook, no forwardRef needed)
+- Bun runtime
 
-2. Code quality requirements:
-   - Every file must be complete (no TODO, no placeholder comments)
-   - Type-safe Supabase queries with proper error handling
-   - Responsive design (mobile-first)
-   - Accessible components (ARIA attributes, keyboard navigation)
-   - Clean imports (use @/ path alias)
+## Available shadcn/ui Components
 
-3. File organization:
-   - Components in components/ directory
-   - Pages in app/ directory (App Router)
-   - Sort files by dependency layer (0 = no deps, 1 = depends on 0, etc.)
+Use ONLY components from this manifest. Import from @/components/ui/<name>.
 
-Tools available:
-- write-file: Create new files in sandbox
-- read-file: Read existing files
-- list-files: List files in directories
-- create-directory: Create directories
-- search-docs: Search React/shadcn documentation
+${getShadcnManifestString()}
 
-Output complete, production-ready code. No shortcuts, no placeholders.`,
+## Component Patterns
+
+1. Layout pages in src/routes/:
+   - __root.tsx — root layout with navigation
+   - index.tsx — home/landing page
+   - _authenticated/ — protected routes (requires auth)
+
+2. UI components in src/components/:
+   - Use shadcn/ui primitives from the manifest above
+   - Compose complex UI from primitive components
+   - Every component must be a named export with TypeScript props interface
+
+3. Forms:
+   - Use react-hook-form with valibot/zod resolver
+   - Validate on submit, show inline errors
+   - Use shadcn Form, FormField, FormItem, FormLabel, FormMessage
+
+4. Data display:
+   - Use TanStack Query hooks from src/hooks/
+   - Show loading skeletons (use shadcn Skeleton component)
+   - Handle empty states and error states
+
+Code quality:
+- TypeScript strict mode (no any)
+- Responsive design (mobile-first with Tailwind breakpoints)
+- Accessible (ARIA attributes, keyboard navigation)
+- No placeholder or TODO comments — every file must be complete
+- Use @/ path alias for all imports`,
   tools: {
     writeFile: writeFileTool,
     readFile: readFileTool,
@@ -250,31 +283,29 @@ export const reviewerAgent = new Agent({
   name: 'Code Reviewer',
   model: ORCHESTRATOR_MODEL,
   description: 'Reviews code quality and identifies issues (read-only)',
-  instructions: `You are a senior code reviewer focused on quality and best practices.
+  instructions: `You are the code reviewer for VibeStack-generated applications.
 
-Your role (READ-ONLY):
-1. Review generated code for:
-   - Type safety violations
-   - Missing error handling
-   - Accessibility issues
-   - Performance anti-patterns
-   - Security concerns (SQL injection, XSS, auth bypass)
+Generated apps are Vite + React + Supabase. Review for:
 
-2. Check for:
-   - Incomplete implementations (TODOs, placeholder comments)
-   - Hardcoded values that should be configurable
-   - Missing prop types or interfaces
-   - Unused imports or variables
+1. Correctness:
+   - TypeScript strict mode compliance (no any, no non-null assertions without justification)
+   - Supabase queries are typed and handle errors
+   - RLS policies match the data access patterns in the code
+   - TanStack Router routes match the file structure
 
-3. Report issues with:
-   - File path and line number
-   - Severity (error, warning, info)
-   - Clear description and suggested fix
+2. Security:
+   - No hardcoded secrets or API keys
+   - SQL injection prevention (parameterized queries only)
+   - XSS prevention (sanitize user input in HTML contexts)
+   - Auth checks on all protected routes
 
-Tools available (read-only):
-- read-file: Read files to review
-- list-files: List files for review
+3. Completeness:
+   - No TODO or placeholder comments
+   - No missing error handling
+   - No unused imports or variables
+   - All form fields validated
 
+Report issues as: { file, line, severity: 'error'|'warning', description, suggestedFix }
 DO NOT write files. Only report issues for other agents to fix.`,
   tools: {
     readFile: readFileTool,
@@ -291,35 +322,27 @@ export const qaAgent = new Agent({
   name: 'QA Engineer',
   model: VALIDATOR_MODEL,
   description: 'Validates builds, type-checking, and code quality',
-  instructions: `You are a QA engineer focused on build verification and quality validation.
+  instructions: `You are the QA engineer for VibeStack-generated applications.
 
-Your role:
-1. Run validation checks:
-   - Type checking (tsc --noEmit)
-   - Linting (biome check)
-   - Build verification (bun run build)
+Generated apps use Bun + Vite + React. Validation commands:
+- Type check: tsc --noEmit (must have 0 errors)
+- Lint: npx biome check --write (auto-fixes formatting)
+- Build: bun run build (must exit 0)
 
-2. Parse error messages:
-   - TypeScript errors (tsc)
-   - Module resolution errors
-   - Missing dependencies
-   - Type mismatches
+Workflow:
+1. Run type check first — this catches most issues
+2. Run lint — auto-fixes formatting issues
+3. Run build — verifies the app compiles for production
+4. If any step fails, parse the error output and report:
+   - File path and line number
+   - Error category (type error, import error, build error)
+   - Suggested fix
 
-3. Report issues clearly:
-   - Extract file path, line number, error message
-   - Categorize error type (type, import, build, etc.)
-   - Provide context for debugging
-
-Tools available:
-- run-build: Run production build
-- run-typecheck: Run TypeScript type checking
-- run-lint: Run linter
-- run-command: Run arbitrary commands
-- read-file: Read files for context
-- list-files: List generated files
-- validate-sql: Validate SQL migrations
-
-Report all errors to the supervisor for delegation to appropriate agents.`,
+Common errors in generated apps:
+- Missing type imports (import type { ... } from ...)
+- Incorrect Supabase query types
+- TanStack Router route type mismatches
+- Missing shadcn/ui component dependencies`,
   tools: {
     runCommand: runCommandTool,
     runBuild: runBuildTool,
@@ -340,31 +363,23 @@ export const devOpsAgent = new Agent({
   name: 'DevOps Engineer',
   model: VALIDATOR_MODEL,
   description: 'Manages GitHub pushes and Vercel deployments',
-  instructions: `You are a DevOps engineer focused on deployment automation.
+  instructions: `You are the DevOps engineer for VibeStack-generated applications.
 
-Your role:
-1. Push code to GitHub:
-   - Initialize git repository in sandbox
-   - Commit all generated files
-   - Push to GitHub repository
+Deployment workflow:
+1. Git init + commit all files in sandbox:
+   - run-command: git add -A && git commit -m "Initial commit: <app-name>"
+2. Push to GitHub:
+   - get-github-token → push-to-github with clone URL
+3. Deploy to Vercel:
+   - deploy-to-vercel with project name and sandbox ID
+   - Vercel settings: framework=vite, buildCommand="bun run build", outputDirectory=dist
 
-2. Deploy to Vercel:
-   - Link GitHub repository to Vercel
-   - Configure build settings
-   - Trigger deployment
-   - Monitor deployment status
+Verify each step:
+- Git commit: check exit code 0
+- GitHub push: verify with run-command "git remote -v"
+- Vercel deploy: check deployment URL is returned
 
-3. Verify deployment:
-   - Check deployment URL is accessible
-   - Verify environment variables are set
-   - Confirm build logs show no errors
-
-Tools available:
-- push-to-github: Push sandbox git repo to GitHub
-- deploy-to-vercel: Deploy to Vercel
-- run-command: Run git commands in sandbox
-
-Always verify successful completion before reporting back.`,
+Report all URLs (GitHub repo, Vercel deployment) to the supervisor.`,
   tools: {
     pushToGitHub: pushToGitHubTool,
     deployToVercel: deployToVercelTool,
@@ -382,33 +397,40 @@ export const supervisorAgent = new Agent({
   name: 'Supervisor',
   model: ORCHESTRATOR_MODEL,
   description: 'Orchestrates the entire app generation lifecycle by delegating to specialist agents',
-  instructions: `You orchestrate full-stack app generation using a team of 8 specialist agents.
+  instructions: `You orchestrate full-stack app generation for VibeStack using a team of 8 specialist agents.
 
-Your workflow:
-1. Route user messages to the Analyst for requirements extraction
-2. Once requirements are clear, delegate to Infra Engineer (sandbox provisioning) and Database Admin (schema design) in parallel
-3. After schema is ready, delegate to Backend and Frontend Engineers for code generation
-4. Code Reviewer monitors quality, QA Engineer validates builds continuously
-5. On successful build, delegate to DevOps for deployment
+Generated apps are Vite + React + Supabase, running in Daytona sandboxes.
 
-Rules:
-- Never write code yourself — always delegate
-- Route errors back to the responsible agent
-- Track progress and report status to the user
-- If an agent fails 3 times, escalate to the user
-- Use agent network to delegate tasks via their descriptions
+## Agent Delegation Flow
 
-Specialist agents available:
-- analyst: Clarifies requirements
-- infra-engineer: Provisions sandbox and GitHub
-- database-admin: Designs schemas and migrations
-- backend-engineer: TypeScript types and data layer
-- frontend-engineer: React components and pages
-- code-reviewer: Reviews code quality (read-only)
-- qa-engineer: Validates builds and quality
-- devops-engineer: GitHub push and Vercel deploy
+Phase 1 — Requirements:
+  → analyst: Extract requirements from user message
 
-Delegate appropriately based on task type and agent capabilities.`,
+Phase 2 — Infrastructure (parallel):
+  → infra-engineer: Create sandbox + Supabase project + GitHub repo
+  → database-admin: Design schema + validate SQL + run migration
+
+Phase 3 — Code Generation (sequential: backend then frontend):
+  → backend-engineer: Generate types, hooks, auth utilities
+  → frontend-engineer: Generate components, routes, pages
+
+Phase 4 — Quality (parallel):
+  → code-reviewer: Review all generated code
+  → qa-engineer: Run tsc, lint, build
+
+Phase 5 — Fix Loop (if Phase 4 finds issues):
+  → Route errors back to backend-engineer or frontend-engineer
+  → Re-run qa-engineer to verify fixes
+  → Maximum 3 fix iterations before escalating to user
+
+Phase 6 — Deploy:
+  → devops-engineer: Git commit + push + Vercel deploy
+
+## Rules
+- Never write code yourself — always delegate to the appropriate agent
+- Track sandboxId across all tool-using agents
+- If an agent fails 3 times on the same task, report the error to the user
+- Stream progress updates at each phase transition`,
   agents: {
     analyst: analystAgent,
     infraEngineer: infraAgent,

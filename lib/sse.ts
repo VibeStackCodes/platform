@@ -7,42 +7,50 @@
 import type { StreamEvent } from './types';
 
 /**
- * Create an SSE response stream. The callback receives an `emit` function
- * to send events. The stream closes automatically when the callback resolves.
+ * Create an SSE response stream with abort signal support.
+ * The callback receives an `emit` function to send events and an `AbortSignal`
+ * that triggers when the client disconnects.
  *
- * @param handler - Async function that receives an emit function to send StreamEvents
+ * @param handler - Async function that receives emit and signal
  * @returns Response with SSE headers and ReadableStream body
- *
- * @example
- * ```typescript
- * return createSSEStream(async (emit) => {
- *   emit({ type: 'stage_update', stage: 'provisioning' });
- *   await doWork();
- *   emit({ type: 'complete', projectId: '123', urls: {}, requirementResults: [] });
- * });
- * ```
  */
 export function createSSEStream(
-  handler: (emit: (event: StreamEvent) => void) => Promise<void>
+  handler: (emit: (event: StreamEvent) => void, signal: AbortSignal) => Promise<void>
 ): Response {
   const encoder = new TextEncoder();
+  const abortController = new AbortController();
+
   const stream = new ReadableStream({
     async start(controller) {
       const emit = (event: StreamEvent) => {
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+        if (!abortController.signal.aborted) {
+          try {
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+          } catch {
+            // Controller closed, ignore
+          }
+        }
       };
       try {
-        await handler(emit);
+        await handler(emit, abortController.signal);
       } finally {
-        controller.close();
+        try {
+          controller.close();
+        } catch {
+          // Already closed
+        }
       }
     },
+    cancel() {
+      abortController.abort();
+    },
   });
+
   return new Response(stream, {
     headers: {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache",
-      Connection: "keep-alive",
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
     },
   });
 }
