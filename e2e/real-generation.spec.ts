@@ -24,19 +24,8 @@ test.describe('Real Generation Pipeline', () => {
     const testEmail = `e2e-${Date.now()}@test.vibestack.dev`;
     const testPassword = 'TestPass123!';
 
-    // Intercept ALL /api/chat and /api/projects/generate calls to force GPT-5.2
-    await page.route('**/api/chat', async (route) => {
-      const request = route.request();
-      if (request.method() === 'POST') {
-        const body = JSON.parse(request.postData() || '{}');
-        body.model = MODEL;
-        await route.continue({ postData: JSON.stringify(body) });
-      } else {
-        await route.continue();
-      }
-    });
-
-    await page.route('**/api/projects/generate', async (route) => {
+    // Intercept /api/agent calls to force GPT-5.2
+    await page.route('**/api/agent', async (route) => {
       const request = route.request();
       if (request.method() === 'POST') {
         const body = JSON.parse(request.postData() || '{}');

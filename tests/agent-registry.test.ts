@@ -83,6 +83,11 @@ describe('Agent Registry', () => {
     // Code reviewer should only have read-only tools
     const reviewerToolKeys = Object.keys(reviewerAgent.listTools());
     expect(reviewerToolKeys).not.toContain('writeFile');
+
+    // Tool count assertions
+    expect(Object.keys(infraAgent.listTools())).toHaveLength(5); // createSandbox, runCommand, getPreviewUrl, createSupabaseProject, createGitHubRepo
+    expect(Object.keys(dbaAgent.listTools())).toHaveLength(6); // runCommand, writeFile, readFile, validateSQL, searchDocs, runMigration
+    expect(Object.keys(devOpsAgent.listTools())).toHaveLength(4); // pushToGitHub, deployToVercel, runCommand, getGitHubToken
   });
 
   it('each sub-agent has a description for routing', () => {

@@ -180,6 +180,39 @@ describe('Sandbox Tools', () => {
     expect(valid.success).toBe(true);
   });
 
+  it('createSupabaseProjectTool has correct input schema', () => {
+    const schema = createSupabaseProjectTool.inputSchema!;
+    const valid = schema.safeParse({
+      name: 'my-app-db',
+    });
+    expect(valid.success).toBe(true);
+  });
+
+  it('runMigrationTool has correct input schema', () => {
+    const schema = runMigrationTool.inputSchema!;
+    const valid = schema.safeParse({
+      supabaseProjectId: 'abc123',
+      sql: 'CREATE TABLE users (id uuid PRIMARY KEY);',
+    });
+    expect(valid.success).toBe(true);
+  });
+
+  it('createGitHubRepoTool has correct input schema', () => {
+    const schema = createGitHubRepoTool.inputSchema!;
+    const valid = schema.safeParse({
+      appName: 'my-generated-app',
+      projectId: 'proj_123',
+    });
+    expect(valid.success).toBe(true);
+  });
+
+  it('getGitHubTokenTool has correct input schema', () => {
+    const schema = getGitHubTokenTool.inputSchema!;
+    // Empty object should be valid (no required fields)
+    const valid = schema.safeParse({});
+    expect(valid.success).toBe(true);
+  });
+
   it('tools that require sandboxId reject missing sandboxId', () => {
     const schema = writeFileTool.inputSchema!;
     const invalid = schema.safeParse({ path: 'src/App.tsx', content: 'hello' });
@@ -202,6 +235,10 @@ describe('Sandbox Tools', () => {
       pushToGitHubTool,
       deployToVercelTool,
       searchDocsTool,
+      createSupabaseProjectTool,
+      runMigrationTool,
+      createGitHubRepoTool,
+      getGitHubTokenTool,
     ];
 
     for (const tool of tools) {
