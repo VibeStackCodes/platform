@@ -18,8 +18,8 @@ import {
   qaAgent,
   devOpsAgent,
   getSharedStore,
-} from '../../lib/agents/registry';
-import { infraProvisionWorkflow } from '../../lib/agents/workflows';
+} from '../../server/lib/agents/registry';
+import { infraProvisionWorkflow } from '../../server/lib/agents/workflows';
 
 export const mastra = new Mastra({
   agents: {

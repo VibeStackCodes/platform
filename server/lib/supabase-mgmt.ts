@@ -186,7 +186,7 @@ export async function createSupabaseProject(
       throw new Error(`Failed to check project status: ${await statusResponse.text()}`);
     }
 
-    const currentProject: SupabaseAPIProject = await statusResponse.json();
+    const currentProject = (await statusResponse.json()) as SupabaseAPIProject;
     console.log(`[supabase-mgmt] Project status: ${currentProject.status} (attempt ${attempt + 1}/${maxAttempts})`);
 
     if (currentProject.status === "ACTIVE_HEALTHY") {

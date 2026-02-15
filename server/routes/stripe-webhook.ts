@@ -102,7 +102,7 @@ stripeWebhookRoutes.post('/', async (c) => {
           creditsRemaining: profile.creditsMonthly,
           creditsResetAt: new Date(
             (invoice.lines.data[0]?.period?.end ?? 0) * 1000
-          ).toISOString(),
+          ),
         })
         console.log(`User ${profile.id} credits reset to ${profile.creditsMonthly}`)
         break

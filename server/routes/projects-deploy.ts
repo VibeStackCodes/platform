@@ -262,7 +262,7 @@ async function deployToVercel(
     throw new Error(`Vercel deployment failed: ${error}`);
   }
 
-  const deployment: VercelDeployment = await deploymentResponse.json();
+  const deployment = (await deploymentResponse.json()) as VercelDeployment;
 
   // Poll deployment until ready
   const deployUrl = `https://${deployment.url}`;
@@ -338,7 +338,7 @@ async function deployFromGitHub(
   );
 
   if (projectResponse.ok) {
-    const project = await projectResponse.json();
+    const project = (await projectResponse.json()) as { id: string };
     console.log(`[deploy] Vercel project created: ${project.id}`);
   } else if (projectResponse.status === 409) {
     console.log(`[deploy] Vercel project "${slug}" already exists, continuing...`);
@@ -378,7 +378,7 @@ async function deployFromGitHub(
     throw new Error(`Vercel deployment creation failed: ${error}`);
   }
 
-  const deployment: VercelDeployment = await deployResponse.json();
+  const deployment = (await deployResponse.json()) as VercelDeployment;
   const deployUrl = `https://${deployment.url}`;
   console.log(`[deploy] Deployment created: ${deployUrl} (${deployment.id})`);
 
