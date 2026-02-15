@@ -25,7 +25,7 @@ export { mastra } from '../../src/mastra/index';
 
 // Helicone provider + model validation
 export { createHeliconeProvider, getHeliconeHeaders, getHeliconeBaseURL, isAllowedModel, ALLOWED_MODELS } from './provider';
-export type { AllowedModel } from './provider';
+export type { AllowedModel, HeliconeContext } from './provider';
 
 // Workflows
 export { infraProvisionWorkflow } from './workflows';

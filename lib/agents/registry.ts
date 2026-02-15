@@ -487,7 +487,13 @@ Phase 6 — Deploy:
                   providerId: 'openai',
                   modelId: 'text-embedding-3-small',
                   ...(getHeliconeBaseURL()
-                    ? { url: getHeliconeBaseURL(), headers: getHeliconeHeaders('system') }
+                    ? {
+                        url: getHeliconeBaseURL(),
+                        headers: getHeliconeHeaders({
+                          userId: 'system',
+                          agentName: 'embedder',
+                        }),
+                      }
                     : {}),
                 }),
               }

@@ -20,8 +20,7 @@ import { createSSEStream } from '@/lib/sse';
 import type { StreamEvent } from '@/lib/types';
 import { mastra } from '@/src/mastra/index';
 import { RequestContext } from '@/lib/agents/registry';
-import { isAllowedModel } from '@/lib/agents/provider';
-import { createHeliconeProvider } from '@/lib/agents/provider';
+import { isAllowedModel, createHeliconeProvider } from '@/lib/agents/provider';
 import { getUser, createClient } from '@/lib/supabase-server';
 import { checkCredits, deductCredits } from '@/lib/credits';
 
@@ -77,8 +76,14 @@ export async function POST(request: NextRequest) {
   }
 
   // Inject per-request Helicone-proxied model via RequestContext
+  // Full context enables per-user, per-project, per-session cost tracking in Helicone
   const requestContext = new RequestContext();
-  requestContext.set('llm', createHeliconeProvider(user.id)(model));
+  requestContext.set('llm', createHeliconeProvider({
+    userId: user.id,
+    projectId,
+    sessionId: `${projectId}:${Date.now()}`,
+    agentName: 'supervisor',
+  })(model));
   requestContext.set('userId', user.id);
 
   const supervisor = mastra.getAgent('supervisor');
