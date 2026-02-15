@@ -1,9 +1,7 @@
-import { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
 import { PostgresStore } from '@mastra/pg';
 import { RequestContext } from '@mastra/core/di';
-import { PinoLogger } from '@mastra/loggers';
 import { PromptInjectionDetector, ModerationProcessor } from '@mastra/core/processors';
 import type { MastraModelConfig } from '@mastra/core/llm';
 import {
@@ -27,7 +25,6 @@ import {
   getGitHubTokenTool,
   askClarifyingQuestionsTool,
 } from './tools';
-import { infraProvisionWorkflow } from './workflows';
 import { generateShadcnManifest } from '@/lib/shadcn-manifest';
 
 // Re-export RequestContext for route usage
@@ -37,7 +34,7 @@ export { RequestContext };
  * Shared PostgresStore singleton — prevents per-request connection pool creation.
  */
 let _sharedStore: PostgresStore | null = null;
-function getSharedStore(): PostgresStore | null {
+export function getSharedStore(): PostgresStore | null {
   if (!_sharedStore && process.env.DATABASE_URL) {
     _sharedStore = new PostgresStore({
       id: 'supervisor-memory',
@@ -490,26 +487,3 @@ Phase 6 — Deploy:
     : {}),
 });
 
-// --- Mastra instance with all agents registered (Studio-visible) ---
-
-export const mastra = new Mastra({
-  agents: {
-    supervisor: supervisorAgent,
-    analyst: analystAgent,
-    infraEngineer: infraAgent,
-    databaseAdmin: dbaAgent,
-    backendEngineer: backendAgent,
-    frontendEngineer: frontendAgent,
-    codeReviewer: reviewerAgent,
-    qaEngineer: qaAgent,
-    devOpsEngineer: devOpsAgent,
-  },
-  workflows: {
-    infraProvision: infraProvisionWorkflow,
-  },
-  storage: getSharedStore() ?? undefined,
-  logger: new PinoLogger({
-    name: 'VibeStack',
-    level: process.env.NODE_ENV === 'production' ? 'info' : 'debug',
-  }),
-});

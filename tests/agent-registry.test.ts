@@ -8,8 +8,8 @@ vi.mock('@ai-sdk/openai', () => ({
   }),
 }));
 
+import { mastra } from '@/src/mastra/index';
 import {
-  mastra,
   supervisorAgent,
   analystAgent,
   infraAgent,

@@ -18,7 +18,8 @@
 import { NextRequest } from 'next/server';
 import { createSSEStream } from '@/lib/sse';
 import type { StreamEvent } from '@/lib/types';
-import { mastra, RequestContext } from '@/lib/agents/registry';
+import { mastra } from '@/src/mastra/index';
+import { RequestContext } from '@/lib/agents/registry';
 import { isAllowedModel } from '@/lib/agents/provider';
 import { createHeliconeProvider } from '@/lib/agents/provider';
 import { getUser, createClient } from '@/lib/supabase-server';

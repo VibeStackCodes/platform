@@ -5,9 +5,8 @@
 // Schemas
 export * from './schemas';
 
-// Mastra instance + agents + RequestContext
+// Agents + RequestContext + shared store
 export {
-  mastra,
   supervisorAgent,
   analystAgent,
   infraAgent,
@@ -18,7 +17,11 @@ export {
   qaAgent,
   devOpsAgent,
   RequestContext,
+  getSharedStore,
 } from './registry';
+
+// Mastra instance (canonical location: src/mastra/index.ts per Mastra Cloud convention)
+export { mastra } from '../../src/mastra/index';
 
 // Helicone provider + model validation
 export { createHeliconeProvider, isAllowedModel, ALLOWED_MODELS } from './provider';

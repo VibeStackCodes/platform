@@ -13,10 +13,12 @@ vi.mock('@/lib/supabase-server', () => ({
 }));
 
 const mockNetwork = vi.fn();
-vi.mock('@/lib/agents/registry', () => ({
+vi.mock('@/src/mastra/index', () => ({
   mastra: {
     getAgent: vi.fn(() => ({ network: mockNetwork })),
   },
+}));
+vi.mock('@/lib/agents/registry', () => ({
   RequestContext: class MockRequestContext {
     private store = new Map<string, unknown>();
     set(key: string, value: unknown) { this.store.set(key, value); }
@@ -42,7 +44,7 @@ vi.mock('@/lib/credits', () => ({
 
 import { POST } from '@/app/api/agent/route';
 import { getUser, createClient } from '@/lib/supabase-server';
-import { mastra } from '@/lib/agents/registry';
+import { mastra } from '@/src/mastra/index';
 import { isAllowedModel } from '@/lib/agents/provider';
 import { checkCredits, deductCredits } from '@/lib/credits';
 
