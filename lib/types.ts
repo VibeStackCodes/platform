@@ -236,6 +236,31 @@ export interface Project {
 }
 
 // ============================================================================
+// Billing & Credits
+// ============================================================================
+
+export interface UserCredits {
+  credits_remaining: number;
+  credits_monthly: number;
+  credits_reset_at: string | null;
+  plan: 'free' | 'pro';
+}
+
+export interface UsageEvent {
+  id: string;
+  user_id: string;
+  project_id: string | null;
+  event_type: 'chat' | 'generation';
+  model: string;
+  tokens_input: number;
+  tokens_output: number;
+  tokens_total: number;
+  credits_used: number;
+  stripe_meter_event_id: string | null;
+  created_at: string;
+}
+
+// ============================================================================
 // API Request Types
 // ============================================================================
 
@@ -275,7 +300,8 @@ export type StreamEvent =
   | AgentCompleteEvent
   | PhaseStartEvent
   | PhaseCompleteEvent
-  | PlanReadyEvent;
+  | PlanReadyEvent
+  | CreditsUsedEvent;
 
 export interface StageUpdateEvent {
   type: "stage_update";
@@ -388,6 +414,13 @@ export interface AgentCompleteEvent {
   agentId: string;
   tokensUsed: number;
   durationMs: number;
+}
+
+export interface CreditsUsedEvent {
+  type: "credits_used";
+  creditsUsed: number;
+  creditsRemaining: number;
+  tokensTotal: number;
 }
 
 export interface PhaseStartEvent {
