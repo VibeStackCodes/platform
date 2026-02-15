@@ -474,11 +474,6 @@ Phase 6 — Deploy:
   return { supervisor };
 }
 
-// Backward compatibility — route.ts still imports supervisorAgent directly.
-// Task 4 will update route.ts to use createAgentNetwork and remove this.
-const _defaultNetwork = createAgentNetwork('gpt-5.2', 'system');
-export const supervisorAgent = _defaultNetwork.supervisor;
-
 /**
  * Central Mastra instance — bare instance since agents are now per-request.
  */

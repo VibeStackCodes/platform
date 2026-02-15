@@ -1,6 +1,7 @@
 /**
  * Tests for POST /api/agent route
- * Verifies SSE streaming, auth, and event bridging from Mastra network to StreamEvent types
+ * Verifies SSE streaming, auth, model validation, credit enforcement,
+ * and event bridging from Mastra network to StreamEvent types
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -8,20 +9,52 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // Mock dependencies before imports
 vi.mock('@/lib/supabase-server', () => ({
   getUser: vi.fn(),
+  createClient: vi.fn().mockResolvedValue({}),
 }));
 
 vi.mock('@/lib/agents/registry', () => ({
-  supervisorAgent: {
-    network: vi.fn(),
-  },
+  createAgentNetwork: vi.fn(() => ({
+    supervisor: {
+      network: vi.fn(),
+    },
+  })),
+}));
+
+vi.mock('@/lib/agents/provider', () => ({
+  isAllowedModel: vi.fn((model: string) => model === 'gpt-5.2'),
+}));
+
+vi.mock('@/lib/credits', () => ({
+  checkCredits: vi.fn().mockResolvedValue({
+    credits_remaining: 2000,
+    credits_monthly: 2000,
+    credits_reset_at: null,
+    plan: 'pro',
+  }),
+  deductCredits: vi.fn().mockResolvedValue(1),
 }));
 
 import { POST } from '@/app/api/agent/route';
-import { getUser } from '@/lib/supabase-server';
-import { supervisorAgent } from '@/lib/agents/registry';
+import { getUser, createClient } from '@/lib/supabase-server';
+import { createAgentNetwork } from '@/lib/agents/registry';
+import { isAllowedModel } from '@/lib/agents/provider';
+import { checkCredits, deductCredits } from '@/lib/credits';
 
 const mockGetUser = vi.mocked(getUser);
-const mockNetwork = vi.mocked(supervisorAgent.network);
+const mockCreateAgentNetwork = vi.mocked(createAgentNetwork);
+const mockIsAllowedModel = vi.mocked(isAllowedModel);
+const mockCheckCredits = vi.mocked(checkCredits);
+const mockDeductCredits = vi.mocked(deductCredits);
+const mockCreateClient = vi.mocked(createClient);
+
+// Helper to get the mockNetwork function from the mocked createAgentNetwork
+function getMockNetwork() {
+  const mockNetwork = vi.fn();
+  mockCreateAgentNetwork.mockReturnValue({
+    supervisor: { network: mockNetwork },
+  } as any);
+  return mockNetwork;
+}
 
 function createRequest(body: Record<string, unknown>): Request {
   return new Request('http://localhost:3000/api/agent', {
@@ -43,6 +76,15 @@ describe('POST /api/agent', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockGetUser.mockResolvedValue({ id: 'user-123', email: 'test@test.com' } as any);
+    mockIsAllowedModel.mockImplementation((model: string) => model === 'gpt-5.2');
+    mockCreateClient.mockResolvedValue({} as any);
+    mockCheckCredits.mockResolvedValue({
+      credits_remaining: 2000,
+      credits_monthly: 2000,
+      credits_reset_at: null,
+      plan: 'pro',
+    });
+    mockDeductCredits.mockResolvedValue(1);
   });
 
   it('returns 400 when request body is invalid JSON', async () => {
@@ -71,6 +113,14 @@ describe('POST /api/agent', () => {
     expect(res.status).toBe(400);
   });
 
+  it('returns 400 when model is not allowed', async () => {
+    const req = createRequest({ message: 'Build an app', projectId: 'proj-1', model: 'gpt-3.5-turbo' });
+    const res = await POST(req as any);
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toContain('not available');
+  });
+
   it('returns 401 when user is not authenticated', async () => {
     mockGetUser.mockResolvedValue(null);
     const req = createRequest({ message: 'Build an app', projectId: 'proj-1' });
@@ -78,7 +128,31 @@ describe('POST /api/agent', () => {
     expect(res.status).toBe(401);
   });
 
+  it('returns 402 when credits are insufficient', async () => {
+    mockCheckCredits.mockResolvedValue({
+      credits_remaining: 0,
+      credits_monthly: 2000,
+      credits_reset_at: '2026-03-15T00:00:00Z',
+      plan: 'free',
+    });
+    const req = createRequest({ message: 'Build an app', projectId: 'proj-1' });
+    const res = await POST(req as any);
+    expect(res.status).toBe(402);
+    const body = await res.json();
+    expect(body.error).toBe('insufficient_credits');
+    expect(body.credits_remaining).toBe(0);
+    expect(body.credits_reset_at).toBe('2026-03-15T00:00:00Z');
+  });
+
+  it('returns 402 when credits check returns null', async () => {
+    mockCheckCredits.mockResolvedValue(null);
+    const req = createRequest({ message: 'Build an app', projectId: 'proj-1' });
+    const res = await POST(req as any);
+    expect(res.status).toBe(402);
+  });
+
   it('returns SSE response with correct headers', async () => {
+    const mockNetwork = getMockNetwork();
     async function* emptyStream() { /* no chunks */ }
     mockNetwork.mockResolvedValue(emptyStream() as any);
 
@@ -90,6 +164,7 @@ describe('POST /api/agent', () => {
   });
 
   it('emits stage_update generating and complete events', async () => {
+    const mockNetwork = getMockNetwork();
     async function* emptyStream() { /* no chunks */ }
     mockNetwork.mockResolvedValue(emptyStream() as any);
 
@@ -102,6 +177,7 @@ describe('POST /api/agent', () => {
   });
 
   it('bridges agent-execution-start to agent_start', async () => {
+    const mockNetwork = getMockNetwork();
     async function* chunks() {
       yield { type: 'agent-execution-start', payload: { agentId: 'analyst', agentName: 'Analyst' } };
     }
@@ -121,6 +197,7 @@ describe('POST /api/agent', () => {
   });
 
   it('bridges agent-execution-end to agent_complete', async () => {
+    const mockNetwork = getMockNetwork();
     async function* chunks() {
       yield { type: 'agent-execution-end', payload: { agentId: 'analyst', agentName: 'Analyst', tokensUsed: 150, durationMs: 2000 } };
     }
@@ -140,6 +217,7 @@ describe('POST /api/agent', () => {
   });
 
   it('bridges tool-execution-end write-file to file_complete', async () => {
+    const mockNetwork = getMockNetwork();
     async function* chunks() {
       yield { type: 'tool-execution-end', payload: { toolName: 'write-file', result: { path: '/workspace/src/App.tsx', bytesWritten: 42 }, agentId: 'frontend-engineer' } };
     }
@@ -158,6 +236,7 @@ describe('POST /api/agent', () => {
   });
 
   it('bridges non-write tool-execution-end to agent_artifact', async () => {
+    const mockNetwork = getMockNetwork();
     async function* chunks() {
       yield { type: 'tool-execution-end', payload: { toolName: 'run-build', agentId: 'qa-engineer' } };
     }
@@ -177,6 +256,7 @@ describe('POST /api/agent', () => {
   });
 
   it('emits error event when network throws', async () => {
+    const mockNetwork = getMockNetwork();
     mockNetwork.mockRejectedValue(new Error('Model rate limited'));
 
     const req = createRequest({ message: 'Build an app', projectId: 'proj-1' });
@@ -192,6 +272,7 @@ describe('POST /api/agent', () => {
   });
 
   it('calls network with correct memory params', async () => {
+    const mockNetwork = getMockNetwork();
     async function* emptyStream() {}
     mockNetwork.mockResolvedValue(emptyStream() as any);
 
@@ -206,7 +287,19 @@ describe('POST /api/agent', () => {
     });
   });
 
+  it('creates agent network with correct model and userId', async () => {
+    const mockNetwork = getMockNetwork();
+    async function* emptyStream() {}
+    mockNetwork.mockResolvedValue(emptyStream() as any);
+
+    const req = createRequest({ message: 'Build an app', projectId: 'proj-1' });
+    await POST(req as any);
+
+    expect(mockCreateAgentNetwork).toHaveBeenCalledWith('gpt-5.2', 'user-123');
+  });
+
   it('bridges agent-execution-event-text-delta to agent_progress', async () => {
+    const mockNetwork = getMockNetwork();
     async function* chunks() {
       yield { type: 'agent-execution-event-text-delta', payload: { agentId: 'analyst', textDelta: 'Analyzing requirements...' } };
     }
@@ -225,6 +318,7 @@ describe('POST /api/agent', () => {
   });
 
   it('bridges network-execution-event-step-finish to checkpoint', async () => {
+    const mockNetwork = getMockNetwork();
     async function* chunks() {
       yield { type: 'network-execution-event-step-finish', payload: {} };
     }
@@ -243,6 +337,7 @@ describe('POST /api/agent', () => {
   });
 
   it('bridges workflow-execution-suspended to plan_ready', async () => {
+    const mockNetwork = getMockNetwork();
     async function* chunks() {
       yield { type: 'workflow-execution-suspended', payload: { suspendPayload: { appName: 'Todo App', features: [] } } };
     }
@@ -260,6 +355,7 @@ describe('POST /api/agent', () => {
   });
 
   it('handles missing payload fields gracefully', async () => {
+    const mockNetwork = getMockNetwork();
     async function* chunks() {
       yield { type: 'agent-execution-start', payload: {} };
       yield { type: 'agent-execution-end', payload: {} };
@@ -287,6 +383,7 @@ describe('POST /api/agent', () => {
   });
 
   it('handles multiple chunks sequentially', async () => {
+    const mockNetwork = getMockNetwork();
     async function* chunks() {
       yield { type: 'agent-execution-start', payload: { agentId: 'analyst', agentName: 'Analyst' } };
       yield { type: 'agent-execution-event-text-delta', payload: { agentId: 'analyst', textDelta: 'Step 1' } };
@@ -306,6 +403,7 @@ describe('POST /api/agent', () => {
   });
 
   it('handles chunks with no payload at all', async () => {
+    const mockNetwork = getMockNetwork();
     async function* chunks() {
       yield { type: 'agent-execution-start' };
       yield { type: 'agent-execution-end', payload: null };
@@ -323,5 +421,40 @@ describe('POST /api/agent', () => {
     const agentComplete = events.find((e: any) => e.type === 'agent_complete');
     expect(agentComplete).toBeDefined();
     expect((agentComplete as any).agentId).toBe('unknown');
+  });
+
+  it('deducts credits after successful generation with tokens', async () => {
+    const mockNetwork = getMockNetwork();
+    async function* chunks() {
+      yield { type: 'agent-execution-end', payload: { agentId: 'analyst', usage: { totalTokens: 5000 }, durationMs: 1000 } };
+      yield { type: 'agent-execution-end', payload: { agentId: 'frontend', usage: { totalTokens: 3000 }, durationMs: 2000 } };
+    }
+    mockNetwork.mockResolvedValue(chunks() as any);
+
+    // Return updated credits after deduction
+    mockCheckCredits
+      .mockResolvedValueOnce({ credits_remaining: 2000, credits_monthly: 2000, credits_reset_at: null, plan: 'pro' })
+      .mockResolvedValueOnce({ credits_remaining: 1992, credits_monthly: 2000, credits_reset_at: null, plan: 'pro' });
+
+    const req = createRequest({ message: 'Build an app', projectId: 'proj-1' });
+    const res = await POST(req as any);
+    const events = await readSSEEvents(res);
+
+    // Should have called deductCredits with total tokens = 8000
+    expect(mockDeductCredits).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        userId: 'user-123',
+        projectId: 'proj-1',
+        model: 'gpt-5.2',
+        eventType: 'generation',
+        tokensTotal: 8000,
+      })
+    );
+
+    // Should emit credits_used event
+    const creditsEvent = events.find((e: any) => e.type === 'credits_used');
+    expect(creditsEvent).toBeDefined();
+    expect((creditsEvent as any).tokensTotal).toBe(8000);
   });
 });

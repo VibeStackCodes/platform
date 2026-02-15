@@ -6,7 +6,7 @@
 export * from './schemas';
 
 // Agent factory + Mastra instance
-export { createAgentNetwork, supervisorAgent, mastra } from './registry';
+export { createAgentNetwork, mastra } from './registry';
 
 // Helicone provider + model validation
 export { createHeliconeProvider, isAllowedModel, ALLOWED_MODELS } from './provider';

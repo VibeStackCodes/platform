@@ -8,7 +8,7 @@ vi.mock('@ai-sdk/openai', () => ({
   }),
 }));
 
-import { createAgentNetwork, mastra, supervisorAgent } from '@/lib/agents/registry';
+import { createAgentNetwork, mastra } from '@/lib/agents/registry';
 import type { Agent } from '@mastra/core/agent';
 
 /** Helper: listAgents() can return sync or async; we always treat it as sync in tests */
@@ -37,13 +37,6 @@ describe('Agent Registry (Factory Pattern)', () => {
 
   it('exports mastra instance', () => {
     expect(mastra).toBeDefined();
-  });
-
-  it('exports backward-compatible supervisorAgent singleton', () => {
-    expect(supervisorAgent).toBeDefined();
-    expect(supervisorAgent.name).toBe('Supervisor');
-    const subAgents = getSubAgents(supervisorAgent);
-    expect(Object.keys(subAgents)).toHaveLength(8);
   });
 
   it('each sub-agent has correct tools', () => {
