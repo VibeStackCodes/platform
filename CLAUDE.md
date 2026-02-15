@@ -34,8 +34,7 @@ pnpm test:e2e:real    # Playwright E2E against real Supabase/Daytona
 ```
 app/
   api/
-    chat/          # AI chat endpoint (Vercel AI SDK, streaming)
-    agent/         # Mastra agent pipeline endpoint (SSE)
+    agent/         # Mastra agent pipeline endpoint (SSE, credit-gated)
     projects/      # Project CRUD, deploy, sandbox-urls
     stripe/        # Stripe webhooks
     supabase-proxy/ # Proxies queries to generated app's Supabase
@@ -69,8 +68,7 @@ snapshot/            # Daytona sandbox Docker image (Vite + React base)
 
 ### Generation Pipeline
 
-1. **Chat route** (`/api/chat`) → user describes app → AI extracts requirements via `useChat` (Vercel AI SDK)
-2. **Agent route** (`/api/agent`) → Mastra supervisor network orchestrates 9 agents:
+1. **Agent route** (`/api/agent`) → user describes app → Mastra supervisor network orchestrates 9 agents (credit-gated, 402 on exhaustion):
    - **Planner**: Extracts requirements, creates `SchemaContract`
    - **Data Architect**: Generates SQL migration, validates via PGlite
    - **Frontend Engineer**: Generates React components in sandbox
@@ -78,13 +76,14 @@ snapshot/            # Daytona sandbox Docker image (Vite + React base)
    - **Infra Agent**: Creates Supabase project, GitHub repo
    - **DevOps Agent**: Deploys to Vercel
    - SSE bridge maps Mastra `NetworkChunkType` → `StreamEvent` types
-3. **Preview** delivered via `BuilderPreview` subscribing to Supabase realtime on `projects` table
+2. **Preview** delivered via `BuilderPreview` subscribing to Supabase realtime on `projects` table
 
 ### Key Patterns
 
 - **Contract-first**: `SchemaContract` → all downstream artifacts (SQL, types, seed). Never retry LLM generation — fix the contract or generator if wrong.
-- **Agent architecture**: 9 Mastra agents with supervisor `.network()` routing. Model tiers: `gpt-4o` (orchestrator/codegen), `gpt-4o-mini` (validator).
-- **Two-flow frontend**: Chat phase uses Vercel AI SDK (`useChat` → `/api/chat`), generation phase uses raw SSE (`fetch` → `/api/agent`).
+- **Agent architecture**: 9 Mastra agents created per-request via `createAgentNetwork(model, userId)` with Helicone proxy for observability. Model tiers: `gpt-4o` (orchestrator/codegen), `gpt-4o-mini` (validator).
+- **Credit-Based Billing**: 1 credit = 1,000 tokens. `/api/agent` enforces credits (402 on exhaustion). Stripe meters track usage, credit grants provision per subscription.
+- **Single-flow frontend**: All AI calls go through `/api/agent` (SSE). `/api/chat` has been removed.
 - **SSE streaming**: Agent route streams progress events to client via `lib/sse.ts`.
 - **Mock mode**: `NEXT_PUBLIC_MOCK_MODE=true` bypasses auth middleware and Supabase queries for E2E testing.
 - **Path alias**: `@/*` maps to project root.
@@ -113,6 +112,7 @@ Required in `.env.local`:
 | `STRIPE_SECRET_KEY` | Stripe server key |
 | `STRIPE_WEBHOOK_SECRET` | Stripe webhook validation |
 | `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | Stripe client key |
+| `HELICONE_API_KEY` | Helicone LLM proxy (observability + per-user tracking) |
 
 ## Testing
 
@@ -169,6 +169,8 @@ git commit
 - **`d.list()` vs `d.get(id)`**: Daytona's `list()` returns lightweight objects without `process.executeCommand()`. Always use `get(id)` for full sandbox operations.
 - **Signed preview URLs** from Daytona expire in 1 hour.
 - **No `SUPABASE_SERVICE_ROLE_KEY`** in platform env — use Management API for DB queries against generated apps.
+- **Credit deduction** happens post-execution (not pre-execution). In-flight generations always complete even if credits go negative.
+- **Helicone fallback**: When `HELICONE_API_KEY` is unset, LLM calls go directly to OpenAI (no observability).
 
 ## Snapshot (Daytona Sandbox Image)
 
