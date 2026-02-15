@@ -262,6 +262,37 @@ export const runTypeCheckTool = createTool({
 // SQL Validation
 // ============================================================================
 
+/**
+ * Cached PGlite instance with auth stubs pre-loaded.
+ * Reused across validate-sql calls to avoid ~200ms startup per invocation.
+ * Each validation runs in a transaction that gets rolled back to keep state clean.
+ */
+let _pgliteInstance: Awaited<ReturnType<typeof initPGlite>> | null = null;
+let _pgliteReady: Promise<void> | null = null;
+
+async function initPGlite() {
+  const { PGlite } = await import('@electric-sql/pglite');
+  const pg = new PGlite();
+  const authStubs = `
+    CREATE SCHEMA IF NOT EXISTS auth;
+    CREATE OR REPLACE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$ SELECT '00000000-0000-0000-0000-000000000000'::uuid $$;
+    DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN CREATE ROLE authenticated; END IF; END $$;
+    DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN CREATE ROLE anon; END IF; END $$;
+    DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'service_role') THEN CREATE ROLE service_role; END IF; END $$;
+    GRANT ALL ON SCHEMA public TO authenticated, anon, service_role;
+  `;
+  await pg.exec(authStubs);
+  return pg;
+}
+
+async function getPGlite() {
+  if (!_pgliteInstance) {
+    _pgliteReady = initPGlite().then(pg => { _pgliteInstance = pg; });
+  }
+  await _pgliteReady;
+  return _pgliteInstance!;
+}
+
 export const validateSQLTool = createTool({
   id: 'validate-sql',
   description: 'Validate SQL migration against PGlite (runs locally, no sandbox needed)',
@@ -273,24 +304,16 @@ export const validateSQLTool = createTool({
     error: z.string().optional(),
   }),
   execute: async (inputData, _context) => {
-    const { PGlite } = await import('@electric-sql/pglite');
-    const pg = new PGlite();
+    const pg = await getPGlite();
     try {
-      // AUTH_STUBS required for RLS policies
-      await pg.exec(`
-        CREATE SCHEMA IF NOT EXISTS auth;
-        CREATE OR REPLACE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$ SELECT '00000000-0000-0000-0000-000000000000'::uuid $$;
-        CREATE ROLE authenticated;
-        CREATE ROLE anon;
-        CREATE ROLE service_role;
-        GRANT ALL ON SCHEMA public TO authenticated, anon, service_role;
-      `);
+      // Run in a savepoint to keep PGlite clean for next call
+      await pg.exec('SAVEPOINT validate_sql');
       await pg.exec(inputData.sql);
+      await pg.exec('ROLLBACK TO SAVEPOINT validate_sql');
       return { valid: true };
     } catch (e) {
+      try { await pg.exec('ROLLBACK TO SAVEPOINT validate_sql'); } catch { /* already rolled back */ }
       return { valid: false, error: e instanceof Error ? e.message : String(e) };
-    } finally {
-      await pg.close();
     }
   },
 });
@@ -537,7 +560,7 @@ export const getGitHubTokenTool = createTool({
 
 export const searchDocsTool = createTool({
   id: 'search-docs',
-  description: 'Search library documentation by fetching from official docs sites',
+  description: 'Search library documentation. Prefers llms.txt (LLM-optimized plaintext) over HTML scraping.',
   inputSchema: z.object({
     library: z.string().describe('Library name (e.g., react, supabase, shadcn-ui, vite, tailwindcss, tanstack-router)'),
     query: z.string().describe('What to search for'),
@@ -547,32 +570,59 @@ export const searchDocsTool = createTool({
     source: z.string().describe('Source URL or reference'),
   }),
   execute: async (inputData, _context) => {
-    // Curated documentation references for libraries used in generated apps
-    const docUrls: Record<string, string> = {
+    // llms.txt endpoints — LLM-optimized plaintext docs (preferred)
+    const llmsTxtUrls: Record<string, string> = {
+      'supabase': 'https://supabase.com/llms.txt',
+      'vite': 'https://vite.dev/llms.txt',
+      'tailwindcss': 'https://tailwindcss.com/llms.txt',
+      'tanstack-router': 'https://tanstack.com/router/latest/llms.txt',
+      'tanstack-query': 'https://tanstack.com/query/latest/llms.txt',
+      'drizzle-orm': 'https://orm.drizzle.team/llms.txt',
+      'biome': 'https://biomejs.dev/llms.txt',
+    };
+
+    // Fallback HTML docs for libraries without llms.txt
+    const fallbackUrls: Record<string, string> = {
       'react': 'https://react.dev/reference/react',
-      'supabase': 'https://supabase.com/docs/reference/javascript/introduction',
       'supabase-auth': 'https://supabase.com/docs/guides/auth',
       'supabase-rls': 'https://supabase.com/docs/guides/database/postgres/row-level-security',
       'shadcn-ui': 'https://ui.shadcn.com/docs/components',
-      'vite': 'https://vite.dev/guide/',
-      'tailwindcss': 'https://tailwindcss.com/docs',
-      'tanstack-router': 'https://tanstack.com/router/latest/docs/framework/react/overview',
-      'tanstack-query': 'https://tanstack.com/query/latest/docs/framework/react/overview',
-      'drizzle-orm': 'https://orm.drizzle.team/docs/overview',
       'valibot': 'https://valibot.dev/guides/introduction/',
-      'biome': 'https://biomejs.dev/guides/getting-started/',
     };
 
     const lib = inputData.library.toLowerCase().replace(/\s+/g, '-');
-    const url = docUrls[lib];
+    const llmsUrl = llmsTxtUrls[lib];
+    const htmlUrl = fallbackUrls[lib];
 
-    if (!url) {
+    if (!llmsUrl && !htmlUrl) {
       return {
-        results: `No curated docs for "${inputData.library}". Available libraries: ${Object.keys(docUrls).join(', ')}. Use your training knowledge for this library.`,
+        results: `No curated docs for "${inputData.library}". Available libraries: ${[...Object.keys(llmsTxtUrls), ...Object.keys(fallbackUrls)].join(', ')}. Use your training knowledge for this library.`,
         source: 'built-in',
       };
     }
 
+    // Try llms.txt first (clean plaintext, no parsing needed)
+    if (llmsUrl) {
+      try {
+        const response = await fetch(llmsUrl, {
+          headers: { 'Accept': 'text/plain' },
+          signal: AbortSignal.timeout(5000),
+        });
+
+        if (response.ok) {
+          const text = await response.text();
+          return {
+            results: text.slice(0, 6000),
+            source: llmsUrl,
+          };
+        }
+      } catch {
+        // Fall through to HTML fallback
+      }
+    }
+
+    // Fallback: fetch HTML and strip tags
+    const url = htmlUrl || llmsUrl!;
     try {
       const response = await fetch(url, {
         headers: { 'Accept': 'text/html' },
@@ -586,7 +636,6 @@ export const searchDocsTool = createTool({
         };
       }
 
-      // Extract text content (strip HTML tags for a rough plaintext)
       const html = await response.text();
       const text = html
         .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
@@ -594,7 +643,7 @@ export const searchDocsTool = createTool({
         .replace(/<[^>]+>/g, ' ')
         .replace(/\s+/g, ' ')
         .trim()
-        .slice(0, 4000); // Limit to ~4K chars
+        .slice(0, 4000);
 
       return {
         results: `Documentation excerpt from ${inputData.library}:\n${text}\n\nQuery: ${inputData.query}`,

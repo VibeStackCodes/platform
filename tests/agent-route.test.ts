@@ -53,6 +53,24 @@ const mockCheckCredits = vi.mocked(checkCredits);
 const mockDeductCredits = vi.mocked(deductCredits);
 const mockCreateClient = vi.mocked(createClient);
 
+/**
+ * Helper to create a mock network execution result.
+ * The return object is async-iterable (delegates to chunks) and
+ * exposes a `usage` promise matching Mastra's .network() return.
+ */
+function createMockExecution(
+  chunks: AsyncGenerator,
+  usage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+) {
+  const execution = {
+    [Symbol.asyncIterator]: () => chunks[Symbol.asyncIterator](),
+    usage: Promise.resolve(usage),
+    status: Promise.resolve('completed'),
+    result: Promise.resolve(undefined),
+  };
+  return execution;
+}
+
 // Helper to configure the mockNetwork for a test
 function getMockNetwork() {
   const localMockNetwork = vi.fn();
@@ -158,7 +176,7 @@ describe('POST /api/agent', () => {
   it('returns SSE response with correct headers', async () => {
     const mockNetwork = getMockNetwork();
     async function* emptyStream() { /* no chunks */ }
-    mockNetwork.mockResolvedValue(emptyStream() as any);
+    mockNetwork.mockResolvedValue(createMockExecution(emptyStream()));
 
     const req = createRequest({ message: 'Build an app', projectId: 'proj-1' });
     const res = await POST(req as any);
@@ -170,7 +188,7 @@ describe('POST /api/agent', () => {
   it('emits stage_update generating and complete events', async () => {
     const mockNetwork = getMockNetwork();
     async function* emptyStream() { /* no chunks */ }
-    mockNetwork.mockResolvedValue(emptyStream() as any);
+    mockNetwork.mockResolvedValue(createMockExecution(emptyStream()));
 
     const req = createRequest({ message: 'Build an app', projectId: 'proj-1' });
     const res = await POST(req as any);
@@ -185,7 +203,7 @@ describe('POST /api/agent', () => {
     async function* chunks() {
       yield { type: 'agent-execution-start', payload: { agentId: 'analyst', agentName: 'Analyst' } };
     }
-    mockNetwork.mockResolvedValue(chunks() as any);
+    mockNetwork.mockResolvedValue(createMockExecution(chunks()));
 
     const req = createRequest({ message: 'Build an app', projectId: 'proj-1' });
     const res = await POST(req as any);
@@ -205,7 +223,7 @@ describe('POST /api/agent', () => {
     async function* chunks() {
       yield { type: 'agent-execution-end', payload: { agentId: 'analyst', agentName: 'Analyst', tokensUsed: 150, durationMs: 2000 } };
     }
-    mockNetwork.mockResolvedValue(chunks() as any);
+    mockNetwork.mockResolvedValue(createMockExecution(chunks()));
 
     const req = createRequest({ message: 'Build an app', projectId: 'proj-1' });
     const res = await POST(req as any);
@@ -225,7 +243,7 @@ describe('POST /api/agent', () => {
     async function* chunks() {
       yield { type: 'tool-execution-end', payload: { toolName: 'write-file', result: { path: '/workspace/src/App.tsx', bytesWritten: 42 }, agentId: 'frontend-engineer' } };
     }
-    mockNetwork.mockResolvedValue(chunks() as any);
+    mockNetwork.mockResolvedValue(createMockExecution(chunks()));
 
     const req = createRequest({ message: 'Build an app', projectId: 'proj-1' });
     const res = await POST(req as any);
@@ -244,7 +262,7 @@ describe('POST /api/agent', () => {
     async function* chunks() {
       yield { type: 'tool-execution-end', payload: { toolName: 'run-build', agentId: 'qa-engineer' } };
     }
-    mockNetwork.mockResolvedValue(chunks() as any);
+    mockNetwork.mockResolvedValue(createMockExecution(chunks()));
 
     const req = createRequest({ message: 'Build an app', projectId: 'proj-1' });
     const res = await POST(req as any);
@@ -275,10 +293,10 @@ describe('POST /api/agent', () => {
     });
   });
 
-  it('calls network with correct memory and requestContext params', async () => {
+  it('calls network with correct memory, requestContext, and maxSteps', async () => {
     const localMock = getMockNetwork();
     async function* emptyStream() {}
-    localMock.mockResolvedValue(emptyStream() as any);
+    localMock.mockResolvedValue(createMockExecution(emptyStream()));
 
     const req = createRequest({ message: 'Build a todo app', projectId: 'proj-42' });
     await POST(req as any);
@@ -289,13 +307,14 @@ describe('POST /api/agent', () => {
         resource: 'user-123',
       },
       requestContext: expect.anything(),
+      maxSteps: 50,
     }));
   });
 
   it('retrieves supervisor agent from mastra instance', async () => {
     const localMock = getMockNetwork();
     async function* emptyStream() {}
-    localMock.mockResolvedValue(emptyStream() as any);
+    localMock.mockResolvedValue(createMockExecution(emptyStream()));
 
     const req = createRequest({ message: 'Build an app', projectId: 'proj-1' });
     await POST(req as any);
@@ -308,7 +327,7 @@ describe('POST /api/agent', () => {
     async function* chunks() {
       yield { type: 'agent-execution-event-text-delta', payload: { agentId: 'analyst', textDelta: 'Analyzing requirements...' } };
     }
-    mockNetwork.mockResolvedValue(chunks() as any);
+    mockNetwork.mockResolvedValue(createMockExecution(chunks()));
 
     const req = createRequest({ message: 'Build an app', projectId: 'proj-1' });
     const res = await POST(req as any);
@@ -327,7 +346,7 @@ describe('POST /api/agent', () => {
     async function* chunks() {
       yield { type: 'network-execution-event-step-finish', payload: {} };
     }
-    mockNetwork.mockResolvedValue(chunks() as any);
+    mockNetwork.mockResolvedValue(createMockExecution(chunks()));
 
     const req = createRequest({ message: 'Build an app', projectId: 'proj-1' });
     const res = await POST(req as any);
@@ -341,12 +360,61 @@ describe('POST /api/agent', () => {
     });
   });
 
+  it('bridges routing-agent-start to stage_update planning', async () => {
+    const mockNetwork = getMockNetwork();
+    async function* chunks() {
+      yield { type: 'routing-agent-start', payload: {} };
+    }
+    mockNetwork.mockResolvedValue(createMockExecution(chunks()));
+
+    const req = createRequest({ message: 'Build an app', projectId: 'proj-1' });
+    const res = await POST(req as any);
+    const events = await readSSEEvents(res);
+
+    const planningEvent = events.find((e: any) => e.type === 'stage_update' && e.stage === 'planning');
+    expect(planningEvent).toBeDefined();
+  });
+
+  it('bridges routing-agent-end to checkpoint with delegation target', async () => {
+    const mockNetwork = getMockNetwork();
+    async function* chunks() {
+      yield { type: 'routing-agent-end', payload: { selectedPrimitive: 'analyst' } };
+    }
+    mockNetwork.mockResolvedValue(createMockExecution(chunks()));
+
+    const req = createRequest({ message: 'Build an app', projectId: 'proj-1' });
+    const res = await POST(req as any);
+    const events = await readSSEEvents(res);
+
+    const checkpoint = events.find((e: any) => e.type === 'checkpoint' && e.label?.includes('analyst'));
+    expect(checkpoint).toEqual({
+      type: 'checkpoint',
+      label: 'Delegating to analyst',
+      status: 'active',
+    });
+  });
+
+  it('bridges network-execution-event-finish to pipeline complete checkpoint', async () => {
+    const mockNetwork = getMockNetwork();
+    async function* chunks() {
+      yield { type: 'network-execution-event-finish', payload: {} };
+    }
+    mockNetwork.mockResolvedValue(createMockExecution(chunks()));
+
+    const req = createRequest({ message: 'Build an app', projectId: 'proj-1' });
+    const res = await POST(req as any);
+    const events = await readSSEEvents(res);
+
+    const checkpoint = events.find((e: any) => e.type === 'checkpoint' && e.label === 'Pipeline complete');
+    expect(checkpoint).toBeDefined();
+  });
+
   it('bridges workflow-execution-suspended to plan_ready', async () => {
     const mockNetwork = getMockNetwork();
     async function* chunks() {
       yield { type: 'workflow-execution-suspended', payload: { suspendPayload: { appName: 'Todo App', features: [] } } };
     }
-    mockNetwork.mockResolvedValue(chunks() as any);
+    mockNetwork.mockResolvedValue(createMockExecution(chunks()));
 
     const req = createRequest({ message: 'Build an app', projectId: 'proj-1' });
     const res = await POST(req as any);
@@ -366,7 +434,7 @@ describe('POST /api/agent', () => {
       yield { type: 'agent-execution-end', payload: {} };
       yield { type: 'tool-execution-end', payload: { toolName: 'run-build' } };
     }
-    mockNetwork.mockResolvedValue(chunks() as any);
+    mockNetwork.mockResolvedValue(createMockExecution(chunks()));
 
     const req = createRequest({ message: 'Build an app', projectId: 'proj-1' });
     const res = await POST(req as any);
@@ -395,7 +463,7 @@ describe('POST /api/agent', () => {
       yield { type: 'agent-execution-event-text-delta', payload: { agentId: 'analyst', textDelta: 'Step 2' } };
       yield { type: 'agent-execution-end', payload: { agentId: 'analyst', tokensUsed: 100, durationMs: 1000 } };
     }
-    mockNetwork.mockResolvedValue(chunks() as any);
+    mockNetwork.mockResolvedValue(createMockExecution(chunks()));
 
     const req = createRequest({ message: 'Build an app', projectId: 'proj-1' });
     const res = await POST(req as any);
@@ -413,7 +481,7 @@ describe('POST /api/agent', () => {
       yield { type: 'agent-execution-start' };
       yield { type: 'agent-execution-end', payload: null };
     }
-    mockNetwork.mockResolvedValue(chunks() as any);
+    mockNetwork.mockResolvedValue(createMockExecution(chunks()));
 
     const req = createRequest({ message: 'Build an app', projectId: 'proj-1' });
     const res = await POST(req as any);
@@ -428,13 +496,17 @@ describe('POST /api/agent', () => {
     expect((agentComplete as any).agentId).toBe('unknown');
   });
 
-  it('deducts credits after successful generation with tokens', async () => {
+  it('deducts credits using accurate usage from network execution', async () => {
     const mockNetwork = getMockNetwork();
     async function* chunks() {
       yield { type: 'agent-execution-end', payload: { agentId: 'analyst', usage: { totalTokens: 5000 }, durationMs: 1000 } };
       yield { type: 'agent-execution-end', payload: { agentId: 'frontend', usage: { totalTokens: 3000 }, durationMs: 2000 } };
     }
-    mockNetwork.mockResolvedValue(chunks() as any);
+    mockNetwork.mockResolvedValue(createMockExecution(chunks(), {
+      inputTokens: 5600,
+      outputTokens: 2400,
+      totalTokens: 8000,
+    }));
 
     // Return updated credits after deduction
     mockCheckCredits
@@ -445,7 +517,7 @@ describe('POST /api/agent', () => {
     const res = await POST(req as any);
     const events = await readSSEEvents(res);
 
-    // Should have called deductCredits with total tokens = 8000
+    // Should use accurate inputTokens/outputTokens from usage promise
     expect(mockDeductCredits).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({
@@ -453,6 +525,8 @@ describe('POST /api/agent', () => {
         projectId: 'proj-1',
         model: 'gpt-5.2',
         eventType: 'generation',
+        tokensInput: 5600,
+        tokensOutput: 2400,
         tokensTotal: 8000,
       })
     );

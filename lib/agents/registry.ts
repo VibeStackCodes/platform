@@ -3,6 +3,9 @@ import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
 import { PostgresStore } from '@mastra/pg';
 import { RequestContext } from '@mastra/core/di';
+import { PinoLogger } from '@mastra/loggers';
+import { PromptInjectionDetector, ModerationProcessor } from '@mastra/core/processors';
+import type { MastraModelConfig } from '@mastra/core/llm';
 import {
   writeFileTool,
   readFileTool,
@@ -23,6 +26,7 @@ import {
   createGitHubRepoTool,
   getGitHubTokenTool,
 } from './tools';
+import { infraProvisionWorkflow } from './workflows';
 import { generateShadcnManifest } from '@/lib/shadcn-manifest';
 
 // Re-export RequestContext for route usage
@@ -60,11 +64,12 @@ function getShadcnManifestString(): string {
 
 /**
  * Dynamic model resolver — reads the Helicone-proxied LLM from RequestContext.
+ * Returns LanguageModelV1 (from Helicone provider) or string (Mastra model router format).
  * Falls back to 'openai/gpt-5.2' for Studio playground / Mastra Cloud without RequestContext.
  */
-function dynamicModel({ requestContext }: { requestContext: RequestContext }): string {
+function dynamicModel({ requestContext }: { requestContext: RequestContext }): MastraModelConfig {
   if (requestContext?.has('llm')) {
-    return requestContext.get('llm') as string;
+    return requestContext.get('llm') as MastraModelConfig;
   }
   // Fallback for Mastra Studio / Cloud / tests (uses Mastra's built-in model router)
   return 'openai/gpt-5.2';
@@ -419,6 +424,21 @@ Phase 6 — Deploy:
 - Track sandboxId across all tool-using agents
 - If an agent fails 3 times on the same task, report the error to the user
 - Stream progress updates at each phase transition`,
+  // Guardrails: prompt injection detection on user input, content moderation on output
+  inputProcessors: [
+    new PromptInjectionDetector({
+      model: 'openai/gpt-4o-mini',
+      threshold: 0.8,
+      strategy: 'block',
+      detectionTypes: ['injection', 'jailbreak', 'system-override'],
+    }),
+    new ModerationProcessor({
+      model: 'openai/gpt-4o-mini',
+      threshold: 0.7,
+      strategy: 'warn',
+      categories: ['hate', 'harassment', 'violence', 'self-harm'],
+    }),
+  ],
   agents: {
     analyst: analystAgent,
     infraEngineer: infraAgent,
@@ -472,4 +492,12 @@ export const mastra = new Mastra({
     qaEngineer: qaAgent,
     devOpsEngineer: devOpsAgent,
   },
+  workflows: {
+    infraProvision: infraProvisionWorkflow,
+  },
+  storage: getSharedStore() ?? undefined,
+  logger: new PinoLogger({
+    name: 'VibeStack',
+    level: process.env.NODE_ENV === 'production' ? 'info' : 'debug',
+  }),
 });

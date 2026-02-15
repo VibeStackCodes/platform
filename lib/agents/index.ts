@@ -24,6 +24,9 @@ export {
 export { createHeliconeProvider, isAllowedModel, ALLOWED_MODELS } from './provider';
 export type { AllowedModel } from './provider';
 
+// Workflows
+export { infraProvisionWorkflow } from './workflows';
+
 // Tools
 export {
   writeFileTool,

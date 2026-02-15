@@ -1,6 +1,20 @@
 import { z } from 'zod';
 
 /**
+ * Agent output schemas — contract definitions for each specialist agent.
+ *
+ * IMPORTANT: These schemas are NOT wired as `structuredOutput` on agents within
+ * the supervisor network. In a Mastra Agent Network, the supervisor reads
+ * freeform text from sub-agents to decide routing. Adding structuredOutput
+ * would force JSON responses that break supervisor reasoning.
+ *
+ * These schemas serve as:
+ * 1. Documentation of expected agent output shapes
+ * 2. Contracts for standalone `.generate()` calls outside the network
+ * 3. Validation schemas for post-processing agent outputs
+ */
+
+/**
  * Feature schema for requirements clarification
  */
 const FeatureSchema = z.object({

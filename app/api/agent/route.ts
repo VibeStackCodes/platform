@@ -83,20 +83,19 @@ export async function POST(request: NextRequest) {
   const supervisor = mastra.getAgent('supervisor');
 
   return createSSEStream(async (emit: (event: StreamEvent) => void, signal: AbortSignal) => {
-    let totalTokens = 0;
-
     try {
       emit({ type: 'stage_update', stage: 'generating' });
 
-      const result = await supervisor.network(message, {
+      const execution = await supervisor.network(message, {
         memory: {
           thread: projectId,
           resource: user.id,
         },
         requestContext,
+        maxSteps: 50,
       });
 
-      for await (const chunk of result) {
+      for await (const chunk of execution) {
         // Break early if client disconnected
         if (signal.aborted) {
           console.log('[agent] Client disconnected, stopping stream');
@@ -109,6 +108,23 @@ export async function POST(request: NextRequest) {
         const payload = (chunk as any).payload ?? {};
 
         switch (chunk.type) {
+          // --- Routing agent events (supervisor analyzing/delegating) ---
+          case 'routing-agent-start':
+            emit({
+              type: 'stage_update',
+              stage: 'planning',
+            });
+            break;
+
+          case 'routing-agent-end':
+            emit({
+              type: 'checkpoint',
+              label: `Delegating to ${payload.selectedPrimitive ?? 'agent'}`,
+              status: 'active',
+            });
+            break;
+
+          // --- Delegated agent execution events ---
           case 'agent-execution-start':
             emit({
               type: 'agent_start',
@@ -126,18 +142,16 @@ export async function POST(request: NextRequest) {
             });
             break;
 
-          case 'agent-execution-end': {
-            const agentTokens = payload.usage?.totalTokens ?? payload.tokensUsed ?? 0;
-            totalTokens += agentTokens;
+          case 'agent-execution-end':
             emit({
               type: 'agent_complete',
               agentId: payload.agentId ?? 'unknown',
-              tokensUsed: agentTokens,
+              tokensUsed: payload.usage?.totalTokens ?? payload.tokensUsed ?? 0,
               durationMs: payload.durationMs ?? 0,
             });
             break;
-          }
 
+          // --- Tool execution events ---
           case 'tool-execution-start':
             emit({
               type: 'agent_artifact',
@@ -165,6 +179,7 @@ export async function POST(request: NextRequest) {
             }
             break;
 
+          // --- Network lifecycle events ---
           case 'network-execution-event-step-finish':
             emit({
               type: 'checkpoint',
@@ -173,6 +188,15 @@ export async function POST(request: NextRequest) {
             });
             break;
 
+          case 'network-execution-event-finish':
+            emit({
+              type: 'checkpoint',
+              label: 'Pipeline complete',
+              status: 'complete',
+            });
+            break;
+
+          // --- Workflow events (suspend/resume) ---
           case 'workflow-execution-suspended':
             emit({
               type: 'plan_ready',
@@ -189,6 +213,10 @@ export async function POST(request: NextRequest) {
         }
       }
 
+      // Use accurate token counts from network execution
+      const tokenUsage = await execution.usage;
+      const totalTokens = tokenUsage.totalTokens;
+
       // Deduct credits after successful completion
       if (totalTokens > 0) {
         const creditsUsed = await deductCredits(supabase, {
@@ -196,8 +224,8 @@ export async function POST(request: NextRequest) {
           projectId,
           model,
           eventType: 'generation',
-          tokensInput: Math.round(totalTokens * 0.7),
-          tokensOutput: Math.round(totalTokens * 0.3),
+          tokensInput: tokenUsage.inputTokens,
+          tokensOutput: tokenUsage.outputTokens,
           tokensTotal: totalTokens,
         });
 
@@ -212,19 +240,6 @@ export async function POST(request: NextRequest) {
 
       emit({ type: 'stage_update', stage: 'complete' });
     } catch (error) {
-      // Still deduct credits on error (tokens were consumed)
-      if (totalTokens > 0) {
-        await deductCredits(supabase, {
-          userId: user.id,
-          projectId,
-          model,
-          eventType: 'generation',
-          tokensInput: Math.round(totalTokens * 0.7),
-          tokensOutput: Math.round(totalTokens * 0.3),
-          tokensTotal: totalTokens,
-        }).catch(console.error);
-      }
-
       if (signal.aborted) {
         console.log('[agent] Stream aborted by client');
         return;
