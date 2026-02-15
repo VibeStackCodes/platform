@@ -54,8 +54,9 @@ import {
 import { PromptBar } from "@/components/prompt-bar";
 import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
 import { Bot, CheckCircle2 } from "lucide-react";
-import type { StreamEvent, ChatPlan, BuildError, CheckpointEvent, LayerCommitEvent } from "@/lib/types";
+import type { StreamEvent, ChatPlan, BuildError, CheckpointEvent, LayerCommitEvent, ClarificationQuestion } from "@/lib/types";
 import { CreditDisplay } from "@/components/credit-display";
+import { ClarificationQuestions } from "@/components/clarification-questions";
 
 // Custom message type — replaces UIMessage from Vercel AI SDK
 interface ChatMessage {
@@ -92,6 +93,7 @@ export function BuilderChat({ projectId, initialPrompt, initialMessages, onGener
   const [activeAgents, setActiveAgents] = useState<
     { id: string; name: string; status: 'running' | 'complete'; message?: string }[]
   >([]);
+  const [pendingClarification, setPendingClarification] = useState<ClarificationQuestion[] | null>(null);
   const [userCredits, setUserCredits] = useState<{
     credits_remaining: number;
     credits_monthly: number;
@@ -209,6 +211,9 @@ export function BuilderChat({ projectId, initialPrompt, initialMessages, onGener
           ...prev,
           credits_remaining: event.creditsRemaining,
         } : prev);
+        break;
+      case "clarification_request":
+        setPendingClarification(event.questions);
         break;
     }
   }, [onGenerationComplete]);
@@ -372,6 +377,11 @@ export function BuilderChat({ projectId, initialPrompt, initialMessages, onGener
     sendChatMessage(suggestion);
   };
 
+  const handleClarificationSubmit = (answersText: string) => {
+    setPendingClarification(null);
+    sendChatMessage(answersText);
+  };
+
   const handleStartGeneration = useCallback(async (chatPlan: ChatPlan) => {
     setGenerationStatus("generating");
     setGenerationFiles([]);
@@ -468,6 +478,15 @@ export function BuilderChat({ projectId, initialPrompt, initialMessages, onGener
                 <div className="mx-4 my-2 text-sm text-muted-foreground animate-pulse">
                   Thinking...
                 </div>
+              )}
+
+              {/* Clarification Questions — interactive multi-choice cards */}
+              {pendingClarification && (
+                <ClarificationQuestions
+                  questions={pendingClarification}
+                  onSubmit={handleClarificationSubmit}
+                  disabled={chatStatus === "streaming"}
+                />
               )}
 
               {/* Chat error */}

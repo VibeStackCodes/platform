@@ -301,7 +301,8 @@ export type StreamEvent =
   | PhaseStartEvent
   | PhaseCompleteEvent
   | PlanReadyEvent
-  | CreditsUsedEvent;
+  | CreditsUsedEvent
+  | ClarificationRequestEvent;
 
 export interface StageUpdateEvent {
   type: "stage_update";
@@ -439,4 +440,15 @@ export interface PhaseCompleteEvent {
 export interface PlanReadyEvent {
   type: "plan_ready";
   plan: Record<string, unknown>;
+}
+
+export interface ClarificationQuestion {
+  question: string;
+  selectionMode: "single" | "multiple";
+  options: Array<{ label: string; description: string }>;
+}
+
+export interface ClarificationRequestEvent {
+  type: "clarification_request";
+  questions: ClarificationQuestion[];
 }

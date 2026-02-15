@@ -25,6 +25,7 @@ import {
   runMigrationTool,
   createGitHubRepoTool,
   getGitHubTokenTool,
+  askClarifyingQuestionsTool,
 } from './tools';
 import { infraProvisionWorkflow } from './workflows';
 import { generateShadcnManifest } from '@/lib/shadcn-manifest';
@@ -97,11 +98,22 @@ Your role:
    - Database: PostgreSQL via Supabase with RLS enabled on all tables
    - State: TanStack Query for server state management
 
-3. Ask ONE clarifying question at a time when critical requirements are ambiguous.
+3. When the user's request is broad, vague, or has multiple valid interpretations,
+   use the ask-clarifying-questions tool to present structured options.
+   - Generate 1-4 questions with 2-4 options each
+   - Use selectionMode "single" when only one choice makes sense
+   - Use selectionMode "multiple" when the user might want several options
+   - Each option needs a short label (2-5 words) and a description
+   - Do NOT ask questions via plain text — always use the tool for structured UI
+   - If the request is clear and specific enough, skip clarification and proceed directly
+
+4. After receiving clarification answers (as the next user message), incorporate
+   them into the structured requirements output.
 
 Output structured JSON with: appName, description, features[], entities[], designTokens.`,
   tools: {
     searchDocs: searchDocsTool,
+    askClarifyingQuestions: askClarifyingQuestionsTool,
   },
 });
 

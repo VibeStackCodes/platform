@@ -657,3 +657,41 @@ export const searchDocsTool = createTool({
     }
   },
 });
+
+// ============================================================================
+// Clarification Questions (UI-bound tool — no server-side execution)
+// ============================================================================
+
+export const askClarifyingQuestionsTool = createTool({
+  id: 'ask-clarifying-questions',
+  description: `Ask the user structured clarifying questions with selectable options. Use when:
+- The user's request is broad or vague and needs refinement
+- Multiple valid interpretations exist (design style, feature scope, data model)
+- You need specific preferences before generating requirements
+
+The tool returns immediately — the user's answers arrive as the next message.`,
+  inputSchema: z.object({
+    questions: z.array(z.object({
+      question: z.string().describe('The question to ask'),
+      selectionMode: z.enum(['single', 'multiple']).describe('single = pick one, multiple = pick many'),
+      options: z.array(z.object({
+        label: z.string().describe('Short option label (2-5 words)'),
+        description: z.string().describe('Explanation of what this option means'),
+      })).min(2).max(4),
+    })).min(1).max(4).describe('1-4 clarifying questions'),
+  }),
+  outputSchema: z.object({
+    status: z.literal('awaiting_user_input'),
+    questionCount: z.number(),
+  }),
+  execute: async (inputData) => {
+    // This tool doesn't execute server-side logic.
+    // The SSE bridge intercepts tool-execution-end for 'ask-clarifying-questions'
+    // and emits a clarification_request event to the frontend.
+    // The user's answers arrive as the next message to /api/agent.
+    return {
+      status: 'awaiting_user_input' as const,
+      questionCount: inputData.questions.length,
+    };
+  },
+});

@@ -47,4 +47,5 @@ export {
   runMigrationTool,
   createGitHubRepoTool,
   getGitHubTokenTool,
+  askClarifyingQuestionsTool,
 } from './tools';

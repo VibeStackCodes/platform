@@ -496,6 +496,43 @@ describe('POST /api/agent', () => {
     expect((agentComplete as any).agentId).toBe('unknown');
   });
 
+  it('emits clarification_request when ask-clarifying-questions tool ends', async () => {
+    const mockNetwork = getMockNetwork();
+    const questionsPayload = [
+      {
+        question: 'What design style?',
+        selectionMode: 'single',
+        options: [
+          { label: 'Minimal', description: 'Clean and simple' },
+          { label: 'Bold', description: 'High contrast and vibrant' },
+        ],
+      },
+    ];
+    async function* chunks() {
+      yield {
+        type: 'tool-execution-end',
+        payload: {
+          toolName: 'ask-clarifying-questions',
+          agentId: 'analyst',
+          input: { questions: questionsPayload },
+          result: { status: 'awaiting_user_input', questionCount: 1 },
+        },
+      };
+    }
+    mockNetwork.mockResolvedValue(createMockExecution(chunks()));
+
+    const req = createRequest({ message: 'Build an app', projectId: 'proj-1' });
+    const res = await POST(req as any);
+    const events = await readSSEEvents(res);
+
+    const clarification = events.find((e: any) => e.type === 'clarification_request');
+    expect(clarification).toBeDefined();
+    expect((clarification as any).questions).toHaveLength(1);
+    expect((clarification as any).questions[0].question).toBe('What design style?');
+    expect((clarification as any).questions[0].selectionMode).toBe('single');
+    expect((clarification as any).questions[0].options).toHaveLength(2);
+  });
+
   it('deducts credits using accurate usage from network execution', async () => {
     const mockNetwork = getMockNetwork();
     async function* chunks() {

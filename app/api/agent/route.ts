@@ -169,6 +169,20 @@ export async function POST(request: NextRequest) {
                 path: (toolResult?.path as string) ?? '',
                 linesOfCode: (toolResult?.bytesWritten as number) ?? 0,
               });
+            } else if (payload.toolName === 'ask-clarifying-questions') {
+              // Extract questions from the tool's input (not output)
+              const toolInput = payload.input as Record<string, unknown> | undefined;
+              const questions = toolInput?.questions;
+              if (Array.isArray(questions)) {
+                emit({
+                  type: 'clarification_request',
+                  questions: questions as Array<{
+                    question: string;
+                    selectionMode: 'single' | 'multiple';
+                    options: Array<{ label: string; description: string }>;
+                  }>,
+                });
+              }
             } else {
               emit({
                 type: 'agent_artifact',
