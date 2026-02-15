@@ -1,0 +1,11 @@
+/**
+ * Supabase Browser Client
+ * For use in client-side React components (Vite SPA)
+ */
+
+import { createClient } from '@supabase/supabase-js'
+
+export const supabase = createClient(
+  import.meta.env.VITE_SUPABASE_URL,
+  import.meta.env.VITE_SUPABASE_ANON_KEY,
+)
