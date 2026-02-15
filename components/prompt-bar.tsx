@@ -28,7 +28,7 @@ import {
   ModelSelectorTrigger,
 } from "@/components/ai-elements/model-selector";
 import { GlobeIcon, ChevronDownIcon } from "lucide-react";
-import type { ChatStatus } from "ai";
+type ChatStatus = "ready" | "submitted" | "streaming" | "error";
 
 const models = [
   { id: "gpt-5.2", name: "GPT-5.2", provider: "openai" as const },

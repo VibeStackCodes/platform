@@ -1,8 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import { useChat } from "@ai-sdk/react";
-import { DefaultChatTransport, type UIMessage } from "ai";
 import {
   Conversation,
   ConversationContent,
@@ -15,24 +13,6 @@ import {
   MessageResponse,
 } from "@/components/ai-elements/message";
 import {
-  Reasoning,
-  ReasoningTrigger,
-  ReasoningContent,
-} from "@/components/ai-elements/reasoning";
-import {
-  Tool,
-  ToolHeader,
-} from "@/components/ai-elements/tool";
-import {
-  Plan,
-  PlanHeader,
-  PlanTitle,
-  PlanDescription,
-  PlanContent,
-  PlanTrigger,
-  PlanAction,
-} from "@/components/ai-elements/plan";
-import {
   Queue,
   QueueItem,
   QueueItemIndicator,
@@ -40,21 +20,6 @@ import {
   QueueList,
 } from "@/components/ai-elements/queue";
 import { Suggestions, Suggestion } from "@/components/ai-elements/suggestion";
-import {
-  ChainOfThought,
-  ChainOfThoughtHeader,
-  ChainOfThoughtContent,
-  ChainOfThoughtStep,
-} from "@/components/ai-elements/chain-of-thought";
-import {
-  Confirmation,
-  ConfirmationTitle,
-  ConfirmationRequest,
-  ConfirmationAccepted,
-  ConfirmationRejected,
-  ConfirmationActions,
-  ConfirmationAction,
-} from "@/components/ai-elements/confirmation";
 import {
   StackTrace,
   StackTraceHeader,
@@ -88,8 +53,15 @@ import {
 } from "@/components/ai-elements/commit";
 import { PromptBar } from "@/components/prompt-bar";
 import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
-import { Bot, Rocket, CheckCircle2, Pencil, Search, FileCode2, CircleAlert } from "lucide-react";
-import type { StreamEvent, ChatPlan, BuildError, CheckpointEvent, LayerCommitEvent, FeatureSpec } from "@/lib/types";
+import { Bot, CheckCircle2 } from "lucide-react";
+import type { StreamEvent, ChatPlan, BuildError, CheckpointEvent, LayerCommitEvent } from "@/lib/types";
+
+// Custom message type — replaces UIMessage from Vercel AI SDK
+interface ChatMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+}
 
 interface BuilderChatProps {
   projectId: string;
@@ -121,46 +93,153 @@ export function BuilderChat({ projectId, initialPrompt, initialMessages, onGener
   >([]);
   const hasAutoSubmitted = useRef(false);
 
-  const { messages, status, error: chatError, sendMessage, addToolResult } = useChat({
-    messages: initialMessages as UIMessage[] | undefined,
-    transport: new DefaultChatTransport({
-      api: "/api/chat",
-      body: { projectId, model },
-    }),
-    onError: (err) => {
-      console.error("[BuilderChat] useChat error:", err);
-    },
-  });
+  // Custom state management — replaces useChat from @ai-sdk/react
+  const [messages, setMessages] = useState<ChatMessage[]>(
+    initialMessages?.map(m => ({
+      id: m.id,
+      role: (m.role === "system" ? "assistant" : m.role) as "user" | "assistant",
+      content: m.parts
+        ?.map(p => (p as Record<string, unknown>).text || "")
+        .filter(Boolean)
+        .join("") || "",
+    })) ?? []
+  );
+  const [chatStatus, setChatStatus] = useState<"ready" | "streaming">("ready");
+  const [chatError, setChatError] = useState<Error | null>(null);
 
   // Message persistence is handled by Mastra agent memory (thread/resource)
+
+  /**
+   * Parse an SSE buffer and process chat-relevant events.
+   * Shared between sendChatMessage and handleStartGeneration.
+   */
+  const parseSSEBuffer = useCallback(
+    (
+      buffer: string,
+      onChatText: ((text: string) => void) | null,
+      onGenerationEvent: ((event: StreamEvent) => void) | null
+    ): string => {
+      const events = buffer.split("\n\n");
+      const remainder = events.pop() || "";
+
+      for (const eventText of events) {
+        if (!eventText.trim() || !eventText.startsWith("data: ")) continue;
+        try {
+          const event = JSON.parse(eventText.replace(/^data: /, "")) as StreamEvent;
+
+          // Chat-relevant: stream analyst/supervisor text into the assistant message
+          if (
+            onChatText &&
+            event.type === "agent_progress" &&
+            (event.agentId === "analyst" || event.agentId === "supervisor")
+          ) {
+            onChatText(event.message);
+          }
+
+          // Everything else goes to the generation event handler
+          if (onGenerationEvent) {
+            onGenerationEvent(event);
+          }
+        } catch {
+          // skip malformed events
+        }
+      }
+
+      return remainder;
+    },
+    []
+  );
+
+  /**
+   * Send a chat message to /api/agent and stream the analyst response.
+   * Replaces the Vercel AI SDK useChat + /api/chat flow.
+   */
+  const sendChatMessage = useCallback(
+    async (text: string) => {
+      const userMessage: ChatMessage = {
+        id: `user-${Date.now()}`,
+        role: "user",
+        content: text,
+      };
+      setMessages(prev => [...prev, userMessage]);
+      setChatStatus("streaming");
+      setChatError(null);
+
+      const assistantId = `assistant-${Date.now()}`;
+      setMessages(prev => [
+        ...prev,
+        { id: assistantId, role: "assistant" as const, content: "" },
+      ]);
+
+      let fullText = "";
+
+      try {
+        const response = await fetch("/api/agent", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message: text, projectId, model }),
+        });
+
+        if (!response.ok || !response.body) {
+          if (response.status === 402) {
+            const errorData = await response.json();
+            setChatError(
+              new Error(
+                `Out of credits. ${errorData.credits_remaining ?? 0} remaining.`
+              )
+            );
+            setMessages(prev => prev.filter(m => m.id !== assistantId));
+            setChatStatus("ready");
+            return;
+          }
+          throw new Error(`Request failed: ${response.status}`);
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          buffer = parseSSEBuffer(
+            buffer,
+            (delta: string) => {
+              fullText += delta;
+              const snapshot = fullText;
+              setMessages(prev =>
+                prev.map(m =>
+                  m.id === assistantId ? { ...m, content: snapshot } : m
+                )
+              );
+            },
+            // Also forward generation-relevant events during chat
+            handleGenerationEvent
+          );
+        }
+      } catch (err) {
+        setChatError(err instanceof Error ? err : new Error("Chat failed"));
+        // Remove empty assistant placeholder on error
+        setMessages(prev =>
+          prev.filter(m => m.id !== assistantId || m.content.length > 0)
+        );
+      } finally {
+        setChatStatus("ready");
+      }
+    },
+    [projectId, model, parseSSEBuffer] // eslint-disable-line react-hooks/exhaustive-deps
+  );
 
   // Auto-submit initial prompt (skip if conversation was restored from DB)
   useEffect(() => {
     if (initialPrompt && !hasAutoSubmitted.current && messages.length === 0 && !initialMessages?.length) {
       hasAutoSubmitted.current = true;
-      sendMessage({ text: initialPrompt });
+      sendChatMessage(initialPrompt);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // Auto-complete thinking_steps tool calls so the AI can proceed to show_plan
-  useEffect(() => {
-    for (const msg of messages) {
-      if (msg.role !== "assistant") continue;
-      for (const part of msg.parts ?? []) {
-        if (
-          part.type === "tool-thinking_steps" &&
-          part.state === "input-available"
-        ) {
-          addToolResult({
-            tool: "thinking_steps",
-            toolCallId: part.toolCallId,
-            output: "acknowledged",
-          });
-        }
-      }
-    }
-  }, [messages, addToolResult]);
 
   const handleSubmit = async (
     message: PromptInputMessage,
@@ -168,37 +247,12 @@ export function BuilderChat({ projectId, initialPrompt, initialMessages, onGener
   ) => {
     if (!message.text?.trim()) return;
     setModel(options.model);
-    sendMessage({ text: message.text });
+    sendChatMessage(message.text);
   };
 
   const handleSuggestionClick = (suggestion: string) => {
-    sendMessage({ text: suggestion });
+    sendChatMessage(suggestion);
   };
-
-  const handleApprove = useCallback(
-    (toolCallId: string) => {
-      addToolResult({
-        tool: "show_plan",
-        toolCallId,
-        output: "approved",
-      });
-    },
-    [addToolResult]
-  );
-
-  const handleReject = useCallback(
-    (toolCallId: string) => {
-      const reason = window.prompt("What changes would you like?");
-      if (reason) {
-        addToolResult({
-          tool: "show_plan",
-          toolCallId,
-          output: `rejected: ${reason}`,
-        });
-      }
-    },
-    [addToolResult]
-  );
 
   const handleStartGeneration = useCallback(async (chatPlan: ChatPlan) => {
     setGenerationStatus("generating");
@@ -209,7 +263,7 @@ export function BuilderChat({ projectId, initialPrompt, initialMessages, onGener
       const response = await fetch("/api/agent", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: chatPlan.appDescription, projectId }),
+        body: JSON.stringify({ message: chatPlan.appDescription, projectId, model }),
       });
 
       if (!response.ok || !response.body) {
@@ -276,7 +330,7 @@ export function BuilderChat({ projectId, initialPrompt, initialMessages, onGener
         // Track artifacts per agent if needed in the future
         break;
       case "plan_ready":
-        // Agent-generated plan received — could show approval UI
+        // Agent-generated plan received — could show approval UI in the future
         break;
       case "file_start":
         setGenerationFiles((prev) => {
@@ -351,306 +405,21 @@ export function BuilderChat({ projectId, initialPrompt, initialMessages, onGener
               {messages.map((message) => (
                 <Message from={message.role} key={message.id}>
                   <MessageContent>
-                    {message.parts.map((part, i) => {
-                      const key = `${message.id}-${i}`;
-
-                      switch (part.type) {
-                        case "text":
-                          return <MessageResponse key={key}>{part.text}</MessageResponse>;
-
-                        case "reasoning":
-                          return (
-                            <Reasoning key={key} isStreaming={part.state === "streaming"}>
-                              <ReasoningTrigger />
-                              <ReasoningContent>{part.text}</ReasoningContent>
-                            </Reasoning>
-                          );
-
-                        // Tool: thinking_steps
-                        case "tool-thinking_steps": {
-                          if (part.state === "input-streaming") {
-                            return (
-                              <Tool key={key}>
-                                <ToolHeader title="Planning" type={part.type} state={part.state} />
-                              </Tool>
-                            );
-                          }
-                          const stepsInput = part.input as { steps?: Array<{ label: string; description?: string }> };
-                          if (!stepsInput?.steps) return null;
-                          return (
-                            <ChainOfThought key={key} defaultOpen>
-                              <ChainOfThoughtHeader>Planning steps</ChainOfThoughtHeader>
-                              <ChainOfThoughtContent>
-                                {stepsInput.steps.map((step, idx) => (
-                                  <ChainOfThoughtStep
-                                    key={step.label}
-                                    label={step.label}
-                                    description={step.description}
-                                    status={idx < stepsInput.steps!.length - 1 ? "complete" : "active"}
-                                  />
-                                ))}
-                              </ChainOfThoughtContent>
-                            </ChainOfThought>
-                          );
-                        }
-
-                        // Tool: ask_clarifying_question
-                        case "tool-ask_clarifying_question": {
-                          const isStreaming = part.state === "input-streaming";
-                          if (isStreaming) {
-                            return (
-                              <Tool key={key}>
-                                <ToolHeader
-                                  title="Clarifying question"
-                                  type={part.type}
-                                  state={part.state}
-                                />
-                              </Tool>
-                            );
-                          }
-                          const qInput = part.input as { question?: string; options?: string[] };
-                          if (!qInput?.question) return null;
-                          return (
-                            <div key={key} className="space-y-3">
-                              <MessageResponse>{qInput.question}</MessageResponse>
-                              {qInput.options && qInput.options.length > 0 && (
-                                <Suggestions vertical>
-                                  {qInput.options.map((opt: string) => (
-                                    <Suggestion
-                                      key={opt}
-                                      suggestion={opt}
-                                      onClick={handleSuggestionClick}
-                                    />
-                                  ))}
-                                </Suggestions>
-                              )}
-                            </div>
-                          );
-                        }
-
-                        // Tool: show_plan
-                        case "tool-show_plan": {
-                          if (part.state === "input-streaming") {
-                            return (
-                              <Tool key={key}>
-                                <ToolHeader
-                                  title="Building plan"
-                                  type={part.type}
-                                  state={part.state}
-                                />
-                              </Tool>
-                            );
-                          }
-                          const chatPlan = part.input as ChatPlan;
-                          if (!chatPlan?.appName) return null;
-                          const features = Array.isArray(chatPlan.features) ? chatPlan.features : [];
-                          const designTokens = chatPlan.designTokens || {} as ChatPlan["designTokens"];
-                          const isComplete = features.length > 0;
-                          return (
-                            <Plan key={key} isStreaming={!isComplete} defaultOpen>
-                              <PlanHeader>
-                                <div>
-                                  <PlanTitle>{chatPlan.appName}</PlanTitle>
-                                  <PlanDescription>{chatPlan.appDescription || ""}</PlanDescription>
-                                </div>
-                                <PlanAction>
-                                  <PlanTrigger />
-                                </PlanAction>
-                              </PlanHeader>
-                              <PlanContent>
-                                <div className="space-y-3">
-                                  {features.length > 0 && (
-                                  <div>
-                                    <h4 className="text-sm font-medium mb-1">
-                                      Features ({features.length})
-                                    </h4>
-                                    <ul className="text-sm text-muted-foreground space-y-1">
-                                      {features.map((f: FeatureSpec, idx: number) => (
-                                        <li key={idx} className="flex items-start gap-2">
-                                          <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-foreground">
-                                            {f.category}
-                                          </span>
-                                          <span>{f.description}</span>
-                                          {f.entity && (
-                                            <span className="text-xs text-muted-foreground">
-                                              ({f.entity.name}: {f.entity.fields.map(fd => fd.name).join(", ")})
-                                            </span>
-                                          )}
-                                        </li>
-                                      ))}
-                                    </ul>
-                                  </div>
-                                  )}
-                                  {Array.isArray(chatPlan.shadcnComponents) && chatPlan.shadcnComponents.length > 0 && (
-                                  <div>
-                                    <h4 className="text-sm font-medium mb-1">
-                                      Components ({chatPlan.shadcnComponents.length + 4})
-                                    </h4>
-                                    <div className="flex flex-wrap gap-1">
-                                      {['button', 'card', 'input', 'label', ...chatPlan.shadcnComponents].map((c: string) => (
-                                        <span key={c} className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-foreground">
-                                          {c}
-                                        </span>
-                                      ))}
-                                    </div>
-                                  </div>
-                                  )}
-                                  {designTokens.primaryColor && (
-                                  <div>
-                                    <h4 className="text-sm font-medium mb-1">Design</h4>
-                                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                      <span
-                                        className="inline-block size-3 rounded-full border"
-                                        style={{ backgroundColor: designTokens.primaryColor }}
-                                      />
-                                      <span>{designTokens.primaryColor}</span>
-                                      <span
-                                        className="inline-block size-3 rounded-full border"
-                                        style={{ backgroundColor: designTokens.accentColor }}
-                                      />
-                                      <span>{designTokens.accentColor}</span>
-                                      <span className="ml-1">{designTokens.fontFamily}</span>
-                                    </div>
-                                  </div>
-                                  )}
-                                  <Confirmation
-                                    approval={
-                                      generationStatus !== "idle"
-                                        ? { id: part.toolCallId, approved: true }
-                                        : { id: part.toolCallId }
-                                    }
-                                    state={
-                                      generationStatus !== "idle"
-                                        ? "approval-responded"
-                                        : "approval-requested"
-                                    }
-                                  >
-                                    <ConfirmationTitle>
-                                      Ready to generate {chatPlan.appName}?
-                                    </ConfirmationTitle>
-                                    <ConfirmationRequest>
-                                      <ConfirmationActions>
-                                        <ConfirmationAction
-                                          variant="outline"
-                                          onClick={() => handleReject(part.toolCallId)}
-                                        >
-                                          Request Changes
-                                        </ConfirmationAction>
-                                        <ConfirmationAction
-                                          onClick={() => {
-                                            handleApprove(part.toolCallId);
-                                            handleStartGeneration(chatPlan);
-                                          }}
-                                          disabled={!isComplete}
-                                        >
-                                          <Rocket className="mr-2 size-4" />
-                                          Approve & Generate
-                                        </ConfirmationAction>
-                                      </ConfirmationActions>
-                                    </ConfirmationRequest>
-                                    <ConfirmationAccepted>
-                                      <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
-                                        <CheckCircle2 className="size-4" />
-                                        Plan approved — generating code...
-                                      </div>
-                                    </ConfirmationAccepted>
-                                    <ConfirmationRejected>
-                                      <div className="text-sm text-muted-foreground">
-                                        Changes requested — revising plan...
-                                      </div>
-                                    </ConfirmationRejected>
-                                  </Confirmation>
-                                </div>
-                              </PlanContent>
-                            </Plan>
-                          );
-                        }
-
-                        // Tool: start_generation
-                        case "tool-start_generation":
-                          return null;
-
-                        // Tool: edit_code
-                        case "tool-edit_code": {
-                          if (part.state === "input-streaming") {
-                            return (
-                              <Tool key={key}>
-                                <ToolHeader
-                                  title="Editing code"
-                                  type={part.type}
-                                  state={part.state}
-                                />
-                              </Tool>
-                            );
-                          }
-                          const editInput = part.input as {
-                            instruction?: string;
-                            searchQueries?: string[];
-                            reasoning?: string;
-                          };
-                          const editOutput = part.output as { filesModified?: string[]; buildPassed?: boolean; status?: string; message?: string } | undefined;
-                          const isEditComplete = part.state === "output-available";
-
-                          return (
-                            <ChainOfThought key={key} defaultOpen>
-                              <ChainOfThoughtHeader>
-                                <Pencil className="mr-1.5 inline size-3.5" />
-                                Editing code
-                              </ChainOfThoughtHeader>
-                              <ChainOfThoughtContent>
-                                {editInput?.reasoning && (
-                                  <ChainOfThoughtStep
-                                    label="Analysis"
-                                    description={editInput.reasoning}
-                                    status="complete"
-                                  />
-                                )}
-                                {editInput?.searchQueries && (
-                                  <ChainOfThoughtStep
-                                    label="Searching"
-                                    description={editInput.searchQueries.map(q => `"${q}"`).join(', ')}
-                                    status={isEditComplete ? "complete" : "active"}
-                                  />
-                                )}
-                                {isEditComplete && editOutput && 'filesModified' in editOutput && (
-                                  <>
-                                    <ChainOfThoughtStep
-                                      label={`Modified ${editOutput.filesModified!.length} file(s)`}
-                                      description={editOutput.filesModified!.join(', ')}
-                                      status="complete"
-                                    />
-                                    <div className="mt-2 flex items-center gap-2 text-sm">
-                                      {editOutput.buildPassed ? (
-                                        <span className="flex items-center gap-1 text-green-600 dark:text-green-400">
-                                          <CheckCircle2 className="size-3.5" />
-                                          Build passed
-                                        </span>
-                                      ) : (
-                                        <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400">
-                                          <CircleAlert className="size-3.5" />
-                                          Build has issues
-                                        </span>
-                                      )}
-                                    </div>
-                                  </>
-                                )}
-                                {isEditComplete && editOutput && 'status' in editOutput && editOutput.status === 'error' && (
-                                  <div className="mt-2 text-sm text-red-500">
-                                    {editOutput.message}
-                                  </div>
-                                )}
-                              </ChainOfThoughtContent>
-                            </ChainOfThought>
-                          );
-                        }
-
-                        default:
-                          return null;
-                      }
-                    })}
+                    {message.role === "user" ? (
+                      <div className="whitespace-pre-wrap">{message.content}</div>
+                    ) : (
+                      <MessageResponse>{message.content}</MessageResponse>
+                    )}
                   </MessageContent>
                 </Message>
               ))}
+
+              {/* Streaming indicator */}
+              {chatStatus === "streaming" && messages.length > 0 && !messages[messages.length - 1]?.content && (
+                <div className="mx-4 my-2 text-sm text-muted-foreground animate-pulse">
+                  Thinking...
+                </div>
+              )}
 
               {/* Chat error */}
               {chatError && (
@@ -753,7 +522,7 @@ export function BuilderChat({ projectId, initialPrompt, initialMessages, onGener
         <PromptBar
           onSubmit={handleSubmit}
           placeholder="Describe what you want to build..."
-          status={status === "streaming" ? "streaming" : "ready"}
+          status={chatStatus === "streaming" ? "streaming" : "ready"}
           disabled={generationStatus === "generating"}
         />
       </div>
