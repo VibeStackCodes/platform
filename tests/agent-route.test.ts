@@ -18,33 +18,59 @@ vi.mock('@server/lib/agents/provider', () => ({
   createHeliconeProvider: vi.fn(() => vi.fn()),
 }))
 
-vi.mock('../../src/mastra/index', () => ({
-  mastra: {
-    getAgent: vi.fn(() => ({
-      network: vi.fn(async function* () {
-        yield {
-          type: 'routing-agent-start',
-          payload: {},
+vi.mock('../../src/mastra/index', () => {
+  /** Create a mock ReadableStream of WorkflowStreamEvents */
+  function createMockStream() {
+    const events = [
+      { type: 'workflow-start', runId: 'test-run', from: 'WORKFLOW', payload: { workflowId: 'app-generation' } },
+      {
+        type: 'workflow-step-start',
+        runId: 'test-run',
+        from: 'WORKFLOW',
+        id: 'analyst',
+        payload: { id: 'analyst', stepCallId: 'sc-1', status: 'running' },
+      },
+      {
+        type: 'workflow-step-finish',
+        runId: 'test-run',
+        from: 'WORKFLOW',
+        payload: { id: 'analyst', metadata: {} },
+      },
+      {
+        type: 'workflow-finish',
+        runId: 'test-run',
+        from: 'WORKFLOW',
+        payload: {
+          workflowStatus: 'success',
+          output: { usage: { inputTokens: 500, outputTokens: 500, totalTokens: 1000 } },
+          metadata: {},
+        },
+      },
+    ]
+    return new ReadableStream({
+      start(controller) {
+        for (const event of events) {
+          controller.enqueue(event)
         }
-        yield {
-          type: 'agent-execution-start',
-          payload: { agentId: 'test-agent', agentName: 'Test Agent' },
-        }
-        yield {
-          type: 'network-execution-event-finish',
-          payload: {},
-        }
-        return {
-          usage: Promise.resolve({
-            totalTokens: 1000,
-            inputTokens: 500,
-            outputTokens: 500,
-          }),
-        }
-      }),
-    })),
-  },
-}))
+        controller.close()
+      },
+    })
+  }
+
+  return {
+    mastra: {
+      getWorkflow: vi.fn(() => ({
+        createRun: vi.fn(async () => ({
+          stream: vi.fn(() => ({
+            fullStream: createMockStream(),
+            usage: Promise.resolve({ inputTokens: 500, outputTokens: 500, totalTokens: 1000 }),
+            result: Promise.resolve({}),
+          })),
+        })),
+      })),
+    },
+  }
+})
 
 vi.mock('@server/lib/db/client', () => ({
   db: {

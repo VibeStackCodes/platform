@@ -1,14 +1,18 @@
+import path from 'node:path'
 import { Agent } from '@mastra/core/agent'
 import { RequestContext } from '@mastra/core/di'
 import type { MastraModelConfig } from '@mastra/core/llm'
 import { ModelRouterEmbeddingModel } from '@mastra/core/llm'
 import { ModerationProcessor, PromptInjectionDetector } from '@mastra/core/processors'
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace'
 import { Memory } from '@mastra/memory'
 import { PgVector, PostgresStore } from '@mastra/pg'
 import { generateShadcnManifest } from '../shadcn-manifest'
 import { createHeliconeProvider, getHeliconeBaseURL, getHeliconeHeaders } from './provider'
 import {
   askClarifyingQuestionsTool,
+  contractToHooksTool,
+  contractToRoutesTool,
   createDirectoryTool,
   createGitHubRepoTool,
   createSandboxTool,
@@ -29,6 +33,7 @@ import {
   writeFileTool,
   writeFilesTool,
 } from './tools'
+import { qaWorkflow } from './workflows'
 
 // Re-export RequestContext for route usage
 export { RequestContext }
@@ -75,6 +80,28 @@ function dynamicModel({ requestContext }: { requestContext: RequestContext }): M
   // Fallback for Mastra Studio / Cloud / tests — still route through Helicone
   return createHeliconeProvider('studio')('gpt-5.2')
 }
+
+// --- Workspace Skills (domain knowledge for code-gen agents) ---
+
+const skillsRoot = path.resolve(import.meta.dirname, 'skills')
+
+const backendWorkspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: skillsRoot }),
+  skills: ['/supabase-js', '/tanstack-query', '/vite-app'],
+})
+
+const frontendWorkspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: skillsRoot }),
+  skills: [
+    '/supabase-js',
+    '/tanstack-router',
+    '/tanstack-query',
+    '/shadcn-ui',
+    '/tailwind-v4',
+    '/react-19',
+    '/vite-app',
+  ],
+})
 
 // --- Module-level agents (visible to Mastra Studio) ---
 
@@ -215,9 +242,9 @@ Your role:
    - src/lib/supabase.ts — typed Supabase client
 
 2. Generate data access hooks:
-   - src/hooks/use-<entity>.ts — TanStack Query hooks for CRUD
-   - Pattern: useQuery for reads, useMutation for writes
-   - Always include loading/error states
+   - Use contract-to-hooks tool to generate TanStack Query CRUD hooks from the schema contract
+   - Review and customize the generated hooks as needed
+   - src/hooks/use-<entity>.ts — one hook file per entity
 
 3. Generate auth utilities:
    - src/lib/auth.ts — sign in, sign up, sign out, session management
@@ -233,7 +260,10 @@ Code quality:
 - TypeScript strict mode (no any)
 - All Supabase queries must be typed
 - Error handling on every database call
-- Use @/ path alias for imports`,
+- Use @/ path alias for imports
+
+After writing all files, call workflow-qaValidation to verify your code compiles.
+Fix any errors it reports before reporting done.`,
   tools: {
     writeFile: writeFileTool,
     writeFiles: writeFilesTool,
@@ -241,8 +271,13 @@ Code quality:
     listFiles: listFilesTool,
     createDirectory: createDirectoryTool,
     searchDocs: searchDocsTool,
+    contractToHooks: contractToHooksTool,
   },
-  defaultOptions: { maxSteps: 20 },
+  workflows: {
+    qaValidation: qaWorkflow,
+  },
+  workspace: backendWorkspace,
+  defaultOptions: { maxSteps: 25 },
 })
 
 export const frontendAgent = new Agent({
@@ -268,6 +303,7 @@ ${getShadcnManifestString()}
 ## Component Patterns
 
 1. Layout pages in src/routes/:
+   - Use contract-to-routes tool to generate TanStack Router route scaffolding from the schema contract
    - __root.tsx — root layout with navigation
    - index.tsx — home/landing page
    - _authenticated/ — protected routes (requires auth)
@@ -292,7 +328,10 @@ Code quality:
 - Responsive design (mobile-first with Tailwind breakpoints)
 - Accessible (ARIA attributes, keyboard navigation)
 - No placeholder or TODO comments — every file must be complete
-- Use @/ path alias for all imports`,
+- Use @/ path alias for all imports
+
+After writing all files, call workflow-qaValidation to verify your code compiles.
+Fix any errors it reports before reporting done.`,
   tools: {
     writeFile: writeFileTool,
     writeFiles: writeFilesTool,
@@ -300,8 +339,13 @@ Code quality:
     listFiles: listFilesTool,
     createDirectory: createDirectoryTool,
     searchDocs: searchDocsTool,
+    contractToRoutes: contractToRoutesTool,
   },
-  defaultOptions: { maxSteps: 25 },
+  workflows: {
+    qaValidation: qaWorkflow,
+  },
+  workspace: frontendWorkspace,
+  defaultOptions: { maxSteps: 30 },
 })
 
 export const reviewerAgent = new Agent({
@@ -409,7 +453,57 @@ Report all URLs (GitHub repo, Vercel deployment) to the supervisor.`,
   defaultOptions: { maxSteps: 10 },
 })
 
-// --- Supervisor (orchestrator) ---
+// --- Product Manager (orchestrates code generation via sub-agents) ---
+
+export const pmAgent = new Agent({
+  id: 'product-manager',
+  name: 'Product Manager',
+  model: dynamicModel,
+  description:
+    'Decomposes requirements into features and orchestrates implementation via sub-agents',
+  instructions: `You are the Product Manager for VibeStack code generation. You decompose requirements into features and orchestrate implementation by calling sub-agents as tools.
+
+## Your Role
+1. Receive a SchemaContract, design preferences, and app metadata
+2. Decompose requirements into discrete features (auth, CRUD for each entity, dashboard, etc.)
+3. Assign file paths per feature to avoid conflicts between agents
+4. Call backend agents (agent-backend1, agent-backend2) for data/auth features
+5. Call frontend agents (agent-frontend1, agent-frontend2) for UI features
+6. Call MULTIPLE agents in PARALLEL when features are independent — use parallel tool calls
+7. After agents complete, call agent-reviewer to review their code
+8. If reviewer finds issues, route fixes to the appropriate agent
+9. When all features pass review, call workflow-qaValidation for final check
+
+## File Coordination Rules
+- Each agent gets exclusive ownership of specific files
+- Shared files (barrel exports, root route, app layout) are NOT written by agents — the integrationStep handles those
+- Backend agents own: src/lib/, src/hooks/
+- Frontend agents own: src/routes/, src/components/ (except ui/ which is pre-vendored)
+
+## Calling Agents
+- agent-backend1 / agent-backend2: Pass sandboxId + feature description + file paths to write
+- agent-frontend1 / agent-frontend2: Pass sandboxId + feature description + component specs
+- agent-reviewer: Pass sandboxId + list of files to review
+
+## Quality Gate
+After all agents complete and reviewer approves:
+1. Call workflow-qaValidation with the sandboxId
+2. If it fails, route errors to the appropriate agent for fixing
+3. Maximum 3 fix iterations before reporting failure`,
+  agents: {
+    backend1: backendAgent,
+    backend2: backendAgent,
+    frontend1: frontendAgent,
+    frontend2: frontendAgent,
+    reviewer: reviewerAgent,
+  },
+  workflows: {
+    qaValidation: qaWorkflow,
+  },
+  defaultOptions: { maxSteps: 40 },
+})
+
+// --- Supervisor (orchestrator — LEGACY, kept for Studio visibility) ---
 
 export const supervisorAgent = new Agent({
   id: 'supervisor',

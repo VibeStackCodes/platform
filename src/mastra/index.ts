@@ -21,16 +21,23 @@ import {
   frontendAgent,
   getSharedStore,
   infraAgent,
+  pmAgent,
   qaAgent,
   reviewerAgent,
   supervisorAgent,
 } from '../../server/lib/agents/registry'
-import { infraProvisionWorkflow } from '../../server/lib/agents/workflows'
+import {
+  appGenerationWorkflow,
+  deployWorkflow,
+  infraProvisionWorkflow,
+  qaWorkflow,
+} from '../../server/lib/agents/workflows'
 
 export const mastra = new Mastra({
   agents: {
     supervisor: supervisorAgent,
     analyst: analystAgent,
+    productManager: pmAgent,
     infraEngineer: infraAgent,
     databaseAdmin: dbaAgent,
     backendEngineer: backendAgent,
@@ -40,7 +47,10 @@ export const mastra = new Mastra({
     devOpsEngineer: devOpsAgent,
   },
   workflows: {
+    appGeneration: appGenerationWorkflow,
     infraProvision: infraProvisionWorkflow,
+    qaValidation: qaWorkflow,
+    deploy: deployWorkflow,
   },
   storage: getSharedStore() ?? undefined,
   observability: new Observability({

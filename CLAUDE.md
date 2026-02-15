@@ -99,7 +99,8 @@ server/                  # Hono API server
     schema-contract.ts   # SchemaContract type — single source of truth
     contract-to-sql.ts   # SchemaContract → deterministic SQL migration
     contract-to-types.ts # SchemaContract → TypeScript types
-    contract-to-drizzle.ts # SchemaContract → Drizzle ORM schema
+    contract-to-hooks.ts  # SchemaContract → TanStack Query CRUD hooks
+    contract-to-routes.ts # SchemaContract → TanStack Router route definitions
     github.ts            # GitHub App integration
     supabase-mgmt.ts     # Supabase Management API
     credits.ts           # Credit checking/deduction

@@ -25,7 +25,10 @@ async function waitForHydration(page: Page) {
 async function _fillPromptAndSubmit(page: Page, prompt: string) {
   await page.evaluate((val) => {
     const textarea = document.querySelector('textarea[name="message"]') as HTMLTextAreaElement
-    const descriptor = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')
+    const descriptor = Object.getOwnPropertyDescriptor(
+      window.HTMLTextAreaElement.prototype,
+      'value',
+    )
     const setter = descriptor?.set
     if (!setter) throw new Error('Could not find textarea value setter')
     setter.call(textarea, val)

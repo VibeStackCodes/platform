@@ -556,7 +556,11 @@ export function BuilderChat({
                   {buildErrors.length > 0 && (
                     <div className="mt-3 space-y-2">
                       {buildErrors.map((err) => (
-                        <StackTrace key={`${err.file}-${err.message}`} trace={err.raw} defaultOpen={false}>
+                        <StackTrace
+                          key={`${err.file}-${err.message}`}
+                          trace={err.raw}
+                          defaultOpen={false}
+                        >
                           <StackTraceHeader>
                             <StackTraceError>
                               <StackTraceErrorType>Build Error</StackTraceErrorType>

@@ -1,48 +1,80 @@
 // lib/schema-contract.ts
 
-// SQL column types supported by Supabase/Postgres
-export type SQLType =
-  | 'uuid'
-  | 'text'
-  | 'numeric'
-  | 'boolean'
-  | 'timestamptz'
-  | 'jsonb'
-  | 'integer'
-  | 'bigint'
+import { z } from 'zod'
 
-export interface ColumnDef {
-  name: string
-  type: SQLType
-  nullable?: boolean
-  default?: string
-  primaryKey?: boolean
-  unique?: boolean
-  references?: { table: string; column: string }
-}
+// ============================================================================
+// Zod schemas (runtime validation — used by structuredOutput + tools)
+// ============================================================================
 
-export interface RLSPolicy {
-  name: string
-  operation: 'SELECT' | 'INSERT' | 'UPDATE' | 'DELETE' | 'ALL'
-  using?: string
-  withCheck?: string
-}
+const SQL_TYPES = [
+  'uuid',
+  'text',
+  'numeric',
+  'boolean',
+  'timestamptz',
+  'jsonb',
+  'integer',
+  'bigint',
+] as const
 
-export interface TableDef {
-  name: string
-  columns: ColumnDef[]
-  rlsPolicies?: RLSPolicy[]
-}
+export const SQLTypeSchema = z.enum(SQL_TYPES)
 
-export interface EnumDef {
-  name: string
-  values: string[]
-}
+export const ColumnDefSchema = z.object({
+  name: z.string().describe('Column name (snake_case)'),
+  type: SQLTypeSchema.describe('PostgreSQL data type'),
+  nullable: z.boolean().optional().describe('Whether column is nullable'),
+  default: z.string().optional().describe('SQL default expression'),
+  primaryKey: z.boolean().optional().describe('Whether column is primary key'),
+  unique: z.boolean().optional().describe('Whether column has unique constraint'),
+  references: z
+    .object({
+      table: z.string().describe('Referenced table name'),
+      column: z.string().describe('Referenced column name'),
+    })
+    .optional()
+    .describe('Foreign key reference'),
+})
 
-export interface SchemaContract {
-  tables: TableDef[]
-  enums?: EnumDef[]
-}
+export const RLSPolicySchema = z.object({
+  name: z.string().describe('Policy name'),
+  operation: z.enum(['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'ALL']).describe('SQL operation'),
+  using: z.string().optional().describe('USING expression for row filtering'),
+  withCheck: z.string().optional().describe('WITH CHECK expression for mutations'),
+})
+
+export const TableDefSchema = z.object({
+  name: z.string().describe('Table name (snake_case, singular)'),
+  columns: z.array(ColumnDefSchema).describe('Table columns'),
+  rlsPolicies: z.array(RLSPolicySchema).optional().describe('Row-Level Security policies'),
+})
+
+export const EnumDefSchema = z.object({
+  name: z.string().describe('Enum type name'),
+  values: z.array(z.string()).describe('Enum values'),
+})
+
+export const SchemaContractSchema = z.object({
+  tables: z.array(TableDefSchema).describe('Database tables'),
+  enums: z.array(EnumDefSchema).optional().describe('PostgreSQL enum types'),
+})
+
+export const DesignPreferencesSchema = z.object({
+  style: z.string().default('modern').describe('Design style (e.g., modern, minimal, playful)'),
+  primaryColor: z.string().default('#3b82f6').describe('Primary color (hex code)'),
+  fontFamily: z.string().default('Inter').describe('Font family'),
+})
+
+// ============================================================================
+// TypeScript types (inferred from Zod schemas — single source of truth)
+// ============================================================================
+
+export type SQLType = z.infer<typeof SQLTypeSchema>
+export type ColumnDef = z.infer<typeof ColumnDefSchema>
+export type RLSPolicy = z.infer<typeof RLSPolicySchema>
+export type TableDef = z.infer<typeof TableDefSchema>
+export type EnumDef = z.infer<typeof EnumDefSchema>
+export type SchemaContract = z.infer<typeof SchemaContractSchema>
+export type DesignPreferences = z.infer<typeof DesignPreferencesSchema>
 
 export interface ValidationResult {
   valid: boolean

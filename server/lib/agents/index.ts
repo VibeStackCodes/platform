@@ -24,6 +24,7 @@ export {
   frontendAgent,
   getSharedStore,
   infraAgent,
+  pmAgent,
   qaAgent,
   RequestContext,
   reviewerAgent,
@@ -36,6 +37,8 @@ export * from './schemas'
 // Tools
 export {
   askClarifyingQuestionsTool,
+  contractToHooksTool,
+  contractToRoutesTool,
   createDirectoryTool,
   createGitHubRepoTool,
   createSandboxTool,
@@ -58,4 +61,10 @@ export {
 } from './tools'
 
 // Workflows
-export { infraProvisionWorkflow } from './workflows'
+export {
+  appGenerationWorkflow,
+  deployWorkflow,
+  infraProvisionWorkflow,
+  qaWorkflow,
+  validateSQLStep,
+} from './workflows'

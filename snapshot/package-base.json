@@ -13,7 +13,6 @@
     "react-dom": "^19.0.0",
     "@tanstack/react-router": "^1.0.0",
     "@supabase/supabase-js": "^2.95.0",
-    "drizzle-orm": "^0.38.0",
     "valibot": "^1.0.0",
     "@sentry/react": "^9.0.0",
     "lucide-react": "^0.460.0",
@@ -31,7 +30,6 @@
     "tailwindcss": "^4.1.0",
     "@tailwindcss/vite": "^4.1.0",
     "@tanstack/router-plugin": "^1.0.0",
-    "drizzle-kit": "^0.30.0",
     "@biomejs/biome": "^1.9.0"
   }
 }

@@ -1,6 +1,6 @@
 /**
  * POST /api/agent
- * Unified agent route that bridges Mastra supervisor agent .network() to SSE streaming
+ * Unified agent route that bridges Mastra appGenerationWorkflow to SSE streaming
  *
  * Request body:
  *   { message: string, projectId: string, model?: string }
@@ -17,6 +17,7 @@
 
 import { sql } from 'drizzle-orm'
 import { Hono } from 'hono'
+import type { WorkflowStreamEvent } from '@mastra/core/workflows'
 import { mastra } from '../../src/mastra/index'
 import { createHeliconeProvider, isAllowedModel } from '../lib/agents/provider'
 import { RequestContext } from '../lib/agents/registry'
@@ -30,6 +31,111 @@ export const agentRoutes = new Hono()
 
 // Apply auth middleware to all routes
 agentRoutes.use('*', authMiddleware)
+
+/** Map workflow step IDs to human-readable phase names */
+const STEP_PHASES: Record<string, { name: string; phase: number }> = {
+  analyst: { name: 'Analyzing requirements', phase: 1 },
+  'prepare-analyst-prompt': { name: 'Preparing analysis', phase: 1 },
+  'create-sandbox': { name: 'Creating sandbox', phase: 2 },
+  'create-supabase': { name: 'Creating database', phase: 2 },
+  'create-github-repo': { name: 'Creating repository', phase: 2 },
+  'prepare-infra-input': { name: 'Provisioning infrastructure', phase: 2 },
+  'merge-infra': { name: 'Infrastructure ready', phase: 2 },
+  'prepare-schema-input': { name: 'Preparing schema', phase: 3 },
+  'schema-generation': { name: 'Generating schema', phase: 3 },
+  'write-migration': { name: 'Writing migration', phase: 4 },
+  'prepare-run-migration': { name: 'Preparing migration', phase: 4 },
+  'run-migration': { name: 'Running migration', phase: 4 },
+  'prepare-codegen-input': { name: 'Preparing code generation', phase: 5 },
+  'code-generation': { name: 'Generating code', phase: 5 },
+  'prepare-integration-input': { name: 'Preparing integration', phase: 6 },
+  integration: { name: 'Wiring app together', phase: 6 },
+  'prepare-qa-input': { name: 'Preparing validation', phase: 7 },
+  'final-qa-gate': { name: 'Running QA checks', phase: 7 },
+  'assemble-output': { name: 'Assembling results', phase: 8 },
+}
+
+/**
+ * Process nested agent/tool events from workflow-step-output.
+ * When a workflow step runs an agent (e.g., codeGenStep calling pmAgent),
+ * the agent's inner events bubble up as nested ChunkType payloads.
+ */
+function processNestedEvent(
+  // biome-ignore lint/suspicious/noExplicitAny: Mastra nested payloads have dynamic structure
+  nestedOutput: any,
+  emit: (event: StreamEvent) => void,
+): void {
+  if (!nestedOutput || typeof nestedOutput !== 'object') return
+
+  const type = nestedOutput.type as string | undefined
+  // biome-ignore lint/suspicious/noExplicitAny: runtime payload
+  const payload = (nestedOutput as any).payload ?? nestedOutput
+
+  switch (type) {
+    case 'tool-call':
+      emit({
+        type: 'agent_artifact',
+        agentId: payload.toolName ?? 'pm',
+        artifactType: 'tool-start',
+        artifactName: payload.toolName ?? 'unknown',
+      })
+      break
+
+    case 'tool-result': {
+      const toolName = payload.toolName as string | undefined
+      if (toolName === 'write-file' || toolName === 'write-files') {
+        const result = payload.result as Record<string, unknown> | undefined
+        emit({
+          type: 'file_complete',
+          path: (result?.path as string) ?? '',
+          linesOfCode: (result?.bytesWritten as number) ?? 0,
+        })
+      } else if (toolName === 'ask-clarifying-questions') {
+        const args = payload.args as Record<string, unknown> | undefined
+        const questions = args?.questions
+        if (Array.isArray(questions)) {
+          emit({
+            type: 'clarification_request',
+            questions: questions as Array<{
+              question: string
+              selectionMode: 'single' | 'multiple'
+              options: Array<{ label: string; description: string }>
+            }>,
+          })
+        }
+      } else {
+        emit({
+          type: 'agent_artifact',
+          agentId: payload.toolName ?? 'pm',
+          artifactType: 'tool-result',
+          artifactName: toolName ?? 'unknown',
+        })
+      }
+      break
+    }
+
+    case 'text-delta':
+      if (payload.text) {
+        emit({
+          type: 'agent_progress',
+          agentId: 'code-generation',
+          message: payload.text,
+        })
+      }
+      break
+
+    case 'finish':
+      // Agent finished generating — no action needed, workflow continues
+      break
+
+    default:
+      // Recursively check for nested output (NestedWorkflowOutput)
+      if (payload?.output) {
+        processNestedEvent(payload.output, emit)
+      }
+      break
+  }
+}
 
 /**
  * POST /api/agent
@@ -73,7 +179,6 @@ agentRoutes.post('/', async (c) => {
   }
 
   // Inject per-request Helicone-proxied model via RequestContext
-  // Full context enables per-user, per-project, per-session cost tracking in Helicone
   const requestContext = new RequestContext()
   requestContext.set(
     'llm',
@@ -81,179 +186,178 @@ agentRoutes.post('/', async (c) => {
       userId: user.id,
       projectId,
       sessionId: `${projectId}:${Date.now()}`,
-      agentName: 'supervisor',
+      agentName: 'app-generation',
     })(model),
   )
   requestContext.set('userId', user.id)
 
-  const supervisor = mastra.getAgent('supervisor')
+  // Get the workflow and create a run
+  const workflow = mastra.getWorkflow('appGeneration')
+  const run = await workflow.createRun()
 
-  // Return SSE stream — createSSEStream returns a Response which Hono can return
+  // Return SSE stream
   return createSSEStream(async (emit: (event: StreamEvent) => void, signal: AbortSignal) => {
     try {
       emit({ type: 'stage_update', stage: 'generating' })
 
-      const execution = await supervisor.network(message, {
-        memory: {
-          thread: projectId,
-          resource: user.id,
-        },
+      // Start the workflow stream (returns WorkflowRunOutput directly, not a Promise)
+      const output = run.stream({
+        inputData: { userMessage: message, projectId },
         requestContext,
-        maxSteps: 50,
       })
 
-      for await (const chunk of execution) {
+      // Iterate over workflow stream events
+      for await (const event of output.fullStream) {
         // Break early if client disconnected
         if (signal.aborted) {
           console.log('[agent] Client disconnected, stopping stream')
           break
         }
 
-        // Cast payload for flexible access — Mastra's NetworkChunkType
-        // has strict types but runtime payloads may include extra fields
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const payload = (chunk as any).payload ?? {}
+        const wfEvent = event as WorkflowStreamEvent
 
-        switch (chunk.type) {
-          // --- Routing agent events (supervisor analyzing/delegating) ---
-          case 'routing-agent-start':
+        switch (wfEvent.type) {
+          case 'workflow-start':
             emit({
               type: 'stage_update',
-              stage: 'planning',
+              stage: 'generating',
             })
             break
 
-          case 'routing-agent-end':
-            emit({
-              type: 'checkpoint',
-              label: `Delegating to ${payload.selectedPrimitive ?? 'agent'}`,
-              status: 'active',
-            })
-            break
-
-          // --- Delegated agent execution events ---
-          case 'agent-execution-start':
-            emit({
-              type: 'agent_start',
-              agentId: payload.agentId ?? 'unknown',
-              agentName: payload.agentName ?? payload.agentId ?? 'Agent',
-              phase: 0,
-            })
-            break
-
-          case 'agent-execution-event-text-delta':
-            emit({
-              type: 'agent_progress',
-              agentId: payload.agentId ?? payload?.payload?.id ?? 'unknown',
-              message: payload.text ?? payload?.payload?.text ?? payload.textDelta ?? '',
-            })
-            break
-
-          case 'agent-execution-end':
-            emit({
-              type: 'agent_complete',
-              agentId: payload.agentId ?? 'unknown',
-              tokensUsed: payload.usage?.totalTokens ?? payload.tokensUsed ?? 0,
-              durationMs: payload.durationMs ?? 0,
-            })
-            break
-
-          // --- Tool execution events ---
-          case 'tool-execution-start':
-            emit({
-              type: 'agent_artifact',
-              agentId: payload.agentId ?? payload.primitiveId ?? 'unknown',
-              artifactType: 'tool-start',
-              artifactName: payload.toolName ?? 'unknown',
-            })
-            break
-
-          case 'tool-execution-end':
-            if (payload.toolName === 'write-file') {
-              const toolResult = payload.result as Record<string, unknown> | undefined
+          case 'workflow-step-start': {
+            const stepId = wfEvent.payload?.id ?? ''
+            const phaseInfo = STEP_PHASES[stepId]
+            if (phaseInfo) {
               emit({
-                type: 'file_complete',
-                path: (toolResult?.path as string) ?? '',
-                linesOfCode: (toolResult?.bytesWritten as number) ?? 0,
+                type: 'phase_start',
+                phase: phaseInfo.phase,
+                phaseName: phaseInfo.name,
+                agentCount: 1,
               })
-            } else if (payload.toolName === 'ask-clarifying-questions') {
-              // Extract questions from the tool's input (not output)
-              const toolInput = payload.input as Record<string, unknown> | undefined
-              const questions = toolInput?.questions
-              if (Array.isArray(questions)) {
-                emit({
-                  type: 'clarification_request',
-                  questions: questions as Array<{
-                    question: string
-                    selectionMode: 'single' | 'multiple'
-                    options: Array<{ label: string; description: string }>
-                  }>,
-                })
-              }
-            } else {
               emit({
-                type: 'agent_artifact',
-                agentId: payload.agentId ?? payload.primitiveId ?? 'unknown',
-                artifactType: 'tool-result',
-                artifactName: payload.toolName ?? 'unknown',
+                type: 'checkpoint',
+                label: phaseInfo.name,
+                status: 'active',
               })
             }
             break
+          }
 
-          // --- Network lifecycle events ---
-          case 'network-execution-event-step-finish':
-            emit({
-              type: 'checkpoint',
-              label: 'Network step complete',
-              status: 'complete',
-            })
+          case 'workflow-step-finish': {
+            const stepId = wfEvent.payload?.id ?? ''
+            const phaseInfo = STEP_PHASES[stepId]
+            if (phaseInfo) {
+              emit({
+                type: 'checkpoint',
+                label: `${phaseInfo.name} complete`,
+                status: 'complete',
+              })
+              emit({
+                type: 'phase_complete',
+                phase: phaseInfo.phase,
+                phaseName: phaseInfo.name,
+              })
+            }
+            break
+          }
+
+          case 'workflow-step-result': {
+            const stepId = wfEvent.payload?.id ?? ''
+            const status = wfEvent.payload?.status
+
+            // Emit file_complete events for write-migration step
+            if (stepId === 'write-migration' && status === 'success') {
+              emit({
+                type: 'file_complete',
+                path: 'supabase/migrations/001_initial.sql',
+                linesOfCode: 0,
+              })
+            }
+
+            // Emit QA results from final-qa-gate
+            if (stepId === 'final-qa-gate' && wfEvent.payload?.output) {
+              const qa = wfEvent.payload.output as {
+                typecheckPassed?: boolean
+                lintPassed?: boolean
+                buildPassed?: boolean
+                typecheckOutput?: string
+                lintOutput?: string
+                buildOutput?: string
+              }
+              if (!qa.typecheckPassed || !qa.lintPassed || !qa.buildPassed) {
+                const errors = []
+                if (!qa.typecheckPassed)
+                  errors.push({ file: 'tsc', message: qa.typecheckOutput ?? 'Type check failed', raw: qa.typecheckOutput ?? '' })
+                if (!qa.lintPassed)
+                  errors.push({ file: 'lint', message: qa.lintOutput ?? 'Lint failed', raw: qa.lintOutput ?? '' })
+                if (!qa.buildPassed)
+                  errors.push({ file: 'build', message: qa.buildOutput ?? 'Build failed', raw: qa.buildOutput ?? '' })
+                emit({ type: 'build_error', errors })
+              }
+            }
+            break
+          }
+
+          case 'workflow-step-output':
+            // Nested agent events (from codeGenStep → pmAgent → sub-agents)
+            processNestedEvent(wfEvent.payload?.output, emit)
             break
 
-          case 'network-execution-event-finish':
-            emit({
-              type: 'checkpoint',
-              label: 'Pipeline complete',
-              status: 'complete',
-            })
-            break
-
-          // --- Workflow events (suspend/resume) ---
-          case 'workflow-execution-suspended':
+          case 'workflow-step-suspended':
             emit({
               type: 'plan_ready',
-              plan: payload.suspendPayload ?? {},
+              plan: wfEvent.payload?.suspendPayload ?? {},
+            })
+            break
+
+          case 'workflow-finish': {
+            const wfStatus = wfEvent.payload?.workflowStatus
+            if (wfStatus === 'success') {
+              emit({
+                type: 'checkpoint',
+                label: 'Pipeline complete',
+                status: 'complete',
+              })
+            }
+            break
+          }
+
+          case 'workflow-canceled':
+            emit({
+              type: 'error',
+              message: 'Workflow was canceled',
+              stage: 'error',
             })
             break
 
           default:
-            // Log unhandled chunk types for debugging (non-critical)
+            // Log unhandled for debugging
             if (process.env.NODE_ENV === 'development') {
               console.log(
-                `[agent] Unhandled chunk type: ${chunk.type}`,
-                JSON.stringify(payload).slice(0, 200),
+                `[agent] Unhandled workflow event: ${wfEvent.type}`,
+                JSON.stringify(wfEvent.payload ?? {}).slice(0, 200),
               )
             }
             break
         }
       }
 
-      // Use accurate token counts from network execution
-      const tokenUsage = await execution.usage
-      const totalTokens = tokenUsage.totalTokens
+      // Get token usage from workflow execution
+      const usage = await output.usage
+      const totalTokens = (usage?.inputTokens ?? 0) + (usage?.outputTokens ?? 0)
 
       // Deduct credits after successful completion
       if (totalTokens > 0) {
         const creditsUsed = Math.ceil(totalTokens / 1000)
 
-        // Deduct credits via Postgres function (matches original RPC call)
         await db.execute(sql`SELECT deduct_credits(
           ${user.id}::uuid,
           ${creditsUsed}::int,
           ${projectId}::uuid,
           ${model}::text,
           ${'generation'}::text,
-          ${tokenUsage.inputTokens}::int,
-          ${tokenUsage.outputTokens}::int,
+          ${usage?.inputTokens ?? 0}::int,
+          ${usage?.outputTokens ?? 0}::int,
           ${totalTokens}::int
         )`)
 
