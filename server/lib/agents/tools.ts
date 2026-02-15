@@ -323,10 +323,14 @@ let _pgliteReady: Promise<void> | null = null
 async function initPGlite() {
   const { PGlite } = await import('@electric-sql/pglite')
   const pg = new PGlite()
-  const authStubs = `
+  const supabaseStubs = `
+    -- Supabase roles
     DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN CREATE ROLE authenticated; END IF; END $$;
     DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN CREATE ROLE anon; END IF; END $$;
     DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'service_role') THEN CREATE ROLE service_role; END IF; END $$;
+    GRANT ALL ON SCHEMA public TO authenticated, anon, service_role;
+
+    -- auth schema
     CREATE SCHEMA IF NOT EXISTS auth;
     CREATE TABLE IF NOT EXISTS auth.users (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -336,9 +340,36 @@ async function initPGlite() {
     CREATE OR REPLACE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$ SELECT '00000000-0000-0000-0000-000000000000'::uuid $$;
     CREATE OR REPLACE FUNCTION auth.role() RETURNS text LANGUAGE sql STABLE AS $$ SELECT 'authenticated'::text $$;
     CREATE OR REPLACE FUNCTION auth.jwt() RETURNS jsonb LANGUAGE sql STABLE AS $$ SELECT '{}'::jsonb $$;
-    GRANT ALL ON SCHEMA public TO authenticated, anon, service_role;
+
+    -- storage schema (Supabase Storage stubs)
+    CREATE SCHEMA IF NOT EXISTS storage;
+    CREATE TABLE IF NOT EXISTS storage.buckets (
+      id text PRIMARY KEY,
+      name text NOT NULL UNIQUE,
+      owner uuid REFERENCES auth.users(id),
+      public boolean DEFAULT false,
+      file_size_limit bigint,
+      allowed_mime_types text[],
+      created_at timestamptz DEFAULT now(),
+      updated_at timestamptz DEFAULT now()
+    );
+    CREATE TABLE IF NOT EXISTS storage.objects (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      bucket_id text REFERENCES storage.buckets(id),
+      name text,
+      owner uuid REFERENCES auth.users(id),
+      metadata jsonb,
+      path_tokens text[] GENERATED ALWAYS AS (string_to_array(name, '/')) STORED,
+      created_at timestamptz DEFAULT now(),
+      updated_at timestamptz DEFAULT now(),
+      last_accessed_at timestamptz DEFAULT now()
+    );
+    GRANT ALL ON SCHEMA storage TO authenticated, anon, service_role;
+
+    -- realtime schema (stub for ALTER PUBLICATION references)
+    CREATE SCHEMA IF NOT EXISTS realtime;
   `
-  await pg.exec(authStubs)
+  await pg.exec(supabaseStubs)
   return pg
 }
 
@@ -364,10 +395,16 @@ export const validateSQLTool = createTool({
   }),
   execute: async (inputData, _context) => {
     const pg = await getPGlite()
-    // Strip CREATE EXTENSION statements — PGlite doesn't support extension management
-    // but agents often generate them (pgcrypto, uuid-ossp, etc.). PGlite has
-    // gen_random_uuid() built-in, so these extensions aren't needed for validation.
-    const sql = inputData.sql.replace(/CREATE\s+EXTENSION\s+IF\s+NOT\s+EXISTS\s+[^;]+;/gi, '')
+    // Strip statements PGlite can't handle:
+    // - CREATE EXTENSION: PGlite has gen_random_uuid() built-in, extensions not needed
+    // - ALTER/CREATE PUBLICATION: Supabase realtime uses publications, PGlite doesn't support them
+    // - NOTIFY/pg_notify: Supabase realtime triggers, no-op in PGlite
+    const sql = inputData.sql
+      .replace(/CREATE\s+EXTENSION\s+IF\s+NOT\s+EXISTS\s+[^;]+;/gi, '')
+      .replace(/ALTER\s+PUBLICATION\s+[^;]+;/gi, '')
+      .replace(/CREATE\s+PUBLICATION\s+[^;]+;/gi, '')
+      .replace(/DROP\s+PUBLICATION\s+[^;]+;/gi, '')
+      .replace(/SELECT\s+pg_notify\s*\([^)]*\)\s*;/gi, '')
     try {
       // Wrap in a transaction and always rollback to keep PGlite clean
       await pg.exec('BEGIN')

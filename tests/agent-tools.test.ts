@@ -307,3 +307,118 @@ describe('Sandbox Tools', () => {
     expect(valid.success).toBe(true)
   })
 })
+
+describe('PGlite Supabase Stubs', () => {
+  // These tests call validateSQLTool.execute() directly against PGlite
+  // to verify that the Supabase stubs (auth, storage, realtime) work correctly.
+  const validate = (sql: string) =>
+    validateSQLTool.execute!({ context: {}, sql }, { toolCallId: 'test', resourceId: 'test', threadId: 'test', runId: 'test' } as never)
+
+  it('validates basic table with RLS referencing auth.uid()', async () => {
+    const result = await validate(`
+      CREATE TABLE notes (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id uuid NOT NULL DEFAULT auth.uid(),
+        content text NOT NULL,
+        created_at timestamptz DEFAULT now()
+      );
+      ALTER TABLE notes ENABLE ROW LEVEL SECURITY;
+      CREATE POLICY "users read own notes" ON notes FOR SELECT USING (auth.uid() = user_id);
+    `)
+    expect(result.valid).toBe(true)
+  })
+
+  it('validates FK to auth.users', async () => {
+    const result = await validate(`
+      CREATE TABLE profiles (
+        id uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+        display_name text NOT NULL,
+        avatar_url text
+      );
+    `)
+    expect(result.valid).toBe(true)
+  })
+
+  it('validates FK to storage.objects', async () => {
+    const result = await validate(`
+      CREATE TABLE uploads (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        object_id uuid REFERENCES storage.objects(id),
+        user_id uuid NOT NULL DEFAULT auth.uid(),
+        label text
+      );
+    `)
+    expect(result.valid).toBe(true)
+  })
+
+  it('validates FK to storage.buckets', async () => {
+    const result = await validate(`
+      CREATE TABLE bucket_configs (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        bucket_id text REFERENCES storage.buckets(id),
+        max_size bigint DEFAULT 10485760
+      );
+    `)
+    expect(result.valid).toBe(true)
+  })
+
+  it('strips CREATE EXTENSION statements', async () => {
+    const result = await validate(`
+      CREATE EXTENSION IF NOT EXISTS pgcrypto;
+      CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+      CREATE TABLE test (id uuid PRIMARY KEY DEFAULT gen_random_uuid());
+    `)
+    expect(result.valid).toBe(true)
+  })
+
+  it('strips ALTER PUBLICATION supabase_realtime', async () => {
+    const result = await validate(`
+      CREATE TABLE messages (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        content text NOT NULL
+      );
+      ALTER PUBLICATION supabase_realtime ADD TABLE messages;
+    `)
+    expect(result.valid).toBe(true)
+  })
+
+  it('strips CREATE PUBLICATION', async () => {
+    const result = await validate(`
+      CREATE PUBLICATION my_pub FOR TABLE messages;
+    `)
+    expect(result.valid).toBe(true)
+  })
+
+  it('strips pg_notify calls', async () => {
+    const result = await validate(`
+      CREATE TABLE events (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), payload jsonb);
+      SELECT pg_notify('events_channel', 'test');
+    `)
+    expect(result.valid).toBe(true)
+  })
+
+  it('validates grants to Supabase roles', async () => {
+    const result = await validate(`
+      CREATE TABLE items (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), name text);
+      GRANT SELECT ON items TO authenticated;
+      GRANT SELECT ON items TO anon;
+      GRANT ALL ON items TO service_role;
+    `)
+    expect(result.valid).toBe(true)
+  })
+
+  it('rejects genuinely invalid SQL', async () => {
+    const result = await validate('CREATE TABL not_valid (;')
+    expect(result.valid).toBe(false)
+    expect(result.error).toBeDefined()
+  })
+
+  it('validates storage policies referencing storage schema', async () => {
+    const result = await validate(`
+      CREATE POLICY "authenticated can read objects"
+        ON storage.objects FOR SELECT
+        USING (auth.role() = 'authenticated');
+    `)
+    expect(result.valid).toBe(true)
+  })
+})
