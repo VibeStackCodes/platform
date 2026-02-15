@@ -28,22 +28,22 @@ export default defineConfig({
   ],
   webServer: [
     {
-      command: 'NEXT_PUBLIC_MOCK_MODE=true pnpm build && NEXT_PUBLIC_MOCK_MODE=true pnpm start -p 3100',
+      command: 'VITE_MOCK_MODE=true pnpm dev',
       url: 'http://localhost:3100',
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
       env: {
-        NEXT_PUBLIC_MOCK_MODE: 'true',
+        VITE_MOCK_MODE: 'true',
         SUPABASE_E2E_ORG_ID: 'zieajexturdwfcjjfolu',
       },
     },
     {
-      command: 'pnpm build && pnpm start',
+      command: 'pnpm dev',
       url: 'http://localhost:3000',
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
       env: {
-        NEXT_PUBLIC_MOCK_MODE: 'false',
+        VITE_MOCK_MODE: 'false',
         SUPABASE_E2E_ORG_ID: 'zieajexturdwfcjjfolu',
       },
     },
