@@ -4,7 +4,7 @@
  * Provides type-safe SSE response creation for streaming events to clients.
  */
 
-import type { StreamEvent } from './types';
+import type { StreamEvent } from '../../lib/types';
 
 /**
  * Create an SSE response stream with abort signal support.

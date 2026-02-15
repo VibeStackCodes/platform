@@ -21,7 +21,7 @@ export {
 } from './registry';
 
 // Mastra instance (canonical location: src/mastra/index.ts per Mastra Cloud convention)
-export { mastra } from '../../src/mastra/index';
+export { mastra } from '../../../src/mastra/index';
 
 // Helicone provider + model validation
 export { createHeliconeProvider, isAllowedModel, ALLOWED_MODELS } from './provider';

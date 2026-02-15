@@ -6,7 +6,7 @@
  */
 
 import { SupabaseManagementAPI } from "supabase-management-js";
-import type { SupabaseProject, SupabaseSchema } from "./types";
+import type { SupabaseProject, SupabaseSchema } from "../../lib/types";
 
 // ============================================================================
 // Internal API Response Types

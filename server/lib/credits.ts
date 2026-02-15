@@ -6,7 +6,7 @@
  */
 import Stripe from 'stripe';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { UserCredits } from './types';
+import type { UserCredits } from '../../lib/types';
 
 const stripe = process.env.STRIPE_SECRET_KEY
   ? new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2026-01-28.clover' })
