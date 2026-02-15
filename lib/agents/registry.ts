@@ -26,6 +26,22 @@ import { generateShadcnManifest } from '@/lib/shadcn-manifest';
 import { createHeliconeProvider, type AllowedModel } from './provider';
 
 /**
+ * Shared PostgresStore singleton — prevents per-request connection pool creation.
+ * When createAgentNetwork() is called per-request, each supervisor's Memory
+ * reuses this single store instance instead of spawning a new pool.
+ */
+let _sharedStore: PostgresStore | null = null;
+function getSharedStore(): PostgresStore | null {
+  if (!_sharedStore && process.env.DATABASE_URL) {
+    _sharedStore = new PostgresStore({
+      id: 'supervisor-memory',
+      connectionString: process.env.DATABASE_URL,
+    });
+  }
+  return _sharedStore;
+}
+
+/**
  * Lazily generate shadcn component manifest for frontend agent context
  */
 let _manifestCache: string | null = null;
@@ -413,13 +429,10 @@ Phase 6 — Deploy:
       qaEngineer: qaAgent,
       devOpsEngineer: devOpsAgent,
     },
-    ...(process.env.DATABASE_URL
+    ...(getSharedStore()
       ? {
           memory: new Memory({
-            storage: new PostgresStore({
-              id: 'supervisor-memory',
-              connectionString: process.env.DATABASE_URL,
-            }),
+            storage: getSharedStore()!,
             options: {
               // Store FULL conversation history (no truncation)
               lastMessages: false,
