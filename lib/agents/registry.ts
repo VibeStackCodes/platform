@@ -1,7 +1,7 @@
 import { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
-import { LibSQLStore } from '@mastra/libsql';
+import { PostgresStore } from '@mastra/pg';
 import {
   writeFileTool,
   readFileTool,
@@ -441,9 +441,16 @@ Phase 6 — Deploy:
     qaEngineer: qaAgent,
     devOpsEngineer: devOpsAgent,
   },
-  memory: new Memory({
-    storage: new LibSQLStore({ id: 'supervisor-memory', url: 'file:./memory/mastra.db' }),
-  }),
+  ...(process.env.DATABASE_URL
+    ? {
+        memory: new Memory({
+          storage: new PostgresStore({
+            id: 'supervisor-memory',
+            connectionString: process.env.DATABASE_URL,
+          }),
+        }),
+      }
+    : {}),
 });
 
 /**

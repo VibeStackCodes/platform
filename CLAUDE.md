@@ -97,6 +97,7 @@ Required in `.env.local`:
 |----------|---------|
 | `NEXT_PUBLIC_SUPABASE_URL` | Platform Supabase instance |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Platform Supabase anon key |
+| `DATABASE_URL` | PostgreSQL connection string (Supabase pooler URL for Mastra agent memory) |
 | `SUPABASE_ACCESS_TOKEN` | Management API token (for generating app DBs) |
 | `SUPABASE_ORG_ID` | Org for generated Supabase projects |
 | `ANTHROPIC_API_KEY` | Claude API |
