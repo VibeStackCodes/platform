@@ -31,9 +31,9 @@ import { GlobeIcon, ChevronDownIcon } from "lucide-react";
 type ChatStatus = "ready" | "submitted" | "streaming" | "error";
 
 const models = [
-  { id: "gpt-5.2", name: "GPT-5.2", provider: "openai" as const },
-  { id: "gpt-5.1-codex-max", name: "GPT-5.1 Codex Max", provider: "openai" as const },
-  { id: "gpt-5-mini", name: "GPT-5 Mini", provider: "openai" as const },
+  { id: "gpt-5.2", name: "GPT-5.2", provider: "openai" as const, available: true },
+  { id: "gpt-5.1-codex-max", name: "GPT-5.1 Codex Max", provider: "openai" as const, available: false },
+  { id: "gpt-5-mini", name: "GPT-5 Mini", provider: "openai" as const, available: false },
 ];
 
 interface PromptBarProps {
@@ -105,12 +105,17 @@ export function PromptBar({
                       key={m.id}
                       value={m.id}
                       onSelect={() => {
+                        if (!m.available) return;
                         setModel(m.id);
                         setSelectorOpen(false);
                       }}
+                      className={!m.available ? "opacity-50 cursor-not-allowed" : ""}
                     >
                       <ModelSelectorLogo provider={m.provider} />
                       <ModelSelectorName>{m.name}</ModelSelectorName>
+                      {!m.available && (
+                        <span className="ml-auto text-xs text-muted-foreground">Coming soon</span>
+                      )}
                     </ModelSelectorItem>
                   ))}
                 </ModelSelectorGroup>

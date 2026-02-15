@@ -54,7 +54,8 @@ import {
 import { PromptBar } from "@/components/prompt-bar";
 import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
 import { Bot, CheckCircle2 } from "lucide-react";
-import type { StreamEvent, ChatPlan, BuildError, CheckpointEvent, LayerCommitEvent } from "@/lib/types";
+import type { StreamEvent, ChatPlan, BuildError, CheckpointEvent, LayerCommitEvent, CreditsUsedEvent } from "@/lib/types";
+import { CreditDisplay } from "@/components/credit-display";
 
 // Custom message type — replaces UIMessage from Vercel AI SDK
 interface ChatMessage {
@@ -91,6 +92,12 @@ export function BuilderChat({ projectId, initialPrompt, initialMessages, onGener
   const [activeAgents, setActiveAgents] = useState<
     { id: string; name: string; status: 'running' | 'complete'; message?: string }[]
   >([]);
+  const [userCredits, setUserCredits] = useState<{
+    credits_remaining: number;
+    credits_monthly: number;
+    plan: "free" | "pro";
+    credits_reset_at: string | null;
+  } | null>(null);
   const hasAutoSubmitted = useRef(false);
 
   // Custom state management — replaces useChat from @ai-sdk/react
@@ -267,6 +274,14 @@ export function BuilderChat({ projectId, initialPrompt, initialMessages, onGener
       });
 
       if (!response.ok || !response.body) {
+        if (response.status === 402) {
+          const errorData = await response.json();
+          setGenerationStatus("error");
+          setChatError(new Error(
+            `Out of credits (${errorData.credits_remaining ?? 0} remaining). Please upgrade to Pro for more credits.`
+          ));
+          return;
+        }
         throw new Error("Generation failed");
       }
 
@@ -379,6 +394,12 @@ export function BuilderChat({ projectId, initialPrompt, initialMessages, onGener
         break;
       case "layer_commit":
         setLayerCommits((prev) => [...prev, event]);
+        break;
+      case "credits_used":
+        setUserCredits(prev => prev ? {
+          ...prev,
+          credits_remaining: event.creditsRemaining,
+        } : prev);
         break;
     }
   };
@@ -519,6 +540,16 @@ export function BuilderChat({ projectId, initialPrompt, initialMessages, onGener
       </Conversation>
 
       <div className="border-t p-4">
+        {userCredits && (
+          <div className="mb-2 flex items-center justify-between">
+            <CreditDisplay
+              remaining={userCredits.credits_remaining}
+              monthly={userCredits.credits_monthly}
+              plan={userCredits.plan}
+              resetAt={userCredits.credits_reset_at}
+            />
+          </div>
+        )}
         <PromptBar
           onSubmit={handleSubmit}
           placeholder="Describe what you want to build..."
