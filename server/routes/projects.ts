@@ -1,11 +1,50 @@
 // server/routes/projects.ts
 import { Hono } from 'hono'
 import { authMiddleware } from '../middleware/auth'
-import { getProject } from '../lib/db/queries'
+import {
+  getUserProjects,
+  getProject,
+  createProject,
+  getProjectMessages,
+} from '../lib/db/queries'
 
 export const projectRoutes = new Hono()
 
 projectRoutes.use('*', authMiddleware)
+
+/**
+ * GET /api/projects
+ *
+ * Lists all projects for the authenticated user.
+ */
+projectRoutes.get('/', async (c) => {
+  const user = c.var.user
+  const projects = await getUserProjects(user.id)
+  return c.json(projects)
+})
+
+/**
+ * POST /api/projects
+ *
+ * Creates a new project for the authenticated user.
+ */
+projectRoutes.post('/', async (c) => {
+  const user = c.var.user
+  const body = await c.req.json<{ name: string; prompt?: string }>()
+
+  if (!body.name) {
+    return c.json({ error: 'Missing project name' }, 400)
+  }
+
+  const project = await createProject({
+    userId: user.id,
+    name: body.name,
+    prompt: body.prompt ?? null,
+    status: 'pending',
+  })
+
+  return c.json(project, 201)
+})
 
 /**
  * GET /api/projects/:id
@@ -22,4 +61,23 @@ projectRoutes.get('/:id', async (c) => {
   }
 
   return c.json(project)
+})
+
+/**
+ * GET /api/projects/:id/messages
+ *
+ * Returns chat messages for a project.
+ */
+projectRoutes.get('/:id/messages', async (c) => {
+  const user = c.var.user
+  const id = c.req.param('id')
+
+  // Verify project ownership
+  const project = await getProject(id, user.id)
+  if (!project) {
+    return c.json({ error: 'Project not found' }, 404)
+  }
+
+  const messages = await getProjectMessages(id)
+  return c.json(messages)
 })
