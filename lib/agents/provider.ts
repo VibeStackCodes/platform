@@ -1,12 +1,27 @@
 /**
  * Helicone-proxied OpenAI provider factory
  *
- * All LLM calls route through Helicone for observability and per-user tracking.
- * Falls back to direct OpenAI if HELICONE_API_KEY is not set (local dev).
+ * ALL OpenAI calls (LLM + embeddings) route through Helicone for observability
+ * and per-user cost tracking. Falls back to direct OpenAI if HELICONE_API_KEY is not set.
  */
 import { createOpenAI } from '@ai-sdk/openai';
 
 const HELICONE_GATEWAY = 'https://oai.helicone.ai/v1';
+
+/** Shared Helicone headers for a given user (or 'system' for non-user calls) */
+export function getHeliconeHeaders(userId: string): Record<string, string> {
+  const apiKey = process.env.HELICONE_API_KEY;
+  if (!apiKey) return {};
+  return {
+    'Helicone-Auth': `Bearer ${apiKey}`,
+    'Helicone-User-Id': userId,
+  };
+}
+
+/** Helicone gateway URL (or undefined to use direct OpenAI) */
+export function getHeliconeBaseURL(): string | undefined {
+  return process.env.HELICONE_API_KEY ? HELICONE_GATEWAY : undefined;
+}
 
 /**
  * Creates an OpenAI provider instance routed through Helicone.

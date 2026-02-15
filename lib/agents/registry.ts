@@ -5,6 +5,7 @@ import { RequestContext } from '@mastra/core/di';
 import { PromptInjectionDetector, ModerationProcessor } from '@mastra/core/processors';
 import { ModelRouterEmbeddingModel } from '@mastra/core/llm';
 import type { MastraModelConfig } from '@mastra/core/llm';
+import { createHeliconeProvider, getHeliconeHeaders, getHeliconeBaseURL } from './provider';
 import {
   writeFileTool,
   writeFilesTool,
@@ -65,14 +66,14 @@ function getShadcnManifestString(): string {
 /**
  * Dynamic model resolver — reads the Helicone-proxied LLM from RequestContext.
  * Returns LanguageModelV1 (from Helicone provider) or string (Mastra model router format).
- * Falls back to 'openai/gpt-5.2' for Studio playground / Mastra Cloud without RequestContext.
+ * ALL paths route through Helicone when HELICONE_API_KEY is set.
  */
 function dynamicModel({ requestContext }: { requestContext: RequestContext }): MastraModelConfig {
   if (requestContext?.has('llm')) {
     return requestContext.get('llm') as MastraModelConfig;
   }
-  // Fallback for Mastra Studio / Cloud / tests (uses Mastra's built-in model router)
-  return 'openai/gpt-5.2';
+  // Fallback for Mastra Studio / Cloud / tests — still route through Helicone
+  return createHeliconeProvider('studio')('gpt-5.2');
 }
 
 // --- Module-level agents (visible to Mastra Studio) ---
@@ -482,7 +483,13 @@ Phase 6 — Deploy:
                   id: 'supervisor-vector',
                   connectionString: process.env.DATABASE_URL,
                 }),
-                embedder: new ModelRouterEmbeddingModel('openai/text-embedding-3-small'),
+                embedder: new ModelRouterEmbeddingModel({
+                  providerId: 'openai',
+                  modelId: 'text-embedding-3-small',
+                  ...(getHeliconeBaseURL()
+                    ? { url: getHeliconeBaseURL(), headers: getHeliconeHeaders('system') }
+                    : {}),
+                }),
               }
             : {}),
           options: {
