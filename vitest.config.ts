@@ -12,7 +12,7 @@ export default defineConfig({
       reporter: ['text', 'json', 'html'],
       exclude: [
         'node_modules/**',
-        '.next/**',
+        'dist/**',
         'tests/**',
         '**/*.config.ts',
       ],
@@ -20,7 +20,8 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@': resolve(__dirname, './'),
+      '@server': resolve(__dirname, './server'),
+      '@': resolve(__dirname, './src'),
     },
   },
 });

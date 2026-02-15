@@ -25,7 +25,7 @@ import {
   getGitHubTokenTool,
   askClarifyingQuestionsTool,
 } from './tools';
-import { generateShadcnManifest } from '@/lib/shadcn-manifest';
+import { generateShadcnManifest } from '../shadcn-manifest';
 
 // Re-export RequestContext for route usage
 export { RequestContext };

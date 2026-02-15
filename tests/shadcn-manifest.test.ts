@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { generateShadcnManifest, type ComponentManifest } from '@/lib/shadcn-manifest';
+import { generateShadcnManifest, type ComponentManifest } from '@server/lib/shadcn-manifest';
 
 describe('generateShadcnManifest', () => {
   it('returns a manifest with all registered components', () => {

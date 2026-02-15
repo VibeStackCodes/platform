@@ -1,7 +1,7 @@
 // tests/contract-to-sql.test.ts
 import { describe, it, expect } from 'vitest';
-import { contractToSQL } from '@/lib/contract-to-sql';
-import type { SchemaContract } from '@/lib/schema-contract';
+import { contractToSQL } from '@server/lib/contract-to-sql';
+import type { SchemaContract } from '@server/lib/schema-contract';
 
 describe('contractToSQL', () => {
   it('generates CREATE TABLE with correct column types', () => {

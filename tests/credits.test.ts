@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { checkCredits } from '@/lib/credits';
+import { checkCredits } from '@server/lib/credits';
 
 describe('Credit System', () => {
   it('checkCredits returns user credits', async () => {

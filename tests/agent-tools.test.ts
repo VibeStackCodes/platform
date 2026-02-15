@@ -18,7 +18,7 @@ import {
   runMigrationTool,
   createGitHubRepoTool,
   getGitHubTokenTool,
-} from '@/lib/agents/tools';
+} from '@server/lib/agents/tools';
 
 describe('Sandbox Tools', () => {
   it('exports all 18 tools', () => {

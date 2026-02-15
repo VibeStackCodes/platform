@@ -8,7 +8,7 @@ import {
   InfraProvisionResultSchema,
   CodeReviewResultSchema,
   DeploymentResultSchema,
-} from '@/lib/agents/schemas';
+} from '@server/lib/agents/schemas';
 
 describe('ClarifiedRequirementsSchema', () => {
   it('validates a complete object', () => {

@@ -8,7 +8,7 @@ vi.mock('@ai-sdk/openai', () => ({
   }),
 }));
 
-import { mastra } from '@/src/mastra/index';
+import { mastra } from '@/mastra/index';
 import {
   supervisorAgent,
   analystAgent,
@@ -19,7 +19,7 @@ import {
   reviewerAgent,
   qaAgent,
   devOpsAgent,
-} from '@/lib/agents/registry';
+} from '@server/lib/agents/registry';
 import type { Agent } from '@mastra/core/agent';
 
 /** Helper: listAgents() can return sync or async; we always treat it as sync in tests */

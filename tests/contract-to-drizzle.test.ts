@@ -1,7 +1,7 @@
 // tests/contract-to-drizzle.test.ts
 import { describe, it, expect } from 'vitest';
-import { contractToDrizzleSchema } from '@/lib/contract-to-drizzle';
-import type { SchemaContract } from '@/lib/schema-contract';
+import { contractToDrizzleSchema } from '@server/lib/contract-to-drizzle';
+import type { SchemaContract } from '@server/lib/schema-contract';
 
 describe('contractToDrizzleSchema', () => {
   const contract: SchemaContract = {

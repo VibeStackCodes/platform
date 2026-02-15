@@ -1,8 +1,8 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
-import { getSandbox, createSandbox as createSandboxFn, getPreviewUrl as getPreviewUrlFn, pushToGitHub as pushToGitHubFn, downloadDirectory } from '@/lib/sandbox';
-import { createRepo, getInstallationToken, buildRepoName } from '@/lib/github';
-import { createSupabaseProject as createSupabaseProjectFn, runMigration } from '@/lib/supabase-mgmt';
+import { getSandbox, createSandbox as createSandboxFn, getPreviewUrl as getPreviewUrlFn, pushToGitHub as pushToGitHubFn, downloadDirectory } from '../sandbox';
+import { createRepo, getInstallationToken, buildRepoName } from '../github';
+import { createSupabaseProject as createSupabaseProjectFn, runMigration } from '../supabase-mgmt';
 
 /**
  * Standalone Mastra tools for 9-agent architecture

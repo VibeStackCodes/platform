@@ -10,9 +10,9 @@
 
 import { createWorkflow, createStep } from '@mastra/core/workflows';
 import { z } from 'zod';
-import { createSandbox as createSandboxFn } from '@/lib/sandbox';
-import { createRepo, buildRepoName } from '@/lib/github';
-import { createSupabaseProject as createSupabaseProjectFn } from '@/lib/supabase-mgmt';
+import { createSandbox as createSandboxFn } from '../sandbox';
+import { createRepo, buildRepoName } from '../github';
+import { createSupabaseProject as createSupabaseProjectFn } from '../supabase-mgmt';
 
 // --- Step 1: Create Daytona sandbox ---
 

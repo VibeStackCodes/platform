@@ -1,6 +1,6 @@
 // tests/schema-contract.test.ts
 import { describe, it, expect } from 'vitest';
-import { validateContract, type SchemaContract } from '@/lib/schema-contract';
+import { validateContract, type SchemaContract } from '@server/lib/schema-contract';
 
 describe('validateContract', () => {
   it('accepts a valid contract with tables and relations', () => {

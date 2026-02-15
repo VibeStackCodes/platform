@@ -1,7 +1,7 @@
 // tests/contract-to-types.test.ts
 import { describe, it, expect } from 'vitest';
-import { contractToTypes } from '@/lib/contract-to-types';
-import type { SchemaContract } from '@/lib/schema-contract';
+import { contractToTypes } from '@server/lib/contract-to-types';
+import type { SchemaContract } from '@server/lib/schema-contract';
 
 describe('contractToTypes', () => {
   it('generates Supabase Database type with Row/Insert/Update', () => {

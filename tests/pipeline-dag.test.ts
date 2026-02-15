@@ -1,6 +1,6 @@
 // tests/pipeline-dag.test.ts
 import { describe, it, expect } from 'vitest';
-import { runDAG, type Stage } from '@/lib/pipeline-dag';
+import { runDAG, type Stage } from '@server/lib/pipeline-dag';
 
 describe('runDAG', () => {
   it('runs stages in dependency order', async () => {

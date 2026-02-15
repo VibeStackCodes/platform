@@ -26,7 +26,7 @@ describe('Agent Provider', () => {
     process.env.HELICONE_API_KEY = 'sk-helicone-test';
     process.env.OPENAI_API_KEY = 'sk-openai-test';
 
-    const { createHeliconeProvider } = await import('@/lib/agents/provider');
+    const { createHeliconeProvider } = await import('@server/lib/agents/provider');
     const { createOpenAI } = await import('@ai-sdk/openai');
 
     createHeliconeProvider('user-123');
@@ -46,7 +46,7 @@ describe('Agent Provider', () => {
     delete process.env.HELICONE_API_KEY;
     process.env.OPENAI_API_KEY = 'sk-openai-test';
 
-    const { createHeliconeProvider } = await import('@/lib/agents/provider');
+    const { createHeliconeProvider } = await import('@server/lib/agents/provider');
     const { createOpenAI } = await import('@ai-sdk/openai');
 
     createHeliconeProvider('user-123');
@@ -64,7 +64,7 @@ describe('Agent Provider', () => {
   });
 
   it('isAllowedModel validates correctly', async () => {
-    const { isAllowedModel } = await import('@/lib/agents/provider');
+    const { isAllowedModel } = await import('@server/lib/agents/provider');
 
     expect(isAllowedModel('gpt-5.2')).toBe(true);
     expect(isAllowedModel('gpt-5-mini')).toBe(false);
@@ -72,7 +72,7 @@ describe('Agent Provider', () => {
   });
 
   it('ALLOWED_MODELS contains only gpt-5.2', async () => {
-    const { ALLOWED_MODELS } = await import('@/lib/agents/provider');
+    const { ALLOWED_MODELS } = await import('@server/lib/agents/provider');
     expect(ALLOWED_MODELS).toEqual(['gpt-5.2']);
   });
 });

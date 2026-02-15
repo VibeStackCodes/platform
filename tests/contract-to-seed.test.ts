@@ -1,7 +1,7 @@
 // tests/contract-to-seed.test.ts
 import { describe, it, expect } from 'vitest';
-import { contractToSeedSQL } from '@/lib/contract-to-seed';
-import type { SchemaContract } from '@/lib/schema-contract';
+import { contractToSeedSQL } from '@server/lib/contract-to-seed';
+import type { SchemaContract } from '@server/lib/schema-contract';
 
 describe('contractToSeedSQL', () => {
   it('generates INSERT statements for a simple table', () => {
