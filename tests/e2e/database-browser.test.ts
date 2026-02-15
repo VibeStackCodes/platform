@@ -38,7 +38,7 @@ describe('Database Browser E2E: Introspection Pipeline', () => {
     };
 
     mockFetch = vi.fn();
-    global.fetch = mockFetch;
+    global.fetch = mockFetch as typeof fetch;
   });
 
   afterEach(() => {

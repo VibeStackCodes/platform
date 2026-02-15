@@ -1,5 +1,4 @@
 import { Daytona, Sandbox } from '@daytonaio/sdk';
-import { createRepo, getInstallationToken, buildRepoName } from './github';
 
 /**
  * Daytona Sandbox Wrapper
@@ -66,7 +65,6 @@ export async function findSandboxByProject(projectId: string): Promise<Sandbox |
   try {
     const result = await daytona.list({ project: projectId }, 1, 1);
     if (result.items.length > 0) {
-      // list() returns lightweight objects — get the full sandbox
       const sandbox = await daytona.get(result.items[0].id);
       console.log(`✓ Found sandbox by project label: ${sandbox.id}`);
       return sandbox;
@@ -115,7 +113,6 @@ export async function createSandbox(config: SandboxConfig = {}): Promise<Sandbox
       labels: config.labels || {},
       ephemeral: false,
       snapshot: snapshotId,
-      public: true, // Public preview links work in iframes without auth headers
     }, {
       timeout: 60, // 60 second creation timeout
     });
@@ -187,7 +184,7 @@ export async function runCommand(
     timeout?: number;
   } = {}
 ): Promise<CommandResult> {
-  const { cwd, env, async: isAsync = false, timeout = 300 } = options;
+  const { cwd, env: _env, async: isAsync = false, timeout = 300 } = options;
 
   try {
     // Create session if it doesn't exist
@@ -203,13 +200,13 @@ export async function runCommand(
     }
 
     // Execute command in session
+    // Note: env vars are not supported via SessionExecuteRequest - set them at sandbox level
     const response = await sandbox.process.executeSessionCommand(
       sessionId,
       {
         command,
-        var: env,
         async: isAsync,
-      } as any,
+      },
       timeout
     );
 
@@ -220,124 +217,6 @@ export async function runCommand(
     };
   } catch (error) {
     throw new Error(`Command execution failed: ${error instanceof Error ? error.message : String(error)}`);
-  }
-}
-
-// ============================================================================
-// Dev Server Management
-// ============================================================================
-
-/**
- * Initialize a generated Next.js app in the sandbox
- * - Uploads generated files
- * - Installs dependencies
- * - Starts dev server in background
- */
-export async function initGeneratedApp(
-  sandbox: Sandbox,
-  files: Array<{ content: string; path: string }>,
-  workDir: string = '/workspace'
-): Promise<void> {
-  try {
-    // 1. Upload all generated files
-    console.log('Uploading generated files...');
-    await uploadFiles(sandbox, files);
-
-    // 2. Initialize git repo (no SDK equivalent for git init)
-    console.log('Initializing git...');
-    await runCommand(
-      sandbox,
-      'git init && git config user.email "vibestack@generated.app" && git config user.name "VibeStack"',
-      'git-init',
-      { cwd: workDir, timeout: 30 }
-    );
-
-    // 3. Deps pre-installed in snapshot — skip install
-
-    // 4. Stage all files and commit using Daytona SDK
-    console.log('Staging and committing files...');
-    await sandbox.git.add(workDir, ['.']);
-    await sandbox.git.commit(
-      workDir,
-      'chore: initial project scaffolding',
-      'VibeStack',
-      'vibestack@generated.app',
-    );
-
-    // 5. Start dev server in background (async mode)
-    console.log('Starting dev server...');
-    await runCommand(
-      sandbox,
-      'bun run dev 2>/tmp/checker-errors.log',
-      'dev-server',
-      { cwd: workDir, async: true, timeout: 0 }
-    );
-
-    // 6. Wait for server to be ready (poll port 3000)
-    await waitForServerReady(sandbox, 3000, 30);
-
-    console.log('✓ Generated app initialized and running');
-  } catch (error) {
-    throw new Error(`Failed to initialize app: ${error instanceof Error ? error.message : String(error)}`);
-  }
-}
-
-/**
- * Wait for server to be ready by polling HTTP endpoint
- */
-async function waitForServerReady(
-  sandbox: Sandbox,
-  port: number,
-  maxAttempts: number = 30
-): Promise<void> {
-  for (let i = 0; i < maxAttempts; i++) {
-    try {
-      const result = await sandbox.process.executeCommand(
-        `curl -f -s -o /dev/null -w "%{http_code}" http://localhost:${port} || echo "000"`,
-        '/workspace',
-        undefined,
-        5
-      );
-
-      const httpCode = result.result.trim();
-
-      // Any HTTP response (200, 404, etc.) indicates server is ready
-      if (httpCode !== "000" && httpCode !== "") {
-        console.log(`✓ Server ready on port ${port} (HTTP ${httpCode})`);
-        return;
-      }
-    } catch {
-      // Ignore errors, keep polling
-    }
-
-    await new Promise(resolve => setTimeout(resolve, 1000));
-  }
-
-  throw new Error(`Server not ready after ${maxAttempts} attempts`);
-}
-
-/**
- * Get dev server logs from session
- */
-export async function getDevServerLogs(
-  sandbox: Sandbox,
-  sessionId: string = 'dev-server',
-  commandId: string
-): Promise<{ stdout: string; stderr: string }> {
-  let stdout = '';
-  let stderr = '';
-
-  try {
-    await sandbox.process.getSessionCommandLogs(
-      sessionId,
-      commandId,
-      (chunk: string) => { stdout += chunk; },
-      (chunk: string) => { stderr += chunk; }
-    );
-
-    return { stdout, stderr };
-  } catch (error) {
-    throw new Error(`Failed to get logs: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
@@ -363,12 +242,42 @@ export async function getPreviewUrl(
   }
 }
 
+// ============================================================================
+// Dev Server Management
+// ============================================================================
+
+/**
+ * Wait for server to be ready by polling HTTP endpoint
+ */
+async function waitForServerReady(
+  sandbox: Sandbox,
+  port: number,
+  maxAttempts: number = 30
+): Promise<void> {
+  for (let i = 0; i < maxAttempts; i++) {
+    try {
+      const result = await sandbox.process.executeCommand(
+        `curl -f -s -o /dev/null -w "%{http_code}" http://localhost:${port} || echo "000"`,
+        '/workspace',
+        undefined,
+        5
+      );
+      const httpCode = result.result.trim();
+      if (httpCode !== "000" && httpCode !== "") {
+        console.log(`✓ Server ready on port ${port} (HTTP ${httpCode})`);
+        return;
+      }
+    } catch {
+      // Ignore errors, keep polling
+    }
+    await new Promise(resolve => setTimeout(resolve, 1000));
+  }
+  throw new Error(`Server not ready after ${maxAttempts} attempts`);
+}
+
 /**
  * Get the preview link URL for the code server (OpenVSCode on port 13337).
- * Uses getPreviewLink instead of getSignedPreviewUrl because the signed URL
- * proxy has a bug that appends JSON error bytes after HTML in browser contexts,
- * corrupting OpenVSCode's workbench initialization.
- * Requires sandbox created with public: true so the URL works in iframes.
+ * Requires sandbox created with public: true.
  */
 export async function getCodeServerLink(sandbox: Sandbox): Promise<string> {
   const link = await sandbox.getPreviewLink(13337);
@@ -376,28 +285,7 @@ export async function getCodeServerLink(sandbox: Sandbox): Promise<string> {
 }
 
 /**
- * Start the Vite dev server in the background.
- * Returns preview URL immediately — HMR will pick up file changes.
- */
-export async function startDevServer(
-  sandbox: Sandbox,
-  workDir: string = '/workspace'
-): Promise<{ url: string }> {
-  // Start dev server in background (async mode, no timeout)
-  // Redirect stderr to file for live-fixer to read vite-plugin-checker errors
-  runCommand(sandbox, 'bun run dev 2>/tmp/checker-errors.log', 'dev-server', {
-    cwd: workDir,
-    async: true,
-    timeout: 0
-  }).catch(() => {
-    // Dev server runs forever — errors are expected when sandbox shuts down
-  });
-
-  return waitForDevServer(sandbox);
-}
-
-/**
- * Wait for an already-running dev server (started by snapshot entrypoint) and return its URL.
+ * Wait for an already-running dev server and return its preview URL.
  */
 export async function waitForDevServer(sandbox: Sandbox): Promise<{ url: string }> {
   await waitForServerReady(sandbox, 3000, 30);
@@ -407,7 +295,6 @@ export async function waitForDevServer(sandbox: Sandbox): Promise<{ url: string 
 
 /**
  * Wait for the code server (OpenVSCode Server) to be ready on port 13337.
- * Started by the snapshot entrypoint — may take a few seconds to boot.
  */
 export async function waitForCodeServer(sandbox: Sandbox, maxAttempts: number = 15): Promise<void> {
   await waitForServerReady(sandbox, 13337, maxAttempts);
@@ -427,15 +314,15 @@ export async function pushToGitHub(
   token: string,
   workDir: string = '/workspace'
 ): Promise<void> {
-  const authedUrl = cloneUrl.replace('https://', `https://x-access-token:${token}@`);
-
-  // git init + remote add have no SDK equivalent
+  // Add remote (shell command — no SDK method for remote add)
   await runCommand(
     sandbox,
-    `git init && git config user.email "vibestack@generated.app" && git config user.name "VibeStack" && git remote add origin ${authedUrl}`,
+    `git remote add origin ${cloneUrl}`,
     'git-remote-add',
-    { cwd: workDir, timeout: 30 }
+    { cwd: workDir, timeout: 15 }
   );
+
+  // Rename default branch to main (sandbox git init creates 'master')
   await runCommand(
     sandbox,
     'git branch -M main',
@@ -443,10 +330,8 @@ export async function pushToGitHub(
     { cwd: workDir, timeout: 10 }
   );
 
-  // Push using Daytona native git binding
+  // Push using Daytona's native git module with token auth
   await sandbox.git.push(workDir, 'x-access-token', token);
-
-  console.log(`✓ Git push to ${cloneUrl} completed`);
 }
 
 // ============================================================================
@@ -516,120 +401,3 @@ export async function downloadDirectory(
   }
 }
 
-// ============================================================================
-// Early Provisioning
-// ============================================================================
-
-/**
- * Provision sandbox + Supabase project in background.
- * Called fire-and-forget from chat route on first message.
- * Creates with short autoStopInterval (10min) — abandoned sandboxes self-destruct.
- */
-export async function provisionProject(
-  projectId: string,
-  appName: string,
-  supabaseClient: any,
-): Promise<void> {
-  try {
-    const sandbox = await createSandbox({
-      language: 'typescript',
-      autoStopInterval: 60,
-      labels: { project: projectId, app: appName, type: 'vibestack-generated' },
-    });
-
-    // Wait for both servers started by snapshot entrypoint, then get URLs
-    const [, , codeServerUrl] = await Promise.all([
-      waitForDevServer(sandbox),
-      waitForCodeServer(sandbox),
-      getCodeServerLink(sandbox),
-    ]);
-
-    // Create GitHub repo and init git in sandbox — source of truth from day one
-    let githubRepoUrl: string | null = null;
-    try {
-      const repoName = buildRepoName(appName, projectId);
-      const { cloneUrl, htmlUrl } = await createRepo(repoName);
-      const token = await getInstallationToken();
-      const authedUrl = cloneUrl.replace('https://', `https://x-access-token:${token}@`);
-
-      // git init + remote add have no SDK equivalent
-      await runCommand(
-        sandbox,
-        `git init && git config user.email "vibestack@generated.app" && git config user.name "VibeStack" && git remote add origin ${authedUrl}`,
-        'git-init',
-        { cwd: '/workspace', timeout: 30 }
-      );
-      // Rename default branch to main
-      await runCommand(
-        sandbox,
-        'git branch -M main',
-        'git-rename-branch',
-        { cwd: '/workspace', timeout: 10 }
-      );
-      // Commit snapshot code as initial commit
-      await sandbox.git.add('/workspace', ['.']);
-      await sandbox.git.commit(
-        '/workspace',
-        'chore: initial project scaffolding',
-        'VibeStack',
-        'vibestack@generated.app',
-      );
-      // Push using Daytona native git binding
-      await sandbox.git.push('/workspace', 'x-access-token', token);
-
-      githubRepoUrl = htmlUrl;
-      console.log(`✓ GitHub repo created and initialized: ${htmlUrl}`);
-    } catch (error) {
-      // Non-fatal: generate route will create repo as fallback
-      console.warn(`[provisionProject] GitHub init failed (will retry in generate):`, error);
-    }
-
-    // TODO: Phase 2 — store *.preview.vibestack.app URL (non-expiring Cloudflare proxy)
-    // See docs/plans/2026-02-14-sandbox-preview-architecture-design.md
-    // Signed Daytona URLs expire — client fetches fresh from /api/projects/[id]/sandbox-urls
-    await supabaseClient
-      .from('projects')
-      .update({
-        sandbox_id: sandbox.id,
-        code_server_url: codeServerUrl,
-        ...(githubRepoUrl ? { github_repo_url: githubRepoUrl } : {}),
-      })
-      .eq('id', projectId);
-
-    console.log(`✓ Sandbox pre-provisioned: ${sandbox.id}`);
-  } catch (error) {
-    console.error(`[provisionProject] Failed for ${projectId}:`, error);
-    // Don't throw — this is fire-and-forget. Generation route will create its own if needed.
-  }
-}
-
-/**
- * Push the current working tree to origin main.
- * Used after incremental commits during generation.
- * Uses Daytona native git.push() with installation token auth.
- */
-export async function pushToOrigin(
-  sandbox: Sandbox,
-  workDir: string = '/workspace'
-): Promise<void> {
-  const token = await getInstallationToken();
-  await sandbox.git.push(workDir, 'x-access-token', token);
-  console.log('✓ Pushed to origin main');
-}
-
-// ============================================================================
-// Sandbox Destruction
-// ============================================================================
-
-/**
- * Destroy a sandbox and clean up all resources
- */
-export async function destroySandbox(sandbox: Sandbox): Promise<void> {
-  try {
-    await sandbox.delete(30); // 30 second timeout
-    console.log(`✓ Sandbox destroyed: ${sandbox.id}`);
-  } catch (error) {
-    console.error(`Failed to destroy sandbox ${sandbox.id}:`, error);
-    throw new Error(`Sandbox destruction failed: ${error instanceof Error ? error.message : String(error)}`);
-  }
-}

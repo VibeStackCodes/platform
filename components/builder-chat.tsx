@@ -89,7 +89,7 @@ import {
 import { PromptBar } from "@/components/prompt-bar";
 import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
 import { Bot, Rocket, CheckCircle2, Pencil, Search, FileCode2, CircleAlert } from "lucide-react";
-import type { StreamEvent, ChatPlan, BuildError, CheckpointEvent, LayerCommitEvent, FeatureSpec, EditResult } from "@/lib/types";
+import type { StreamEvent, ChatPlan, BuildError, CheckpointEvent, LayerCommitEvent, FeatureSpec } from "@/lib/types";
 
 interface BuilderChatProps {
   projectId: string;
@@ -116,6 +116,9 @@ export function BuilderChat({ projectId, initialPrompt, initialMessages, onGener
   const [buildErrors, setBuildErrors] = useState<BuildError[]>([]);
   const [checkpoints, setCheckpoints] = useState<CheckpointEvent[]>([]);
   const [layerCommits, setLayerCommits] = useState<LayerCommitEvent[]>([]);
+  const [activeAgents, setActiveAgents] = useState<
+    { id: string; name: string; status: 'running' | 'complete'; message?: string }[]
+  >([]);
   const hasAutoSubmitted = useRef(false);
 
   const { messages, status, error: chatError, sendMessage, addToolResult } = useChat({
@@ -129,19 +132,7 @@ export function BuilderChat({ projectId, initialPrompt, initialMessages, onGener
     },
   });
 
-  // Persist messages when AI finishes responding (status transitions away from "streaming")
-  const prevStatusRef = useRef(status);
-  useEffect(() => {
-    const wasStreaming = prevStatusRef.current === "streaming";
-    prevStatusRef.current = status;
-    if (wasStreaming && status !== "streaming" && messages.length > 0) {
-      fetch("/api/chat/messages", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectId, messages }),
-      }).catch((err) => console.error("[BuilderChat] persist error:", err));
-    }
-  }, [status, messages, projectId]);
+  // Message persistence is handled by Mastra agent memory (thread/resource)
 
   // Auto-submit initial prompt (skip if conversation was restored from DB)
   useEffect(() => {
@@ -211,14 +202,14 @@ export function BuilderChat({ projectId, initialPrompt, initialMessages, onGener
 
   const handleStartGeneration = useCallback(async (chatPlan: ChatPlan) => {
     setGenerationStatus("generating");
-    // Files come from template pipeline streaming — start with empty list
+    // Agent pipeline sends events as SSE — start with empty state
     setGenerationFiles([]);
 
     try {
-      const response = await fetch("/api/projects/generate", {
+      const response = await fetch("/api/agent", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectId, prompt: chatPlan.appDescription, chatPlan, model }),
+        body: JSON.stringify({ message: chatPlan.appDescription, projectId }),
       });
 
       if (!response.ok || !response.body) {
@@ -254,6 +245,39 @@ export function BuilderChat({ projectId, initialPrompt, initialMessages, onGener
 
   const handleGenerationEvent = (event: StreamEvent) => {
     switch (event.type) {
+      case "stage_update":
+        if (event.stage === "complete") {
+          setGenerationStatus("complete");
+        } else if (event.stage === "error") {
+          setGenerationStatus("error");
+        }
+        break;
+      case "agent_start":
+        setActiveAgents((prev) => [
+          ...prev.filter((a) => a.id !== event.agentId),
+          { id: event.agentId, name: event.agentName, status: "running" as const },
+        ]);
+        break;
+      case "agent_progress":
+        setActiveAgents((prev) =>
+          prev.map((a) =>
+            a.id === event.agentId ? { ...a, message: event.message } : a
+          )
+        );
+        break;
+      case "agent_complete":
+        setActiveAgents((prev) =>
+          prev.map((a) =>
+            a.id === event.agentId ? { ...a, status: "complete" as const } : a
+          )
+        );
+        break;
+      case "agent_artifact":
+        // Track artifacts per agent if needed in the future
+        break;
+      case "plan_ready":
+        // Agent-generated plan received — could show approval UI
+        break;
       case "file_start":
         setGenerationFiles((prev) => {
           const exists = prev.some((f) => f.path === event.path);
@@ -564,7 +588,7 @@ export function BuilderChat({ projectId, initialPrompt, initialMessages, onGener
                             searchQueries?: string[];
                             reasoning?: string;
                           };
-                          const editOutput = part.output as EditResult | { status: string; message: string } | undefined;
+                          const editOutput = part.output as { filesModified?: string[]; buildPassed?: boolean; status?: string; message?: string } | undefined;
                           const isEditComplete = part.state === "output-available";
 
                           return (
@@ -591,8 +615,8 @@ export function BuilderChat({ projectId, initialPrompt, initialMessages, onGener
                                 {isEditComplete && editOutput && 'filesModified' in editOutput && (
                                   <>
                                     <ChainOfThoughtStep
-                                      label={`Modified ${editOutput.filesModified.length} file(s)`}
-                                      description={editOutput.filesModified.join(', ')}
+                                      label={`Modified ${editOutput.filesModified!.length} file(s)`}
+                                      description={editOutput.filesModified!.join(', ')}
                                       status="complete"
                                     />
                                     <div className="mt-2 flex items-center gap-2 text-sm">

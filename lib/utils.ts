@@ -1,6 +1,5 @@
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
-import pluralize from "pluralize"
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -14,9 +13,4 @@ export function stripCodeFences(text: string): string {
     cleaned = cleaned.replace(/\n```\s*$/, '');
   }
   return cleaned;
-}
-
-/** Pluralize a table name using the `pluralize` library (440+ rules) */
-export function pluralizeTable(name: string): string {
-  return pluralize(name);
 }

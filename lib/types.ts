@@ -93,32 +93,6 @@ export interface ChatPlan {
 }
 
 // ============================================================================
-// Template Pipeline Types
-// ============================================================================
-
-export type TemplateName = 'scaffold' | 'auth' | 'crud' | 'realtime' | 'dashboard' | 'messaging';
-
-export interface TemplateTask {
-  template: TemplateName;
-  config: Record<string, unknown>;
-  llmTask?: string;
-}
-
-export interface EntityConfig {
-  entity: string;
-  tableName: string;
-  fields: EntityField[];
-  belongsTo?: string[];
-  hasRealtime?: boolean;
-}
-
-export interface GeneratedFile {
-  path: string;
-  content: string;
-  layer: number;
-}
-
-// ============================================================================
 // Plan (full technical plan, expanded server-side)
 // ============================================================================
 
@@ -252,13 +226,10 @@ export interface Project {
   generation_state: GenerationState | null;
   sandbox_id: string | null;
   supabase_project_id: string | null;
-  supabase_anon_key: string | null;
-  supabase_service_role_key: string | null;
   preview_url: string | null;
   code_server_url: string | null;
   deploy_url: string | null;
   supabase_url: string | null;
-  github_repo_url: string | null;
   model: string | null;
   created_at: string;
   updated_at: string;
@@ -267,13 +238,6 @@ export interface Project {
 // ============================================================================
 // API Request Types
 // ============================================================================
-
-export interface GenerateRequest {
-  projectId?: string;
-  prompt?: string;
-  chatPlan: ChatPlan;
-  model?: string;
-}
 
 export interface EditRequest {
   projectId: string;
@@ -305,9 +269,13 @@ export type StreamEvent =
   | ErrorEvent
   | CheckpointEvent
   | LayerCommitEvent
-  | EditStartEvent
-  | EditFileEvent
-  | EditCompleteEvent;
+  | AgentStartEvent
+  | AgentProgressEvent
+  | AgentArtifactEvent
+  | AgentCompleteEvent
+  | PhaseStartEvent
+  | PhaseCompleteEvent
+  | PlanReadyEvent;
 
 export interface StageUpdateEvent {
   type: "stage_update";
@@ -391,30 +359,51 @@ export interface LayerCommitEvent {
   files: string[];
 }
 
-export interface EditStartEvent {
-  type: "edit_start";
-  instruction: string;
-}
-
-export interface EditFileEvent {
-  type: "edit_file";
-  path: string;
-  status: "searching" | "editing" | "uploading" | "complete";
-}
-
-export interface EditCompleteEvent {
-  type: "edit_complete";
-  filesModified: string[];
-  buildPassed: boolean;
-}
-
 // ============================================================================
-// Edit Result
+// Agent Pipeline Events
 // ============================================================================
 
-export interface EditResult {
-  filesModified: string[];
-  symbolsFound: number;
-  buildPassed: boolean;
-  error?: string;
+export interface AgentStartEvent {
+  type: "agent_start";
+  agentId: string;
+  agentName: string;
+  phase: number;
+}
+
+export interface AgentProgressEvent {
+  type: "agent_progress";
+  agentId: string;
+  message: string;
+}
+
+export interface AgentArtifactEvent {
+  type: "agent_artifact";
+  agentId: string;
+  artifactType: string;
+  artifactName: string;
+}
+
+export interface AgentCompleteEvent {
+  type: "agent_complete";
+  agentId: string;
+  tokensUsed: number;
+  durationMs: number;
+}
+
+export interface PhaseStartEvent {
+  type: "phase_start";
+  phase: number;
+  phaseName: string;
+  agentCount: number;
+}
+
+export interface PhaseCompleteEvent {
+  type: "phase_complete";
+  phase: number;
+  phaseName: string;
+}
+
+export interface PlanReadyEvent {
+  type: "plan_ready";
+  plan: Record<string, unknown>;
 }

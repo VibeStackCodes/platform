@@ -1,157 +1,70 @@
-import { streamText, convertToModelMessages, stepCountIs } from 'ai';
-import { MockLanguageModelV3 } from 'ai/test';
-import type { UIMessage } from 'ai';
-import { resolveModel } from '@/lib/models';
-import { createChatTools, chatTools } from '@/lib/chat-tools';
-import { BUILDER_SYSTEM_PROMPT } from '@/lib/system-prompt';
-import { createClient } from '@/lib/supabase-server';
-import { MOCK_CHAT_PLAN } from '@/lib/mock-data';
-
-/**
- * Architecture Note: Chat route uses AI SDK (not direct OpenAI SDK) for useChat compatibility.
- * The generation pipeline (planner, generator, verifier) uses OpenAI SDK directly
- * to access features like structured outputs, parallel function calls, and predicted outputs.
- */
-
-const MOCK_MODE = process.env.NEXT_PUBLIC_MOCK_MODE === 'true';
+import { streamText, tool, stepCountIs } from 'ai';
+import { anthropic } from '@ai-sdk/anthropic';
+import { getUser } from '@/lib/supabase-server';
+import { z } from 'zod';
 
 export const maxDuration = 120;
 
 export async function POST(req: Request) {
-  if (!MOCK_MODE) {
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-        status: 401,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
+  const user = await getUser();
+  if (!user) {
+    return new Response('Unauthorized', { status: 401 });
   }
 
-  const { messages, projectId: _projectId, model: modelId = 'gpt-5.2' } =
-    (await req.json()) as {
-      messages: UIMessage[];
-      projectId: string;
-      model?: string;
-    };
-
-  if (MOCK_MODE) {
-    return buildMockChatResponse(messages);
-  }
-
-  // On first user message, kick off early provisioning (fire-and-forget)
-  const userMessages = messages.filter((m) => m.role === 'user');
-  if (userMessages.length === 1 && _projectId) {
-    const supabase = await createClient();
-    const firstMessage = userMessages[0];
-    const textParts = firstMessage.parts.filter((p) => p.type === 'text');
-    const promptText = textParts.length > 0 && 'text' in textParts[0]
-      ? textParts[0].text
-      : 'New Project';
-    import('@/lib/sandbox').then(({ provisionProject }) => {
-      // Use first words of user prompt as temp name — buildRepoName adds vibestack- prefix.
-      // The generate route will use chatPlan.appName for the real Supabase project.
-      const tempName = promptText.split(/\s+/).slice(0, 5).join(' ');
-      provisionProject(_projectId, tempName, supabase).catch(console.error);
-    });
-  }
-
-  const modelMessages = await convertToModelMessages(messages);
-
-  const tools = createChatTools({ projectId: _projectId, model: modelId });
+  const { messages } = await req.json();
 
   const result = streamText({
-    model: resolveModel(modelId),
-    system: BUILDER_SYSTEM_PROMPT,
-    messages: modelMessages,
-    tools,
+    model: anthropic('claude-sonnet-4-5-20250929'),
+    system: `You are an AI app builder assistant. Help the user describe their app idea by asking clarifying questions about features, design, and functionality. Once you have enough information, present a structured plan using the show_plan tool.
+
+Be concise and decisive. Default to modern, sensible choices:
+- Style: modern, minimal
+- Color: blue (#3b82f6)
+- Font: Inter
+- Auth: Supabase Auth
+- Database: PostgreSQL with Supabase`,
+    messages,
+    tools: {
+      thinking_steps: tool({
+        description: 'Internal reasoning steps before presenting plan',
+        inputSchema: z.object({
+          steps: z.array(z.string()),
+        }),
+        execute: async ({ steps }) => ({ steps }),
+      }),
+      show_plan: tool({
+        description: 'Present the app generation plan for user approval',
+        inputSchema: z.object({
+          appName: z.string(),
+          appDescription: z.string(),
+          features: z.array(z.object({
+            description: z.string(),
+            category: z.enum(['auth', 'crud', 'realtime', 'dashboard', 'messaging', 'ui']),
+            entity: z.object({
+              name: z.string(),
+              fields: z.array(z.object({
+                name: z.string(),
+                type: z.enum(['text', 'number', 'boolean', 'enum', 'uuid', 'timestamp', 'json']),
+                required: z.boolean(),
+                enumValues: z.array(z.string()).optional(),
+              })),
+              belongsTo: z.array(z.string()).optional(),
+            }).optional(),
+          })),
+          designTokens: z.object({
+            primaryColor: z.string(),
+            accentColor: z.string(),
+            fontFamily: z.string(),
+            spacing: z.enum(['compact', 'comfortable', 'spacious']),
+            borderRadius: z.enum(['none', 'small', 'medium', 'large']),
+          }),
+          shadcnComponents: z.array(z.string()),
+        }),
+        execute: async (input) => input,
+      }),
+    },
     stopWhen: stepCountIs(10),
     maxOutputTokens: 16384,
-  });
-
-  return result.toUIMessageStreamResponse();
-}
-
-/**
- * Build V3 stream result for a tool call.
- * Uses tool-input-start → tool-input-delta → tool-input-end → finish parts.
- */
-function toolCallStreamResult(toolCallId: string, toolName: string, args: unknown) {
-  const argsStr = JSON.stringify(args);
-  const parts = [
-    { type: 'tool-input-start' as const, id: toolCallId, toolName },
-    { type: 'tool-input-delta' as const, id: toolCallId, delta: argsStr },
-    { type: 'tool-input-end' as const, id: toolCallId },
-    { type: 'tool-call' as const, toolCallId, toolName, input: argsStr },
-    { type: 'finish' as const, finishReason: 'tool-calls' as const, usage: { inputTokens: 0, outputTokens: 0 } },
-  ];
-
-  return {
-    stream: new ReadableStream({
-      async start(controller) {
-        for (const part of parts) {
-          await new Promise((r) => setTimeout(r, 50));
-          controller.enqueue(part);
-        }
-        controller.close();
-      },
-    }),
-  };
-}
-
-/**
- * Mock chat response that simulates brainstorm → plan flow.
- *
- * Turn 1: clarifying question
- * Turn 2: thinking_steps showing planning process
- * Turn 3: show_plan with full fixture plan
- * Turn 4: start_generation
- * Turn 5+: edit response as plain text
- */
-function buildMockChatResponse(messages: UIMessage[]) {
-  const userMessages = messages.filter((m) => m.role === 'user');
-  const turnNumber = userMessages.length;
-
-  let streamResult: ReturnType<typeof toolCallStreamResult>;
-
-  if (turnNumber <= 1) {
-    streamResult = toolCallStreamResult('mock-q1', 'ask_clarifying_question', {
-      question: 'What kind of tasks will users manage? Are these personal tasks or team-based with collaboration?',
-      options: ['Personal task list', 'Team collaboration', 'Both personal and team'],
-    });
-  } else if (turnNumber === 2) {
-    streamResult = toolCallStreamResult('mock-thinking', 'thinking_steps', {
-      steps: [
-        { label: 'Analyzing requirements', description: 'Identifying core features and constraints' },
-        { label: 'Designing database schema', description: 'Planning tables, RLS policies, and relations' },
-        { label: 'Planning file architecture', description: 'Organizing files by dependency layers' },
-        { label: 'Selecting dependencies', description: 'Choosing npm packages and versions' },
-      ],
-    });
-  } else if (turnNumber === 3) {
-    streamResult = toolCallStreamResult('mock-plan', 'show_plan', MOCK_CHAT_PLAN);
-  } else {
-    // Turn 4+: simulate edit_code tool call with mock result
-    streamResult = toolCallStreamResult('mock-edit', 'edit_code', {
-      instruction: 'Change the header color to blue',
-      searchQueries: ['Header', 'header'],
-      reasoning: 'The user wants to modify the header component styling',
-    });
-  }
-
-  const mockModel = new MockLanguageModelV3({
-    doStream: streamResult as any,
-  });
-
-  const result = streamText({
-    model: mockModel,
-    messages: [{ role: 'user', content: 'mock' }],
-    tools: chatTools,
-    maxOutputTokens: 4096,
   });
 
   return result.toUIMessageStreamResponse();
