@@ -477,7 +477,7 @@ Phase 6 — Deploy:
   ...(getSharedStore()
     ? {
         memory: new Memory({
-          storage: getSharedStore()!,
+          storage: getSharedStore() ?? undefined,
           ...(process.env.DATABASE_URL
             ? {
                 vector: new PgVector({

@@ -101,7 +101,9 @@ describe('Agent Registry (Module-Level with Dynamic Model)', () => {
       expect(agent.name.length).toBeGreaterThan(0)
       const description = agent.getDescription()
       expect(description).toBeDefined()
-      expect(description!.length).toBeGreaterThan(10)
+      if (description) {
+        expect(description.length).toBeGreaterThan(10)
+      }
     }
   })
 

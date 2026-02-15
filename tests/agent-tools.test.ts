@@ -51,7 +51,9 @@ describe('Sandbox Tools', () => {
   })
 
   it('writeFileTool has correct input schema', () => {
-    const schema = writeFileTool.inputSchema!
+    const schema = writeFileTool.inputSchema
+    expect(schema).toBeDefined()
+    if (!schema) return
     const valid = schema.safeParse({
       sandboxId: 'abc',
       path: 'src/App.tsx',
@@ -61,25 +63,33 @@ describe('Sandbox Tools', () => {
   })
 
   it('readFileTool has correct input schema', () => {
-    const schema = readFileTool.inputSchema!
+    const schema = readFileTool.inputSchema
+    expect(schema).toBeDefined()
+    if (!schema) return
     const valid = schema.safeParse({ sandboxId: 'abc', path: 'src/App.tsx' })
     expect(valid.success).toBe(true)
   })
 
   it('listFilesTool has correct input schema', () => {
-    const schema = listFilesTool.inputSchema!
+    const schema = listFilesTool.inputSchema
+    expect(schema).toBeDefined()
+    if (!schema) return
     const valid = schema.safeParse({ sandboxId: 'abc', directory: 'src' })
     expect(valid.success).toBe(true)
   })
 
   it('createDirectoryTool has correct input schema', () => {
-    const schema = createDirectoryTool.inputSchema!
+    const schema = createDirectoryTool.inputSchema
+    expect(schema).toBeDefined()
+    if (!schema) return
     const valid = schema.safeParse({ sandboxId: 'abc', path: 'src/components' })
     expect(valid.success).toBe(true)
   })
 
   it('runCommandTool has correct input schema', () => {
-    const schema = runCommandTool.inputSchema!
+    const schema = runCommandTool.inputSchema
+    expect(schema).toBeDefined()
+    if (!schema) return
     const valid = schema.safeParse({
       sandboxId: 'abc',
       command: 'bun run build',
@@ -96,25 +106,33 @@ describe('Sandbox Tools', () => {
   })
 
   it('runBuildTool has correct input schema', () => {
-    const schema = runBuildTool.inputSchema!
+    const schema = runBuildTool.inputSchema
+    expect(schema).toBeDefined()
+    if (!schema) return
     const valid = schema.safeParse({ sandboxId: 'abc' })
     expect(valid.success).toBe(true)
   })
 
   it('runLintTool has correct input schema', () => {
-    const schema = runLintTool.inputSchema!
+    const schema = runLintTool.inputSchema
+    expect(schema).toBeDefined()
+    if (!schema) return
     const valid = schema.safeParse({ sandboxId: 'abc' })
     expect(valid.success).toBe(true)
   })
 
   it('runTypeCheckTool has correct input schema', () => {
-    const schema = runTypeCheckTool.inputSchema!
+    const schema = runTypeCheckTool.inputSchema
+    expect(schema).toBeDefined()
+    if (!schema) return
     const valid = schema.safeParse({ sandboxId: 'abc' })
     expect(valid.success).toBe(true)
   })
 
   it('validateSQLTool input accepts SQL string (no sandboxId needed)', () => {
-    const schema = validateSQLTool.inputSchema!
+    const schema = validateSQLTool.inputSchema
+    expect(schema).toBeDefined()
+    if (!schema) return
     const valid = schema.safeParse({ sql: 'CREATE TABLE test (id uuid PRIMARY KEY);' })
     expect(valid.success).toBe(true)
 
@@ -124,7 +142,9 @@ describe('Sandbox Tools', () => {
   })
 
   it('getPreviewUrlTool has optional port with default', () => {
-    const schema = getPreviewUrlTool.inputSchema!
+    const schema = getPreviewUrlTool.inputSchema
+    expect(schema).toBeDefined()
+    if (!schema) return
     const valid = schema.safeParse({ sandboxId: 'abc' })
     expect(valid.success).toBe(true)
 
@@ -133,7 +153,9 @@ describe('Sandbox Tools', () => {
   })
 
   it('createSandboxTool does not require sandboxId', () => {
-    const schema = createSandboxTool.inputSchema!
+    const schema = createSandboxTool.inputSchema
+    expect(schema).toBeDefined()
+    if (!schema) return
     const valid = schema.safeParse({})
     expect(valid.success).toBe(true)
 
@@ -145,7 +167,9 @@ describe('Sandbox Tools', () => {
   })
 
   it('pushToGitHubTool has correct input schema', () => {
-    const schema = pushToGitHubTool.inputSchema!
+    const schema = pushToGitHubTool.inputSchema
+    expect(schema).toBeDefined()
+    if (!schema) return
     const valid = schema.safeParse({
       sandboxId: 'abc',
       cloneUrl: 'https://github.com/user/repo.git',
@@ -155,7 +179,9 @@ describe('Sandbox Tools', () => {
   })
 
   it('deployToVercelTool has correct input schema', () => {
-    const schema = deployToVercelTool.inputSchema!
+    const schema = deployToVercelTool.inputSchema
+    expect(schema).toBeDefined()
+    if (!schema) return
     const valid = schema.safeParse({
       sandboxId: 'abc',
       projectName: 'test-project',
@@ -172,7 +198,9 @@ describe('Sandbox Tools', () => {
   })
 
   it('searchDocsTool input accepts library and query', () => {
-    const schema = searchDocsTool.inputSchema!
+    const schema = searchDocsTool.inputSchema
+    expect(schema).toBeDefined()
+    if (!schema) return
     const valid = schema.safeParse({
       library: 'react',
       query: 'useEffect cleanup',
@@ -181,7 +209,9 @@ describe('Sandbox Tools', () => {
   })
 
   it('createSupabaseProjectTool has correct input schema', () => {
-    const schema = createSupabaseProjectTool.inputSchema!
+    const schema = createSupabaseProjectTool.inputSchema
+    expect(schema).toBeDefined()
+    if (!schema) return
     const valid = schema.safeParse({
       name: 'my-app-db',
     })
@@ -189,7 +219,9 @@ describe('Sandbox Tools', () => {
   })
 
   it('runMigrationTool has correct input schema', () => {
-    const schema = runMigrationTool.inputSchema!
+    const schema = runMigrationTool.inputSchema
+    expect(schema).toBeDefined()
+    if (!schema) return
     const valid = schema.safeParse({
       supabaseProjectId: 'abc123',
       sql: 'CREATE TABLE users (id uuid PRIMARY KEY);',
@@ -198,7 +230,9 @@ describe('Sandbox Tools', () => {
   })
 
   it('createGitHubRepoTool has correct input schema', () => {
-    const schema = createGitHubRepoTool.inputSchema!
+    const schema = createGitHubRepoTool.inputSchema
+    expect(schema).toBeDefined()
+    if (!schema) return
     const valid = schema.safeParse({
       appName: 'my-generated-app',
       projectId: 'proj_123',
@@ -207,14 +241,18 @@ describe('Sandbox Tools', () => {
   })
 
   it('getGitHubTokenTool has correct input schema', () => {
-    const schema = getGitHubTokenTool.inputSchema!
+    const schema = getGitHubTokenTool.inputSchema
+    expect(schema).toBeDefined()
+    if (!schema) return
     // Empty object should be valid (no required fields)
     const valid = schema.safeParse({})
     expect(valid.success).toBe(true)
   })
 
   it('tools that require sandboxId reject missing sandboxId', () => {
-    const schema = writeFileTool.inputSchema!
+    const schema = writeFileTool.inputSchema
+    expect(schema).toBeDefined()
+    if (!schema) return
     const invalid = schema.safeParse({ path: 'src/App.tsx', content: 'hello' })
     expect(invalid.success).toBe(false)
   })
@@ -248,7 +286,9 @@ describe('Sandbox Tools', () => {
   })
 
   it('writeFileTool outputSchema matches expected structure', () => {
-    const schema = writeFileTool.outputSchema!
+    const schema = writeFileTool.outputSchema
+    expect(schema).toBeDefined()
+    if (!schema) return
     const valid = schema.safeParse({
       success: true,
       path: 'src/App.tsx',
@@ -258,7 +298,9 @@ describe('Sandbox Tools', () => {
   })
 
   it('readFileTool outputSchema matches expected structure', () => {
-    const schema = readFileTool.outputSchema!
+    const schema = readFileTool.outputSchema
+    expect(schema).toBeDefined()
+    if (!schema) return
     const valid = schema.safeParse({
       content: 'file content',
       exists: true,
@@ -267,7 +309,9 @@ describe('Sandbox Tools', () => {
   })
 
   it('validateSQLTool outputSchema matches expected structure', () => {
-    const schema = validateSQLTool.outputSchema!
+    const schema = validateSQLTool.outputSchema
+    expect(schema).toBeDefined()
+    if (!schema) return
     const validResult = schema.safeParse({ valid: true })
     expect(validResult.success).toBe(true)
 
@@ -279,7 +323,9 @@ describe('Sandbox Tools', () => {
   })
 
   it('listFilesTool outputSchema matches expected structure', () => {
-    const schema = listFilesTool.outputSchema!
+    const schema = listFilesTool.outputSchema
+    expect(schema).toBeDefined()
+    if (!schema) return
     const valid = schema.safeParse({
       files: ['file1.ts', 'file2.ts'],
       count: 2,
@@ -288,7 +334,9 @@ describe('Sandbox Tools', () => {
   })
 
   it('runCommandTool outputSchema matches expected structure', () => {
-    const schema = runCommandTool.outputSchema!
+    const schema = runCommandTool.outputSchema
+    expect(schema).toBeDefined()
+    if (!schema) return
     const valid = schema.safeParse({
       exitCode: 0,
       stdout: 'command output',
@@ -298,7 +346,9 @@ describe('Sandbox Tools', () => {
   })
 
   it('getPreviewUrlTool outputSchema matches expected structure', () => {
-    const schema = getPreviewUrlTool.outputSchema!
+    const schema = getPreviewUrlTool.outputSchema
+    expect(schema).toBeDefined()
+    if (!schema) return
     const valid = schema.safeParse({
       url: 'https://preview.daytona.io/abc',
       port: 3000,
@@ -311,8 +361,15 @@ describe('Sandbox Tools', () => {
 describe('PGlite Supabase Stubs', () => {
   // These tests call validateSQLTool.execute() directly against PGlite
   // to verify that the Supabase stubs (auth, storage, realtime) work correctly.
-  const validate = (sql: string) =>
-    validateSQLTool.execute!({ context: {}, sql }, { toolCallId: 'test', resourceId: 'test', threadId: 'test', runId: 'test' } as never)
+  const validate = (sql: string) => {
+    if (!validateSQLTool.execute) throw new Error('validateSQLTool.execute is undefined')
+    return validateSQLTool.execute({ context: {}, sql }, {
+      toolCallId: 'test',
+      resourceId: 'test',
+      threadId: 'test',
+      runId: 'test',
+    } as never)
+  }
 
   it('validates basic table with RLS referencing auth.uid()', async () => {
     const result = await validate(`

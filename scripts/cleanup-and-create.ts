@@ -11,13 +11,14 @@ async function main() {
 
   // Clean up existing sandboxes (ignore errors for already-deleting ones)
   const result = await d.list()
-  const sandboxes = (result as any).items || result
+  const sandboxes = (result as { items?: unknown[] }).items || result
   for (const s of sandboxes) {
     try {
       console.log(`Deleting sandbox: ${s.id}`)
       await d.delete(s)
-    } catch (e: any) {
-      console.log(`  Skip (already deleting): ${e.message?.slice(0, 60)}`)
+    } catch (e: unknown) {
+      const errorMessage = (e as { message?: string })?.message?.slice(0, 60) ?? String(e)
+      console.log(`  Skip (already deleting): ${errorMessage}`)
     }
   }
 
@@ -26,7 +27,7 @@ async function main() {
   for (let i = 0; i < 12; i++) {
     await new Promise((r) => setTimeout(r, 5000))
     const check = await d.list()
-    const remaining = (check as any).items || check
+    const remaining = (check as { items?: unknown[] }).items || check
     console.log(`  ${remaining.length} sandboxes remaining...`)
     if (remaining.length === 0) break
   }

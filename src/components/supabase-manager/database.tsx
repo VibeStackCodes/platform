@@ -13,8 +13,32 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { runQuery, useRunQuery } from '@/hooks/use-run-query'
 import { useListTables } from '@/hooks/use-tables'
 
+// Type definitions for pg-meta table/column objects
+interface PgColumn {
+  name: string
+  data_type: string
+  is_nullable: boolean
+  is_updatable: boolean
+  is_generated: boolean
+  enums?: string[]
+  default_value?: string | null
+  is_identity?: boolean
+}
+
+interface PgPrimaryKey {
+  name: string
+}
+
+interface PgTable {
+  id: string
+  name: string
+  columns: PgColumn[]
+  primary_keys?: PgPrimaryKey[]
+  live_rows_estimate?: number
+}
+
 // Helper to generate a Zod schema from the table's column definitions
-export function generateZodSchema(table: any): z.ZodObject<any> {
+export function generateZodSchema(table: PgTable): z.ZodObject<Record<string, ZodTypeAny>> {
   if (!table || !table.columns) {
     return z.object({})
   }
@@ -52,9 +76,9 @@ export function generateZodSchema(table: any): z.ZodObject<any> {
   return z.object(shape)
 }
 
-export const getPrimaryKeys = (table: any): string[] => {
+export const getPrimaryKeys = (table: PgTable): string[] => {
   if (!table || !table.primary_keys) return []
-  return table.primary_keys.map((pk: any) => pk.name)
+  return table.primary_keys.map((pk) => pk.name)
 }
 
 function EditRowView({
@@ -65,8 +89,8 @@ function EditRowView({
   onBack,
 }: {
   projectRef: string
-  table: any
-  row: any
+  table: PgTable
+  row: Record<string, unknown>
   onSuccess: () => void
   onBack: () => void
 }) {
@@ -75,19 +99,19 @@ function EditRowView({
 
   const columnInfo = useMemo(() => {
     if (!table || !table.columns) return {}
-    const info: Record<string, any> = {}
+    const info: Record<string, { data_type: string; is_nullable: boolean }> = {}
     for (const column of table.columns) {
       if (!column.is_updatable || column.is_generated) continue
       const dataType = column.data_type.toLowerCase()
       const displayType =
-        dataType === 'user-defined' && column.enums?.length > 0 ? 'enum' : dataType
+        dataType === 'user-defined' && column.enums && column.enums.length > 0 ? 'enum' : dataType
       info[column.name] = { data_type: displayType, is_nullable: column.is_nullable }
     }
     return info
   }, [table])
 
   const handleFormSubmit = useCallback(
-    (formData: any) => {
+    (formData: Record<string, unknown>) => {
       const pks = getPrimaryKeys(table)
       if (pks.length === 0) {
         toast.error('Cannot update row: no primary key.')
@@ -97,7 +121,7 @@ function EditRowView({
       const setClauses = Object.entries(formData)
         .map(([key, value]) => {
           if (JSON.stringify(row[key]) === JSON.stringify(value)) return null
-          const column = table.columns.find((col: any) => col.name === key)
+          const column = table.columns.find((col) => col.name === key)
           const dataType = column?.data_type?.toLowerCase() || ''
           const isNullable = column?.is_nullable || false
 
@@ -171,20 +195,23 @@ function TableRecordsView({
   onBack,
 }: {
   projectRef: string
-  table: any
+  table: PgTable
   onBack: () => void
 }) {
-  const [editingRow, setEditingRow] = useState<any>(null)
+  const [editingRow, setEditingRow] = useState<Record<string, unknown> | null>(null)
   const [refetchKey, setRefetchKey] = useState(0)
 
-  const { data: rows, isLoading } = useQuery({
+  const { data: rows, isLoading } = useQuery<unknown, Error, Record<string, unknown>[]>({
     queryKey: ['table-records', projectRef, table.name, refetchKey],
-    queryFn: () =>
-      runQuery({
+    queryFn: async () => {
+      const result = await runQuery({
         projectRef,
         query: `SELECT * FROM public."${table.name}" LIMIT 100;`,
         readOnly: true,
-      }),
+      })
+      // runQuery returns unknown, we assert it's an array of records
+      return (result ?? []) as Record<string, unknown>[]
+    },
     enabled: !!projectRef && !!table.name,
   })
 
@@ -226,8 +253,10 @@ function TableRecordsView({
 }
 
 export function DatabaseManager({ projectRef }: { projectRef: string }) {
-  const [selectedTable, setSelectedTable] = useState<any>(null)
-  const { data: tables, isLoading, isError } = useListTables(projectRef, ['public'])
+  const [selectedTable, setSelectedTable] = useState<PgTable | null>(null)
+  const { data: tablesData, isLoading, isError } = useListTables(projectRef, ['public'])
+  // useListTables returns unknown, we assert it's an array of PgTable
+  const tables = (tablesData ?? []) as PgTable[]
 
   if (selectedTable) {
     return (
@@ -266,7 +295,7 @@ export function DatabaseManager({ projectRef }: { projectRef: string }) {
 
       {tables && tables.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-          {tables.map((table: any) => (
+          {tables.map((table) => (
             <Button
               variant="outline"
               key={table.id}

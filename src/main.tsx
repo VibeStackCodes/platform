@@ -1,4 +1,3 @@
-import './sentry.client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createRouter, RouterProvider } from '@tanstack/react-router'
 import { StrictMode } from 'react'
@@ -9,13 +8,16 @@ import { useAuth } from '@/lib/auth'
 import { routeTree } from './routeTree.gen'
 import './index.css'
 
+// Defer Sentry to avoid blocking initial render
+setTimeout(() => import('./sentry.client'), 0)
+
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 30_000 } },
 })
 
 const router = createRouter({
   routeTree,
-  context: { auth: undefined!, queryClient },
+  context: { auth: undefined as unknown as ReturnType<typeof useAuth>, queryClient },
   defaultErrorComponent: ({ error }) => (
     <div className="flex h-screen items-center justify-center">
       <div className="text-center">
@@ -53,7 +55,10 @@ function App() {
   )
 }
 
-createRoot(document.getElementById('root')!).render(
+const rootEl = document.getElementById('root')
+if (!rootEl) throw new Error('Root element not found')
+
+createRoot(rootEl).render(
   <StrictMode>
     <App />
   </StrictMode>,

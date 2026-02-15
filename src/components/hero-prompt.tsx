@@ -3,12 +3,13 @@
 import { useNavigate } from '@tanstack/react-router'
 import type { PromptInputMessage } from '@/components/ai-elements/prompt-input'
 import { PromptBar } from '@/components/prompt-bar'
-import { supabase } from '@/lib/supabase-browser'
+import { useAuth } from '@/lib/auth'
 
 const PENDING_PROMPT_KEY = 'vibestack_pending_prompt'
 
 export function HeroPrompt() {
   const navigate = useNavigate()
+  const { user } = useAuth()
 
   async function handleSubmit(
     message: PromptInputMessage,
@@ -16,10 +17,6 @@ export function HeroPrompt() {
   ) {
     const prompt = message.text.trim()
     if (!prompt) return
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
 
     if (!user) {
       sessionStorage.setItem(PENDING_PROMPT_KEY, prompt)

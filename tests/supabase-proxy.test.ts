@@ -9,15 +9,22 @@ vi.mock('@server/middleware/auth', () => ({
   }),
 }))
 
+interface MockDb {
+  select: ReturnType<typeof vi.fn>
+  from: ReturnType<typeof vi.fn>
+  where: ReturnType<typeof vi.fn>
+  then: ReturnType<typeof vi.fn>
+}
+
 vi.mock('@server/lib/db/client', () => {
-  const createMockDb = () => ({
-    select: vi.fn(function (this: any) {
+  const createMockDb = (): MockDb => ({
+    select: vi.fn(function (this: MockDb) {
       return this
     }),
-    from: vi.fn(function (this: any) {
+    from: vi.fn(function (this: MockDb) {
       return this
     }),
-    where: vi.fn(function (this: any) {
+    where: vi.fn(function (this: MockDb) {
       return this
     }),
     // oxlint-disable-next-line unicorn/no-thenable
@@ -35,7 +42,7 @@ vi.mock('@server/lib/db/client', () => {
 import { db } from '@server/lib/db/client'
 import { supabaseProxyRoutes } from '@server/routes/supabase-proxy'
 
-const mockDb = db as any
+const mockDb = db as unknown as MockDb
 
 describe('Supabase Proxy Route', () => {
   let app: Hono
@@ -72,7 +79,7 @@ describe('Supabase Proxy Route', () => {
   })
 
   it('returns 403 when user does not own the project', async () => {
-    mockDb.then.mockImplementationOnce((callback: any) => {
+    mockDb.then.mockImplementationOnce((callback: (data: unknown[]) => unknown) => {
       return Promise.resolve(callback([]))
     })
 
@@ -96,7 +103,7 @@ describe('Supabase Proxy Route', () => {
   })
 
   it('forwards GET requests to Supabase API when ownership verified', async () => {
-    mockDb.then.mockImplementationOnce((callback: any) => {
+    mockDb.then.mockImplementationOnce((callback: (data: unknown[]) => unknown) => {
       return Promise.resolve(callback([{ id: 'project-123' }]))
     })
 
@@ -124,7 +131,7 @@ describe('Supabase Proxy Route', () => {
   })
 
   it('forwards POST requests with body to Supabase API', async () => {
-    mockDb.then.mockImplementationOnce((callback: any) => {
+    mockDb.then.mockImplementationOnce((callback: (data: unknown[]) => unknown) => {
       return Promise.resolve(callback([{ id: 'project-123' }]))
     })
 
@@ -159,7 +166,7 @@ describe('Supabase Proxy Route', () => {
   })
 
   it('passes through response status from Supabase API', async () => {
-    mockDb.then.mockImplementationOnce((callback: any) => {
+    mockDb.then.mockImplementationOnce((callback: (data: unknown[]) => unknown) => {
       return Promise.resolve(callback([{ id: 'project-123' }]))
     })
 
@@ -201,7 +208,7 @@ describe('Supabase Proxy Route', () => {
   })
 
   it('handles PUT requests correctly', async () => {
-    mockDb.then.mockImplementationOnce((callback: any) => {
+    mockDb.then.mockImplementationOnce((callback: (data: unknown[]) => unknown) => {
       return Promise.resolve(callback([{ id: 'project-123' }]))
     })
 
@@ -228,7 +235,7 @@ describe('Supabase Proxy Route', () => {
   })
 
   it('handles DELETE requests correctly', async () => {
-    mockDb.then.mockImplementationOnce((callback: any) => {
+    mockDb.then.mockImplementationOnce((callback: (data: unknown[]) => unknown) => {
       return Promise.resolve(callback([{ id: 'project-123' }]))
     })
 
@@ -251,7 +258,7 @@ describe('Supabase Proxy Route', () => {
   })
 
   it('extracts correct path from nested routes', async () => {
-    mockDb.then.mockImplementationOnce((callback: any) => {
+    mockDb.then.mockImplementationOnce((callback: (data: unknown[]) => unknown) => {
       return Promise.resolve(callback([{ id: 'project-123' }]))
     })
 
@@ -272,7 +279,7 @@ describe('Supabase Proxy Route', () => {
   })
 
   it('handles project ref in middle of complex path', async () => {
-    mockDb.then.mockImplementationOnce((callback: any) => {
+    mockDb.then.mockImplementationOnce((callback: (data: unknown[]) => unknown) => {
       return Promise.resolve(callback([{ id: 'project-123' }]))
     })
 

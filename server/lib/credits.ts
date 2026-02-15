@@ -6,7 +6,7 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'
-import Stripe from 'stripe'
+import { Stripe } from 'stripe'
 import type { UserCredits } from './types'
 
 const stripe = process.env.STRIPE_SECRET_KEY

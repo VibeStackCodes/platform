@@ -4,13 +4,15 @@
  */
 
 import { Hono } from 'hono'
-import Stripe from 'stripe'
+import { Stripe } from 'stripe'
 import { getProfileForCheckout, setStripeCustomerId } from '../lib/db/queries'
 import { authMiddleware } from '../middleware/auth'
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2026-01-28.clover',
-})
+function getStripe() {
+  const key = process.env.STRIPE_SECRET_KEY
+  if (!key) throw new Error('STRIPE_SECRET_KEY is required')
+  return new Stripe(key, { apiVersion: '2026-01-28.clover' })
+}
 
 export const stripeCheckoutRoutes = new Hono()
 
@@ -34,6 +36,7 @@ stripeCheckoutRoutes.post('/', async (c) => {
     }
 
     // Create or retrieve Stripe customer
+    const stripe = getStripe()
     let customerId = profile?.stripeCustomerId
 
     if (!customerId) {

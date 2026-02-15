@@ -107,7 +107,10 @@ function detectCycle(tables: TableDef[]): string[] | null {
   for (const t of tables) {
     for (const col of t.columns) {
       if (col.references && adj.has(col.references.table)) {
-        adj.get(t.name)!.push(col.references.table)
+        const neighbors = adj.get(t.name)
+        if (neighbors) {
+          neighbors.push(col.references.table)
+        }
       }
     }
   }

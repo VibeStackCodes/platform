@@ -1,7 +1,7 @@
 'use client'
 
 import { Bot, CheckCircle2 } from 'lucide-react'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { Checkpoint, CheckpointIcon, CheckpointTrigger } from '@/components/ai-elements/checkpoint'
 import {
   Commit,
@@ -122,15 +122,16 @@ export function BuilderChat({
 
   // Custom state management — replaces useChat from @ai-sdk/react
   const [messages, setMessages] = useState<ChatMessage[]>(
-    initialMessages?.map((m) => ({
-      id: m.id,
-      role: (m.role === 'system' ? 'assistant' : m.role) as 'user' | 'assistant',
-      content:
-        m.parts
-          ?.map((p) => (p as Record<string, unknown>).text || '')
-          .filter(Boolean)
-          .join('') || '',
-    })) ?? [],
+    () =>
+      initialMessages?.map((m) => ({
+        id: m.id,
+        role: (m.role === 'system' ? 'assistant' : m.role) as 'user' | 'assistant',
+        content:
+          m.parts
+            ?.map((p) => (p as Record<string, unknown>).text || '')
+            .filter(Boolean)
+            .join('') || '',
+      })) ?? [],
   )
   const [chatStatus, setChatStatus] = useState<'ready' | 'streaming'>('ready')
   const [chatError, setChatError] = useState<Error | null>(null)
@@ -484,21 +485,33 @@ export function BuilderChat({
                     {message.role === 'user' ? (
                       <div className="whitespace-pre-wrap">{message.content}</div>
                     ) : (
-                      <MessageResponse>{message.content}</MessageResponse>
+                      <Suspense
+                        fallback={
+                          <div className="text-sm text-muted-foreground animate-pulse">
+                            Loading response...
+                          </div>
+                        }
+                      >
+                        <MessageResponse>{message.content}</MessageResponse>
+                      </Suspense>
                     )}
                   </MessageContent>
                 </Message>
               ))}
 
               {/* Streaming indicator — shown only while waiting for first token */}
-              {chatStatus === 'streaming' &&
-                messages.length > 0 &&
-                messages[messages.length - 1]?.role === 'assistant' &&
-                !messages[messages.length - 1]?.content && (
+              {(() => {
+                const lastMessage = messages[messages.length - 1]
+                const showThinking =
+                  chatStatus === 'streaming' &&
+                  lastMessage?.role === 'assistant' &&
+                  !lastMessage?.content
+                return showThinking ? (
                   <div className="mx-4 my-2 text-sm text-muted-foreground animate-pulse">
                     Thinking...
                   </div>
-                )}
+                ) : null
+              })()}
 
               {/* Clarification Questions — interactive multi-choice cards */}
               {pendingClarification && (
@@ -542,8 +555,8 @@ export function BuilderChat({
                   {/* Build Errors */}
                   {buildErrors.length > 0 && (
                     <div className="mt-3 space-y-2">
-                      {buildErrors.map((err, i) => (
-                        <StackTrace key={`${err.file}-${i}`} trace={err.raw} defaultOpen={i === 0}>
+                      {buildErrors.map((err) => (
+                        <StackTrace key={`${err.file}-${err.message}`} trace={err.raw} defaultOpen={false}>
                           <StackTraceHeader>
                             <StackTraceError>
                               <StackTraceErrorType>Build Error</StackTraceErrorType>

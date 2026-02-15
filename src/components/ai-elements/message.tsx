@@ -1,14 +1,17 @@
 'use client'
 
-import { cjk } from '@streamdown/cjk'
-import { code } from '@streamdown/code'
-import { math } from '@streamdown/math'
-import { mermaid } from '@streamdown/mermaid'
 import type { UIMessage } from 'ai'
 import { ChevronLeftIcon, ChevronRightIcon } from 'lucide-react'
 import type { ComponentProps, HTMLAttributes, ReactElement } from 'react'
-import { createContext, memo, useCallback, useContext, useEffect, useMemo, useState } from 'react'
-import { Streamdown } from 'streamdown'
+import {
+  createContext,
+  lazy,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react'
 import { Button } from '@/components/ui/button'
 import { ButtonGroup, ButtonGroupText } from '@/components/ui/button-group'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
@@ -265,22 +268,12 @@ export const MessageBranchPage = ({ className, ...props }: MessageBranchPageProp
   )
 }
 
-export type MessageResponseProps = ComponentProps<typeof Streamdown>
-
-const streamdownPlugins = { cjk, code, math, mermaid }
-
-export const MessageResponse = memo(
-  ({ className, ...props }: MessageResponseProps) => (
-    <Streamdown
-      className={cn('size-full [&>*:first-child]:mt-0 [&>*:last-child]:mb-0', className)}
-      plugins={streamdownPlugins}
-      {...props}
-    />
-  ),
-  (prevProps, nextProps) => prevProps.children === nextProps.children,
+// Lazy-load MessageResponse to defer heavy streamdown plugins (shiki, mermaid, etc.)
+// These plugins add ~500KB to the bundle and are only needed in the chat interface
+export const MessageResponse = lazy(() =>
+  import('./message-response').then((mod) => ({ default: mod.MessageResponse })),
 )
-
-MessageResponse.displayName = 'MessageResponse'
+export type { MessageResponseProps } from './message-response'
 
 export type MessageToolbarProps = ComponentProps<'div'>
 

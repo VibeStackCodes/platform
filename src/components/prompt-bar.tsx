@@ -1,7 +1,7 @@
 'use client'
 
 import { ChevronDownIcon, GlobeIcon } from 'lucide-react'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import {
   ModelSelector,
   ModelSelectorContent,
@@ -63,7 +63,7 @@ export function PromptBar({
   const [useWebSearch, setUseWebSearch] = useState(false)
   const [selectorOpen, setSelectorOpen] = useState(false)
 
-  const selectedModel = models.find((m) => m.id === model) ?? models[0]
+  const selectedModel = useMemo(() => models.find((m) => m.id === model) ?? models[0], [model])
 
   function handleSubmit(message: PromptInputMessage) {
     const result = onSubmit(message, { model, webSearch: useWebSearch })

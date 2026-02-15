@@ -67,14 +67,14 @@ async function main() {
   try {
     const publicSandbox = await d.create(
       {
-        language: 'typescript' as any,
+        language: 'typescript' as unknown as 'typescript',
         envVars: {},
         autoStopInterval: 5, // Short lived
         labels: { type: 'test-public' },
         ephemeral: true,
         snapshot: 'vibestack-workspace',
         public: true,
-      } as any,
+      },
       { timeout: 60 },
     )
     console.log('Public sandbox:', publicSandbox.id)
@@ -95,8 +95,9 @@ async function main() {
     // Clean up
     await publicSandbox.delete(30)
     console.log('Cleaned up test sandbox')
-  } catch (err: any) {
-    console.log('Public sandbox test failed:', err.message?.substring(0, 200))
+  } catch (err: unknown) {
+    const errorMessage = (err as { message?: string })?.message?.substring(0, 200) ?? String(err)
+    console.log('Public sandbox test failed:', errorMessage)
   }
 }
 

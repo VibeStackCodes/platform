@@ -1,4 +1,5 @@
 import { checkCredits } from '@server/lib/credits'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { describe, expect, it, vi } from 'vitest'
 
 describe('Credit System', () => {
@@ -19,12 +20,13 @@ describe('Credit System', () => {
           }),
         }),
       }),
-    } as any
+    } as unknown as SupabaseClient
 
     const credits = await checkCredits(mockSupabase, 'user-123')
     expect(credits).not.toBeNull()
-    expect(credits!.credits_remaining).toBe(1500)
-    expect(credits!.plan).toBe('pro')
+    if (!credits) return
+    expect(credits.credits_remaining).toBe(1500)
+    expect(credits.plan).toBe('pro')
   })
 
   it('checkCredits returns null on error', async () => {
@@ -39,7 +41,7 @@ describe('Credit System', () => {
           }),
         }),
       }),
-    } as any
+    } as unknown as SupabaseClient
 
     const credits = await checkCredits(mockSupabase, 'user-999')
     expect(credits).toBeNull()

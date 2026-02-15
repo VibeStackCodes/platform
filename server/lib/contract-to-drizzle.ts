@@ -69,7 +69,10 @@ function topologicalSort(tables: TableDef[]): TableDef[] {
     for (const col of t.columns) {
       if (col.references && tableMap.has(col.references.table) && col.references.table !== t.name) {
         // t depends on col.references.table → edge from ref → t
-        adj.get(col.references.table)!.push(t.name)
+        const neighbors = adj.get(col.references.table)
+        if (neighbors) {
+          neighbors.push(t.name)
+        }
         inDegree.set(t.name, (inDegree.get(t.name) ?? 0) + 1)
       }
     }
@@ -80,8 +83,12 @@ function topologicalSort(tables: TableDef[]): TableDef[] {
   const result: TableDef[] = []
 
   while (queue.length > 0) {
-    const name = queue.shift()!
-    result.push(tableMap.get(name)!)
+    const name = queue.shift()
+    if (!name) continue
+    const table = tableMap.get(name)
+    if (table) {
+      result.push(table)
+    }
     for (const neighbor of adj.get(name) ?? []) {
       const newDeg = (inDegree.get(neighbor) ?? 1) - 1
       inDegree.set(neighbor, newDeg)
@@ -182,7 +189,7 @@ export function contractToDrizzleSchema(contract: SchemaContract): string {
   // Build imports
   const pgCoreImports = ['pgTable']
   if (hasEnums) pgCoreImports.push('pgEnum')
-  pgCoreImports.push(...Array.from(typesUsed).sort())
+  pgCoreImports.push(...Array.from(typesUsed).toSorted())
 
   parts.push(`import { ${pgCoreImports.join(', ')} } from 'drizzle-orm/pg-core';`)
   if (needsSql) {

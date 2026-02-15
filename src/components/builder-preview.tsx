@@ -102,6 +102,10 @@ export function BuilderPreview({
                 className="h-full w-full border-0"
                 title="Code Editor"
                 allow="clipboard-read; clipboard-write; cross-origin-isolated"
+                // TODO: Phase 2 — Cloudflare proxy (*.preview.vibestack.app) will make this same-origin
+                // See docs/plans/2026-02-14-sandbox-preview-architecture-design.md
+                // oxlint-disable-next-line eslint-plugin-react(iframe-missing-sandbox)
+                sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
               />
             ) : (
               <div className="h-full" />

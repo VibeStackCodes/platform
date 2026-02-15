@@ -8,7 +8,7 @@ async function main() {
   }
   const d = new Daytona({ apiKey, apiUrl: 'https://app.daytona.io/api', _experimental: {} })
   const result = await d.list()
-  const sandboxes = (result as any).items || result
+  const sandboxes = (result as { items?: unknown[] }).items || result
   const s = sandboxes[0]
   if (!s) {
     console.error('No sandbox found')

@@ -8,7 +8,7 @@ async function main() {
   }
   const d = new Daytona({ apiKey, apiUrl: 'https://app.daytona.io/api', _experimental: {} })
   const result = await d.list()
-  const sandboxes = (result as any).items || result
+  const sandboxes = (result as { items?: unknown[] }).items || result
   const s = sandboxes[0]
   if (!s) {
     console.error('No sandbox found')
@@ -32,7 +32,8 @@ async function main() {
     console.log(`  Poll ${i + 1}: ${curl.result}`)
     if (curl.result.trim() === '200') {
       const preview = await s.getPreviewLink(3000)
-      console.log(`\nDev server ready: ${(preview as any).url}`)
+      const previewUrl = (preview as { url?: string })?.url
+      console.log(`\nDev server ready: ${previewUrl}`)
       return
     }
   }

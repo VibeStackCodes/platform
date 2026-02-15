@@ -1,6 +1,7 @@
 'use client'
 
 import { createClient } from '@supabase/supabase-js'
+import { useQuery } from '@tanstack/react-query'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { BuilderChat } from '@/components/builder-chat'
 import { BuilderPreview } from '@/components/builder-preview'
@@ -16,6 +17,52 @@ interface ProjectLayoutProps {
   initialSandboxId?: string
   initialSupabaseUrl?: string
   initialSupabaseProjectId?: string
+}
+
+/**
+ * Custom hook to subscribe to realtime project updates from Supabase.
+ * Only subscribes when enabled to avoid unnecessary WebSocket connections.
+ */
+function useProjectRealtime(projectId: string, enabled: boolean) {
+  const [realtimeData, setRealtimeData] = useState<{
+    supabaseUrl?: string
+    supabaseProjectId?: string
+  }>({})
+
+  useEffect(() => {
+    if (!enabled) return
+
+    const supabase = createClient(
+      import.meta.env.VITE_SUPABASE_URL,
+      import.meta.env.VITE_SUPABASE_ANON_KEY,
+    )
+
+    const channel = supabase
+      .channel(`project-${projectId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'projects',
+          filter: `id=eq.${projectId}`,
+        },
+        (payload) => {
+          const row = payload.new as Record<string, unknown>
+          const updates: { supabaseUrl?: string; supabaseProjectId?: string } = {}
+          if (row.supabase_url) updates.supabaseUrl = row.supabase_url as string
+          if (row.supabase_project_id) updates.supabaseProjectId = row.supabase_project_id as string
+          setRealtimeData((prev) => ({ ...prev, ...updates }))
+        },
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [projectId, enabled])
+
+  return realtimeData
 }
 
 // TODO: Phase 2 — replace polling with *.preview.vibestack.app Cloudflare proxy (no expiry)
@@ -38,7 +85,34 @@ export function ProjectLayout({
   const [expiresAt, setExpiresAt] = useState<string | undefined>()
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
-  // Fetch signed sandbox URLs from the API
+  // Fetch sandbox URLs using TanStack Query with automatic polling
+  const { data: sandboxUrls } = useQuery({
+    queryKey: ['sandbox-urls', projectId],
+    queryFn: async () => {
+      const res = await fetch(`/api/projects/${projectId}/sandbox-urls`)
+      if (!res.ok) return null
+      return res.json() as Promise<{
+        sandboxId: string
+        previewUrl: string
+        codeServerUrl: string
+        expiresAt: string
+      } | null>
+    },
+    refetchInterval: previewUrl ? false : 2000,
+    enabled: !previewUrl && !!projectId,
+  })
+
+  // Update local state when query data changes
+  useEffect(() => {
+    if (sandboxUrls?.previewUrl) {
+      setSandboxId(sandboxUrls.sandboxId)
+      setPreviewUrl(sandboxUrls.previewUrl)
+      setCodeServerUrl(sandboxUrls.codeServerUrl)
+      setExpiresAt(sandboxUrls.expiresAt)
+    }
+  }, [sandboxUrls])
+
+  // Fetch sandbox URLs imperatively when generation completes
   const fetchSandboxUrls = useCallback(async (): Promise<boolean> => {
     try {
       const res = await fetch(`/api/projects/${projectId}/sandbox-urls`)
@@ -56,26 +130,6 @@ export function ProjectLayout({
       return false
     }
   }, [projectId])
-
-  // Poll for sandbox URLs on mount (sandbox may still be provisioning)
-  useEffect(() => {
-    if (previewUrl) return // Already have it
-
-    let cancelled = false
-    const poll = async () => {
-      for (let i = 0; i < 30 && !cancelled; i++) {
-        const found = await fetchSandboxUrls()
-        if (found || cancelled) return
-        await new Promise((r) => setTimeout(r, 2000))
-      }
-    }
-    poll()
-
-    return () => {
-      cancelled = true
-      clearTimeout(refreshTimerRef.current)
-    }
-  }, [projectId, previewUrl, fetchSandboxUrls])
 
   // Schedule refresh before expiry
   useEffect(() => {
@@ -98,36 +152,13 @@ export function ProjectLayout({
   // Only subscribe when we still need the supabase project ID — avoid connecting
   // a WebSocket that immediately gets torn down (causes console WS error noise).
   const needsRealtimeSub = !supabaseProjectId
+  const realtimeData = useProjectRealtime(projectId, needsRealtimeSub)
+
+  // Update local state from realtime subscription
   useEffect(() => {
-    if (!needsRealtimeSub) return
-
-    const supabase = createClient(
-      import.meta.env.VITE_SUPABASE_URL,
-      import.meta.env.VITE_SUPABASE_ANON_KEY,
-    )
-
-    const channel = supabase
-      .channel(`project-${projectId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'projects',
-          filter: `id=eq.${projectId}`,
-        },
-        (payload) => {
-          const row = payload.new as Record<string, unknown>
-          if (row.supabase_url) setSupabaseUrl(row.supabase_url as string)
-          if (row.supabase_project_id) setSupabaseProjectId(row.supabase_project_id as string)
-        },
-      )
-      .subscribe()
-
-    return () => {
-      supabase.removeChannel(channel)
-    }
-  }, [projectId, needsRealtimeSub])
+    if (realtimeData.supabaseUrl) setSupabaseUrl(realtimeData.supabaseUrl)
+    if (realtimeData.supabaseProjectId) setSupabaseProjectId(realtimeData.supabaseProjectId)
+  }, [realtimeData])
 
   return (
     <div className="flex h-screen">

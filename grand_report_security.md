@@ -397,7 +397,7 @@ Key dependencies and their security posture:
 - `handlebars@^4.7.8` — Historical prototype pollution CVEs; verify version
 - `react-jsx-parser@^2.4.1` — Parses JSX strings; potential XSS if used with user input
 
-**Recommendation:** Run `pnpm audit` regularly and integrate into CI/CD.
+**Recommendation:** Run `bun pm audit` regularly and integrate into CI/CD.
 
 ---
 

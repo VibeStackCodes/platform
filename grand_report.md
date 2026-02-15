@@ -280,7 +280,7 @@ Core business logic files (`generator.ts`, `planner.ts`, `injector.ts`, `templat
 - Both `@anthropic-ai/sdk` AND `@ai-sdk/anthropic` installed (redundant)
 - `radix-ui` meta-package instead of individual `@radix-ui/*` packages
 - `glob` in production deps (should be devDependencies)
-- No `pnpm audit` in workflow
+- No `bun pm audit` in workflow
 
 ### Development Workflow Gaps
 
@@ -354,7 +354,7 @@ lib/
 #### #1: Currents.dev (Recommended)
 Purpose-built Playwright dashboard. Drop-in npm reporter, instant dashboard, flake detection. Free tier (500 records/mo) covers current ~20 tests.
 ```bash
-pnpm add -D @currents/playwright
+bun add -D @currents/playwright
 # Add to playwright.config.ts reporter array + set CURRENTS_RECORD_KEY
 ```
 

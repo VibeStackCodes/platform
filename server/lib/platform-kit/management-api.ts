@@ -9,10 +9,9 @@ interface DatabaseQueryPath {
   }
 }
 
-export interface ManagementApiPaths {
+export type ManagementApiPaths = {
   '/v1/projects/{ref}/database/query': DatabaseQueryPath
-  [key: string]: any
-}
+} & Record<string, Record<string, unknown>>
 
 export const client = createClient<ManagementApiPaths>({
   baseUrl: '/api/supabase-proxy',

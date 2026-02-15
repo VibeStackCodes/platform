@@ -8,7 +8,7 @@ async function main() {
   }
   const d = new Daytona({ apiKey, apiUrl: 'https://app.daytona.io/api', _experimental: {} })
   const result = await d.list()
-  const sandboxes = (result as any).items || result
+  const sandboxes = (result as { items?: unknown[] }).items || result
   for (const s of sandboxes) {
     console.log(`Sandbox: ${s.id}`)
     const preview = await s.getPreviewLink(3000)

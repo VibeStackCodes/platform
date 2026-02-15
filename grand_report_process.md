@@ -6,7 +6,7 @@
 
 ## Executive Summary
 
-The project is a Next.js 16 + Supabase + AI SDK platform ("VibeStack") for generating full-stack apps via conversational AI. It uses pnpm, Tailwind v4, Vitest, and Playwright. The codebase is relatively young (~1 week old based on git history) and already shows common early-stage gaps: **no CI/CD pipeline, no git hooks, minimal test coverage, boilerplate README, no bundle analysis, and an empty next.config.ts**. Below are actionable findings organized by category.
+The project is a Next.js 16 + Supabase + AI SDK platform ("VibeStack") for generating full-stack apps via conversational AI. It uses bun, Tailwind v4, Vitest, and Playwright. The codebase is relatively young (~1 week old based on git history) and already shows common early-stage gaps: **no CI/CD pipeline, no git hooks, minimal test coverage, boilerplate README, no bundle analysis, and an empty next.config.ts**. Below are actionable findings organized by category.
 
 ---
 
@@ -19,14 +19,14 @@ The project is a Next.js 16 + Supabase + AI SDK platform ("VibeStack") for gener
 | 1.1 | **`next.config.ts` is completely empty** — no image optimization config, no `output: 'standalone'`, no headers/redirects, no bundle analyzer | High | Missing production optimizations, no CSP headers, no Docker-optimized output |
 | 1.2 | **No bundle analysis tooling** — `@next/bundle-analyzer` not installed | Medium | Cannot identify bloated imports or tree-shaking failures |
 | 1.3 | **`tsconfig.json` targets ES2017** — modern Next.js apps can target ES2022+ since all major browsers support it | Low | Slightly larger output from unnecessary downleveling |
-| 1.4 | **No `turbopack` usage** — `pnpm dev` runs vanilla `next dev` without `--turbopack` flag | Medium | Significantly slower dev rebuilds (~2-5x) |
+| 1.4 | **No `turbopack` usage** — `bun run dev` runs vanilla `next dev` without `--turbopack` flag | Medium | Significantly slower dev rebuilds (~2-5x) |
 
 ### Recommendations
 
 - Add `output: 'standalone'` for Docker deployments
 - Install `@next/bundle-analyzer` and add `ANALYZE=true` build script
 - Add security headers via `next.config.ts` `headers()` function
-- Use `pnpm dev --turbopack` for faster development
+- Use `bun run dev --turbopack` for faster development
 - Consider bumping `target` to ES2022
 
 ---
@@ -45,15 +45,15 @@ The project is a Next.js 16 + Supabase + AI SDK platform ("VibeStack") for gener
 
 Create at minimum a `.github/workflows/ci.yml` with:
 ```yaml
-- pnpm install --frozen-lockfile
-- pnpm lint
-- npx tsc --noEmit  # Add "typecheck" script
-- pnpm test -- --run
-- pnpm build
+- bun install --frozen-lockfile
+- bun run lint
+- bunx tsc --noEmit  # Add "typecheck" script
+- bun run test -- --run
+- bun run build
 ```
 Add scripts to `package.json`:
 - `"typecheck": "tsc --noEmit"`
-- `"ci": "pnpm lint && pnpm typecheck && pnpm test -- --run && pnpm build"`
+- `"ci": "bun run lint && bun run typecheck && bun run test -- --run && bun run build"`
 
 ---
 
@@ -67,7 +67,7 @@ Add scripts to `package.json`:
 | 3.2 | **Both `motion` and implicit `framer-motion` (peer dep)** — `motion` is the new package name; check if framer-motion is still referenced | Low | Potential duplicate motion library in bundle |
 | 3.3 | **`glob` (13.0.2) in production deps** — likely only needed at build/script time | Low | Unnecessarily included in client bundles if imported from app code |
 | 3.4 | **`radix-ui` meta-package** — installs ALL Radix components; prefer individual `@radix-ui/*` packages for tree-shaking | Medium | Significantly larger dependency tree than needed |
-| 3.5 | **No `pnpm audit` in workflow** — no automated security scanning | Medium | Vulnerable dependencies may go unnoticed |
+| 3.5 | **No `bun pm audit` in workflow** — no automated security scanning | Medium | Vulnerable dependencies may go unnoticed |
 | 3.6 | **Version ranges are very loose** (`^` everywhere) — no pinning strategy | Low | Builds may differ between environments |
 | 3.7 | **`sharp` listed in `ignoredBuiltDependencies`** but not in deps — Next.js image optimization uses it implicitly | Low | May silently fall back to unoptimized images |
 
@@ -76,8 +76,8 @@ Add scripts to `package.json`:
 - Remove `@anthropic-ai/sdk` if only using AI SDK's Anthropic provider
 - Move `glob` to `devDependencies`
 - Replace `radix-ui` meta-package with specific `@radix-ui/*` imports
-- Add `pnpm audit` to CI pipeline
-- Add `pnpm dedupe` to post-install
+- Add `bun pm audit` to CI pipeline
+- Add `bun dedupe` to post-install
 
 ---
 
@@ -125,14 +125,14 @@ Add `.DS_Store` to `.gitignore` (it's already there but files were committed bef
 ### Recommendations
 
 ```bash
-pnpm add -D husky lint-staged prettier
+bun add -D husky lint-staged prettier
 npx husky init
 # pre-commit: npx lint-staged
 # lint-staged.config.js: { "*.{ts,tsx}": ["eslint --fix", "prettier --write"] }
 ```
 Add to `package.json`:
 ```json
-"engines": { "node": ">=20", "pnpm": ">=9" }
+"engines": { "node": ">=20", "bun": ">=1" }
 ```
 Add `.nvmrc` with `20` or `22`.
 
@@ -149,7 +149,7 @@ Add `.nvmrc` with `20` or `22`.
 | 6.3 | **No API route tests** — `app/api/chat/`, `app/api/projects/`, `app/api/stripe/` untested | High | API contract changes go undetected |
 | 6.4 | **No component tests** — zero React component tests for `builder-chat.tsx` (662 lines), `builder-preview.tsx`, etc. | High | UI regressions undetected |
 | 6.5 | **Playwright runs with `workers: 1` and `fullyParallel: false`** — very slow E2E execution | Medium | CI time will balloon as tests grow |
-| 6.6 | **Playwright webServer uses `pnpm build && pnpm start`** — full production build for E2E is slow | Medium | Could use `next dev` or prebuilt assets |
+| 6.6 | **Playwright webServer uses `bun run build && bun run start`** — full production build for E2E is slow | Medium | Could use dev server or prebuilt assets |
 | 6.7 | **No coverage thresholds** — coverage config exists but no minimum enforcement | Medium | Coverage can silently decrease |
 | 6.8 | **`vitest` runs only `tests/**/*.test.ts`** — tests co-located with source (e.g., `lib/__tests__/`) would be missed | Low | Inflexible test file placement |
 
@@ -259,7 +259,7 @@ Add convenience scripts:
   "typecheck": "tsc --noEmit",
   "db:migrate": "supabase db push",
   "db:seed": "tsx scripts/seed.ts",
-  "ci": "pnpm lint && pnpm typecheck && pnpm test -- --run"
+  "ci": "bun run lint && bun run typecheck && bun run test -- --run"
 }
 ```
 

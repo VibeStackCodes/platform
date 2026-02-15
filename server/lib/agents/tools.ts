@@ -42,34 +42,39 @@ export const writeFileTool = createTool({
   }),
   execute: async (inputData, _context) => {
     try {
-      const sandbox = await getSandbox(inputData.sandboxId);
-      const fullPath = `/workspace/${inputData.path}`;
-      await sandbox.fs.uploadFile(Buffer.from(inputData.content), fullPath);
+      const sandbox = await getSandbox(inputData.sandboxId)
+      const fullPath = `/workspace/${inputData.path}`
+      await sandbox.fs.uploadFile(Buffer.from(inputData.content), fullPath)
       return {
         success: true,
         path: inputData.path,
         bytesWritten: inputData.content.length,
-      };
+      }
     } catch (e) {
       return {
         success: false,
         path: inputData.path,
         bytesWritten: 0,
         error: e instanceof Error ? e.message : String(e),
-      };
+      }
     }
   },
-});
+})
 
 export const writeFilesTool = createTool({
   id: 'write-files',
-  description: 'Write multiple files to the sandbox workspace in one call. More efficient than multiple write-file calls for scaffolding.',
+  description:
+    'Write multiple files to the sandbox workspace in one call. More efficient than multiple write-file calls for scaffolding.',
   inputSchema: z.object({
     sandboxId: z.string().describe('Daytona sandbox ID'),
-    files: z.array(z.object({
-      path: z.string().describe('File path relative to /workspace'),
-      content: z.string().describe('File content to write'),
-    })).describe('Array of files to write'),
+    files: z
+      .array(
+        z.object({
+          path: z.string().describe('File path relative to /workspace'),
+          content: z.string().describe('File content to write'),
+        }),
+      )
+      .describe('Array of files to write'),
   }),
   outputSchema: z.object({
     success: z.boolean(),
@@ -196,7 +201,11 @@ export const createDirectoryTool = createTool({
 
       return { success: true, path: inputData.path }
     } catch (e) {
-      return { success: false, path: inputData.path, error: e instanceof Error ? e.message : String(e) }
+      return {
+        success: false,
+        path: inputData.path,
+        error: e instanceof Error ? e.message : String(e),
+      }
     }
   },
 })
@@ -380,7 +389,10 @@ async function getPGlite() {
     })
   }
   await _pgliteReady
-  return _pgliteInstance!
+  if (!_pgliteInstance) {
+    throw new Error('PGlite failed to initialize')
+  }
+  return _pgliteInstance
 }
 
 export const validateSQLTool = createTool({
@@ -412,7 +424,11 @@ export const validateSQLTool = createTool({
       await pg.exec('ROLLBACK')
       return { valid: true }
     } catch (e) {
-      try { await pg.exec('ROLLBACK') } catch { /* already rolled back */ }
+      try {
+        await pg.exec('ROLLBACK')
+      } catch {
+        /* already rolled back */
+      }
       return { valid: false, error: e instanceof Error ? e.message : String(e) }
     }
   },
@@ -442,7 +458,12 @@ export const getPreviewUrlTool = createTool({
       const preview = await getPreviewUrlFn(sandbox, port)
       return { url: preview.url, port: preview.port, expiresAt: preview.expiresAt.toISOString() }
     } catch (e) {
-      return { url: '', port: inputData.port || 3000, expiresAt: '', error: e instanceof Error ? e.message : String(e) }
+      return {
+        url: '',
+        port: inputData.port || 3000,
+        expiresAt: '',
+        error: e instanceof Error ? e.message : String(e),
+      }
     }
   },
 })
@@ -519,7 +540,12 @@ export const deployToVercelTool = createTool({
     try {
       const vercelToken = process.env.VERCEL_TOKEN
       if (!vercelToken) {
-        return { deploymentUrl: '', deploymentId: '', status: 'failed', error: 'VERCEL_TOKEN environment variable is required' }
+        return {
+          deploymentUrl: '',
+          deploymentId: '',
+          status: 'failed',
+          error: 'VERCEL_TOKEN environment variable is required',
+        }
       }
 
       const finalTeamId = inputData.teamId || process.env.VERCEL_TEAM_ID
@@ -562,17 +588,35 @@ export const deployToVercelTool = createTool({
 
       if (!deploymentResponse.ok) {
         const errText = await deploymentResponse.text()
-        return { deploymentUrl: '', deploymentId: '', status: 'failed', error: `Vercel deployment failed: ${errText}` }
+        return {
+          deploymentUrl: '',
+          deploymentId: '',
+          status: 'failed',
+          error: `Vercel deployment failed: ${errText}`,
+        }
       }
 
-      const deployment = await deploymentResponse.json() as { id: string; url: string; readyState: string }
+      const deployment = (await deploymentResponse.json()) as {
+        id: string
+        url: string
+        readyState: string
+      }
       const deployUrl = `https://${deployment.url}`
 
       console.log(`[deploy-to-vercel] Deployment created: ${deployUrl} (${deployment.id})`)
 
-      return { deploymentUrl: deployUrl, deploymentId: deployment.id, status: deployment.readyState }
+      return {
+        deploymentUrl: deployUrl,
+        deploymentId: deployment.id,
+        status: deployment.readyState,
+      }
     } catch (e) {
-      return { deploymentUrl: '', deploymentId: '', status: 'failed', error: e instanceof Error ? e.message : String(e) }
+      return {
+        deploymentUrl: '',
+        deploymentId: '',
+        status: 'failed',
+        error: e instanceof Error ? e.message : String(e),
+      }
     }
   },
 })
@@ -608,7 +652,14 @@ export const createSupabaseProjectTool = createTool({
         dbHost: project.dbHost,
       }
     } catch (e) {
-      return { projectId: '', url: '', anonKey: '', serviceRoleKey: '', dbHost: '', error: e instanceof Error ? e.message : String(e) }
+      return {
+        projectId: '',
+        url: '',
+        anonKey: '',
+        serviceRoleKey: '',
+        dbHost: '',
+        error: e instanceof Error ? e.message : String(e),
+      }
     }
   },
 })
@@ -649,7 +700,12 @@ export const createGitHubRepoTool = createTool({
       const repo = await createRepo(repoName)
       return { cloneUrl: repo.cloneUrl, htmlUrl: repo.htmlUrl, repoName }
     } catch (e) {
-      return { cloneUrl: '', htmlUrl: '', repoName: '', error: e instanceof Error ? e.message : String(e) }
+      return {
+        cloneUrl: '',
+        htmlUrl: '',
+        repoName: '',
+        error: e instanceof Error ? e.message : String(e),
+      }
     }
   },
 })
@@ -745,7 +801,13 @@ export const searchDocsTool = createTool({
     }
 
     // Fallback: fetch HTML and strip tags
-    const url = htmlUrl || llmsUrl!
+    const url = htmlUrl ?? llmsUrl
+    if (!url) {
+      return {
+        results: `No documentation URL available for ${inputData.library}`,
+        source: 'built-in',
+      }
+    }
     try {
       const response = await fetch(url, {
         headers: { Accept: 'text/html' },

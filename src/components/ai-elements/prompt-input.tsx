@@ -654,7 +654,12 @@ export const PromptInput = ({
     () => ({
       add: (incoming: SourceDocumentUIPart[] | SourceDocumentUIPart) => {
         const array = Array.isArray(incoming) ? incoming : [incoming]
-        setReferencedSources((prev) => [...prev, ...array.map((s) => ({ ...s, id: nanoid() }))])
+        // Build new objects without spread inside map to avoid no-map-spread warning
+        const withIds: (SourceDocumentUIPart & { id: string })[] = []
+        for (const source of array) {
+          withIds.push({ ...source, id: nanoid() })
+        }
+        setReferencedSources((prev) => [...prev, ...withIds])
       },
       clear: clearReferencedSources,
       remove: (id: string) => {

@@ -2,7 +2,7 @@
 
 ## Current Setup Analysis
 
-**Config**: `playwright.config.ts` — sequential execution (workers: 1), HTML reporter, video `on`, screenshots `only-on-failure`, trace `on-first-retry`. Two projects: `mock` (fast, no real APIs) and `real` (full pipeline with GPT-5.2, Daytona, Supabase — 15min timeout). Tests run against `localhost:3000` with `pnpm build && pnpm start`. No CI reporter configured beyond built-in HTML.
+**Config**: `playwright.config.ts` — sequential execution (workers: 1), HTML reporter, video `on`, screenshots `only-on-failure`, trace `on-first-retry`. Two projects: `mock` (fast, no real APIs) and `real` (full pipeline with GPT-5.2, Daytona, Supabase — 15min timeout). Tests run against `localhost:3000` with `bun run build && bun run start`. No CI reporter configured beyond built-in HTML.
 
 **Test Suite**: 2 spec files, ~20 tests covering landing page, auth UI, middleware, dashboard, builder chat flow, deploy, and edit/iterate. The `real-generation.spec.ts` is a heavyweight integration test (up to 15 minutes).
 
@@ -139,7 +139,7 @@
 
 **Setup effort**: ~15 minutes
 ```bash
-pnpm add -D @currents/playwright
+bun add -D @currents/playwright
 # Add to playwright.config.ts reporter array + set CURRENTS_RECORD_KEY
 ```
 

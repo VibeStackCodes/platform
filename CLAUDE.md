@@ -5,18 +5,18 @@ AI-powered app builder — users describe an app, the platform generates a full 
 ## Commands
 
 ```bash
-pnpm dev              # Vite SPA + Hono API server (concurrently)
-pnpm build            # Vite client build + server typecheck
-pnpm preview          # Vite preview of built client
-pnpm lint             # OxLint (670+ rules, 50-100x faster than ESLint)
-pnpm lint:fix         # OxLint auto-fix
-pnpm format           # Biome format (formatter only)
-pnpm test             # Vitest unit/integration tests
-pnpm test:e2e:mock    # Playwright E2E with mock mode (no external services)
-pnpm test:e2e:real    # Playwright E2E against real Supabase/Daytona
-pnpm db:generate      # Drizzle Kit generate migrations
-pnpm db:migrate       # Drizzle Kit run migrations
-pnpm db:studio        # Drizzle Kit studio (DB browser)
+bun run dev           # Vite SPA + Hono API server (concurrently)
+bun run build         # Vite client build + server typecheck
+bun run preview       # Vite preview of built client
+bun run lint          # OxLint (670+ rules, 50-100x faster than ESLint)
+bun run lint:fix      # OxLint auto-fix
+bun run format        # Biome format (formatter only)
+bun run test          # Vitest unit/integration tests
+bun run test:e2e:mock # Playwright E2E with mock mode (no external services)
+bun run test:e2e:real # Playwright E2E against real Supabase/Daytona
+bun run db:generate   # Drizzle Kit generate migrations
+bun run db:migrate    # Drizzle Kit run migrations
+bun run db:studio     # Drizzle Kit studio (DB browser)
 ```
 
 ## Stack
@@ -34,7 +34,7 @@ pnpm db:studio        # Drizzle Kit studio (DB browser)
 - **Monitoring**: Sentry (client + server + AI agent instrumentation)
 - **Linting**: OxLint (670+ rules, oxc-based) + Biome (formatter only)
 - **Testing**: Vitest (unit), Playwright (E2E)
-- **Package manager**: pnpm
+- **Package manager**: bun
 
 ## Architecture
 
@@ -172,14 +172,14 @@ Required in `.env.local`:
 - Config: `vitest.config.ts`, environment: `happy-dom`
 - Tests in `tests/` directory, setup file: `tests/setup.ts`
 - Aliases: `@/` → `src/`, `@server/` → `server/`
-- Run: `pnpm test` or `pnpm test:ui`
+- Run: `bun run test` or `bun run test:ui`
 
 ### E2E Tests (Playwright)
 
 - Config: `playwright.config.ts`
 - Two projects: `mock` (uses mock mode) and `real` (hits real services)
-- Mock E2E: `pnpm test:e2e:mock` — runs with `VITE_MOCK_MODE=true`
-- Real E2E: `pnpm test:e2e:real` — requires all env vars set
+- Mock E2E: `bun run test:e2e:mock` — runs with `VITE_MOCK_MODE=true`
+- Real E2E: `bun run test:e2e:real` — requires all env vars set
 - Sequential (not parallel) — tests share auth state
 - Global setup: `e2e/global-setup.ts`
 
@@ -192,13 +192,13 @@ When merging a feature branch (especially from a worktree), **always verify the 
 git merge --no-commit feature/branch-name
 
 # 2. Install deps (package.json may have changed)
-pnpm install
+bun install
 
 # 3. Verify the MERGED code compiles
-npx tsc --noEmit
+bunx tsc --noEmit
 
 # 4. Run the FULL test suite (not just branch tests)
-pnpm test
+bun run test
 
 # 5. Only then commit
 git commit

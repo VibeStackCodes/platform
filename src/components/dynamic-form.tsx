@@ -23,9 +23,9 @@ import {
 import { Switch } from '@/components/ui/switch'
 
 interface DynamicFormProps {
-  schema: z.ZodObject<any>
-  initialValues?: Record<string, any>
-  onSubmit: (data: any) => void
+  schema: z.ZodObject<Record<string, ZodTypeAny>>
+  initialValues?: Record<string, unknown>
+  onSubmit: (data: Record<string, unknown>) => void
   isLoading?: boolean
   columnInfo?: Record<string, { data_type: string; is_nullable: boolean }>
 }
@@ -105,7 +105,7 @@ export function DynamicForm({
                     {type === 'boolean' ? (
                       <div className="flex items-center space-x-2">
                         <Switch
-                          checked={field.value ?? false}
+                          checked={(field.value as boolean | undefined) ?? false}
                           onCheckedChange={field.onChange}
                           disabled={isLoading}
                         />
@@ -115,7 +115,7 @@ export function DynamicForm({
                       </div>
                     ) : type === 'enum' && enumValues ? (
                       <Select
-                        value={field.value ?? ''}
+                        value={(field.value as string | undefined) ?? ''}
                         onValueChange={field.onChange}
                         disabled={isLoading}
                       >
@@ -136,7 +136,7 @@ export function DynamicForm({
                         value={
                           Array.isArray(field.value)
                             ? JSON.stringify(field.value)
-                            : (field.value ?? '')
+                            : ((field.value as string | undefined) ?? '')
                         }
                         onChange={(e) => {
                           try {
@@ -153,7 +153,7 @@ export function DynamicForm({
                     ) : (
                       <Input
                         {...field}
-                        value={field.value ?? ''}
+                        value={(field.value as string | number | undefined) ?? ''}
                         type={type}
                         disabled={isLoading}
                       />

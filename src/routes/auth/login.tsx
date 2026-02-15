@@ -57,8 +57,8 @@ function LoginPage() {
       })
       if (error) {
         setError(error.message)
-      } else if (data.session) {
-        await redirectAfterAuth(data.user!.id)
+      } else if (data.session && data.user) {
+        await redirectAfterAuth(data.user.id)
       } else {
         setMessage('Check your email for a confirmation link.')
       }
@@ -69,8 +69,8 @@ function LoginPage() {
       })
       if (error) {
         setError(error.message)
-      } else {
-        await redirectAfterAuth(data.user!.id)
+      } else if (data.user) {
+        await redirectAfterAuth(data.user.id)
       }
     }
 

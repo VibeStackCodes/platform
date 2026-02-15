@@ -434,13 +434,13 @@ export const StackTraceFrames = memo(
 
     return (
       <div className={cn('space-y-1 p-3', className)} {...props}>
-        {framesToShow.map((frame, index) => (
+        {framesToShow.map((frame) => (
           <div
             className={cn(
               'text-xs',
               frame.isInternal ? 'text-muted-foreground/50' : 'text-foreground/90',
             )}
-            key={`${frame.raw}-${index}`}
+            key={frame.raw}
           >
             <span className="text-muted-foreground">at </span>
             {frame.functionName && (

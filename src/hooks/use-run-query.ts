@@ -12,17 +12,18 @@ export async function runQuery({
   projectRef: string
   query: string
   readOnly?: boolean
-}) {
+}): Promise<unknown> {
   const { data, error } = await client.POST('/v1/projects/{ref}/database/query', {
     params: { path: { ref: projectRef } },
     body: { query, read_only: readOnly },
   })
 
   if (error) {
-    throw new Error((error as any)?.message || 'Query failed')
+    const errorMessage = (error as { message?: string })?.message || 'Query failed'
+    throw new Error(errorMessage)
   }
 
-  return data as any
+  return data
 }
 
 export const useRunQuery = () => {

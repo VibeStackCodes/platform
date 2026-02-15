@@ -1,6 +1,6 @@
 # Agent E2E Test Prompts (Mastra Studio)
 
-Test the full generation pipeline via **Mastra Studio** (`pnpm mastra:dev` -> Agents -> Supervisor).
+Test the full generation pipeline via **Mastra Studio** (`bun run mastra:dev` -> Agents -> Supervisor).
 
 Each test prompt exercises the full agent network. Verify expected behaviors using the checklist after each run.
 
@@ -9,7 +9,7 @@ Each test prompt exercises the full agent network. Verify expected behaviors usi
 ## How to Run
 
 ```bash
-pnpm mastra:dev
+bun run mastra:dev
 # Open http://localhost:4111 (or 4112)
 # Navigate to: Agents -> Supervisor -> Chat
 # Paste a test prompt below

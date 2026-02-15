@@ -4,15 +4,20 @@
  */
 
 import { Hono } from 'hono'
-import Stripe from 'stripe'
+import { Stripe } from 'stripe'
 import { getProfileByStripeId, updateProfileByStripeId, updateProfilePlan } from '../lib/db/queries'
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2026-01-28.clover',
-})
+function getStripe() {
+  const key = process.env.STRIPE_SECRET_KEY
+  if (!key) throw new Error('STRIPE_SECRET_KEY is required')
+  return new Stripe(key, { apiVersion: '2026-01-28.clover' })
+}
 
-// Webhook secret for signature verification
-const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!
+function getWebhookSecret() {
+  const secret = process.env.STRIPE_WEBHOOK_SECRET
+  if (!secret) throw new Error('STRIPE_WEBHOOK_SECRET is required')
+  return secret
+}
 
 export const stripeWebhookRoutes = new Hono()
 
@@ -35,7 +40,7 @@ stripeWebhookRoutes.post('/', async (c) => {
     // Verify webhook signature
     let event: Stripe.Event
     try {
-      event = stripe.webhooks.constructEvent(body, signature, webhookSecret)
+      event = getStripe().webhooks.constructEvent(body, signature, getWebhookSecret())
     } catch (err) {
       console.error('Webhook signature verification failed:', err)
       return c.json({ error: 'Invalid signature' }, 400)

@@ -88,6 +88,7 @@ export async function getSandbox(sandboxId: string): Promise<Sandbox> {
   } catch (error) {
     throw new Error(
       `Failed to get sandbox ${sandboxId}: ${error instanceof Error ? error.message : String(error)}`,
+      { cause: error },
     )
   }
 }
@@ -128,6 +129,7 @@ export async function createSandbox(config: SandboxConfig = {}): Promise<Sandbox
     console.error('Failed to create sandbox:', error)
     throw new Error(
       `Sandbox creation failed: ${error instanceof Error ? error.message : String(error)}`,
+      { cause: error },
     )
   }
 }
@@ -151,6 +153,7 @@ export async function uploadFile(
   } catch (error) {
     throw new Error(
       `Failed to upload ${remotePath}: ${error instanceof Error ? error.message : String(error)}`,
+      { cause: error },
     )
   }
 }
@@ -168,6 +171,7 @@ export async function uploadFiles(
   } catch (error) {
     throw new Error(
       `Failed to upload files: ${error instanceof Error ? error.message : String(error)}`,
+      { cause: error },
     )
   }
 }
@@ -227,6 +231,7 @@ export async function runCommand(
   } catch (error) {
     throw new Error(
       `Command execution failed: ${error instanceof Error ? error.message : String(error)}`,
+      { cause: error },
     )
   }
 }
@@ -251,6 +256,7 @@ export async function getPreviewUrl(
   } catch (error) {
     throw new Error(
       `Failed to get preview URL: ${error instanceof Error ? error.message : String(error)}`,
+      { cause: error },
     )
   }
 }
@@ -358,6 +364,7 @@ export async function downloadFile(sandbox: Sandbox, remotePath: string): Promis
   } catch (error) {
     throw new Error(
       `Failed to download ${remotePath}: ${error instanceof Error ? error.message : String(error)}`,
+      { cause: error },
     )
   }
 }
@@ -389,12 +396,15 @@ export async function downloadDirectory(
 
     console.log(`Found ${filePaths.length} files to download`)
 
+    // Hoist RegExp creation outside the loop for better performance
+    const pathRegex = new RegExp(`^${remotePath}/?`)
+
     // Download all files in parallel
     const files = await Promise.all(
       filePaths.map(async (filePath) => {
         const content = await downloadFile(sandbox, filePath)
         // Make path relative to workspace
-        const relativePath = filePath.replace(new RegExp(`^${remotePath}/?`), '')
+        const relativePath = filePath.replace(pathRegex, '')
         return {
           path: relativePath || filePath,
           content,
@@ -407,6 +417,7 @@ export async function downloadDirectory(
   } catch (error) {
     throw new Error(
       `Failed to download directory: ${error instanceof Error ? error.message : String(error)}`,
+      { cause: error },
     )
   }
 }

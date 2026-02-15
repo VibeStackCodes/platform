@@ -86,7 +86,7 @@ async function runMigrationInPGlite(
     .replace(/ALTER\s+PUBLICATION\s+[^;]+;/gi, '')
     .replace(/CREATE\s+PUBLICATION\s+[^;]+;/gi, '')
     .replace(/DROP\s+PUBLICATION\s+[^;]+;/gi, '')
-    .replace(/SELECT\s+pg_notify\s*\([^)]*\)\s*;/gi, '');
+    .replace(/SELECT\s+pg_notify\s*\([^)]*\)\s*;/gi, '')
   const script = `
 import { PGlite } from '@electric-sql/pglite';
 

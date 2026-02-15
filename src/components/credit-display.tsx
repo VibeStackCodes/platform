@@ -1,6 +1,7 @@
 'use client'
 
 import { Coins } from 'lucide-react'
+import { useMemo } from 'react'
 
 interface CreditDisplayProps {
   remaining: number
@@ -9,8 +10,13 @@ interface CreditDisplayProps {
   resetAt?: string | null
 }
 
-export function CreditDisplay({ remaining, monthly, plan: _plan, resetAt: _resetAt }: CreditDisplayProps) {
-  const pct = monthly > 0 ? (remaining / monthly) * 100 : 0
+export function CreditDisplay({
+  remaining,
+  monthly,
+  plan: _plan,
+  resetAt: _resetAt,
+}: CreditDisplayProps) {
+  const pct = useMemo(() => (monthly > 0 ? (remaining / monthly) * 100 : 0), [remaining, monthly])
   const isLow = pct < 20
 
   return (

@@ -154,11 +154,12 @@ export async function createSupabaseProject(
     .slice(0, 63)
 
   // Create the project using SDK
+  type CreateProjectParams = Parameters<typeof client.createProject>[0]
   const project = await client.createProject({
     name: sanitizedName,
     organization_id: orgId,
-    region: region as any,
-    plan: plan as any,
+    region: region as CreateProjectParams['region'],
+    plan: plan as CreateProjectParams['plan'],
     db_pass: password,
   })
 

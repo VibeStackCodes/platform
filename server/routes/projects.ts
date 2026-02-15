@@ -15,7 +15,18 @@ projectRoutes.use('*', authMiddleware)
 projectRoutes.get('/', async (c) => {
   const user = c.var.user
   const projects = await getUserProjects(user.id)
-  return c.json(projects)
+  // Return only fields needed by dashboard (id, name, description, prompt, status, previewUrl, createdAt)
+  return c.json(
+    projects.map(({ id, name, description, prompt, status, previewUrl, createdAt }) => ({
+      id,
+      name,
+      description,
+      prompt,
+      status,
+      previewUrl,
+      createdAt,
+    })),
+  )
 })
 
 /**
@@ -67,12 +78,12 @@ projectRoutes.get('/:id/messages', async (c) => {
   const user = c.var.user
   const id = c.req.param('id')
 
-  // Verify project ownership
-  const project = await getProject(id, user.id)
+  // Parallelize project ownership check and messages fetch
+  const [project, messages] = await Promise.all([getProject(id, user.id), getProjectMessages(id)])
+
   if (!project) {
     return c.json({ error: 'Project not found' }, 404)
   }
 
-  const messages = await getProjectMessages(id)
   return c.json(messages)
 })

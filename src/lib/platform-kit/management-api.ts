@@ -11,7 +11,6 @@ interface DatabaseQueryPath {
 
 export interface ManagementApiPaths {
   '/v1/projects/{ref}/database/query': DatabaseQueryPath
-  [key: string]: any
 }
 
 export const client = createClient<ManagementApiPaths>({

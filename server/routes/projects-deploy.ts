@@ -22,7 +22,7 @@ projectDeployRoutes.use('*', authMiddleware)
  * Build the project in sandbox with production env vars
  */
 async function buildInSandbox(
-  sandbox: any,
+  sandbox: Awaited<ReturnType<typeof import('../lib/sandbox').getSandbox>>,
   supabaseUrl: string,
   supabaseAnonKey: string,
 ): Promise<Array<{ path: string; content: Buffer }>> {
@@ -456,8 +456,8 @@ async function waitForDeploymentReady(
     }
 
     if (event.type === 'error') {
-      const errorPayload = event.payload as any
-      const errorMessage = errorPayload?.message || JSON.stringify(errorPayload)
+      const errorPayload = event.payload as { message?: string } | undefined
+      const errorMessage = errorPayload?.message ?? JSON.stringify(errorPayload)
       console.error('[deploy] Deployment error:', errorMessage)
       throw new Error(`Deployment failed: ${errorMessage}`)
     }
