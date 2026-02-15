@@ -1,4 +1,18 @@
 import { z } from 'zod'
+import { DesignPreferencesSchema, SchemaContractSchema } from '../schema-contract'
+
+/**
+ * Analyst output — the structured result of requirements extraction.
+ * Used as the inputSchema for the submitRequirements tool so the analyst
+ * can produce structured output via tool calling (allowing it to also call
+ * askClarifyingQuestions in the same generate() invocation).
+ */
+export const AnalystOutputSchema = z.object({
+  appName: z.string().describe('Short application name (e.g., "TaskFlow")'),
+  appDescription: z.string().describe('One-line app description'),
+  contract: SchemaContractSchema.describe('Database schema contract'),
+  designPreferences: DesignPreferencesSchema.describe('UI design preferences'),
+})
 
 /**
  * Agent output schemas — contract definitions for each specialist agent.
@@ -23,15 +37,6 @@ const FeatureSchema = z.object({
   category: z
     .enum(['auth', 'crud', 'dashboard', 'messaging', 'realtime', 'custom'])
     .describe('Feature category'),
-})
-
-/**
- * Design preferences for styling
- */
-const DesignPreferencesSchema = z.object({
-  style: z.string().default('modern').describe('Design style (e.g., modern, minimal, playful)'),
-  primaryColor: z.string().default('#3b82f6').describe('Primary color (hex code)'),
-  fontFamily: z.string().default('Inter').describe('Font family'),
 })
 
 /**

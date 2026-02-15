@@ -13,6 +13,7 @@ import {
   askClarifyingQuestionsTool,
   contractToHooksTool,
   contractToRoutesTool,
+  submitRequirementsTool,
   createDirectoryTool,
   createGitHubRepoTool,
   createSandboxTool,
@@ -112,37 +113,31 @@ export const analystAgent = new Agent({
   description: 'Converses with users to extract and clarify app requirements',
   instructions: `You are a requirements analyst for VibeStack, an AI app builder that generates Vite + React + Supabase applications.
 
-Your role:
-1. Extract structured requirements from user descriptions:
-   - App name and one-line description
-   - Core features (categorize each as: auth, crud, dashboard, messaging, realtime, custom)
-   - Data entities with fields and relationships
-   - Design preferences (colors, fonts, layout style)
+You MUST call exactly one of these tools — never respond with plain text:
+- submitRequirements: when the request is clear enough to define app name, database schema, and design preferences
+- askClarifyingQuestions: when the request is vague and needs refinement
 
-2. Apply smart defaults when unspecified:
-   - Auth: Supabase Auth with email/password + Google OAuth
-   - Styling: Modern minimal with Tailwind CSS v4, primary blue (#3b82f6), Inter font
-   - Database: PostgreSQL via Supabase with RLS enabled on all tables
-   - State: TanStack Query for server state management
+Guidelines for extracting requirements:
+1. App name and one-line description
+2. Database schema: tables with columns (name, type, nullable, default), foreign keys, RLS policies, enums
+3. Design preferences: style, primaryColor (hex), fontFamily
 
-3. When the user's request is broad, vague, or has multiple valid interpretations,
-   use the ask-clarifying-questions tool to present structured options.
-   - Generate 1-4 questions with 2-4 options each
-   - Use selectionMode "single" when only one choice makes sense
-   - Use selectionMode "multiple" when the user might want several options
-   - Each option needs a short label (2-5 words) and a description
-   - Do NOT ask questions via plain text — always use the tool for structured UI
-   - If the request is clear and specific enough, skip clarification and proceed directly
+Smart defaults when unspecified:
+- Auth: Supabase Auth with email/password + Google OAuth. Include users table with RLS policy using auth.uid()
+- Styling: Modern minimal, primary blue (#3b82f6), Inter font
+- Database: PostgreSQL via Supabase, RLS enabled on all tables
+- Every table gets id (uuid, default gen_random_uuid()), created_at, updated_at columns
 
-4. After receiving clarification answers (as the next user message), incorporate
-   them into the structured requirements output.
-
-Output structured JSON with: appName, description, features[], entities[], designTokens.`,
+When using askClarifyingQuestions:
+- 1-4 questions, 2-4 options each
+- selectionMode "single" for mutually exclusive choices, "multiple" for pick-many
+- Each option: short label (2-5 words) + description
+- Only ask when genuinely ambiguous — err toward proceeding with smart defaults`,
   tools: {
     searchDocs: searchDocsTool,
     askClarifyingQuestions: askClarifyingQuestionsTool,
+    submitRequirements: submitRequirementsTool,
   },
-  defaultOptions: { maxSteps: 10 },
 })
 
 export const infraAgent = new Agent({

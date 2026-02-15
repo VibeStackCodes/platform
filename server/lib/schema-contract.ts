@@ -19,20 +19,37 @@ const SQL_TYPES = [
 
 export const SQLTypeSchema = z.enum(SQL_TYPES)
 
+// FK reference schema — accepts both object `{ table, column }` and string "table.column"
+const FKReferenceSchema = z
+  .preprocess((val) => {
+    if (typeof val === 'string') {
+      // Parse "table.column" or "table(column)" format
+      const dotMatch = val.match(/^([^.(]+)\.([^.(]+)$/)
+      if (dotMatch) return { table: dotMatch[1], column: dotMatch[2] }
+      const parenMatch = val.match(/^([^(]+)\(([^)]+)\)$/)
+      if (parenMatch) return { table: parenMatch[1], column: parenMatch[2] }
+      // Assume it's a table name referencing "id"
+      return { table: val, column: 'id' }
+    }
+    return val
+  }, z.object({
+    table: z.string().describe('Referenced table name'),
+    column: z.string().describe('Referenced column name'),
+  }))
+  .describe('Foreign key reference')
+
 export const ColumnDefSchema = z.object({
   name: z.string().describe('Column name (snake_case)'),
   type: SQLTypeSchema.describe('PostgreSQL data type'),
   nullable: z.boolean().optional().describe('Whether column is nullable'),
-  default: z.string().optional().describe('SQL default expression'),
+  // Accept any primitive, coerce to string (LLMs emit numbers/booleans for defaults)
+  default: z.preprocess(
+    (val) => (val != null ? String(val) : undefined),
+    z.string().optional(),
+  ).describe('SQL default expression'),
   primaryKey: z.boolean().optional().describe('Whether column is primary key'),
   unique: z.boolean().optional().describe('Whether column has unique constraint'),
-  references: z
-    .object({
-      table: z.string().describe('Referenced table name'),
-      column: z.string().describe('Referenced column name'),
-    })
-    .optional()
-    .describe('Foreign key reference'),
+  references: FKReferenceSchema.optional(),
 })
 
 export const RLSPolicySchema = z.object({
@@ -45,7 +62,15 @@ export const RLSPolicySchema = z.object({
 export const TableDefSchema = z.object({
   name: z.string().describe('Table name (snake_case, singular)'),
   columns: z.array(ColumnDefSchema).describe('Table columns'),
-  rlsPolicies: z.array(RLSPolicySchema).optional().describe('Row-Level Security policies'),
+  // Accept string or array — LLMs sometimes emit "enable RLS" as a string
+  rlsPolicies: z.preprocess(
+    (val) => {
+      if (typeof val === 'string') return [] // Drop invalid string, use empty array
+      if (!Array.isArray(val)) return undefined
+      return val
+    },
+    z.array(RLSPolicySchema).optional(),
+  ).describe('Row-Level Security policies'),
 })
 
 export const EnumDefSchema = z.object({

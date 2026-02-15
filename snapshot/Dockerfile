@@ -22,8 +22,10 @@ RUN bun install
 # Creates .vite/ dep pre-bundle and tsconfig.tsbuildinfo
 # Saves ~5-10s on first dev server start and tsc --noEmit
 COPY warmup-scaffold/ /workspace/
-RUN bun run dev &>/dev/null & DEV_PID=$! && sleep 8 && kill $DEV_PID 2>/dev/null || true
-RUN npx tsc --noEmit 2>/dev/null || true
+RUN bun add -g typescript
+RUN bun run dev & DEV_PID=$! && sleep 8 && kill $DEV_PID 2>/dev/null; \
+    test -d node_modules/.vite || (echo "FATAL: Vite dep pre-bundle failed" && exit 1)
+RUN tsc --noEmit
 
 # Entrypoint starts dev server (tmux) + OpenVSCode Server (foreground)
 COPY entrypoint.sh /entrypoint.sh

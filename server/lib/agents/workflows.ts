@@ -21,8 +21,11 @@ import {
 } from '../sandbox'
 import { DesignPreferencesSchema, SchemaContractSchema, validateContract } from '../schema-contract'
 import { createSupabaseProject as createSupabaseProjectFn, runMigration } from '../supabase-mgmt'
-import { analystAgent, pmAgent } from './registry'
+import { AnalystOutputSchema } from './schemas'
 import { validateSQLTool } from './tools'
+
+// Re-export for downstream consumers
+export { AnalystOutputSchema }
 
 // ============================================================================
 // Shared schemas
@@ -34,20 +37,14 @@ const infraInputSchema = z.object({
 })
 
 // ============================================================================
-// Analyst Output Schema — used by analystStep for structuredOutput
-// ============================================================================
-
-export const AnalystOutputSchema = z.object({
-  appName: z.string().describe('Short application name (e.g., "TaskFlow")'),
-  appDescription: z.string().describe('One-line app description'),
-  contract: SchemaContractSchema.describe('Database schema contract'),
-  designPreferences: DesignPreferencesSchema.describe('UI design preferences'),
-})
-
-// ============================================================================
-// Analyst Step — 1 LLM call with structuredOutput → SchemaContract + metadata
-// Note: Uses createStep({ execute }) instead of createStep(agent) to avoid
-// circular ESM dependency — analystAgent is undefined at module init time.
+// Analyst Step — single LLM call via tool-as-output pattern
+//
+// The agent has two tools: askClarifyingQuestions and submitRequirements.
+// In one generate() call, the LLM decides which to invoke:
+//   - Vague request → askClarifyingQuestions → workflow suspends
+//   - Clear request → submitRequirements → structured output extracted from tool args
+//
+// On resume (after user answers), the enriched prompt is sent again.
 // ============================================================================
 
 export const analystStep = createStep({
@@ -60,23 +57,56 @@ export const analystStep = createStep({
       ? `${inputData.prompt}\n\nUser's answers to clarification questions:\n${resumePayload.answers}`
       : inputData.prompt
 
-    if (!resumeData) {
-      const checkResult = await analystAgent.generate(prompt, { maxSteps: 2 })
-      for (const step of checkResult.steps ?? []) {
-        for (const tc of step.toolCalls ?? []) {
-          // biome-ignore lint/suspicious/noExplicitAny: ToolCallChunk has dynamic structure
-          const toolCall = tc as any
-          if (toolCall.toolName === 'ask-clarifying-questions') {
-            return suspend({ questions: toolCall.args.questions })
-          }
+    // Lazy import to break circular dependency
+    const { analystAgent } = await import('./registry')
+    const result = await analystAgent.generate(prompt, { maxSteps: 3 })
+
+    // Extract tool calls from result.steps[].content[] (AI SDK v5 ContentPart format).
+    // In AI SDK v5, tool call arguments are in `part.input` (not `part.args`).
+    // The `step.toolCalls` array may contain null entries or SSE event wrappers,
+    // so we iterate over `step.content` which has the actual ContentPart objects.
+    for (const step of result.steps ?? []) {
+      // biome-ignore lint/suspicious/noExplicitAny: ContentPart has dynamic shape
+      for (const part of (step as any).content ?? []) {
+        if (part?.type !== 'tool-call') continue
+        const name = part.toolName as string
+        // AI SDK v5 uses `input` for tool arguments, with `args` as empty fallback
+        const toolArgs = part.input ?? part.args ?? {}
+
+        if (name === 'askClarifyingQuestions' || name === 'ask-clarifying-questions') {
+          return suspend({ questions: toolArgs.questions })
+        }
+        if (name === 'submitRequirements' || name === 'submit-requirements') {
+          return toolArgs as z.infer<typeof AnalystOutputSchema>
         }
       }
     }
 
-    const result = await analystAgent.generate(prompt, {
-      structuredOutput: { schema: AnalystOutputSchema },
-    })
-    return result.object
+    // Fallback: LLM sometimes emits tool-shaped JSON as plain text instead of calling the tool.
+    // Parse the text response and handle it gracefully.
+    const text = (result.text ?? '').trim()
+    if (text) {
+      try {
+        const parsed = JSON.parse(text)
+        // If it looks like clarification questions, suspend
+        if (Array.isArray(parsed.questions) && parsed.questions.length > 0) {
+          return suspend({ questions: parsed.questions })
+        }
+        // If it looks like analyst output (has contract with tables), use it
+        const validated = AnalystOutputSchema.safeParse(parsed)
+        if (validated.success) {
+          return validated.data
+        }
+      } catch {
+        // Not valid JSON — fall through to error
+      }
+    }
+
+    throw new Error(
+      'Analyst agent did not call submit-requirements or ask-clarifying-questions. ' +
+        'Agent response: ' +
+        text.slice(0, 300),
+    )
   },
 })
 
@@ -241,7 +271,11 @@ export const runMigrationStep = createStep({
     executedAt: z.string(),
   }),
   execute: async ({ inputData }) => {
-    return await runMigration(inputData.supabaseProjectId, inputData.sql)
+    const result = await runMigration(inputData.supabaseProjectId, inputData.sql)
+    if (!result.success) {
+      throw new Error(`Migration failed: ${result.error}`)
+    }
+    return result
   },
 })
 
@@ -285,7 +319,7 @@ const lintStep = createStep({
   execute: async ({ inputData }) => {
     const sandbox = await getSandbox(inputData.sandboxId)
     const result = await sandbox.process.executeCommand(
-      'npx biome check --write',
+      'bunx biome check --write',
       '/workspace',
       undefined,
       30,
@@ -520,6 +554,8 @@ export const codeGenStep = createStep({
   }),
   execute: async ({ inputData }) => {
     const prompt = buildCodeGenPrompt(inputData)
+    // Lazy import to break circular dependency
+    const { pmAgent } = await import('./registry')
     await pmAgent.generate(prompt)
     return {
       sandboxId: inputData.sandboxId,
@@ -751,7 +787,7 @@ const finalQAGateStep = createStep({
 
     const tsc = await sandbox.process.executeCommand('tsc --noEmit', '/workspace', undefined, 60)
     const lint = await sandbox.process.executeCommand(
-      'npx biome check --write',
+      'bunx biome check --write',
       '/workspace',
       undefined,
       30,
@@ -806,11 +842,28 @@ appGenerationWorkflow
   )
   .then(analystStep)
 
+  // Validate analyst output before proceeding
+  .map(
+    async ({ inputData }) => {
+      const analyst = inputData as z.infer<typeof AnalystOutputSchema>
+      if (!analyst.contract?.tables?.length) {
+        throw new Error(
+          'Analyst produced an empty contract — no tables defined. The user prompt may be too vague.',
+        )
+      }
+      if (!analyst.appName) {
+        throw new Error('Analyst did not produce an app name.')
+      }
+      return analyst
+    },
+    { id: 'validate-analyst-output' },
+  )
+
   // Phase 2: Provision infrastructure in parallel (0 LLM calls)
   .map(
     async ({ getInitData, getStepResult }) => {
       const trigger = getInitData<{ userMessage: string; projectId: string }>()
-      const analyst = getStepResult<z.infer<typeof AnalystOutputSchema>>('analyst')
+      const analyst = getStepResult<z.infer<typeof AnalystOutputSchema>>('validate-analyst-output')
       return { appName: analyst.appName, projectId: trigger.projectId }
     },
     { id: 'prepare-infra-input' },
@@ -840,7 +893,7 @@ appGenerationWorkflow
   // Phase 3: Generate schema artifacts — deterministic (0 LLM calls)
   .map(
     async ({ inputData, getStepResult }) => {
-      const analyst = getStepResult<z.infer<typeof AnalystOutputSchema>>('analyst')
+      const analyst = getStepResult<z.infer<typeof AnalystOutputSchema>>('validate-analyst-output')
       return {
         contract: analyst.contract,
         sandboxId: (inputData as { sandboxId: string }).sandboxId,
@@ -867,7 +920,7 @@ appGenerationWorkflow
   // Phase 5: Code generation via PM agent (N LLM calls)
   .map(
     async ({ getStepResult }) => {
-      const analyst = getStepResult<z.infer<typeof AnalystOutputSchema>>('analyst')
+      const analyst = getStepResult<z.infer<typeof AnalystOutputSchema>>('validate-analyst-output')
       const infra = getStepResult<{
         sandboxId: string
         supabaseUrl: string
@@ -912,7 +965,7 @@ appGenerationWorkflow
   // Assemble final output
   .map(
     async ({ inputData, getStepResult }) => {
-      const analyst = getStepResult<z.infer<typeof AnalystOutputSchema>>('analyst')
+      const analyst = getStepResult<z.infer<typeof AnalystOutputSchema>>('validate-analyst-output')
       const infra = getStepResult<{ githubHtmlUrl: string; repoName: string; supabaseUrl: string }>(
         'merge-infra',
       )

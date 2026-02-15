@@ -893,6 +893,26 @@ export const contractToRoutesTool = createTool({
 })
 
 // ============================================================================
+// Submit Requirements (analyst tool-as-output — extracts structured data via tool calling)
+// ============================================================================
+
+import { AnalystOutputSchema } from './schemas'
+
+export const submitRequirementsTool = createTool({
+  id: 'submit-requirements',
+  description: `Submit the final extracted requirements when the user's request is clear enough to proceed.
+Call this tool (instead of askClarifyingQuestions) when you have enough information to define:
+- App name and description
+- Database schema (tables, columns, types, relationships, RLS policies)
+- Design preferences (style, colors, fonts)
+
+The input must be complete and valid — the pipeline uses this directly to generate SQL and code.`,
+  inputSchema: AnalystOutputSchema,
+  outputSchema: z.object({ submitted: z.literal(true) }),
+  execute: async () => ({ submitted: true as const }),
+})
+
+// ============================================================================
 // Clarification Questions (UI-bound tool — no server-side execution)
 // ============================================================================
 

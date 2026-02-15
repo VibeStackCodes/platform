@@ -55,6 +55,7 @@ export {
   runMigrationTool,
   runTypeCheckTool,
   searchDocsTool,
+  submitRequirementsTool,
   validateSQLTool,
   writeFilesTool,
   writeFileTool,

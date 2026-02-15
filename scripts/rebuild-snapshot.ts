@@ -45,11 +45,12 @@ async function main() {
     .addLocalFile('snapshot/warmup-scaffold/src/main.tsx', '/workspace/src/main.tsx')
     .addLocalFile('snapshot/warmup-scaffold/src/index.css', '/workspace/src/index.css')
     .addLocalFile('snapshot/warmup-scaffold/src/lib/utils.ts', '/workspace/src/lib/utils.ts')
-    // Run dev server briefly to pre-bundle Vite deps, then tsc to warm tsbuildinfo
+    // Run dev server briefly to pre-bundle Vite deps, then verify cache was created
     .runCommands(
-      'bun run dev &>/dev/null & DEV_PID=$! && sleep 8 && kill $DEV_PID 2>/dev/null || true',
+      'bun run dev & DEV_PID=$! && sleep 8 && kill $DEV_PID 2>/dev/null; test -d node_modules/.vite || (echo "FATAL: Vite dep pre-bundle failed" && exit 1)',
     )
-    .runCommands('npx tsc --noEmit 2>/dev/null || true')
+    // Warm TypeScript cache (tsbuildinfo) — must compile cleanly
+    .runCommands('tsc --noEmit')
     // Entrypoint script: starts OpenVSCode + bun dev in tmux
     .addLocalFile('snapshot/entrypoint.sh', '/opt/entrypoint.sh')
     .runCommands('chmod +x /opt/entrypoint.sh')
@@ -75,7 +76,7 @@ async function main() {
       name: SNAPSHOT_NAME,
       image,
       entrypoint: ['/opt/entrypoint.sh'],
-      resources: { cpu: 2, memory: 4, disk: 10 },
+      resources: { cpu: 1, memory: 2, disk: 3 },
     },
     { onLogs: (chunk: string) => process.stdout.write(chunk), timeout: 600 },
   )
