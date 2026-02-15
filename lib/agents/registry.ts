@@ -17,6 +17,10 @@ import {
   pushToGitHubTool,
   deployToVercelTool,
   searchDocsTool,
+  createSupabaseProjectTool,
+  runMigrationTool,
+  createGitHubRepoTool,
+  getGitHubTokenTool,
 } from './tools';
 
 /**
@@ -25,9 +29,9 @@ import {
  * - CODEGEN: Optimized for code generation with extended context
  * - VALIDATOR: Fast, cheap for builds, type-checking, validation
  */
-const ORCHESTRATOR_MODEL = 'openai/gpt-5.2';
-const CODEGEN_MODEL = 'openai/gpt-5.1-codex-max';
-const VALIDATOR_MODEL = 'openai/gpt-5-mini';
+const ORCHESTRATOR_MODEL = 'openai/gpt-4o';
+const CODEGEN_MODEL = 'openai/gpt-4o';
+const VALIDATOR_MODEL = 'openai/gpt-4o-mini';
 
 /**
  * Analyst Agent
@@ -89,6 +93,8 @@ Always verify each step completes successfully before proceeding.`,
     createSandbox: createSandboxTool,
     runCommand: runCommandTool,
     getPreviewUrl: getPreviewUrlTool,
+    createSupabaseProject: createSupabaseProjectTool,
+    createGitHubRepo: createGitHubRepoTool,
   },
 });
 
@@ -137,6 +143,7 @@ Output production-ready, valid PostgreSQL 15+ SQL. No placeholder comments.`,
     readFile: readFileTool,
     validateSQL: validateSQLTool,
     searchDocs: searchDocsTool,
+    runMigration: runMigrationTool,
   },
 });
 
@@ -362,6 +369,7 @@ Always verify successful completion before reporting back.`,
     pushToGitHub: pushToGitHubTool,
     deployToVercel: deployToVercelTool,
     runCommand: runCommandTool,
+    getGitHubToken: getGitHubTokenTool,
   },
 });
 

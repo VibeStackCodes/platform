@@ -186,6 +186,22 @@ export interface GenerationState {
 }
 
 // ============================================================================
+// Supabase Project (from Management API)
+// ============================================================================
+
+export interface SupabaseProject {
+  id: string;
+  name: string;
+  orgId: string;
+  region: string;
+  dbHost: string;
+  dbPassword: string;
+  anonKey: string;
+  serviceRoleKey: string;
+  url: string;
+}
+
+// ============================================================================
 // Platform Database Types
 // ============================================================================
 

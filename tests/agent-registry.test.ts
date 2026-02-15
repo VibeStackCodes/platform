@@ -54,20 +54,20 @@ describe('Agent Registry', () => {
   });
 
   it('assigns correct models per tier', () => {
-    // Orchestrator tier (gpt-5.2)
-    expect(supervisorAgent.model).toContain('gpt-5.2');
-    expect(analystAgent.model).toContain('gpt-5.2');
-    expect(dbaAgent.model).toContain('gpt-5.2');
-    expect(reviewerAgent.model).toContain('gpt-5.2');
+    // Orchestrator tier (gpt-4o)
+    expect(supervisorAgent.model).toContain('gpt-4o');
+    expect(analystAgent.model).toContain('gpt-4o');
+    expect(dbaAgent.model).toContain('gpt-4o');
+    expect(reviewerAgent.model).toContain('gpt-4o');
 
-    // Codegen tier (gpt-5.1-codex-max)
-    expect(backendAgent.model).toContain('gpt-5.1-codex-max');
-    expect(frontendAgent.model).toContain('gpt-5.1-codex-max');
+    // Codegen tier (gpt-4o)
+    expect(backendAgent.model).toContain('gpt-4o');
+    expect(frontendAgent.model).toContain('gpt-4o');
 
-    // Validator tier (gpt-5-mini)
-    expect(infraAgent.model).toContain('gpt-5-mini');
-    expect(qaAgent.model).toContain('gpt-5-mini');
-    expect(devOpsAgent.model).toContain('gpt-5-mini');
+    // Validator tier (gpt-4o-mini)
+    expect(infraAgent.model).toContain('gpt-4o-mini');
+    expect(qaAgent.model).toContain('gpt-4o-mini');
+    expect(devOpsAgent.model).toContain('gpt-4o-mini');
   });
 
   it('assigns correct tools per agent', () => {

@@ -14,10 +14,14 @@ import {
   pushToGitHubTool,
   deployToVercelTool,
   searchDocsTool,
+  createSupabaseProjectTool,
+  runMigrationTool,
+  createGitHubRepoTool,
+  getGitHubTokenTool,
 } from '@/lib/agents/tools';
 
 describe('Sandbox Tools', () => {
-  it('exports all 14 tools', () => {
+  it('exports all 18 tools', () => {
     const tools = [
       writeFileTool,
       readFileTool,
@@ -33,6 +37,10 @@ describe('Sandbox Tools', () => {
       pushToGitHubTool,
       deployToVercelTool,
       searchDocsTool,
+      createSupabaseProjectTool,
+      runMigrationTool,
+      createGitHubRepoTool,
+      getGitHubTokenTool,
     ];
     for (const tool of tools) {
       expect(tool).toBeDefined();
@@ -149,10 +157,18 @@ describe('Sandbox Tools', () => {
   it('deployToVercelTool has correct input schema', () => {
     const schema = deployToVercelTool.inputSchema!;
     const valid = schema.safeParse({
-      projectId: 'proj_123',
-      repoUrl: 'https://github.com/user/repo',
+      sandboxId: 'abc',
+      projectName: 'test-project',
     });
     expect(valid.success).toBe(true);
+
+    // With optional teamId
+    const withTeamId = schema.safeParse({
+      sandboxId: 'abc',
+      projectName: 'test-project',
+      teamId: 'team_123',
+    });
+    expect(withTeamId.success).toBe(true);
   });
 
   it('searchDocsTool input accepts library and query', () => {

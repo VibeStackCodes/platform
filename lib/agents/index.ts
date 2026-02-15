@@ -35,4 +35,8 @@ export {
   pushToGitHubTool,
   deployToVercelTool,
   searchDocsTool,
+  createSupabaseProjectTool,
+  runMigrationTool,
+  createGitHubRepoTool,
+  getGitHubTokenTool,
 } from './tools';

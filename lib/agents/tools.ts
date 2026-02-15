@@ -1,6 +1,8 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
-import { getSandbox, createSandbox as createSandboxFn, getPreviewUrl as getPreviewUrlFn, pushToGitHub as pushToGitHubFn } from '@/lib/sandbox';
+import { getSandbox, createSandbox as createSandboxFn, getPreviewUrl as getPreviewUrlFn, pushToGitHub as pushToGitHubFn, downloadDirectory } from '@/lib/sandbox';
+import { createRepo, getInstallationToken, buildRepoName } from '@/lib/github';
+import { createSupabaseProject as createSupabaseProjectFn, runMigration } from '@/lib/supabase-mgmt';
 
 /**
  * Standalone Mastra tools for 9-agent architecture
@@ -377,10 +379,11 @@ export const pushToGitHubTool = createTool({
 
 export const deployToVercelTool = createTool({
   id: 'deploy-to-vercel',
-  description: 'Deploy a project to Vercel [PLACEHOLDER — returns mock response, integration pending]',
+  description: 'Deploy sandbox files to Vercel using the Vercel REST API. Downloads files from sandbox and creates a deployment.',
   inputSchema: z.object({
-    projectId: z.string().describe('VibeStack project ID'),
-    repoUrl: z.string().describe('GitHub repository URL'),
+    sandboxId: z.string().describe('Daytona sandbox ID'),
+    projectName: z.string().describe('Project name for Vercel deployment'),
+    teamId: z.string().optional().describe('Vercel team ID (defaults to VERCEL_TEAM_ID env var)'),
   }),
   outputSchema: z.object({
     deploymentUrl: z.string(),
@@ -388,12 +391,143 @@ export const deployToVercelTool = createTool({
     status: z.string(),
   }),
   execute: async (inputData, _context) => {
-    // Placeholder — will use @vercel/client in full implementation
+    const vercelToken = process.env.VERCEL_TOKEN;
+    if (!vercelToken) {
+      throw new Error('VERCEL_TOKEN environment variable is required');
+    }
+
+    const finalTeamId = inputData.teamId || process.env.VERCEL_TEAM_ID;
+
+    // Download files from sandbox
+    const sandbox = await getSandbox(inputData.sandboxId);
+    const files = await downloadDirectory(sandbox, '/workspace');
+
+    console.log(`[deploy-to-vercel] Downloaded ${files.length} files from sandbox`);
+
+    // Prepare files in Vercel format (base64-encoded)
+    const vercelFiles = files.map((f) => ({
+      file: f.path,
+      data: f.content.toString('base64'),
+    }));
+
+    // Create deployment
+    const deploymentResponse = await fetch(
+      `https://api.vercel.com/v13/deployments${finalTeamId ? `?teamId=${finalTeamId}` : ''}`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${vercelToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: inputData.projectName.toLowerCase().replace(/[^a-z0-9-]/g, '-'),
+          files: vercelFiles,
+          projectSettings: {
+            framework: 'vite',
+            buildCommand: 'bun run build',
+            devCommand: 'bun run dev',
+            installCommand: 'bun install',
+            outputDirectory: 'dist',
+          },
+          target: 'production',
+        }),
+      }
+    );
+
+    if (!deploymentResponse.ok) {
+      const error = await deploymentResponse.text();
+      throw new Error(`Vercel deployment failed: ${error}`);
+    }
+
+    const deployment = await deploymentResponse.json() as { id: string; url: string; readyState: string };
+    const deployUrl = `https://${deployment.url}`;
+
+    console.log(`[deploy-to-vercel] Deployment created: ${deployUrl} (${deployment.id})`);
+
     return {
-      deploymentUrl: `https://${inputData.projectId}.vercel.app`,
-      deploymentId: `dpl_${Date.now()}`,
-      status: 'pending',
+      deploymentUrl: deployUrl,
+      deploymentId: deployment.id,
+      status: deployment.readyState,
     };
+  },
+});
+
+// ============================================================================
+// Infrastructure Tools
+// ============================================================================
+
+export const createSupabaseProjectTool = createTool({
+  id: 'create-supabase-project',
+  description: 'Create a new Supabase project via Management API. Waits for ACTIVE_HEALTHY status. Returns project ID, URL, and API keys.',
+  inputSchema: z.object({
+    name: z.string().describe('Project name (sanitized to lowercase alphanumeric + hyphens)'),
+    region: z.string().default('us-east-1').describe('AWS region'),
+  }),
+  outputSchema: z.object({
+    projectId: z.string(),
+    url: z.string(),
+    anonKey: z.string(),
+    serviceRoleKey: z.string(),
+    dbHost: z.string(),
+  }),
+  execute: async (inputData) => {
+    const project = await createSupabaseProjectFn(inputData.name, inputData.region);
+    return {
+      projectId: project.id,
+      url: project.url,
+      anonKey: project.anonKey,
+      serviceRoleKey: project.serviceRoleKey,
+      dbHost: project.dbHost,
+    };
+  },
+});
+
+export const runMigrationTool = createTool({
+  id: 'run-migration',
+  description: 'Execute a SQL migration against a Supabase project via the Management API',
+  inputSchema: z.object({
+    supabaseProjectId: z.string().describe('Supabase project ID'),
+    sql: z.string().describe('SQL migration to execute'),
+  }),
+  outputSchema: z.object({
+    success: z.boolean(),
+    error: z.string().optional(),
+    executedAt: z.string(),
+  }),
+  execute: async (inputData) => {
+    return await runMigration(inputData.supabaseProjectId, inputData.sql);
+  },
+});
+
+export const createGitHubRepoTool = createTool({
+  id: 'create-github-repo',
+  description: 'Create a GitHub repository in the VibeStack org via GitHub App',
+  inputSchema: z.object({
+    appName: z.string().describe('Application name'),
+    projectId: z.string().describe('VibeStack project ID'),
+  }),
+  outputSchema: z.object({
+    cloneUrl: z.string(),
+    htmlUrl: z.string(),
+    repoName: z.string(),
+  }),
+  execute: async (inputData) => {
+    const repoName = buildRepoName(inputData.appName, inputData.projectId);
+    const repo = await createRepo(repoName);
+    return { cloneUrl: repo.cloneUrl, htmlUrl: repo.htmlUrl, repoName };
+  },
+});
+
+export const getGitHubTokenTool = createTool({
+  id: 'get-github-token',
+  description: 'Get a GitHub App installation token for git push authentication',
+  inputSchema: z.object({}),
+  outputSchema: z.object({
+    token: z.string(),
+  }),
+  execute: async () => {
+    const token = await getInstallationToken();
+    return { token };
   },
 });
 
