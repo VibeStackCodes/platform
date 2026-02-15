@@ -5,25 +5,34 @@ AI-powered app builder — users describe an app, the platform generates a full 
 ## Commands
 
 ```bash
-pnpm dev              # Next.js dev server on :3000
-pnpm build            # Production build (matches Vercel)
-pnpm lint             # OxLint (670+ rules, replaces ESLint)
+pnpm dev              # Vite SPA + Hono API server (concurrently)
+pnpm build            # Vite client build + server typecheck
+pnpm preview          # Vite preview of built client
+pnpm lint             # Biome (linter + formatter, replaces ESLint/OxLint)
+pnpm lint:fix         # Biome auto-fix
+pnpm format           # Biome format
 pnpm test             # Vitest unit/integration tests
 pnpm test:e2e:mock    # Playwright E2E with mock mode (no external services)
 pnpm test:e2e:real    # Playwright E2E against real Supabase/Daytona
+pnpm db:generate      # Drizzle Kit generate migrations
+pnpm db:migrate       # Drizzle Kit run migrations
+pnpm db:studio        # Drizzle Kit studio (DB browser)
 ```
 
 ## Stack
 
-- **Framework**: Next.js 16 (App Router, React 19)
-- **Language**: TypeScript 5, strict mode
+- **Client**: Vite 8 SPA, React 19, TanStack Router (file-based routing)
+- **Server**: Hono API framework (replaces Next.js API routes)
+- **Language**: TypeScript 5, strict mode, dual tsconfig (client + server)
 - **UI**: Tailwind CSS v4, shadcn/ui (Radix), Motion (framer-motion successor)
-- **Auth**: Supabase Auth via `@supabase/ssr` middleware
-- **Database**: Supabase (platform DB) + Supabase Management API (generated app DBs)
+- **Auth**: Supabase Auth via `@supabase/supabase-js` (SPA localStorage tokens)
+- **Database**: Drizzle ORM + Supabase (platform DB) + Supabase Management API (generated app DBs)
 - **Sandbox**: Daytona SDK — sandboxed environments from snapshots
-- **AI**: Vercel AI SDK v6 (`ai` package), Anthropic + OpenAI providers
+- **AI**: Mastra agent framework, OpenAI + Anthropic providers
 - **Payments**: Stripe (checkout, webhooks)
-- **Deployment**: Vercel (generated apps deployed via `@vercel/client`)
+- **Deployment**: Vercel (Hono via `@hono/vercel`, client via `dist/client/`)
+- **Monitoring**: Sentry (client + server + AI agent instrumentation)
+- **Linting**: Biome (linter + formatter, replaces ESLint/OxLint)
 - **Testing**: Vitest (unit), Playwright (E2E)
 - **Package manager**: pnpm
 
@@ -32,39 +41,79 @@ pnpm test:e2e:real    # Playwright E2E against real Supabase/Daytona
 ### Directory Structure
 
 ```
-app/
-  api/
-    agent/         # Mastra agent pipeline endpoint (SSE, credit-gated)
-    projects/      # Project CRUD, deploy, sandbox-urls
-    stripe/        # Stripe webhooks
-    supabase-proxy/ # Proxies queries to generated app's Supabase
-  auth/            # Auth callback routes
-  dashboard/       # User's project list
-  project/[id]/    # Builder UI (chat + preview + DB manager)
-components/
-  ui/              # shadcn/ui primitives
-  supabase-manager/ # Database browser/editor for generated apps
-  builder-chat.tsx  # Chat panel in builder
-  builder-preview.tsx # Live preview iframe
-lib/
-  agents/
-    registry.ts      # 9 agents + supervisor network (Mastra)
-    tools.ts         # 18 Mastra tools (sandbox, GitHub, Supabase, Vercel)
-    schemas.ts       # Zod schemas for agent inputs/outputs
-    index.ts         # Barrel exports
-  sandbox.ts         # Daytona sandbox lifecycle (create, get, destroy)
-  schema-contract.ts # SchemaContract type — single source of truth
-  contract-to-sql.ts # SchemaContract → deterministic SQL migration
-  contract-to-types.ts # SchemaContract → TypeScript types
-  contract-to-drizzle.ts # SchemaContract → Drizzle ORM schema
-  github.ts          # GitHub App integration (create repo, push)
-  supabase-mgmt.ts   # Supabase Management API (create project, run migration)
-  local-supabase.ts  # PGlite-based local SQL validation
-  sse.ts             # SSE stream helper
-  types.ts           # Shared types (StreamEvent, Plan, Project, etc.)
-supabase/migrations/ # Platform DB migrations
-snapshot/            # Daytona sandbox Docker image (Vite + React base)
+src/                     # Client SPA (Vite + TanStack Router)
+  main.tsx               # App entry point (Router + QueryClient + Auth)
+  sentry.client.ts       # Sentry client init
+  index.css              # Tailwind v4 theme (CSS-first)
+  routes/
+    __root.tsx            # Root layout (Outlet + devtools)
+    index.tsx             # Landing page
+    _authenticated/
+      route.tsx           # Auth guard (beforeLoad redirect)
+      dashboard.tsx       # Project list
+      project.$id.tsx     # Builder UI (chat + preview + DB manager)
+    auth/
+      login.tsx           # Sign in/up page
+  components/
+    ui/                   # shadcn/ui primitives
+    supabase-manager/     # Database browser/editor for generated apps
+    builder-chat.tsx      # Chat panel in builder
+    builder-preview.tsx   # Live preview iframe
+    hero-prompt.tsx       # Landing page prompt bar
+    project-layout.tsx    # Builder page layout
+    theme-provider.tsx    # Dark/light/system theme (replaces next-themes)
+  lib/
+    auth.ts              # useAuth() hook (Supabase onAuthStateChange)
+    supabase-browser.ts  # Supabase client singleton (import.meta.env.VITE_*)
+    utils.ts             # cn() helper, stripCodeFences()
+    types.ts             # Client-side type definitions
+    platform-kit/        # Management API client + pg-meta types
+  contexts/              # React contexts
+  hooks/                 # Custom hooks
+server/                  # Hono API server
+  index.ts               # Hono app entry + Sentry middleware
+  sentry.ts              # Sentry server init + AI agent instrumentation
+  middleware/
+    auth.ts              # Hono auth middleware (cookie-based Supabase)
+  routes/
+    agent.ts             # Mastra agent SSE endpoint (credit-gated)
+    projects.ts          # Project CRUD
+    projects-deploy.ts   # Vercel deployment
+    sandbox-urls.ts      # Sandbox preview URLs
+    stripe-checkout.ts   # Stripe checkout sessions
+    stripe-webhook.ts    # Stripe webhook handler
+    supabase-proxy.ts    # Proxies queries to generated app's Supabase
+    auth-callback.ts     # OAuth code exchange
+  lib/
+    db/
+      schema.ts          # Drizzle schema (matches Supabase migrations)
+      relations.ts       # Drizzle relations
+      client.ts          # Drizzle client (pg Pool)
+      queries.ts         # Type-safe query functions
+    agents/
+      registry.ts        # 9 agents + supervisor network (Mastra)
+      tools.ts           # 18 Mastra tools
+      schemas.ts         # Zod schemas for agent inputs/outputs
+      workflows.ts       # Mastra workflows
+    sandbox.ts           # Daytona sandbox lifecycle
+    schema-contract.ts   # SchemaContract type — single source of truth
+    contract-to-sql.ts   # SchemaContract → deterministic SQL migration
+    contract-to-types.ts # SchemaContract → TypeScript types
+    contract-to-drizzle.ts # SchemaContract → Drizzle ORM schema
+    github.ts            # GitHub App integration
+    supabase-mgmt.ts     # Supabase Management API
+    credits.ts           # Credit checking/deduction
+    sse.ts               # SSE stream helper (Hono streamSSE)
+supabase/migrations/     # Platform DB migrations
+snapshot/                # Daytona sandbox Docker image (Vite + React base)
 ```
+
+### Dual tsconfig
+
+- **`tsconfig.json`**: Client code (`src/`). `@/` → `./src/*`
+- **`tsconfig.server.json`**: Server code (`server/`). `@/` → `./server/*`
+- **Never cross-import** between client and server boundaries
+- `src/mastra/` is excluded from client tsconfig (imports server code)
 
 ### Generation Pipeline
 
@@ -83,10 +132,10 @@ snapshot/            # Daytona sandbox Docker image (Vite + React base)
 - **Contract-first**: `SchemaContract` → all downstream artifacts (SQL, types, seed). Never retry LLM generation — fix the contract or generator if wrong.
 - **Agent architecture**: 9 Mastra agents created per-request via `createAgentNetwork(model, userId)` with Helicone proxy for observability. Model tiers: `gpt-4o` (orchestrator/codegen), `gpt-4o-mini` (validator).
 - **Credit-Based Billing**: 1 credit = 1,000 tokens. `/api/agent` enforces credits (402 on exhaustion). Stripe meters track usage, credit grants provision per subscription.
-- **Single-flow frontend**: All AI calls go through `/api/agent` (SSE). `/api/chat` has been removed.
-- **SSE streaming**: Agent route streams progress events to client via `lib/sse.ts`.
-- **Mock mode**: `NEXT_PUBLIC_MOCK_MODE=true` bypasses auth middleware and Supabase queries for E2E testing.
-- **Path alias**: `@/*` maps to project root.
+- **Single-flow frontend**: All AI calls go through `/api/agent` (SSE).
+- **SSE streaming**: Agent route streams progress events to client via Hono `streamSSE()`.
+- **Mock mode**: `VITE_MOCK_MODE=true` bypasses auth and Supabase queries for E2E testing.
+- **Path aliases**: `@/` → `src/` (client), `@/` → `server/` (server tsconfig). Tests use `@server/` → `server/` alias.
 
 ## Environment Variables
 
@@ -94,9 +143,9 @@ Required in `.env.local`:
 
 | Variable | Purpose |
 |----------|---------|
-| `NEXT_PUBLIC_SUPABASE_URL` | Platform Supabase instance |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Platform Supabase anon key |
-| `DATABASE_URL` | PostgreSQL connection string (Supabase pooler URL for Mastra agent memory) |
+| `VITE_SUPABASE_URL` | Platform Supabase instance |
+| `VITE_SUPABASE_ANON_KEY` | Platform Supabase anon key |
+| `DATABASE_URL` | PostgreSQL connection string (Supabase pooler URL) |
 | `SUPABASE_ACCESS_TOKEN` | Management API token (for generating app DBs) |
 | `SUPABASE_ORG_ID` | Org for generated Supabase projects |
 | `ANTHROPIC_API_KEY` | Claude API |
@@ -111,8 +160,10 @@ Required in `.env.local`:
 | `GITHUB_ORG` | Org for generated repos |
 | `STRIPE_SECRET_KEY` | Stripe server key |
 | `STRIPE_WEBHOOK_SECRET` | Stripe webhook validation |
-| `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | Stripe client key |
+| `VITE_STRIPE_PUBLISHABLE_KEY` | Stripe client key |
 | `HELICONE_API_KEY` | Helicone LLM proxy (observability + per-user tracking) |
+| `VITE_SENTRY_DSN` | Sentry client DSN (optional) |
+| `SENTRY_DSN` | Sentry server DSN (optional) |
 
 ## Testing
 
@@ -120,13 +171,14 @@ Required in `.env.local`:
 
 - Config: `vitest.config.ts`, environment: `happy-dom`
 - Tests in `tests/` directory, setup file: `tests/setup.ts`
+- Aliases: `@/` → `src/`, `@server/` → `server/`
 - Run: `pnpm test` or `pnpm test:ui`
 
 ### E2E Tests (Playwright)
 
 - Config: `playwright.config.ts`
 - Two projects: `mock` (uses mock mode) and `real` (hits real services)
-- Mock E2E: `pnpm test:e2e:mock` — builds app with `NEXT_PUBLIC_MOCK_MODE=true`
+- Mock E2E: `pnpm test:e2e:mock` — runs with `VITE_MOCK_MODE=true`
 - Real E2E: `pnpm test:e2e:real` — requires all env vars set
 - Sequential (not parallel) — tests share auth state
 - Global setup: `e2e/global-setup.ts`
@@ -162,6 +214,8 @@ git commit
 
 ## Gotchas
 
+- **Dual tsconfig**: Client uses `@/` → `src/`, server uses `@/` → `server/`. Never cross-import. Tests use `@server/` for server code.
+- **Env vars**: Client uses `import.meta.env.VITE_*`, server uses `process.env.*`. Only `VITE_` prefixed vars are exposed to the client.
 - **PGlite validation** requires AUTH_STUBS with `authenticated`, `anon`, and `service_role` roles — omitting these causes migration validation to fail silently.
 - **Daytona sandbox polling** uses a 20s window (10x2s) — shorter windows cause duplicate sandbox creation from race conditions.
 - **Verifier** runs `bun run build` (not `npm run build`) — must match Vercel build command in generated projects.
@@ -171,6 +225,7 @@ git commit
 - **No `SUPABASE_SERVICE_ROLE_KEY`** in platform env — use Management API for DB queries against generated apps.
 - **Credit deduction** happens post-execution (not pre-execution). In-flight generations always complete even if credits go negative.
 - **Helicone fallback**: When `HELICONE_API_KEY` is unset, LLM calls go directly to OpenAI (no observability).
+- **Sentry** is gated behind `VITE_SENTRY_DSN` / `SENTRY_DSN` — no-op when unset.
 
 ## Snapshot (Daytona Sandbox Image)
 
@@ -183,13 +238,14 @@ The `snapshot/` directory defines the Docker image used as the Daytona sandbox b
 - **PGlite** (`@electric-sql/pglite`) is included for in-sandbox SQL migration validation
 - **`warmup-scaffold/`**: Minimal React+Vite app used only for cache warming, cleaned up after build (caches kept)
 
-Key detail: the platform itself is Next.js, but **generated apps are Vite + React** running inside Daytona sandboxes.
+Key detail: both the platform and generated apps now use Vite + React.
 
 ## Code Style
 
 - TypeScript strict mode, no `any` unless unavoidable
 - React 19 — use `use()` hook, no `forwardRef` needed
-- shadcn/ui components in `components/ui/`
+- shadcn/ui components in `src/components/ui/`
 - Tailwind v4 (CSS-first config, no `tailwind.config.ts`)
-- OxLint: replaces ESLint (670+ rules, 50-100x faster)
-- Imports use `@/` path alias
+- Biome: replaces ESLint/OxLint (linter + formatter in one, 100x faster)
+- Client imports use `@/` path alias (→ `src/`)
+- Server code uses relative imports within `server/`
