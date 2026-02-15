@@ -54,7 +54,7 @@ import {
 import { PromptBar } from "@/components/prompt-bar";
 import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
 import { Bot, CheckCircle2 } from "lucide-react";
-import type { StreamEvent, ChatPlan, BuildError, CheckpointEvent, LayerCommitEvent, CreditsUsedEvent } from "@/lib/types";
+import type { StreamEvent, ChatPlan, BuildError, CheckpointEvent, LayerCommitEvent } from "@/lib/types";
 import { CreditDisplay } from "@/components/credit-display";
 
 // Custom message type — replaces UIMessage from Vercel AI SDK
@@ -99,6 +99,14 @@ export function BuilderChat({ projectId, initialPrompt, initialMessages, onGener
     credits_reset_at: string | null;
   } | null>(null);
   const hasAutoSubmitted = useRef(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  // Abort in-flight SSE streams on unmount
+  useEffect(() => {
+    return () => {
+      abortControllerRef.current?.abort();
+    };
+  }, []);
 
   // Custom state management — replaces useChat from @ai-sdk/react
   const [messages, setMessages] = useState<ChatMessage[]>(
@@ -115,6 +123,95 @@ export function BuilderChat({ projectId, initialPrompt, initialMessages, onGener
   const [chatError, setChatError] = useState<Error | null>(null);
 
   // Message persistence is handled by Mastra agent memory (thread/resource)
+
+  const handleGenerationEvent = useCallback((event: StreamEvent) => {
+    switch (event.type) {
+      case "stage_update":
+        if (event.stage === "complete") {
+          setGenerationStatus("complete");
+        } else if (event.stage === "error") {
+          setGenerationStatus("error");
+        }
+        break;
+      case "agent_start":
+        setActiveAgents((prev) => [
+          ...prev.filter((a) => a.id !== event.agentId),
+          { id: event.agentId, name: event.agentName, status: "running" as const },
+        ]);
+        break;
+      case "agent_progress":
+        setActiveAgents((prev) =>
+          prev.map((a) =>
+            a.id === event.agentId ? { ...a, message: event.message } : a
+          )
+        );
+        break;
+      case "agent_complete":
+        setActiveAgents((prev) =>
+          prev.map((a) =>
+            a.id === event.agentId ? { ...a, status: "complete" as const } : a
+          )
+        );
+        break;
+      case "agent_artifact":
+        break;
+      case "plan_ready":
+        break;
+      case "file_start":
+        setGenerationFiles((prev) => {
+          const exists = prev.some((f) => f.path === event.path);
+          if (exists) {
+            return prev.map((f) => (f.path === event.path ? { ...f, status: "generating" as const } : f));
+          }
+          return [...prev, { path: event.path, status: "generating" as const }];
+        });
+        break;
+      case "file_complete":
+        setGenerationFiles((prev) =>
+          prev.map((f) =>
+            f.path === event.path
+              ? { ...f, status: "complete" as const, lines: event.linesOfCode }
+              : f
+          )
+        );
+        break;
+      case "file_error":
+        setGenerationFiles((prev) =>
+          prev.map((f) => (f.path === event.path ? { ...f, status: "error" as const } : f))
+        );
+        break;
+      case "complete":
+        setGenerationStatus("complete");
+        onGenerationComplete?.();
+        break;
+      case "error":
+        setGenerationStatus("error");
+        break;
+      case "build_error":
+        setBuildErrors(event.errors);
+        break;
+      case "checkpoint":
+        setCheckpoints((prev) => {
+          const existing = prev.findIndex((c) => c.label === event.label);
+          if (existing >= 0) {
+            const updated = [...prev];
+            updated[existing] = event;
+            return updated;
+          }
+          return [...prev, event];
+        });
+        break;
+      case "layer_commit":
+        setLayerCommits((prev) => [...prev, event]);
+        break;
+      case "credits_used":
+        setUserCredits(prev => prev ? {
+          ...prev,
+          credits_remaining: event.creditsRemaining,
+        } : prev);
+        break;
+    }
+  }, [onGenerationComplete]);
 
   /**
    * Parse an SSE buffer and process chat-relevant events.
@@ -163,6 +260,9 @@ export function BuilderChat({ projectId, initialPrompt, initialMessages, onGener
    */
   const sendChatMessage = useCallback(
     async (text: string) => {
+      // Guard against concurrent calls
+      if (chatStatus === "streaming") return;
+
       const userMessage: ChatMessage = {
         id: `user-${Date.now()}`,
         role: "user",
@@ -179,12 +279,17 @@ export function BuilderChat({ projectId, initialPrompt, initialMessages, onGener
       ]);
 
       let fullText = "";
+      // Abort any previous in-flight request
+      abortControllerRef.current?.abort();
+      const abortController = new AbortController();
+      abortControllerRef.current = abortController;
 
       try {
         const response = await fetch("/api/agent", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ message: text, projectId, model }),
+          signal: abortController.signal,
         });
 
         if (!response.ok || !response.body) {
@@ -206,27 +311,33 @@ export function BuilderChat({ projectId, initialPrompt, initialMessages, onGener
         const decoder = new TextDecoder();
         let buffer = "";
 
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
 
-          buffer += decoder.decode(value, { stream: true });
-          buffer = parseSSEBuffer(
-            buffer,
-            (delta: string) => {
-              fullText += delta;
-              const snapshot = fullText;
-              setMessages(prev =>
-                prev.map(m =>
-                  m.id === assistantId ? { ...m, content: snapshot } : m
-                )
-              );
-            },
-            // Also forward generation-relevant events during chat
-            handleGenerationEvent
-          );
+            buffer += decoder.decode(value, { stream: true });
+            buffer = parseSSEBuffer(
+              buffer,
+              (delta: string) => {
+                fullText += delta;
+                const snapshot = fullText;
+                setMessages(prev =>
+                  prev.map(m =>
+                    m.id === assistantId ? { ...m, content: snapshot } : m
+                  )
+                );
+              },
+              // Also forward generation-relevant events during chat
+              handleGenerationEvent
+            );
+          }
+        } finally {
+          reader.releaseLock();
         }
       } catch (err) {
+        // Silent abort on unmount or cancellation
+        if (err instanceof Error && err.name === "AbortError") return;
         setChatError(err instanceof Error ? err : new Error("Chat failed"));
         // Remove empty assistant placeholder on error
         setMessages(prev =>
@@ -236,7 +347,7 @@ export function BuilderChat({ projectId, initialPrompt, initialMessages, onGener
         setChatStatus("ready");
       }
     },
-    [projectId, model, parseSSEBuffer] // eslint-disable-line react-hooks/exhaustive-deps
+    [projectId, model, chatStatus, parseSSEBuffer, handleGenerationEvent]
   );
 
   // Auto-submit initial prompt (skip if conversation was restored from DB)
@@ -263,14 +374,18 @@ export function BuilderChat({ projectId, initialPrompt, initialMessages, onGener
 
   const handleStartGeneration = useCallback(async (chatPlan: ChatPlan) => {
     setGenerationStatus("generating");
-    // Agent pipeline sends events as SSE — start with empty state
     setGenerationFiles([]);
+
+    abortControllerRef.current?.abort();
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
 
     try {
       const response = await fetch("/api/agent", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: chatPlan.appDescription, projectId, model }),
+        signal: abortController.signal,
       });
 
       if (!response.ok || !response.body) {
@@ -289,120 +404,33 @@ export function BuilderChat({ projectId, initialPrompt, initialMessages, onGener
       const decoder = new TextDecoder();
       let buffer = "";
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
 
-        buffer += decoder.decode(value, { stream: true });
-        const events = buffer.split("\n\n");
-        buffer = events.pop() || "";
+          buffer += decoder.decode(value, { stream: true });
+          const events = buffer.split("\n\n");
+          buffer = events.pop() || "";
 
-        for (const eventText of events) {
-          if (!eventText.trim() || !eventText.startsWith("data: ")) continue;
-          try {
-            const event: StreamEvent = JSON.parse(eventText.replace(/^data: /, ""));
-            handleGenerationEvent(event);
-          } catch {
-            // skip malformed events
+          for (const eventText of events) {
+            if (!eventText.trim() || !eventText.startsWith("data: ")) continue;
+            try {
+              const event: StreamEvent = JSON.parse(eventText.replace(/^data: /, ""));
+              handleGenerationEvent(event);
+            } catch {
+              // skip malformed events
+            }
           }
         }
+      } finally {
+        reader.releaseLock();
       }
-    } catch {
+    } catch (err) {
+      if (err instanceof Error && err.name === "AbortError") return;
       setGenerationStatus("error");
     }
-  }, [projectId, model]);
-
-  const handleGenerationEvent = (event: StreamEvent) => {
-    switch (event.type) {
-      case "stage_update":
-        if (event.stage === "complete") {
-          setGenerationStatus("complete");
-        } else if (event.stage === "error") {
-          setGenerationStatus("error");
-        }
-        break;
-      case "agent_start":
-        setActiveAgents((prev) => [
-          ...prev.filter((a) => a.id !== event.agentId),
-          { id: event.agentId, name: event.agentName, status: "running" as const },
-        ]);
-        break;
-      case "agent_progress":
-        setActiveAgents((prev) =>
-          prev.map((a) =>
-            a.id === event.agentId ? { ...a, message: event.message } : a
-          )
-        );
-        break;
-      case "agent_complete":
-        setActiveAgents((prev) =>
-          prev.map((a) =>
-            a.id === event.agentId ? { ...a, status: "complete" as const } : a
-          )
-        );
-        break;
-      case "agent_artifact":
-        // Track artifacts per agent if needed in the future
-        break;
-      case "plan_ready":
-        // Agent-generated plan received — could show approval UI in the future
-        break;
-      case "file_start":
-        setGenerationFiles((prev) => {
-          const exists = prev.some((f) => f.path === event.path);
-          if (exists) {
-            return prev.map((f) => (f.path === event.path ? { ...f, status: "generating" as const } : f));
-          }
-          return [...prev, { path: event.path, status: "generating" as const }];
-        });
-        break;
-      case "file_complete":
-        setGenerationFiles((prev) =>
-          prev.map((f) =>
-            f.path === event.path
-              ? { ...f, status: "complete" as const, lines: event.linesOfCode }
-              : f
-          )
-        );
-        break;
-      case "file_error":
-        setGenerationFiles((prev) =>
-          prev.map((f) => (f.path === event.path ? { ...f, status: "error" as const } : f))
-        );
-        break;
-      case "complete":
-        setGenerationStatus("complete");
-        onGenerationComplete?.();
-        break;
-      case "error":
-        setGenerationStatus("error");
-        break;
-      case "build_error":
-        setBuildErrors(event.errors);
-        break;
-      case "checkpoint":
-        setCheckpoints((prev) => {
-          // Update existing checkpoint with same label, or add new
-          const existing = prev.findIndex((c) => c.label === event.label);
-          if (existing >= 0) {
-            const updated = [...prev];
-            updated[existing] = event;
-            return updated;
-          }
-          return [...prev, event];
-        });
-        break;
-      case "layer_commit":
-        setLayerCommits((prev) => [...prev, event]);
-        break;
-      case "credits_used":
-        setUserCredits(prev => prev ? {
-          ...prev,
-          credits_remaining: event.creditsRemaining,
-        } : prev);
-        break;
-    }
-  };
+  }, [projectId, model, handleGenerationEvent]);
 
   return (
     <div className="flex h-full flex-col">
@@ -435,8 +463,8 @@ export function BuilderChat({ projectId, initialPrompt, initialMessages, onGener
                 </Message>
               ))}
 
-              {/* Streaming indicator */}
-              {chatStatus === "streaming" && messages.length > 0 && !messages[messages.length - 1]?.content && (
+              {/* Streaming indicator — shown only while waiting for first token */}
+              {chatStatus === "streaming" && messages.length > 0 && messages[messages.length - 1]?.role === "assistant" && !messages[messages.length - 1]?.content && (
                 <div className="mx-4 my-2 text-sm text-muted-foreground animate-pulse">
                   Thinking...
                 </div>
