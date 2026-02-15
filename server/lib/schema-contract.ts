@@ -38,25 +38,37 @@ const FKReferenceSchema = z
   }))
   .describe('Foreign key reference')
 
+// LLMs emit `null` for absent optional fields — Zod .optional() only accepts undefined
+const nullish = (val: unknown) => (val === null ? undefined : val)
+
 export const ColumnDefSchema = z.object({
   name: z.string().describe('Column name (snake_case)'),
   type: SQLTypeSchema.describe('PostgreSQL data type'),
-  nullable: z.boolean().optional().describe('Whether column is nullable'),
+  nullable: z.preprocess(nullish, z.boolean().optional()).describe('Whether column is nullable'),
   // Accept any primitive, coerce to string (LLMs emit numbers/booleans for defaults)
   default: z.preprocess(
     (val) => (val != null ? String(val) : undefined),
     z.string().optional(),
   ).describe('SQL default expression'),
-  primaryKey: z.boolean().optional().describe('Whether column is primary key'),
-  unique: z.boolean().optional().describe('Whether column has unique constraint'),
-  references: FKReferenceSchema.optional(),
+  primaryKey: z.preprocess(nullish, z.boolean().optional()).describe('Whether column is primary key'),
+  unique: z.preprocess(nullish, z.boolean().optional()).describe('Whether column has unique constraint'),
+  // LLMs emit null, empty objects, or empty strings for absent FK refs — normalize to undefined
+  references: z.preprocess(
+    (val) => {
+      if (val === null || val === undefined || val === '') return undefined
+      if (typeof val === 'object' && !Array.isArray(val) && !(val as { table?: string }).table)
+        return undefined
+      return val
+    },
+    FKReferenceSchema.optional(),
+  ),
 })
 
 export const RLSPolicySchema = z.object({
   name: z.string().describe('Policy name'),
   operation: z.enum(['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'ALL']).describe('SQL operation'),
-  using: z.string().optional().describe('USING expression for row filtering'),
-  withCheck: z.string().optional().describe('WITH CHECK expression for mutations'),
+  using: z.preprocess(nullish, z.string().optional()).describe('USING expression for row filtering'),
+  withCheck: z.preprocess(nullish, z.string().optional()).describe('WITH CHECK expression for mutations'),
 })
 
 export const TableDefSchema = z.object({
@@ -80,7 +92,10 @@ export const EnumDefSchema = z.object({
 
 export const SchemaContractSchema = z.object({
   tables: z.array(TableDefSchema).describe('Database tables'),
-  enums: z.array(EnumDefSchema).optional().describe('PostgreSQL enum types'),
+  enums: z.preprocess(
+    (val) => (val === null ? undefined : val),
+    z.array(EnumDefSchema).optional(),
+  ).describe('PostgreSQL enum types'),
 })
 
 export const DesignPreferencesSchema = z.object({
