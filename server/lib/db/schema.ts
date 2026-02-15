@@ -1,5 +1,5 @@
 // server/lib/db/schema.ts
-import { pgTable, uuid, text, integer, timestamp, jsonb } from 'drizzle-orm/pg-core'
+import { integer, jsonb, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core'
 
 export const profiles = pgTable('profiles', {
   id: uuid('id').primaryKey(),
@@ -14,7 +14,9 @@ export const profiles = pgTable('profiles', {
 
 export const projects = pgTable('projects', {
   id: uuid('id').primaryKey().defaultRandom(),
-  userId: uuid('user_id').notNull().references(() => profiles.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id')
+    .notNull()
+    .references(() => profiles.id, { onDelete: 'cascade' }),
   name: text('name').notNull(),
   prompt: text('prompt'),
   description: text('description'),
@@ -37,7 +39,9 @@ export const projects = pgTable('projects', {
 
 export const chatMessages = pgTable('chat_messages', {
   id: text('id').primaryKey(),
-  projectId: uuid('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  projectId: uuid('project_id')
+    .notNull()
+    .references(() => projects.id, { onDelete: 'cascade' }),
   role: text('role').notNull(),
   parts: jsonb('parts').notNull().default([]),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -45,7 +49,9 @@ export const chatMessages = pgTable('chat_messages', {
 
 export const usageEvents = pgTable('usage_events', {
   id: uuid('id').primaryKey().defaultRandom(),
-  userId: uuid('user_id').notNull().references(() => profiles.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id')
+    .notNull()
+    .references(() => profiles.id, { onDelete: 'cascade' }),
   projectId: uuid('project_id').references(() => projects.id, { onDelete: 'set null' }),
   eventType: text('event_type').notNull(),
   model: text('model').notNull().default('gpt-5.2'),

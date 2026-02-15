@@ -1,63 +1,63 @@
-import { Agent } from '@mastra/core/agent';
-import { Memory } from '@mastra/memory';
-import { PostgresStore } from '@mastra/pg';
-import { RequestContext } from '@mastra/core/di';
-import { PromptInjectionDetector, ModerationProcessor } from '@mastra/core/processors';
-import type { MastraModelConfig } from '@mastra/core/llm';
+import { Agent } from '@mastra/core/agent'
+import { RequestContext } from '@mastra/core/di'
+import type { MastraModelConfig } from '@mastra/core/llm'
+import { ModerationProcessor, PromptInjectionDetector } from '@mastra/core/processors'
+import { Memory } from '@mastra/memory'
+import { PostgresStore } from '@mastra/pg'
+import { generateShadcnManifest } from '../shadcn-manifest'
 import {
-  writeFileTool,
-  readFileTool,
-  listFilesTool,
-  createDirectoryTool,
-  runCommandTool,
-  runBuildTool,
-  runLintTool,
-  runTypeCheckTool,
-  validateSQLTool,
-  getPreviewUrlTool,
-  createSandboxTool,
-  pushToGitHubTool,
-  deployToVercelTool,
-  searchDocsTool,
-  createSupabaseProjectTool,
-  runMigrationTool,
-  createGitHubRepoTool,
-  getGitHubTokenTool,
   askClarifyingQuestionsTool,
-} from './tools';
-import { generateShadcnManifest } from '../shadcn-manifest';
+  createDirectoryTool,
+  createGitHubRepoTool,
+  createSandboxTool,
+  createSupabaseProjectTool,
+  deployToVercelTool,
+  getGitHubTokenTool,
+  getPreviewUrlTool,
+  listFilesTool,
+  pushToGitHubTool,
+  readFileTool,
+  runBuildTool,
+  runCommandTool,
+  runLintTool,
+  runMigrationTool,
+  runTypeCheckTool,
+  searchDocsTool,
+  validateSQLTool,
+  writeFileTool,
+} from './tools'
 
 // Re-export RequestContext for route usage
-export { RequestContext };
+export { RequestContext }
 
 /**
  * Shared PostgresStore singleton — prevents per-request connection pool creation.
  */
-let _sharedStore: PostgresStore | null = null;
+let _sharedStore: PostgresStore | null = null
 export function getSharedStore(): PostgresStore | null {
   if (!_sharedStore && process.env.DATABASE_URL) {
     _sharedStore = new PostgresStore({
       id: 'supervisor-memory',
       connectionString: process.env.DATABASE_URL,
-    });
+    })
   }
-  return _sharedStore;
+  return _sharedStore
 }
 
 /**
  * Lazily generate shadcn component manifest for frontend agent context
  */
-let _manifestCache: string | null = null;
+let _manifestCache: string | null = null
 function getShadcnManifestString(): string {
   if (!_manifestCache) {
     try {
-      const manifest = generateShadcnManifest();
-      _manifestCache = JSON.stringify(manifest, null, 2);
+      const manifest = generateShadcnManifest()
+      _manifestCache = JSON.stringify(manifest, null, 2)
     } catch {
-      _manifestCache = '{}';
+      _manifestCache = '{}'
     }
   }
-  return _manifestCache;
+  return _manifestCache
 }
 
 /**
@@ -67,10 +67,10 @@ function getShadcnManifestString(): string {
  */
 function dynamicModel({ requestContext }: { requestContext: RequestContext }): MastraModelConfig {
   if (requestContext?.has('llm')) {
-    return requestContext.get('llm') as MastraModelConfig;
+    return requestContext.get('llm') as MastraModelConfig
   }
   // Fallback for Mastra Studio / Cloud / tests (uses Mastra's built-in model router)
-  return 'openai/gpt-5.2';
+  return 'openai/gpt-5.2'
 }
 
 // --- Module-level agents (visible to Mastra Studio) ---
@@ -112,7 +112,7 @@ Output structured JSON with: appName, description, features[], entities[], desig
     searchDocs: searchDocsTool,
     askClarifyingQuestions: askClarifyingQuestionsTool,
   },
-});
+})
 
 export const infraAgent = new Agent({
   id: 'infra-engineer',
@@ -141,7 +141,7 @@ Always verify each step succeeded. If any step fails, report the error immediate
     createSupabaseProject: createSupabaseProjectTool,
     createGitHubRepo: createGitHubRepoTool,
   },
-});
+})
 
 export const dbaAgent = new Agent({
   id: 'database-admin',
@@ -183,7 +183,7 @@ Required schema stubs: auth.uid() function must be available (provided by Supaba
     searchDocs: searchDocsTool,
     runMigration: runMigrationTool,
   },
-});
+})
 
 export const backendAgent = new Agent({
   id: 'backend-engineer',
@@ -231,7 +231,7 @@ Code quality:
     createDirectory: createDirectoryTool,
     searchDocs: searchDocsTool,
   },
-});
+})
 
 export const frontendAgent = new Agent({
   id: 'frontend-engineer',
@@ -288,7 +288,7 @@ Code quality:
     createDirectory: createDirectoryTool,
     searchDocs: searchDocsTool,
   },
-});
+})
 
 export const reviewerAgent = new Agent({
   id: 'code-reviewer',
@@ -323,7 +323,7 @@ DO NOT write files. Only report issues for other agents to fix.`,
     readFile: readFileTool,
     listFiles: listFilesTool,
   },
-});
+})
 
 export const qaAgent = new Agent({
   id: 'qa-engineer',
@@ -360,7 +360,7 @@ Common errors in generated apps:
     listFiles: listFilesTool,
     validateSQL: validateSQLTool,
   },
-});
+})
 
 export const devOpsAgent = new Agent({
   id: 'devops-engineer',
@@ -390,7 +390,7 @@ Report all URLs (GitHub repo, Vercel deployment) to the supervisor.`,
     runCommand: runCommandTool,
     getGitHubToken: getGitHubTokenTool,
   },
-});
+})
 
 // --- Supervisor (orchestrator) ---
 
@@ -398,7 +398,8 @@ export const supervisorAgent = new Agent({
   id: 'supervisor',
   name: 'Supervisor',
   model: dynamicModel,
-  description: 'Orchestrates the entire app generation lifecycle by delegating to specialist agents',
+  description:
+    'Orchestrates the entire app generation lifecycle by delegating to specialist agents',
   instructions: `You orchestrate full-stack app generation for VibeStack using a team of 8 specialist agents.
 
 Generated apps are Vite + React + Supabase, running in Daytona sandboxes.
@@ -485,5 +486,4 @@ Phase 6 — Deploy:
         }),
       }
     : {}),
-});
-
+})

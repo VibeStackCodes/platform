@@ -1,6 +1,6 @@
 // server/lib/db/relations.ts
 import { relations } from 'drizzle-orm'
-import { profiles, projects, chatMessages, usageEvents } from './schema'
+import { chatMessages, profiles, projects, usageEvents } from './schema'
 
 export const profilesRelations = relations(profiles, ({ many }) => ({
   projects: many(projects),

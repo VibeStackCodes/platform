@@ -1,9 +1,9 @@
-'use client';
+'use client'
 
-import { zodResolver } from '@hookform/resolvers/zod';
-import { useForm } from 'react-hook-form';
-import { z, type ZodTypeAny } from 'zod';
-import { Button } from '@/components/ui/button';
+import { zodResolver } from '@hookform/resolvers/zod'
+import { useForm } from 'react-hook-form'
+import { type ZodTypeAny, z } from 'zod'
+import { Button } from '@/components/ui/button'
 import {
   Form,
   FormControl,
@@ -11,63 +11,65 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
-} from '@/components/ui/form';
-import { Input } from '@/components/ui/input';
+} from '@/components/ui/form'
+import { Input } from '@/components/ui/input'
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
-import { Switch } from '@/components/ui/switch';
+} from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
 
 interface DynamicFormProps {
-  schema: z.ZodObject<any>;
-  initialValues?: Record<string, any>;
-  onSubmit: (data: any) => void;
-  isLoading?: boolean;
-  columnInfo?: Record<string, { data_type: string; is_nullable: boolean }>;
+  schema: z.ZodObject<any>
+  initialValues?: Record<string, any>
+  onSubmit: (data: any) => void
+  isLoading?: boolean
+  columnInfo?: Record<string, { data_type: string; is_nullable: boolean }>
 }
 
-function getFieldType(schema: ZodTypeAny, columnInfo?: { data_type: string; is_nullable: boolean }): {
-  type: 'text' | 'number' | 'boolean' | 'enum' | 'array';
-  enumValues?: readonly string[];
+function getFieldType(
+  schema: ZodTypeAny,
+  columnInfo?: { data_type: string; is_nullable: boolean },
+): {
+  type: 'text' | 'number' | 'boolean' | 'enum' | 'array'
+  enumValues?: readonly string[]
 } {
-  const unwrapped = schema instanceof z.ZodOptional || schema instanceof z.ZodNullable
-    ? schema.unwrap()
-    : schema;
+  const unwrapped =
+    schema instanceof z.ZodOptional || schema instanceof z.ZodNullable ? schema.unwrap() : schema
 
   if (columnInfo) {
-    const dataType = columnInfo.data_type.toLowerCase();
+    const dataType = columnInfo.data_type.toLowerCase()
     if (dataType === 'enum' && unwrapped instanceof z.ZodEnum) {
-      return { type: 'enum', enumValues: unwrapped.options as readonly string[] };
+      return { type: 'enum', enumValues: unwrapped.options as readonly string[] }
     }
     if (dataType.includes('bool')) {
-      return { type: 'boolean' };
+      return { type: 'boolean' }
     }
     if (dataType.includes('int') || dataType.includes('numeric')) {
-      return { type: 'number' };
+      return { type: 'number' }
     }
     if (dataType.includes('array')) {
-      return { type: 'array' };
+      return { type: 'array' }
     }
   }
 
   if (unwrapped instanceof z.ZodEnum) {
-    return { type: 'enum', enumValues: unwrapped.options as readonly string[] };
+    return { type: 'enum', enumValues: unwrapped.options as readonly string[] }
   }
   if (unwrapped instanceof z.ZodBoolean) {
-    return { type: 'boolean' };
+    return { type: 'boolean' }
   }
   if (unwrapped instanceof z.ZodNumber) {
-    return { type: 'number' };
+    return { type: 'number' }
   }
   if (unwrapped instanceof z.ZodArray) {
-    return { type: 'array' };
+    return { type: 'array' }
   }
 
-  return { type: 'text' };
+  return { type: 'text' }
 }
 
 export function DynamicForm({
@@ -80,16 +82,16 @@ export function DynamicForm({
   const form = useForm({
     resolver: zodResolver(schema),
     defaultValues: initialValues,
-  });
+  })
 
-  const fields = Object.keys(schema.shape);
+  const fields = Object.keys(schema.shape)
 
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
         {fields.map((fieldName) => {
-          const fieldSchema = schema.shape[fieldName];
-          const { type, enumValues } = getFieldType(fieldSchema, columnInfo[fieldName]);
+          const fieldSchema = schema.shape[fieldName]
+          const { type, enumValues } = getFieldType(fieldSchema, columnInfo[fieldName])
 
           return (
             <FormField
@@ -134,14 +136,14 @@ export function DynamicForm({
                         value={
                           Array.isArray(field.value)
                             ? JSON.stringify(field.value)
-                            : field.value ?? ''
+                            : (field.value ?? '')
                         }
                         onChange={(e) => {
                           try {
-                            const parsed = JSON.parse(e.target.value);
-                            field.onChange(Array.isArray(parsed) ? parsed : []);
+                            const parsed = JSON.parse(e.target.value)
+                            field.onChange(Array.isArray(parsed) ? parsed : [])
                           } catch {
-                            field.onChange(e.target.value);
+                            field.onChange(e.target.value)
                           }
                         }}
                         placeholder="Enter JSON array"
@@ -161,7 +163,7 @@ export function DynamicForm({
                 </FormItem>
               )}
             />
-          );
+          )
         })}
         <div className="flex justify-end gap-2 pt-4">
           <Button type="submit" disabled={isLoading}>
@@ -170,5 +172,5 @@ export function DynamicForm({
         </div>
       </form>
     </Form>
-  );
+  )
 }

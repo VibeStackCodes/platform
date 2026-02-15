@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from 'zod'
 
 /**
  * Agent output schemas — contract definitions for each specialist agent.
@@ -20,8 +20,10 @@ import { z } from 'zod';
 const FeatureSchema = z.object({
   name: z.string().describe('Feature name'),
   description: z.string().describe('Detailed feature description'),
-  category: z.enum(['auth', 'crud', 'dashboard', 'messaging', 'realtime', 'custom']).describe('Feature category'),
-});
+  category: z
+    .enum(['auth', 'crud', 'dashboard', 'messaging', 'realtime', 'custom'])
+    .describe('Feature category'),
+})
 
 /**
  * Design preferences for styling
@@ -30,7 +32,7 @@ const DesignPreferencesSchema = z.object({
   style: z.string().default('modern').describe('Design style (e.g., modern, minimal, playful)'),
   primaryColor: z.string().default('#3b82f6').describe('Primary color (hex code)'),
   fontFamily: z.string().default('Inter').describe('Font family'),
-});
+})
 
 /**
  * Clarified requirements output from planner agent
@@ -42,9 +44,9 @@ export const ClarifiedRequirementsSchema = z.object({
   features: z.array(FeatureSchema).describe('List of features to implement'),
   constraints: z.array(z.string()).default([]).describe('Technical constraints'),
   designPreferences: DesignPreferencesSchema.describe('Design preferences'),
-});
+})
 
-export type ClarifiedRequirements = z.infer<typeof ClarifiedRequirementsSchema>;
+export type ClarifiedRequirements = z.infer<typeof ClarifiedRequirementsSchema>
 
 /**
  * Phase definition for execution plan
@@ -53,7 +55,7 @@ const PhaseSchema = z.object({
   name: z.string().describe('Phase name'),
   agents: z.array(z.string()).describe('Agent IDs participating in this phase'),
   description: z.string().describe('Phase description'),
-});
+})
 
 /**
  * Agent assignment with model selection rationale
@@ -61,7 +63,7 @@ const PhaseSchema = z.object({
 const AgentAssignmentSchema = z.object({
   model: z.string().describe('Model ID (e.g., claude-sonnet-4-5-20250929)'),
   rationale: z.string().describe('Why this model tier was chosen'),
-});
+})
 
 /**
  * Execution plan output from planner agent
@@ -69,10 +71,12 @@ const AgentAssignmentSchema = z.object({
 export const ExecutionPlanSchema = z.object({
   phases: z.array(PhaseSchema).describe('Execution phases'),
   estimatedDuration: z.string().describe('Estimated duration (e.g., "2-3 minutes")'),
-  agentAssignments: z.record(z.string(), AgentAssignmentSchema).describe('Agent ID to model assignment'),
-});
+  agentAssignments: z
+    .record(z.string(), AgentAssignmentSchema)
+    .describe('Agent ID to model assignment'),
+})
 
-export type ExecutionPlan = z.infer<typeof ExecutionPlanSchema>;
+export type ExecutionPlan = z.infer<typeof ExecutionPlanSchema>
 
 /**
  * Column definition for database schema
@@ -82,11 +86,14 @@ const ColumnSchema = z.object({
   type: z.string().describe('PostgreSQL data type'),
   nullable: z.boolean().optional().describe('Whether column is nullable'),
   primaryKey: z.boolean().optional().describe('Whether column is primary key'),
-  references: z.object({
-    table: z.string().describe('Referenced table name'),
-    column: z.string().describe('Referenced column name'),
-  }).optional().describe('Foreign key reference'),
-});
+  references: z
+    .object({
+      table: z.string().describe('Referenced table name'),
+      column: z.string().describe('Referenced column name'),
+    })
+    .optional()
+    .describe('Foreign key reference'),
+})
 
 /**
  * Index definition for database schema
@@ -95,7 +102,7 @@ const IndexSchema = z.object({
   name: z.string().describe('Index name'),
   columns: z.array(z.string()).describe('Columns in index'),
   unique: z.boolean().default(false).describe('Whether index is unique'),
-});
+})
 
 /**
  * Table definition for database schema
@@ -104,7 +111,7 @@ const TableSchema = z.object({
   name: z.string().describe('Table name'),
   columns: z.array(ColumnSchema).describe('Table columns'),
   indices: z.array(IndexSchema).default([]).describe('Table indices'),
-});
+})
 
 /**
  * Database schema artifact output from data architect agent
@@ -112,9 +119,9 @@ const TableSchema = z.object({
 export const DatabaseSchemaArtifactSchema = z.object({
   tables: z.array(TableSchema).describe('Database tables'),
   migrationSQL: z.string().describe('Complete SQL migration script'),
-});
+})
 
-export type DatabaseSchemaArtifact = z.infer<typeof DatabaseSchemaArtifactSchema>;
+export type DatabaseSchemaArtifact = z.infer<typeof DatabaseSchemaArtifactSchema>
 
 /**
  * Generated file metadata
@@ -123,7 +130,7 @@ const GeneratedFileSchema = z.object({
   path: z.string().describe('File path relative to project root'),
   content: z.string().describe('File content'),
   layer: z.number().describe('Dependency layer (0 = no deps, 1 = depends on 0, etc.)'),
-});
+})
 
 /**
  * Component manifest entry
@@ -131,22 +138,31 @@ const GeneratedFileSchema = z.object({
 const ComponentManifestEntrySchema = z.object({
   name: z.string().describe('Component name'),
   path: z.string().describe('File path'),
-  props: z.array(z.object({
-    name: z.string(),
-    type: z.string(),
-    optional: z.boolean().default(false),
-  })).default([]).describe('Component props'),
-});
+  props: z
+    .array(
+      z.object({
+        name: z.string(),
+        type: z.string(),
+        optional: z.boolean().default(false),
+      }),
+    )
+    .default([])
+    .describe('Component props'),
+})
 
 /**
  * Frontend artifact output from frontend engineer agent
  */
 export const FrontendArtifactSchema = z.object({
-  generatedFiles: z.array(GeneratedFileSchema).describe('Generated files sorted by dependency layer'),
-  componentManifest: z.array(ComponentManifestEntrySchema).describe('Component manifest for reference'),
-});
+  generatedFiles: z
+    .array(GeneratedFileSchema)
+    .describe('Generated files sorted by dependency layer'),
+  componentManifest: z
+    .array(ComponentManifestEntrySchema)
+    .describe('Component manifest for reference'),
+})
 
-export type FrontendArtifact = z.infer<typeof FrontendArtifactSchema>;
+export type FrontendArtifact = z.infer<typeof FrontendArtifactSchema>
 
 /**
  * Build error
@@ -155,7 +171,7 @@ const BuildErrorSchema = z.object({
   file: z.string().describe('File path'),
   line: z.number().optional().describe('Line number'),
   message: z.string().describe('Error message'),
-});
+})
 
 /**
  * Applied fix
@@ -163,7 +179,7 @@ const BuildErrorSchema = z.object({
 const AppliedFixSchema = z.object({
   file: z.string().describe('File path'),
   description: z.string().describe('Description of fix applied'),
-});
+})
 
 /**
  * QA result artifact output from QA engineer agent
@@ -173,9 +189,9 @@ export const QAResultArtifactSchema = z.object({
   errors: z.array(BuildErrorSchema).describe('Build errors encountered'),
   fixesApplied: z.array(AppliedFixSchema).describe('Fixes applied'),
   attempts: z.number().describe('Number of build attempts'),
-});
+})
 
-export type QAResultArtifact = z.infer<typeof QAResultArtifactSchema>;
+export type QAResultArtifact = z.infer<typeof QAResultArtifactSchema>
 
 /**
  * Infrastructure provision result output from infra agent
@@ -186,9 +202,9 @@ export const InfraProvisionResultSchema = z.object({
   supabaseProjectId: z.string().describe('Generated Supabase project ID'),
   supabaseUrl: z.string().describe('Supabase project URL'),
   supabaseAnonKey: z.string().describe('Supabase anonymous key'),
-});
+})
 
-export type InfraProvisionResult = z.infer<typeof InfraProvisionResultSchema>;
+export type InfraProvisionResult = z.infer<typeof InfraProvisionResultSchema>
 
 /**
  * Review issue
@@ -198,7 +214,7 @@ const ReviewIssueSchema = z.object({
   line: z.number().optional().describe('Line number'),
   severity: z.enum(['error', 'warning', 'info']).describe('Issue severity'),
   message: z.string().describe('Issue description'),
-});
+})
 
 /**
  * Code review result output from code reviewer agent
@@ -207,9 +223,9 @@ export const CodeReviewResultSchema = z.object({
   filesReviewed: z.array(z.string()).describe('List of files reviewed'),
   issues: z.array(ReviewIssueSchema).describe('Issues found during review'),
   passed: z.boolean().describe('Whether code review passed'),
-});
+})
 
-export type CodeReviewResult = z.infer<typeof CodeReviewResultSchema>;
+export type CodeReviewResult = z.infer<typeof CodeReviewResultSchema>
 
 /**
  * Deployment result output from devops agent
@@ -219,9 +235,9 @@ export const DeploymentResultSchema = z.object({
   deploymentUrl: z.string().describe('Vercel deployment URL'),
   deploymentId: z.string().describe('Vercel deployment ID'),
   status: z.enum(['success', 'failed', 'pending']).describe('Deployment status'),
-});
+})
 
-export type DeploymentResult = z.infer<typeof DeploymentResultSchema>;
+export type DeploymentResult = z.infer<typeof DeploymentResultSchema>
 
 /**
  * Agent event discriminated union for SSE streaming
@@ -261,6 +277,6 @@ export const AgentEventSchema = z.discriminatedUnion('type', [
     phase: z.number().describe('Phase number'),
     phaseName: z.string().describe('Phase display name'),
   }),
-]);
+])
 
-export type AgentEvent = z.infer<typeof AgentEventSchema>;
+export type AgentEvent = z.infer<typeof AgentEventSchema>

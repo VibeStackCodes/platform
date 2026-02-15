@@ -1,5 +1,5 @@
-import type { Sandbox } from '@daytonaio/sdk';
-import { runCommand } from './sandbox';
+import type { Sandbox } from '@daytonaio/sdk'
+import { runCommand } from './sandbox'
 
 /**
  * Local Supabase Helper
@@ -24,21 +24,18 @@ CREATE TABLE IF NOT EXISTS auth.users (
 CREATE OR REPLACE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$ SELECT gen_random_uuid() $$;
 CREATE OR REPLACE FUNCTION auth.role() RETURNS text LANGUAGE sql STABLE AS $$ SELECT 'authenticated'::text $$;
 CREATE OR REPLACE FUNCTION auth.jwt() RETURNS jsonb LANGUAGE sql STABLE AS $$ SELECT '{}'::jsonb $$;
-`;
+`
 
 /**
  * Validate migration SQL without retry loops.
  * Throws an error if migration fails (contractToSQL bug).
  */
-export async function validateMigration(
-  sandbox: Sandbox,
-  migrationSQL: string,
-): Promise<void> {
-  const error = await runMigrationInPGlite(sandbox, migrationSQL);
+export async function validateMigration(sandbox: Sandbox, migrationSQL: string): Promise<void> {
+  const error = await runMigrationInPGlite(sandbox, migrationSQL)
   if (error) {
-    throw new Error(`Migration validation failed (contractToSQL bug): ${error}`);
+    throw new Error(`Migration validation failed (contractToSQL bug): ${error}`)
   }
-  console.log('[local-supabase] Migration validated successfully via PGlite');
+  console.log('[local-supabase] Migration validated successfully via PGlite')
 }
 
 /**
@@ -62,27 +59,22 @@ try {
 } finally {
   await db.close();
 }
-`;
+`
 
-  await sandbox.fs.uploadFile(
-    Buffer.from(script),
-    '/workspace/run-migration.mjs'
-  );
+  await sandbox.fs.uploadFile(Buffer.from(script), '/workspace/run-migration.mjs')
 
-  const result = await runCommand(
-    sandbox,
-    'bun /workspace/run-migration.mjs',
-    'apply-migration',
-    { cwd: '/workspace', timeout: 30 }
-  );
+  const result = await runCommand(sandbox, 'bun /workspace/run-migration.mjs', 'apply-migration', {
+    cwd: '/workspace',
+    timeout: 30,
+  })
 
   if (result.exitCode !== 0) {
-    const output = `${result.stdout}\n${result.stderr || ''}`.trim();
-    const match = output.match(/MIGRATION_ERROR:\s*(.+)/);
-    return match?.[1] || output;
+    const output = `${result.stdout}\n${result.stderr || ''}`.trim()
+    const match = output.match(/MIGRATION_ERROR:\s*(.+)/)
+    return match?.[1] || output
   }
 
-  return null;
+  return null
 }
 
 /**
@@ -92,12 +84,12 @@ try {
 export async function getLocalSupabaseCredentials(
   sandbox: Sandbox,
 ): Promise<{ url: string; anonKey: string; serviceRoleKey: string }> {
-  const envContent = await sandbox.fs.downloadFile('/workspace/.env.local');
-  const envStr = envContent.toString();
+  const envContent = await sandbox.fs.downloadFile('/workspace/.env.local')
+  const envStr = envContent.toString()
 
-  const url = envStr.match(/VITE_SUPABASE_URL=(.+)/)?.[1]?.trim() || '';
-  const anonKey = envStr.match(/VITE_SUPABASE_ANON_KEY=(.+)/)?.[1]?.trim() || '';
-  const serviceRoleKey = envStr.match(/SUPABASE_SERVICE_ROLE_KEY=(.+)/)?.[1]?.trim() || '';
+  const url = envStr.match(/VITE_SUPABASE_URL=(.+)/)?.[1]?.trim() || ''
+  const anonKey = envStr.match(/VITE_SUPABASE_ANON_KEY=(.+)/)?.[1]?.trim() || ''
+  const serviceRoleKey = envStr.match(/SUPABASE_SERVICE_ROLE_KEY=(.+)/)?.[1]?.trim() || ''
 
-  return { url, anonKey, serviceRoleKey };
+  return { url, anonKey, serviceRoleKey }
 }

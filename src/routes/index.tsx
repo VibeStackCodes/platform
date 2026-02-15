@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Sparkles, Eye, Rocket } from 'lucide-react'
+import { Eye, Rocket, Sparkles } from 'lucide-react'
 import { HeroPrompt } from '@/components/hero-prompt'
+import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 
 export const Route = createFileRoute('/')({
   component: LandingPage,
@@ -16,8 +16,8 @@ function LandingPage() {
             Build apps with AI
           </h1>
           <p className="mt-6 max-w-2xl text-lg text-zinc-400 sm:text-xl">
-            Transform your ideas into production-ready applications. Generate,
-            preview, and deploy—all powered by artificial intelligence.
+            Transform your ideas into production-ready applications. Generate, preview, and
+            deploy—all powered by artificial intelligence.
           </p>
 
           <HeroPrompt />
@@ -31,8 +31,8 @@ function LandingPage() {
               </div>
               <CardTitle className="text-white">AI Generation</CardTitle>
               <CardDescription className="text-zinc-400">
-                Describe your app in plain English and watch AI build it for
-                you. From concept to code in minutes.
+                Describe your app in plain English and watch AI build it for you. From concept to
+                code in minutes.
               </CardDescription>
             </CardHeader>
           </Card>
@@ -44,8 +44,8 @@ function LandingPage() {
               </div>
               <CardTitle className="text-white">Live Preview</CardTitle>
               <CardDescription className="text-zinc-400">
-                See your application come to life in real-time. Make changes and
-                watch them update instantly.
+                See your application come to life in real-time. Make changes and watch them update
+                instantly.
               </CardDescription>
             </CardHeader>
           </Card>
@@ -57,8 +57,8 @@ function LandingPage() {
               </div>
               <CardTitle className="text-white">One-Click Deploy</CardTitle>
               <CardDescription className="text-zinc-400">
-                Go from idea to production in seconds. Deploy your app with a
-                single click, no DevOps required.
+                Go from idea to production in seconds. Deploy your app with a single click, no
+                DevOps required.
               </CardDescription>
             </CardHeader>
           </Card>

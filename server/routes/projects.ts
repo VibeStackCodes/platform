@@ -1,12 +1,7 @@
 // server/routes/projects.ts
 import { Hono } from 'hono'
+import { createProject, getProject, getProjectMessages, getUserProjects } from '../lib/db/queries'
 import { authMiddleware } from '../middleware/auth'
-import {
-  getUserProjects,
-  getProject,
-  createProject,
-  getProjectMessages,
-} from '../lib/db/queries'
 
 export const projectRoutes = new Hono()
 

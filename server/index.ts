@@ -1,18 +1,18 @@
 // server/index.ts — must import sentry first for instrumentation
 import './sentry'
+import { sentry } from '@hono/sentry'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
-import { sentry } from '@hono/sentry'
 import { handle } from 'hono/vercel'
 
 import { agentRoutes } from './routes/agent'
+import { authCallbackRoutes } from './routes/auth-callback'
 import { projectRoutes } from './routes/projects'
 import { projectDeployRoutes } from './routes/projects-deploy'
 import { sandboxUrlRoutes } from './routes/sandbox-urls'
 import { stripeCheckoutRoutes } from './routes/stripe-checkout'
 import { stripeWebhookRoutes } from './routes/stripe-webhook'
 import { supabaseProxyRoutes } from './routes/supabase-proxy'
-import { authCallbackRoutes } from './routes/auth-callback'
 
 const app = new Hono().basePath('/api')
 

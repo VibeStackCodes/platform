@@ -1,5 +1,5 @@
 // lib/contract-to-drizzle.ts
-import type { SchemaContract, TableDef, ColumnDef, SQLType } from './schema-contract';
+import type { ColumnDef, SchemaContract, SQLType, TableDef } from './schema-contract'
 
 /**
  * Map SQLType to Drizzle column builder function names
@@ -13,19 +13,28 @@ const DRIZZLE_TYPE_MAP: Record<SQLType, string> = {
   jsonb: 'jsonb',
   integer: 'integer',
   bigint: 'bigint',
-};
+}
 
 /**
  * Convert snake_case to camelCase for JavaScript property names
  */
 function snakeToCamel(str: string): string {
-  return str.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+  return str.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase())
 }
 
 /**
  * Words that end in 's' but are not plurals
  */
-const NON_PLURAL_S = new Set(['status', 'address', 'progress', 'access', 'process', 'analysis', 'bus', 'canvas']);
+const NON_PLURAL_S = new Set([
+  'status',
+  'address',
+  'progress',
+  'access',
+  'process',
+  'analysis',
+  'bus',
+  'canvas',
+])
 
 /**
  * Convert table name to PascalCase singular type name
@@ -33,14 +42,13 @@ const NON_PLURAL_S = new Set(['status', 'address', 'progress', 'access', 'proces
  */
 function toTypeName(tableName: string): string {
   // Remove trailing 's' for singular (simple heuristic)
-  const singular = (tableName.endsWith('s') && !NON_PLURAL_S.has(tableName))
-    ? tableName.slice(0, -1)
-    : tableName;
+  const singular =
+    tableName.endsWith('s') && !NON_PLURAL_S.has(tableName) ? tableName.slice(0, -1) : tableName
   // Convert to PascalCase
   return singular
     .split('_')
-    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-    .join('');
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join('')
 }
 
 /**
@@ -48,40 +56,40 @@ function toTypeName(tableName: string): string {
  * External tables (auth.users) are excluded from the graph.
  */
 function topologicalSort(tables: TableDef[]): TableDef[] {
-  const tableMap = new Map(tables.map(t => [t.name, t]));
-  const inDegree = new Map<string, number>();
-  const adj = new Map<string, string[]>();
+  const tableMap = new Map(tables.map((t) => [t.name, t]))
+  const inDegree = new Map<string, number>()
+  const adj = new Map<string, string[]>()
 
   for (const t of tables) {
-    inDegree.set(t.name, 0);
-    adj.set(t.name, []);
+    inDegree.set(t.name, 0)
+    adj.set(t.name, [])
   }
 
   for (const t of tables) {
     for (const col of t.columns) {
       if (col.references && tableMap.has(col.references.table) && col.references.table !== t.name) {
         // t depends on col.references.table → edge from ref → t
-        adj.get(col.references.table)!.push(t.name);
-        inDegree.set(t.name, (inDegree.get(t.name) ?? 0) + 1);
+        adj.get(col.references.table)!.push(t.name)
+        inDegree.set(t.name, (inDegree.get(t.name) ?? 0) + 1)
       }
     }
   }
 
   // Kahn's algorithm
-  const queue = tables.filter(t => inDegree.get(t.name) === 0).map(t => t.name);
-  const result: TableDef[] = [];
+  const queue = tables.filter((t) => inDegree.get(t.name) === 0).map((t) => t.name)
+  const result: TableDef[] = []
 
   while (queue.length > 0) {
-    const name = queue.shift()!;
-    result.push(tableMap.get(name)!);
+    const name = queue.shift()!
+    result.push(tableMap.get(name)!)
     for (const neighbor of adj.get(name) ?? []) {
-      const newDeg = (inDegree.get(neighbor) ?? 1) - 1;
-      inDegree.set(neighbor, newDeg);
-      if (newDeg === 0) queue.push(neighbor);
+      const newDeg = (inDegree.get(neighbor) ?? 1) - 1
+      inDegree.set(neighbor, newDeg)
+      if (newDeg === 0) queue.push(neighbor)
     }
   }
 
-  return result;
+  return result
 }
 
 /**
@@ -89,52 +97,52 @@ function topologicalSort(tables: TableDef[]): TableDef[] {
  * e.g., "id: uuid('id').primaryKey().default(sql`gen_random_uuid()`)"
  */
 function generateColumn(col: ColumnDef, tableMap: Set<string>): string {
-  const propName = snakeToCamel(col.name);
-  const drizzleType = DRIZZLE_TYPE_MAP[col.type];
+  const propName = snakeToCamel(col.name)
+  const drizzleType = DRIZZLE_TYPE_MAP[col.type]
 
-  let chain: string;
+  let chain: string
 
   // Special handling for timestamptz → timestamp(name, { withTimezone: true })
   if (col.type === 'timestamptz') {
-    chain = `${drizzleType}('${col.name}', { withTimezone: true })`;
+    chain = `${drizzleType}('${col.name}', { withTimezone: true })`
   } else if (col.type === 'bigint') {
     // bigint requires mode option for JSON compatibility
-    chain = `${drizzleType}('${col.name}', { mode: 'number' })`;
+    chain = `${drizzleType}('${col.name}', { mode: 'number' })`
   } else {
-    chain = `${drizzleType}('${col.name}')`;
+    chain = `${drizzleType}('${col.name}')`
   }
 
   // Add modifiers in Drizzle's expected order: primaryKey → notNull → default → unique → references
   if (col.primaryKey) {
-    chain += '.primaryKey()';
+    chain += '.primaryKey()'
   }
 
   if (col.nullable === false && !col.primaryKey) {
-    chain += '.notNull()';
+    chain += '.notNull()'
   }
 
   if (col.default) {
     // Boolean defaults don't need sql template
     if (col.type === 'boolean' && (col.default === 'true' || col.default === 'false')) {
-      chain += `.default(${col.default})`;
+      chain += `.default(${col.default})`
     } else {
       // All other defaults use sql template literal
-      chain += `.default(sql\`${col.default}\`)`;
+      chain += `.default(sql\`${col.default}\`)`
     }
   }
 
   if (col.unique) {
-    chain += '.unique()';
+    chain += '.unique()'
   }
 
   // Only add .references() for tables that are IN the contract (not external like auth.users)
   if (col.references && tableMap.has(col.references.table)) {
-    const refTableVar = snakeToCamel(col.references.table);
-    const refCol = snakeToCamel(col.references.column);
-    chain += `.references(() => ${refTableVar}.${refCol}, { onDelete: 'cascade' })`;
+    const refTableVar = snakeToCamel(col.references.table)
+    const refCol = snakeToCamel(col.references.column)
+    chain += `.references(() => ${refTableVar}.${refCol}, { onDelete: 'cascade' })`
   }
 
-  return `  ${propName}: ${chain}`;
+  return `  ${propName}: ${chain}`
 }
 
 /**
@@ -146,75 +154,75 @@ function generateColumn(col: ColumnDef, tableMap: Set<string>): string {
  * - Type exports using $inferSelect and $inferInsert
  */
 export function contractToDrizzleSchema(contract: SchemaContract): string {
-  const parts: string[] = [];
+  const parts: string[] = []
 
   // Header comment
-  parts.push('// Auto-generated by VibeStack');
-  parts.push('// DO NOT EDIT MANUALLY');
-  parts.push('');
+  parts.push('// Auto-generated by VibeStack')
+  parts.push('// DO NOT EDIT MANUALLY')
+  parts.push('')
 
   // Collect what we need for imports
-  const hasEnums = (contract.enums?.length ?? 0) > 0;
-  const needsSql = contract.tables.some(t =>
+  const hasEnums = (contract.enums?.length ?? 0) > 0
+  const needsSql = contract.tables.some((t) =>
     t.columns.some(
-      col =>
+      (col) =>
         col.default &&
-        !(col.type === 'boolean' && (col.default === 'true' || col.default === 'false'))
-    )
-  );
+        !(col.type === 'boolean' && (col.default === 'true' || col.default === 'false')),
+    ),
+  )
 
   // Import column types (collect unique types used)
-  const typesUsed = new Set<string>();
+  const typesUsed = new Set<string>()
   for (const table of contract.tables) {
     for (const col of table.columns) {
-      typesUsed.add(DRIZZLE_TYPE_MAP[col.type]);
+      typesUsed.add(DRIZZLE_TYPE_MAP[col.type])
     }
   }
 
   // Build imports
-  const pgCoreImports = ['pgTable'];
-  if (hasEnums) pgCoreImports.push('pgEnum');
-  pgCoreImports.push(...Array.from(typesUsed).sort());
+  const pgCoreImports = ['pgTable']
+  if (hasEnums) pgCoreImports.push('pgEnum')
+  pgCoreImports.push(...Array.from(typesUsed).sort())
 
-  parts.push(`import { ${pgCoreImports.join(', ')} } from 'drizzle-orm/pg-core';`);
+  parts.push(`import { ${pgCoreImports.join(', ')} } from 'drizzle-orm/pg-core';`)
   if (needsSql) {
-    parts.push("import { sql } from 'drizzle-orm';");
+    parts.push("import { sql } from 'drizzle-orm';")
   }
-  parts.push('');
+  parts.push('')
 
   // Generate pgEnum definitions
   if (contract.enums && contract.enums.length > 0) {
     for (const enumDef of contract.enums) {
-      const enumVar = snakeToCamel(enumDef.name) + 'Enum';
-      const values = enumDef.values.map(v => `'${v}'`).join(', ');
-      parts.push(`export const ${enumVar} = pgEnum('${enumDef.name}', [${values}]);`);
+      const enumVar = snakeToCamel(enumDef.name) + 'Enum'
+      const values = enumDef.values.map((v) => `'${v}'`).join(', ')
+      parts.push(`export const ${enumVar} = pgEnum('${enumDef.name}', [${values}]);`)
     }
-    parts.push('');
+    parts.push('')
   }
 
   // Generate pgTable definitions in topological order
-  const tableMap = new Set(contract.tables.map(t => t.name));
-  const sortedTables = topologicalSort(contract.tables);
+  const tableMap = new Set(contract.tables.map((t) => t.name))
+  const sortedTables = topologicalSort(contract.tables)
 
   for (const table of sortedTables) {
-    const tableVar = snakeToCamel(table.name);
-    const columns = table.columns.map(col => generateColumn(col, tableMap)).join(',\n');
+    const tableVar = snakeToCamel(table.name)
+    const columns = table.columns.map((col) => generateColumn(col, tableMap)).join(',\n')
 
-    parts.push(`export const ${tableVar} = pgTable('${table.name}', {`);
-    parts.push(columns);
-    parts.push('});');
-    parts.push('');
+    parts.push(`export const ${tableVar} = pgTable('${table.name}', {`)
+    parts.push(columns)
+    parts.push('});')
+    parts.push('')
   }
 
   // Generate type exports
   for (const table of sortedTables) {
-    const tableVar = snakeToCamel(table.name);
-    const typeName = toTypeName(table.name);
+    const tableVar = snakeToCamel(table.name)
+    const typeName = toTypeName(table.name)
 
-    parts.push(`export type ${typeName} = typeof ${tableVar}.$inferSelect;`);
-    parts.push(`export type New${typeName} = typeof ${tableVar}.$inferInsert;`);
-    parts.push('');
+    parts.push(`export type ${typeName} = typeof ${tableVar}.$inferSelect;`)
+    parts.push(`export type New${typeName} = typeof ${tableVar}.$inferInsert;`)
+    parts.push('')
   }
 
-  return parts.join('\n').trim() + '\n';
+  return parts.join('\n').trim() + '\n'
 }

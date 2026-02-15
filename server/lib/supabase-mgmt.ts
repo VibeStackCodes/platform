@@ -5,8 +5,8 @@
  * via the Supabase Management API (api.supabase.com/v1)
  */
 
-import { SupabaseManagementAPI } from "supabase-management-js";
-import type { SupabaseProject, SupabaseSchema } from "../../lib/types";
+import { SupabaseManagementAPI } from 'supabase-management-js'
+import type { SupabaseProject, SupabaseSchema } from './types'
 
 // ============================================================================
 // Internal API Response Types
@@ -16,16 +16,16 @@ import type { SupabaseProject, SupabaseSchema } from "../../lib/types";
  * Raw response from Supabase Management API /projects endpoint
  */
 interface SupabaseAPIProject {
-  id: string;
-  name: string;
-  organization_id: string;
-  region: string;
+  id: string
+  name: string
+  organization_id: string
+  region: string
   database: {
-    host: string;
-    version: string;
-  };
-  status: string; // "ACTIVE_HEALTHY", "COMING_UP", etc.
-  created_at: string;
+    host: string
+    version: string
+  }
+  status: string // "ACTIVE_HEALTHY", "COMING_UP", etc.
+  created_at: string
 }
 
 /**
@@ -33,55 +33,55 @@ interface SupabaseAPIProject {
  */
 export interface DatabaseSchema {
   tables: Array<{
-    name: string;
+    name: string
     columns: Array<{
-      name: string;
-      type: string;
-      nullable?: boolean;
-      default?: string;
-    }>;
+      name: string
+      type: string
+      nullable?: boolean
+      default?: string
+    }>
     rls?: {
-      enabled: boolean;
+      enabled: boolean
       policies?: Array<{
-        name: string;
-        definition: string;
-      }>;
-    };
-  }>;
+        name: string
+        definition: string
+      }>
+    }
+  }>
   functions?: Array<{
-    name: string;
-    sql: string;
-  }>;
-  seed?: string;
+    name: string
+    sql: string
+  }>
+  seed?: string
 }
 
 /**
  * Result of a SQL migration execution
  */
 export interface MigrationResult {
-  success: boolean;
-  error?: string;
-  executedAt: string;
+  success: boolean
+  error?: string
+  executedAt: string
 }
 
 // ============================================================================
 // SDK Client Singleton
 // ============================================================================
 
-let _client: SupabaseManagementAPI | null = null;
+let _client: SupabaseManagementAPI | null = null
 
 /**
  * Get or create the Supabase Management API client
  */
 function getClient(): SupabaseManagementAPI {
   if (!_client) {
-    const accessToken = process.env.SUPABASE_ACCESS_TOKEN;
+    const accessToken = process.env.SUPABASE_ACCESS_TOKEN
     if (!accessToken) {
-      throw new Error("SUPABASE_ACCESS_TOKEN environment variable is required");
+      throw new Error('SUPABASE_ACCESS_TOKEN environment variable is required')
     }
-    _client = new SupabaseManagementAPI({ accessToken });
+    _client = new SupabaseManagementAPI({ accessToken })
   }
-  return _client;
+  return _client
 }
 
 // ============================================================================
@@ -93,28 +93,25 @@ function getClient(): SupabaseManagementAPI {
  * @deprecated Use getClient() for supported operations
  * Kept for operations not yet supported by the SDK and for test compatibility
  */
-export async function mgmtFetch(
-  path: string,
-  options: RequestInit = {}
-): Promise<Response> {
-  const accessToken = process.env.SUPABASE_ACCESS_TOKEN;
+export async function mgmtFetch(path: string, options: RequestInit = {}): Promise<Response> {
+  const accessToken = process.env.SUPABASE_ACCESS_TOKEN
   if (!accessToken) {
-    throw new Error("SUPABASE_ACCESS_TOKEN environment variable is required");
+    throw new Error('SUPABASE_ACCESS_TOKEN environment variable is required')
   }
 
-  const url = `https://api.supabase.com/v1${path}`;
+  const url = `https://api.supabase.com/v1${path}`
   const headers = {
     Authorization: `Bearer ${accessToken}`,
-    "Content-Type": "application/json",
+    'Content-Type': 'application/json',
     ...options.headers,
-  };
+  }
 
   const response = await fetch(url, {
     ...options,
     headers,
-  });
+  })
 
-  return response;
+  return response
 }
 
 // ============================================================================
@@ -132,29 +129,29 @@ export async function mgmtFetch(
  */
 export async function createSupabaseProject(
   name: string,
-  region: string = "us-east-1",
+  region: string = 'us-east-1',
   dbPassword?: string,
-  plan: string = "free"
+  plan: string = 'free',
 ): Promise<SupabaseProject> {
-  const client = getClient();
-  const orgId = process.env.SUPABASE_E2E_ORG_ID || process.env.SUPABASE_ORG_ID;
+  const client = getClient()
+  const orgId = process.env.SUPABASE_E2E_ORG_ID || process.env.SUPABASE_ORG_ID
   if (!orgId) {
-    throw new Error("SUPABASE_ORG_ID environment variable is required");
+    throw new Error('SUPABASE_ORG_ID environment variable is required')
   }
 
   // Generate a secure password if not provided
-  const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*";
+  const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*'
   const password =
     dbPassword ||
-    Array.from(crypto.getRandomValues(new Uint8Array(24)), (b) => chars[b % chars.length]).join("");
+    Array.from(crypto.getRandomValues(new Uint8Array(24)), (b) => chars[b % chars.length]).join('')
 
   // Sanitize project name (Supabase requires lowercase alphanumeric + hyphens)
   const sanitizedName = name
     .toLowerCase()
-    .replace(/[^a-z0-9-]/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "")
-    .slice(0, 63);
+    .replace(/[^a-z0-9-]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 63)
 
   // Create the project using SDK
   const project = await client.createProject({
@@ -163,44 +160,46 @@ export async function createSupabaseProject(
     region: region as any,
     plan: plan as any,
     db_pass: password,
-  });
+  })
 
   if (!project) {
-    throw new Error("Failed to create Supabase project: No response from SDK");
+    throw new Error('Failed to create Supabase project: No response from SDK')
   }
 
-  console.log(`[supabase-mgmt] Created project ${project.id}, waiting for ACTIVE_HEALTHY status...`);
+  console.log(`[supabase-mgmt] Created project ${project.id}, waiting for ACTIVE_HEALTHY status...`)
 
   // Poll until project is ready
-  const maxAttempts = 60; // 5 minutes with 5s intervals
-  const pollInterval = 5000; // 5 seconds
+  const maxAttempts = 60 // 5 minutes with 5s intervals
+  const pollInterval = 5000 // 5 seconds
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    await new Promise((resolve) => setTimeout(resolve, pollInterval));
+    await new Promise((resolve) => setTimeout(resolve, pollInterval))
 
     // Use SDK health check to verify project is ready
     // Note: checkServiceHealth requires the project ref and a list of services
     // We'll use raw fetch for polling status since SDK doesn't have a direct "get project status" method
-    const statusResponse = await mgmtFetch(`/projects/${project.id}`);
+    const statusResponse = await mgmtFetch(`/projects/${project.id}`)
     if (!statusResponse.ok) {
-      throw new Error(`Failed to check project status: ${await statusResponse.text()}`);
+      throw new Error(`Failed to check project status: ${await statusResponse.text()}`)
     }
 
-    const currentProject = (await statusResponse.json()) as SupabaseAPIProject;
-    console.log(`[supabase-mgmt] Project status: ${currentProject.status} (attempt ${attempt + 1}/${maxAttempts})`);
+    const currentProject = (await statusResponse.json()) as SupabaseAPIProject
+    console.log(
+      `[supabase-mgmt] Project status: ${currentProject.status} (attempt ${attempt + 1}/${maxAttempts})`,
+    )
 
-    if (currentProject.status === "ACTIVE_HEALTHY") {
+    if (currentProject.status === 'ACTIVE_HEALTHY') {
       // Fetch API keys using SDK
-      const keys = await client.getProjectApiKeys(project.id);
+      const keys = await client.getProjectApiKeys(project.id)
       if (!keys) {
-        throw new Error("Failed to fetch API keys from SDK");
+        throw new Error('Failed to fetch API keys from SDK')
       }
 
-      const anonKey = keys.find((k) => k.name === "anon")?.api_key;
-      const serviceRoleKey = keys.find((k) => k.name === "service_role")?.api_key;
+      const anonKey = keys.find((k) => k.name === 'anon')?.api_key
+      const serviceRoleKey = keys.find((k) => k.name === 'service_role')?.api_key
 
       if (!anonKey || !serviceRoleKey) {
-        throw new Error("Failed to retrieve API keys from project");
+        throw new Error('Failed to retrieve API keys from project')
       }
 
       // Map to shared SupabaseProject type
@@ -214,26 +213,26 @@ export async function createSupabaseProject(
         anonKey,
         serviceRoleKey,
         url: `https://${currentProject.id}.supabase.co`,
-      };
+      }
     }
 
-    if (currentProject.status.includes("ERROR") || currentProject.status.includes("FAILED")) {
-      throw new Error(`Project creation failed with status: ${currentProject.status}`);
+    if (currentProject.status.includes('ERROR') || currentProject.status.includes('FAILED')) {
+      throw new Error(`Project creation failed with status: ${currentProject.status}`)
     }
   }
 
-  throw new Error("Project creation timed out waiting for ACTIVE_HEALTHY status");
+  throw new Error('Project creation timed out waiting for ACTIVE_HEALTHY status')
 }
 
 /**
  * Delete a Supabase project
  */
 export async function deleteSupabaseProject(projectId: string): Promise<void> {
-  const client = getClient();
+  const client = getClient()
 
-  await client.deleteProject(projectId);
+  await client.deleteProject(projectId)
 
-  console.log(`[supabase-mgmt] Deleted project ${projectId}`);
+  console.log(`[supabase-mgmt] Deleted project ${projectId}`)
 }
 
 // ============================================================================
@@ -246,25 +245,22 @@ export async function deleteSupabaseProject(projectId: string): Promise<void> {
  * @param projectId - Supabase project ID
  * @param sql - SQL migration to execute
  */
-export async function runMigration(
-  projectId: string,
-  sql: string
-): Promise<MigrationResult> {
-  const client = getClient();
+export async function runMigration(projectId: string, sql: string): Promise<MigrationResult> {
+  const client = getClient()
 
   try {
-    await client.runQuery(projectId, sql);
+    await client.runQuery(projectId, sql)
 
     return {
       success: true,
       executedAt: new Date().toISOString(),
-    };
+    }
   } catch (error) {
     return {
       success: false,
-      error: error instanceof Error ? error.message : "Unknown error",
+      error: error instanceof Error ? error.message : 'Unknown error',
       executedAt: new Date().toISOString(),
-    };
+    }
   }
 }
 
@@ -276,48 +272,55 @@ export async function runMigration(
  */
 export async function setupSchema(
   projectId: string,
-  schema: DatabaseSchema | SupabaseSchema
+  schema: DatabaseSchema | SupabaseSchema,
 ): Promise<MigrationResult[]> {
-  const results: MigrationResult[] = [];
+  const results: MigrationResult[] = []
 
   // Handle SupabaseSchema (raw SQL from planner)
-  if ("migrationSQL" in schema) {
-    const s = schema as SupabaseSchema;
-    results.push(await runMigration(projectId, s.migrationSQL));
+  if ('migrationSQL' in schema) {
+    const s = schema as SupabaseSchema
+    results.push(await runMigration(projectId, s.migrationSQL))
     if (s.rls) {
-      results.push(await runMigration(projectId, s.rls));
+      results.push(await runMigration(projectId, s.rls))
     }
     if (s.seedSQL) {
-      results.push(await runMigration(projectId, s.seedSQL));
+      results.push(await runMigration(projectId, s.seedSQL))
     }
     for (const table of s.realtimeTables) {
       // Validate table name to prevent SQL injection
       if (!/^[a-z0-9_]+$/.test(table)) {
-        console.error(`[supabase-mgmt] Invalid table name for realtime: ${table}`);
+        console.error(`[supabase-mgmt] Invalid table name for realtime: ${table}`)
         results.push({
           success: false,
           error: `Invalid table name: ${table}`,
           executedAt: new Date().toISOString(),
-        });
-        continue;
+        })
+        continue
       }
-      results.push(await runMigration(projectId, `ALTER PUBLICATION supabase_realtime ADD TABLE ${table};`));
+      results.push(
+        await runMigration(projectId, `ALTER PUBLICATION supabase_realtime ADD TABLE ${table};`),
+      )
     }
     for (const bucket of s.storageBuckets) {
       // Validate bucket name to prevent SQL injection
       if (!/^[a-z0-9_]+$/.test(bucket)) {
-        console.error(`[supabase-mgmt] Invalid bucket name: ${bucket}`);
+        console.error(`[supabase-mgmt] Invalid bucket name: ${bucket}`)
         results.push({
           success: false,
           error: `Invalid bucket name: ${bucket}`,
           executedAt: new Date().toISOString(),
-        });
-        continue;
+        })
+        continue
       }
-      results.push(await runMigration(projectId, `INSERT INTO storage.buckets (id, name, public) VALUES ('${bucket}', '${bucket}', true) ON CONFLICT DO NOTHING;`));
+      results.push(
+        await runMigration(
+          projectId,
+          `INSERT INTO storage.buckets (id, name, public) VALUES ('${bucket}', '${bucket}', true) ON CONFLICT DO NOTHING;`,
+        ),
+      )
     }
-    console.log(`[supabase-mgmt] Schema setup complete for project ${projectId}`);
-    return results;
+    console.log(`[supabase-mgmt] Schema setup complete for project ${projectId}`)
+    return results
   }
 
   // Handle structured DatabaseSchema
@@ -325,28 +328,28 @@ export async function setupSchema(
   for (const table of schema.tables) {
     const columns = table.columns
       .map(
-        (col) =>
-          `${col.name} ${col.type}${col.nullable === false ? " NOT NULL" : ""}${
-            col.default ? ` DEFAULT ${col.default}` : ""
-          }`
+        (col: { name: string; type: string; nullable?: boolean; default?: string }) =>
+          `${col.name} ${col.type}${col.nullable === false ? ' NOT NULL' : ''}${
+            col.default ? ` DEFAULT ${col.default}` : ''
+          }`,
       )
-      .join(", ");
+      .join(', ')
 
-    const createTableSql = `CREATE TABLE IF NOT EXISTS ${table.name} (${columns});`;
-    const result = await runMigration(projectId, createTableSql);
-    results.push(result);
+    const createTableSql = `CREATE TABLE IF NOT EXISTS ${table.name} (${columns});`
+    const result = await runMigration(projectId, createTableSql)
+    results.push(result)
 
     // 2. Enable RLS if specified
     if (table.rls?.enabled) {
-      const rlsSql = `ALTER TABLE ${table.name} ENABLE ROW LEVEL SECURITY;`;
-      const rlsResult = await runMigration(projectId, rlsSql);
-      results.push(rlsResult);
+      const rlsSql = `ALTER TABLE ${table.name} ENABLE ROW LEVEL SECURITY;`
+      const rlsResult = await runMigration(projectId, rlsSql)
+      results.push(rlsResult)
 
       // Create policies
       if (table.rls.policies) {
         for (const policy of table.rls.policies) {
-          const policyResult = await runMigration(projectId, policy.definition);
-          results.push(policyResult);
+          const policyResult = await runMigration(projectId, policy.definition)
+          results.push(policyResult)
         }
       }
     }
@@ -355,27 +358,29 @@ export async function setupSchema(
   // 3. Create functions
   if (schema.functions) {
     for (const func of schema.functions) {
-      const result = await runMigration(projectId, func.sql);
-      results.push(result);
+      const result = await runMigration(projectId, func.sql)
+      results.push(result)
     }
   }
 
   // 4. Run seed data
   if (schema.seed) {
-    const seedResult = await runMigration(projectId, schema.seed);
-    results.push(seedResult);
+    const seedResult = await runMigration(projectId, schema.seed)
+    results.push(seedResult)
   }
 
   // 5. Enable realtime for all tables
   const realtimeSql = schema.tables
-    .map((table) => `ALTER PUBLICATION supabase_realtime ADD TABLE ${table.name};`)
-    .join("\n");
+    .map(
+      (table: { name: string }) => `ALTER PUBLICATION supabase_realtime ADD TABLE ${table.name};`,
+    )
+    .join('\n')
 
   if (realtimeSql) {
-    const realtimeResult = await runMigration(projectId, realtimeSql);
-    results.push(realtimeResult);
+    const realtimeResult = await runMigration(projectId, realtimeSql)
+    results.push(realtimeResult)
   }
 
-  console.log(`[supabase-mgmt] Schema setup complete for project ${projectId}`);
-  return results;
+  console.log(`[supabase-mgmt] Schema setup complete for project ${projectId}`)
+  return results
 }

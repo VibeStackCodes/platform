@@ -4,7 +4,7 @@
  * Provides type-safe SSE response creation for streaming events to clients.
  */
 
-import type { StreamEvent } from '../../lib/types';
+import type { StreamEvent } from './types'
 
 /**
  * Create an SSE response stream with abort signal support.
@@ -15,36 +15,36 @@ import type { StreamEvent } from '../../lib/types';
  * @returns Response with SSE headers and ReadableStream body
  */
 export function createSSEStream(
-  handler: (emit: (event: StreamEvent) => void, signal: AbortSignal) => Promise<void>
+  handler: (emit: (event: StreamEvent) => void, signal: AbortSignal) => Promise<void>,
 ): Response {
-  const encoder = new TextEncoder();
-  const abortController = new AbortController();
+  const encoder = new TextEncoder()
+  const abortController = new AbortController()
 
   const stream = new ReadableStream({
     async start(controller) {
       const emit = (event: StreamEvent) => {
         if (!abortController.signal.aborted) {
           try {
-            controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`))
           } catch {
             // Controller closed, ignore
           }
         }
-      };
+      }
       try {
-        await handler(emit, abortController.signal);
+        await handler(emit, abortController.signal)
       } finally {
         try {
-          controller.close();
+          controller.close()
         } catch {
           // Already closed
         }
       }
     },
     cancel() {
-      abortController.abort();
+      abortController.abort()
     },
-  });
+  })
 
   return new Response(stream, {
     headers: {
@@ -52,5 +52,5 @@ export function createSSEStream(
       'Cache-Control': 'no-cache',
       Connection: 'keep-alive',
     },
-  });
+  })
 }

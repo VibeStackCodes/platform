@@ -1,6 +1,5 @@
-'use client';
+'use client'
 
-import { cn } from '@/lib/utils';
 import {
   Table,
   TableBody,
@@ -8,19 +7,20 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '@/components/ui/table';
+} from '@/components/ui/table'
+import { cn } from '@/lib/utils'
 
 interface ResultsTableProps {
-  data: any[];
-  onRowClick?: (row: any) => void;
+  data: any[]
+  onRowClick?: (row: any) => void
 }
 
 export function ResultsTable({ data, onRowClick }: ResultsTableProps) {
   if (!data || data.length === 0) {
-    return <p className="p-4 text-center text-muted-foreground">No results.</p>;
+    return <p className="p-4 text-center text-muted-foreground">No results.</p>
   }
 
-  const headers = Object.keys(data[0]);
+  const headers = Object.keys(data[0])
 
   return (
     <div className="overflow-auto">
@@ -56,5 +56,5 @@ export function ResultsTable({ data, onRowClick }: ResultsTableProps) {
         </TableBody>
       </Table>
     </div>
-  );
+  )
 }

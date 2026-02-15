@@ -3,8 +3,8 @@
  * Handles OAuth callback from Supabase and exchanges code for session
  */
 
-import { Hono } from 'hono'
 import { createClient } from '@supabase/supabase-js'
+import { Hono } from 'hono'
 
 export const authCallbackRoutes = new Hono()
 
@@ -19,7 +19,8 @@ authCallbackRoutes.get('/', async (c) => {
 
   if (code) {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.VITE_SUPABASE_URL
-    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? process.env.VITE_SUPABASE_ANON_KEY
+    const supabaseAnonKey =
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? process.env.VITE_SUPABASE_ANON_KEY
 
     if (!supabaseUrl || !supabaseAnonKey) {
       return c.redirect(`${origin}/?error=server_misconfigured`)

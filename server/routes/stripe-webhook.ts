@@ -5,11 +5,7 @@
 
 import { Hono } from 'hono'
 import Stripe from 'stripe'
-import {
-  updateProfilePlan,
-  getProfileByStripeId,
-  updateProfileByStripeId,
-} from '../lib/db/queries'
+import { getProfileByStripeId, updateProfileByStripeId, updateProfilePlan } from '../lib/db/queries'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: '2026-01-28.clover',
@@ -100,9 +96,7 @@ stripeWebhookRoutes.post('/', async (c) => {
         // Reset credits for the new billing period
         await updateProfileByStripeId(customerId, {
           creditsRemaining: profile.creditsMonthly,
-          creditsResetAt: new Date(
-            (invoice.lines.data[0]?.period?.end ?? 0) * 1000
-          ),
+          creditsResetAt: new Date((invoice.lines.data[0]?.period?.end ?? 0) * 1000),
         })
         console.log(`User ${profile.id} credits reset to ${profile.creditsMonthly}`)
         break
@@ -138,10 +132,9 @@ stripeWebhookRoutes.post('/', async (c) => {
     console.error('Webhook processing error:', error)
     return c.json(
       {
-        error:
-          error instanceof Error ? error.message : 'Webhook processing failed',
+        error: error instanceof Error ? error.message : 'Webhook processing failed',
       },
-      500
+      500,
     )
   }
 })

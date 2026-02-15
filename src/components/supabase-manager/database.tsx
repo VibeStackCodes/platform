@@ -1,62 +1,61 @@
-'use client';
+'use client'
 
-import { AlertTriangle, Table as TableIcon, ChevronLeft } from 'lucide-react';
-import { useCallback, useMemo, useState } from 'react';
-import { toast } from 'sonner';
-import { z, type ZodTypeAny } from 'zod';
-
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Button } from '@/components/ui/button';
-import { Skeleton } from '@/components/ui/skeleton';
-import { DynamicForm } from '@/components/dynamic-form';
-import { ResultsTable } from '@/components/results-table';
-import { useRunQuery, runQuery } from '@/hooks/use-run-query';
-import { useListTables } from '@/hooks/use-tables';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query'
+import { AlertTriangle, ChevronLeft, Table as TableIcon } from 'lucide-react'
+import { useCallback, useMemo, useState } from 'react'
+import { toast } from 'sonner'
+import { type ZodTypeAny, z } from 'zod'
+import { DynamicForm } from '@/components/dynamic-form'
+import { ResultsTable } from '@/components/results-table'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
+import { runQuery, useRunQuery } from '@/hooks/use-run-query'
+import { useListTables } from '@/hooks/use-tables'
 
 // Helper to generate a Zod schema from the table's column definitions
 export function generateZodSchema(table: any): z.ZodObject<any> {
   if (!table || !table.columns) {
-    return z.object({});
+    return z.object({})
   }
 
-  const shape: Record<string, ZodTypeAny> = {};
+  const shape: Record<string, ZodTypeAny> = {}
   for (const column of table.columns) {
-    if (!column.is_updatable || column.is_generated) continue;
+    if (!column.is_updatable || column.is_generated) continue
 
-    let fieldSchema: ZodTypeAny;
-    const dataType = column.data_type.toLowerCase();
+    let fieldSchema: ZodTypeAny
+    const dataType = column.data_type.toLowerCase()
 
     if (dataType.includes('array')) {
-      fieldSchema = z.array(z.any());
+      fieldSchema = z.array(z.any())
     } else if (dataType.includes('int') || dataType.includes('numeric')) {
-      fieldSchema = z.number();
+      fieldSchema = z.number()
     } else if (dataType.includes('bool')) {
-      fieldSchema = z.boolean();
+      fieldSchema = z.boolean()
     } else if (
       dataType === 'user-defined' &&
       column.enums &&
       Array.isArray(column.enums) &&
       column.enums.length > 0
     ) {
-      fieldSchema = z.enum(column.enums as [string, ...string[]]);
+      fieldSchema = z.enum(column.enums as [string, ...string[]])
     } else {
-      fieldSchema = z.string();
+      fieldSchema = z.string()
     }
 
     if (column.is_nullable) {
-      fieldSchema = fieldSchema.nullish();
+      fieldSchema = fieldSchema.nullish()
     }
 
-    shape[column.name] = fieldSchema;
+    shape[column.name] = fieldSchema
   }
-  return z.object(shape);
+  return z.object(shape)
 }
 
 export const getPrimaryKeys = (table: any): string[] => {
-  if (!table || !table.primary_keys) return [];
-  return table.primary_keys.map((pk: any) => pk.name);
-};
+  if (!table || !table.primary_keys) return []
+  return table.primary_keys.map((pk: any) => pk.name)
+}
 
 function EditRowView({
   projectRef,
@@ -65,81 +64,89 @@ function EditRowView({
   onSuccess,
   onBack,
 }: {
-  projectRef: string;
-  table: any;
-  row: any;
-  onSuccess: () => void;
-  onBack: () => void;
+  projectRef: string
+  table: any
+  row: any
+  onSuccess: () => void
+  onBack: () => void
 }) {
-  const { mutate: runUpdateQuery, isPending: isUpdatePending } = useRunQuery();
-  const formSchema = useMemo(() => generateZodSchema(table), [table]);
+  const { mutate: runUpdateQuery, isPending: isUpdatePending } = useRunQuery()
+  const formSchema = useMemo(() => generateZodSchema(table), [table])
 
   const columnInfo = useMemo(() => {
-    if (!table || !table.columns) return {};
-    const info: Record<string, any> = {};
+    if (!table || !table.columns) return {}
+    const info: Record<string, any> = {}
     for (const column of table.columns) {
-      if (!column.is_updatable || column.is_generated) continue;
-      const dataType = column.data_type.toLowerCase();
+      if (!column.is_updatable || column.is_generated) continue
+      const dataType = column.data_type.toLowerCase()
       const displayType =
-        dataType === 'user-defined' && column.enums?.length > 0 ? 'enum' : dataType;
-      info[column.name] = { data_type: displayType, is_nullable: column.is_nullable };
+        dataType === 'user-defined' && column.enums?.length > 0 ? 'enum' : dataType
+      info[column.name] = { data_type: displayType, is_nullable: column.is_nullable }
     }
-    return info;
-  }, [table]);
+    return info
+  }, [table])
 
   const handleFormSubmit = useCallback(
     (formData: any) => {
-      const pks = getPrimaryKeys(table);
+      const pks = getPrimaryKeys(table)
       if (pks.length === 0) {
-        toast.error('Cannot update row: no primary key.');
-        return;
+        toast.error('Cannot update row: no primary key.')
+        return
       }
 
       const setClauses = Object.entries(formData)
         .map(([key, value]) => {
-          if (JSON.stringify(row[key]) === JSON.stringify(value)) return null;
-          const column = table.columns.find((col: any) => col.name === key);
-          const dataType = column?.data_type?.toLowerCase() || '';
-          const isNullable = column?.is_nullable || false;
+          if (JSON.stringify(row[key]) === JSON.stringify(value)) return null
+          const column = table.columns.find((col: any) => col.name === key)
+          const dataType = column?.data_type?.toLowerCase() || ''
+          const isNullable = column?.is_nullable || false
 
-          let formattedValue;
-          if (value === null || value === undefined || (typeof value === 'string' && value.trim() === '')) {
-            formattedValue = isNullable ? 'NULL' : "''";
+          let formattedValue
+          if (
+            value === null ||
+            value === undefined ||
+            (typeof value === 'string' && value.trim() === '')
+          ) {
+            formattedValue = isNullable ? 'NULL' : "''"
           } else if (dataType.includes('array')) {
-            const jsonObj = JSON.stringify({ [key]: Array.isArray(value) ? value : [] });
-            formattedValue = `(select ${key} from json_populate_record(null::public."${table.name}", '${jsonObj.replace(/'/g, "''")}'))`;
+            const jsonObj = JSON.stringify({ [key]: Array.isArray(value) ? value : [] })
+            formattedValue = `(select ${key} from json_populate_record(null::public."${table.name}", '${jsonObj.replace(/'/g, "''")}'))`
           } else if (dataType === 'user-defined' && column?.enums) {
-            formattedValue = `'${String(value).replace(/'/g, "''")}'`;
+            formattedValue = `'${String(value).replace(/'/g, "''")}'`
           } else if (typeof value === 'string') {
-            formattedValue = `'${value.replace(/'/g, "''")}'`;
+            formattedValue = `'${value.replace(/'/g, "''")}'`
           } else {
-            formattedValue = value;
+            formattedValue = value
           }
-          return `"${key}" = ${formattedValue}`;
+          return `"${key}" = ${formattedValue}`
         })
         .filter(Boolean)
-        .join(', ');
+        .join(', ')
 
       if (!setClauses) {
-        toast.error('No changes to save');
-        onSuccess();
-        return;
+        toast.error('No changes to save')
+        onSuccess()
+        return
       }
 
       const whereClauses = pks
         .map((pk) => {
-          const v = row[pk];
-          return `"${pk}" = ${typeof v === 'string' ? `'${v.replace(/'/g, "''")}'` : v}`;
+          const v = row[pk]
+          return `"${pk}" = ${typeof v === 'string' ? `'${v.replace(/'/g, "''")}'` : v}`
         })
-        .join(' AND ');
+        .join(' AND ')
 
       runUpdateQuery(
-        { projectRef, query: `UPDATE public."${table.name}" SET ${setClauses} WHERE ${whereClauses};`, readOnly: false },
-        { onSuccess }
-      );
+        {
+          projectRef,
+          query: `UPDATE public."${table.name}" SET ${setClauses} WHERE ${whereClauses};`,
+          readOnly: false,
+        },
+        { onSuccess },
+      )
     },
-    [projectRef, table, row, runUpdateQuery, onSuccess]
-  );
+    [projectRef, table, row, runUpdateQuery, onSuccess],
+  )
 
   return (
     <div className="p-6">
@@ -155,7 +162,7 @@ function EditRowView({
         columnInfo={columnInfo}
       />
     </div>
-  );
+  )
 }
 
 function TableRecordsView({
@@ -163,12 +170,12 @@ function TableRecordsView({
   table,
   onBack,
 }: {
-  projectRef: string;
-  table: any;
-  onBack: () => void;
+  projectRef: string
+  table: any
+  onBack: () => void
 }) {
-  const [editingRow, setEditingRow] = useState<any>(null);
-  const [refetchKey, setRefetchKey] = useState(0);
+  const [editingRow, setEditingRow] = useState<any>(null)
+  const [refetchKey, setRefetchKey] = useState(0)
 
   const { data: rows, isLoading } = useQuery({
     queryKey: ['table-records', projectRef, table.name, refetchKey],
@@ -179,7 +186,7 @@ function TableRecordsView({
         readOnly: true,
       }),
     enabled: !!projectRef && !!table.name,
-  });
+  })
 
   if (editingRow) {
     return (
@@ -188,12 +195,12 @@ function TableRecordsView({
         table={table}
         row={editingRow}
         onSuccess={() => {
-          setEditingRow(null);
-          setRefetchKey((k) => k + 1);
+          setEditingRow(null)
+          setRefetchKey((k) => k + 1)
         }}
         onBack={() => setEditingRow(null)}
       />
-    );
+    )
   }
 
   return (
@@ -215,12 +222,12 @@ function TableRecordsView({
         <ResultsTable data={rows || []} onRowClick={setEditingRow} />
       )}
     </div>
-  );
+  )
 }
 
 export function DatabaseManager({ projectRef }: { projectRef: string }) {
-  const [selectedTable, setSelectedTable] = useState<any>(null);
-  const { data: tables, isLoading, isError } = useListTables(projectRef, ['public']);
+  const [selectedTable, setSelectedTable] = useState<any>(null)
+  const { data: tables, isLoading, isError } = useListTables(projectRef, ['public'])
 
   if (selectedTable) {
     return (
@@ -229,7 +236,7 @@ export function DatabaseManager({ projectRef }: { projectRef: string }) {
         table={selectedTable}
         onBack={() => setSelectedTable(null)}
       />
-    );
+    )
   }
 
   return (
@@ -283,5 +290,5 @@ export function DatabaseManager({ projectRef }: { projectRef: string }) {
         </Alert>
       ) : null}
     </div>
-  );
+  )
 }

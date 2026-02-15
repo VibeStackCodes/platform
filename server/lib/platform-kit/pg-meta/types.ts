@@ -1,11 +1,11 @@
-import { z } from 'zod';
+import { z } from 'zod'
 
 export const postgresPrimaryKeySchema = z.object({
   schema: z.string(),
   table_name: z.string(),
   name: z.string(),
   table_id: z.number().int(),
-});
+})
 
 export const postgresRelationshipSchema = z.object({
   id: z.number().int(),
@@ -16,7 +16,7 @@ export const postgresRelationshipSchema = z.object({
   target_table_schema: z.string(),
   target_table_name: z.string(),
   target_column_name: z.string(),
-});
+})
 
 export const postgresColumnSchema = z.object({
   table_id: z.number().int(),
@@ -37,7 +37,7 @@ export const postgresColumnSchema = z.object({
   enums: z.array(z.string()),
   check: z.union([z.string(), z.null()]),
   comment: z.union([z.string(), z.null()]),
-});
+})
 
 export const postgresTableSchema = z.object({
   id: z.number().int(),
@@ -59,9 +59,9 @@ export const postgresTableSchema = z.object({
   columns: z.array(postgresColumnSchema).optional(),
   primary_keys: z.array(postgresPrimaryKeySchema),
   relationships: z.array(postgresRelationshipSchema),
-});
+})
 
-export type PostgresPrimaryKey = z.infer<typeof postgresPrimaryKeySchema>;
-export type PostgresRelationship = z.infer<typeof postgresRelationshipSchema>;
-export type PostgresColumn = z.infer<typeof postgresColumnSchema>;
-export type PostgresTable = z.infer<typeof postgresTableSchema>;
+export type PostgresPrimaryKey = z.infer<typeof postgresPrimaryKeySchema>
+export type PostgresRelationship = z.infer<typeof postgresRelationshipSchema>
+export type PostgresColumn = z.infer<typeof postgresColumnSchema>
+export type PostgresTable = z.infer<typeof postgresTableSchema>

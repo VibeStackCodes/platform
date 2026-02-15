@@ -1,15 +1,9 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useState } from 'react'
-import { supabase } from '@/lib/supabase-browser'
 import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
+import { supabase } from '@/lib/supabase-browser'
 
 export const Route = createFileRoute('/auth/login')({
   component: LoginPage,
@@ -91,9 +85,7 @@ function LoginPage() {
             {isSignUp ? 'Create Account' : 'Welcome Back'}
           </CardTitle>
           <CardDescription className="text-zinc-400">
-            {isSignUp
-              ? 'Sign up to start building with AI'
-              : 'Sign in to your account'}
+            {isSignUp ? 'Sign up to start building with AI' : 'Sign in to your account'}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

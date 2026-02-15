@@ -5,8 +5,8 @@
 
 import { Hono } from 'hono'
 import Stripe from 'stripe'
-import { authMiddleware } from '../middleware/auth'
 import { getProfileForCheckout, setStripeCustomerId } from '../lib/db/queries'
+import { authMiddleware } from '../middleware/auth'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: '2026-01-28.clover',
@@ -85,10 +85,9 @@ stripeCheckoutRoutes.post('/', async (c) => {
     console.error('Stripe checkout error:', error)
     return c.json(
       {
-        error:
-          error instanceof Error ? error.message : 'Failed to create checkout session',
+        error: error instanceof Error ? error.message : 'Failed to create checkout session',
       },
-      500
+      500,
     )
   }
 })

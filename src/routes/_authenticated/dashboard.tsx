@@ -1,5 +1,6 @@
-import { createFileRoute, Link } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
+import { createFileRoute, Link } from '@tanstack/react-router'
+import { ExternalLink, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -9,7 +10,6 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
-import { Plus, ExternalLink } from 'lucide-react'
 
 export const Route = createFileRoute('/_authenticated/dashboard')({
   component: DashboardPage,
@@ -40,9 +40,7 @@ function DashboardPage() {
       <div className="mb-8 flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Projects</h1>
-          <p className="text-muted-foreground">
-            Manage and build your AI-powered applications
-          </p>
+          <p className="text-muted-foreground">Manage and build your AI-powered applications</p>
         </div>
         <Button asChild size="lg">
           <Link to="/">
@@ -87,11 +85,7 @@ function DashboardPage() {
                 </Button>
                 {project.previewUrl && (
                   <Button asChild variant="outline">
-                    <a
-                      href={project.previewUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
+                    <a href={project.previewUrl} target="_blank" rel="noopener noreferrer">
                       Preview
                     </a>
                   </Button>

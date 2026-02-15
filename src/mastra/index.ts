@@ -5,21 +5,21 @@
  * so the Mastra Cloud deployer's static analysis can detect the configuration.
  * Agents and helpers are defined in lib/agents/registry.ts.
  */
-import { Mastra } from '@mastra/core';
-import { PinoLogger } from '@mastra/loggers';
+import { Mastra } from '@mastra/core'
+import { PinoLogger } from '@mastra/loggers'
 import {
-  supervisorAgent,
   analystAgent,
-  infraAgent,
-  dbaAgent,
   backendAgent,
-  frontendAgent,
-  reviewerAgent,
-  qaAgent,
+  dbaAgent,
   devOpsAgent,
+  frontendAgent,
   getSharedStore,
-} from '../../server/lib/agents/registry';
-import { infraProvisionWorkflow } from '../../server/lib/agents/workflows';
+  infraAgent,
+  qaAgent,
+  reviewerAgent,
+  supervisorAgent,
+} from '../../server/lib/agents/registry'
+import { infraProvisionWorkflow } from '../../server/lib/agents/workflows'
 
 export const mastra = new Mastra({
   agents: {
@@ -41,4 +41,4 @@ export const mastra = new Mastra({
     name: 'VibeStack',
     level: process.env.NODE_ENV === 'production' ? 'info' : 'debug',
   }),
-});
+})

@@ -1,5 +1,5 @@
 // lib/contract-to-types.ts
-import type { SchemaContract, ColumnDef } from './schema-contract';
+import type { ColumnDef, SchemaContract } from './schema-contract'
 
 const TS_TYPE_MAP: Record<string, string> = {
   uuid: 'string',
@@ -10,7 +10,7 @@ const TS_TYPE_MAP: Record<string, string> = {
   jsonb: 'Record<string, unknown>',
   integer: 'number',
   bigint: 'number',
-};
+}
 
 /**
  * Generate a Supabase-compatible `Database` type from a SchemaContract.
@@ -23,53 +23,53 @@ export function contractToTypes(contract: SchemaContract): string {
     'export type Database = {',
     '  public: {',
     '    Tables: {',
-  ];
+  ]
 
   for (const table of contract.tables) {
-    lines.push(`      ${table.name}: {`);
+    lines.push(`      ${table.name}: {`)
 
     // Row type — all columns, nullable ones get | null
-    lines.push('        Row: {');
+    lines.push('        Row: {')
     for (const col of table.columns) {
-      const tsType = TS_TYPE_MAP[col.type] ?? 'unknown';
-      const nullable = col.nullable !== false && !col.primaryKey ? ' | null' : '';
-      lines.push(`          ${col.name}: ${tsType}${nullable};`);
+      const tsType = TS_TYPE_MAP[col.type] ?? 'unknown'
+      const nullable = col.nullable !== false && !col.primaryKey ? ' | null' : ''
+      lines.push(`          ${col.name}: ${tsType}${nullable};`)
     }
-    lines.push('        };');
+    lines.push('        };')
 
     // Insert type — columns with defaults are optional
-    lines.push('        Insert: {');
+    lines.push('        Insert: {')
     for (const col of table.columns) {
-      const tsType = TS_TYPE_MAP[col.type] ?? 'unknown';
-      const nullable = col.nullable !== false && !col.primaryKey ? ' | null' : '';
-      const optional = col.default ? '?' : '';
-      lines.push(`          ${col.name}${optional}: ${tsType}${nullable};`);
+      const tsType = TS_TYPE_MAP[col.type] ?? 'unknown'
+      const nullable = col.nullable !== false && !col.primaryKey ? ' | null' : ''
+      const optional = col.default ? '?' : ''
+      lines.push(`          ${col.name}${optional}: ${tsType}${nullable};`)
     }
-    lines.push('        };');
+    lines.push('        };')
 
     // Update type — all optional
-    lines.push('        Update: {');
+    lines.push('        Update: {')
     for (const col of table.columns) {
-      const tsType = TS_TYPE_MAP[col.type] ?? 'unknown';
-      const nullable = col.nullable !== false && !col.primaryKey ? ' | null' : '';
-      lines.push(`          ${col.name}?: ${tsType}${nullable};`);
+      const tsType = TS_TYPE_MAP[col.type] ?? 'unknown'
+      const nullable = col.nullable !== false && !col.primaryKey ? ' | null' : ''
+      lines.push(`          ${col.name}?: ${tsType}${nullable};`)
     }
-    lines.push('        };');
+    lines.push('        };')
 
-    lines.push('      };');
+    lines.push('      };')
   }
 
-  lines.push('    };');
+  lines.push('    };')
 
   // Enums
-  lines.push('    Enums: {');
+  lines.push('    Enums: {')
   for (const e of contract.enums ?? []) {
-    lines.push(`      ${e.name}: ${e.values.map(v => `'${v}'`).join(' | ')};`);
+    lines.push(`      ${e.name}: ${e.values.map((v) => `'${v}'`).join(' | ')};`)
   }
-  lines.push('    };');
+  lines.push('    };')
 
-  lines.push('  };');
-  lines.push('};');
+  lines.push('  };')
+  lines.push('};')
 
-  return lines.join('\n');
+  return lines.join('\n')
 }

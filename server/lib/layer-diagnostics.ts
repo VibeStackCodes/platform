@@ -1,5 +1,5 @@
-import type { Sandbox } from '@daytonaio/sdk';
-import { runCommand } from './sandbox';
+import type { Sandbox } from '@daytonaio/sdk'
+import { runCommand } from './sandbox'
 
 /**
  * Per-Layer Diagnostics
@@ -17,21 +17,21 @@ import { runCommand } from './sandbox';
 // ============================================================================
 
 export interface DiagnosticError {
-  file: string;
-  line: number;
-  column: number;
-  code: string;       // "TS2322" or "oxlint/no-unused-vars"
-  message: string;
-  source: 'tsc' | 'oxlint';
-  severity: 'error' | 'warning';
+  file: string
+  line: number
+  column: number
+  code: string // "TS2322" or "oxlint/no-unused-vars"
+  message: string
+  source: 'tsc' | 'oxlint'
+  severity: 'error' | 'warning'
 }
 
 export interface LayerDiagnosticResult {
-  errors: DiagnosticError[];
-  errorsByFile: Map<string, DiagnosticError[]>;
-  totalErrors: number;
-  totalWarnings: number;
-  durationMs: number;
+  errors: DiagnosticError[]
+  errorsByFile: Map<string, DiagnosticError[]>
+  totalErrors: number
+  totalWarnings: number
+  durationMs: number
 }
 
 // ============================================================================
@@ -39,17 +39,17 @@ export interface LayerDiagnosticResult {
 // ============================================================================
 
 /** Parse tsc --noEmit output: file(line,col): error TSxxxx: message */
-const TSC_PATTERN = /([\w\/.-]+)\((\d+),(\d+)\):\s*error\s+(TS\d+):\s*(.+)/g;
+const TSC_PATTERN = /([\w/.-]+)\((\d+),(\d+)\):\s*error\s+(TS\d+):\s*(.+)/g
 
 /** Parse oxlint --format unix output: file:line:col: message [rule] */
-const OXLINT_PATTERN = /([\w\/.-]+):(\d+):(\d+):\s*(.+?)\s*\[(\S+)\]/g;
+const OXLINT_PATTERN = /([\w/.-]+):(\d+):(\d+):\s*(.+?)\s*\[(\S+)\]/g
 
 function parseTscOutput(output: string): DiagnosticError[] {
-  const errors: DiagnosticError[] = [];
-  let match;
+  const errors: DiagnosticError[] = []
+  let match
 
   // Reset regex state
-  TSC_PATTERN.lastIndex = 0;
+  TSC_PATTERN.lastIndex = 0
   while ((match = TSC_PATTERN.exec(output)) !== null) {
     errors.push({
       file: match[1],
@@ -59,20 +59,20 @@ function parseTscOutput(output: string): DiagnosticError[] {
       message: match[5].trim(),
       source: 'tsc',
       severity: 'error',
-    });
+    })
   }
 
-  return errors;
+  return errors
 }
 
 function parseOxlintOutput(output: string): DiagnosticError[] {
-  const errors: DiagnosticError[] = [];
-  let match;
+  const errors: DiagnosticError[] = []
+  let match
 
-  OXLINT_PATTERN.lastIndex = 0;
+  OXLINT_PATTERN.lastIndex = 0
   while ((match = OXLINT_PATTERN.exec(output)) !== null) {
-    const message = match[4].trim();
-    const isWarning = message.startsWith('warning:');
+    const message = match[4].trim()
+    const isWarning = message.startsWith('warning:')
 
     errors.push({
       file: match[1],
@@ -82,10 +82,10 @@ function parseOxlintOutput(output: string): DiagnosticError[] {
       message: isWarning ? message.replace(/^warning:\s*/, '') : message,
       source: 'oxlint',
       severity: isWarning ? 'warning' : 'error',
-    });
+    })
   }
 
-  return errors;
+  return errors
 }
 
 // ============================================================================
@@ -108,12 +108,12 @@ export async function autoFixLintErrors(sandbox: Sandbox): Promise<string> {
       'oxlint src/ --fix --fix-suggestions 2>&1 || true',
       'oxlint-autofix',
       { cwd: '/workspace', timeout: 30 },
-    );
-    console.log(`[layer-diagnostics] oxlint --fix completed (exit ${result.exitCode})`);
-    return result.stdout;
+    )
+    console.log(`[layer-diagnostics] oxlint --fix completed (exit ${result.exitCode})`)
+    return result.stdout
   } catch (err) {
-    console.warn('[layer-diagnostics] oxlint --fix failed (non-fatal):', err);
-    return '';
+    console.warn('[layer-diagnostics] oxlint --fix failed (non-fatal):', err)
+    return ''
   }
 }
 
@@ -132,8 +132,8 @@ export async function runLayerDiagnostics(
   writtenFiles: Set<string>,
   pendingFiles: Set<string>,
 ): Promise<LayerDiagnosticResult> {
-  const startTime = Date.now();
-  const allErrors: DiagnosticError[] = [];
+  const startTime = Date.now()
+  const allErrors: DiagnosticError[] = []
 
   // Run tsc and oxlint in parallel (commands execute in remote sandbox)
   const [tscResult, oxlintResult] = await Promise.all([
@@ -145,44 +145,44 @@ export async function runLayerDiagnostics(
       cwd: '/workspace',
       timeout: 30,
     }).catch(() => ({ exitCode: 0, stdout: '' })),
-  ]);
+  ])
 
   // Parse outputs
-  const tscErrors = parseTscOutput(tscResult.stdout);
-  const oxlintErrors = parseOxlintOutput(oxlintResult.stdout);
-  allErrors.push(...tscErrors, ...oxlintErrors);
+  const tscErrors = parseTscOutput(tscResult.stdout)
+  const oxlintErrors = parseOxlintOutput(oxlintResult.stdout)
+  allErrors.push(...tscErrors, ...oxlintErrors)
 
   // Filter: only keep errors in written files, exclude pending files
   const filteredErrors = allErrors.filter((err) => {
-    const normalizedPath = err.file.replace(/^\.\//, '');
-    return writtenFiles.has(normalizedPath) && !pendingFiles.has(normalizedPath);
-  });
+    const normalizedPath = err.file.replace(/^\.\//, '')
+    return writtenFiles.has(normalizedPath) && !pendingFiles.has(normalizedPath)
+  })
 
   // Deduplicate by file:line:message
-  const seen = new Set<string>();
+  const seen = new Set<string>()
   const dedupedErrors = filteredErrors.filter((err) => {
-    const key = `${err.file}:${err.line}:${err.message}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+    const key = `${err.file}:${err.line}:${err.message}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
 
   // Group by file
-  const errorsByFile = new Map<string, DiagnosticError[]>();
+  const errorsByFile = new Map<string, DiagnosticError[]>()
   for (const err of dedupedErrors) {
-    const existing = errorsByFile.get(err.file) || [];
-    existing.push(err);
-    errorsByFile.set(err.file, existing);
+    const existing = errorsByFile.get(err.file) || []
+    existing.push(err)
+    errorsByFile.set(err.file, existing)
   }
 
-  const totalErrors = dedupedErrors.filter(e => e.severity === 'error').length;
-  const totalWarnings = dedupedErrors.filter(e => e.severity === 'warning').length;
-  const durationMs = Date.now() - startTime;
+  const totalErrors = dedupedErrors.filter((e) => e.severity === 'error').length
+  const totalWarnings = dedupedErrors.filter((e) => e.severity === 'warning').length
+  const durationMs = Date.now() - startTime
 
   console.log(
     `[layer-diagnostics] ${totalErrors} errors, ${totalWarnings} warnings ` +
-    `(filtered from ${allErrors.length} total) in ${durationMs}ms`,
-  );
+      `(filtered from ${allErrors.length} total) in ${durationMs}ms`,
+  )
 
   return {
     errors: dedupedErrors,
@@ -190,5 +190,5 @@ export async function runLayerDiagnostics(
     totalErrors,
     totalWarnings,
     durationMs,
-  };
+  }
 }

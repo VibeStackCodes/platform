@@ -1,222 +1,238 @@
-"use client";
+'use client'
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { Bot, CheckCircle2 } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { Checkpoint, CheckpointIcon, CheckpointTrigger } from '@/components/ai-elements/checkpoint'
+import {
+  Commit,
+  CommitContent,
+  CommitFile,
+  CommitFileIcon,
+  CommitFileInfo,
+  CommitFilePath,
+  CommitFileStatus,
+  CommitFiles,
+  CommitHash,
+  CommitHeader,
+  CommitInfo,
+  CommitMessage,
+} from '@/components/ai-elements/commit'
 import {
   Conversation,
   ConversationContent,
   ConversationEmptyState,
   ConversationScrollButton,
-} from "@/components/ai-elements/conversation";
-import {
-  Message,
-  MessageContent,
-  MessageResponse,
-} from "@/components/ai-elements/message";
+} from '@/components/ai-elements/conversation'
+import { Message, MessageContent, MessageResponse } from '@/components/ai-elements/message'
+import type { PromptInputMessage } from '@/components/ai-elements/prompt-input'
 import {
   Queue,
   QueueItem,
-  QueueItemIndicator,
   QueueItemContent,
+  QueueItemIndicator,
   QueueList,
-} from "@/components/ai-elements/queue";
-import { Suggestions, Suggestion } from "@/components/ai-elements/suggestion";
+} from '@/components/ai-elements/queue'
 import {
   StackTrace,
-  StackTraceHeader,
-  StackTraceError,
-  StackTraceErrorType,
-  StackTraceErrorMessage,
   StackTraceActions,
-  StackTraceCopyButton,
-  StackTraceExpandButton,
   StackTraceContent,
+  StackTraceCopyButton,
+  StackTraceError,
+  StackTraceErrorMessage,
+  StackTraceErrorType,
+  StackTraceExpandButton,
   StackTraceFrames,
-} from "@/components/ai-elements/stack-trace";
-import {
-  Checkpoint,
-  CheckpointIcon,
-  CheckpointTrigger,
-} from "@/components/ai-elements/checkpoint";
-import {
-  Commit,
-  CommitHeader,
-  CommitHash,
-  CommitMessage,
-  CommitInfo,
-  CommitContent,
-  CommitFiles,
-  CommitFile,
-  CommitFileInfo,
-  CommitFileIcon,
-  CommitFilePath,
-  CommitFileStatus,
-} from "@/components/ai-elements/commit";
-import { PromptBar } from "@/components/prompt-bar";
-import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
-import { Bot, CheckCircle2 } from "lucide-react";
-import type { StreamEvent, ChatPlan, BuildError, CheckpointEvent, LayerCommitEvent, ClarificationQuestion } from "@/lib/types";
-import { CreditDisplay } from "@/components/credit-display";
-import { ClarificationQuestions } from "@/components/clarification-questions";
+  StackTraceHeader,
+} from '@/components/ai-elements/stack-trace'
+import { Suggestion, Suggestions } from '@/components/ai-elements/suggestion'
+import { ClarificationQuestions } from '@/components/clarification-questions'
+import { CreditDisplay } from '@/components/credit-display'
+import { PromptBar } from '@/components/prompt-bar'
+import type {
+  BuildError,
+  ChatPlan,
+  CheckpointEvent,
+  ClarificationQuestion,
+  LayerCommitEvent,
+  StreamEvent,
+} from '@/lib/types'
 
 // Custom message type — replaces UIMessage from Vercel AI SDK
 interface ChatMessage {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
+  id: string
+  role: 'user' | 'assistant'
+  content: string
 }
 
 interface BuilderChatProps {
-  projectId: string;
-  initialPrompt?: string;
-  initialMessages?: Array<{ id: string; role: "user" | "assistant" | "system"; parts: Array<Record<string, unknown>> }>;
-  onGenerationComplete?: () => void;
+  projectId: string
+  initialPrompt?: string
+  initialMessages?: Array<{
+    id: string
+    role: 'user' | 'assistant' | 'system'
+    parts: Array<Record<string, unknown>>
+  }>
+  onGenerationComplete?: () => void
 }
 
 const SUGGESTIONS = [
-  "A todo app with authentication",
-  "A blog with markdown editor",
-  "An e-commerce store with Stripe",
-  "A real-time chat application",
-];
+  'A todo app with authentication',
+  'A blog with markdown editor',
+  'An e-commerce store with Stripe',
+  'A real-time chat application',
+]
 
-export function BuilderChat({ projectId, initialPrompt, initialMessages, onGenerationComplete }: BuilderChatProps) {
-  const [model, setModel] = useState("gpt-5.2");
+export function BuilderChat({
+  projectId,
+  initialPrompt,
+  initialMessages,
+  onGenerationComplete,
+}: BuilderChatProps) {
+  const [model, setModel] = useState('gpt-5.2')
   const [generationStatus, setGenerationStatus] = useState<
-    "idle" | "generating" | "complete" | "error"
-  >("idle");
+    'idle' | 'generating' | 'complete' | 'error'
+  >('idle')
   const [generationFiles, setGenerationFiles] = useState<
-    { path: string; status: "pending" | "generating" | "complete" | "error"; lines?: number }[]
-  >([]);
-  const [buildErrors, setBuildErrors] = useState<BuildError[]>([]);
-  const [checkpoints, setCheckpoints] = useState<CheckpointEvent[]>([]);
-  const [layerCommits, setLayerCommits] = useState<LayerCommitEvent[]>([]);
+    { path: string; status: 'pending' | 'generating' | 'complete' | 'error'; lines?: number }[]
+  >([])
+  const [buildErrors, setBuildErrors] = useState<BuildError[]>([])
+  const [checkpoints, setCheckpoints] = useState<CheckpointEvent[]>([])
+  const [layerCommits, setLayerCommits] = useState<LayerCommitEvent[]>([])
   const [activeAgents, setActiveAgents] = useState<
     { id: string; name: string; status: 'running' | 'complete'; message?: string }[]
-  >([]);
-  const [pendingClarification, setPendingClarification] = useState<ClarificationQuestion[] | null>(null);
+  >([])
+  const [pendingClarification, setPendingClarification] = useState<ClarificationQuestion[] | null>(
+    null,
+  )
   const [userCredits, setUserCredits] = useState<{
-    credits_remaining: number;
-    credits_monthly: number;
-    plan: "free" | "pro";
-    credits_reset_at: string | null;
-  } | null>(null);
-  const hasAutoSubmitted = useRef(false);
-  const abortControllerRef = useRef<AbortController | null>(null);
+    credits_remaining: number
+    credits_monthly: number
+    plan: 'free' | 'pro'
+    credits_reset_at: string | null
+  } | null>(null)
+  const hasAutoSubmitted = useRef(false)
+  const abortControllerRef = useRef<AbortController | null>(null)
 
   // Abort in-flight SSE streams on unmount
   useEffect(() => {
     return () => {
-      abortControllerRef.current?.abort();
-    };
-  }, []);
+      abortControllerRef.current?.abort()
+    }
+  }, [])
 
   // Custom state management — replaces useChat from @ai-sdk/react
   const [messages, setMessages] = useState<ChatMessage[]>(
-    initialMessages?.map(m => ({
+    initialMessages?.map((m) => ({
       id: m.id,
-      role: (m.role === "system" ? "assistant" : m.role) as "user" | "assistant",
-      content: m.parts
-        ?.map(p => (p as Record<string, unknown>).text || "")
-        .filter(Boolean)
-        .join("") || "",
-    })) ?? []
-  );
-  const [chatStatus, setChatStatus] = useState<"ready" | "streaming">("ready");
-  const [chatError, setChatError] = useState<Error | null>(null);
+      role: (m.role === 'system' ? 'assistant' : m.role) as 'user' | 'assistant',
+      content:
+        m.parts
+          ?.map((p) => (p as Record<string, unknown>).text || '')
+          .filter(Boolean)
+          .join('') || '',
+    })) ?? [],
+  )
+  const [chatStatus, setChatStatus] = useState<'ready' | 'streaming'>('ready')
+  const [chatError, setChatError] = useState<Error | null>(null)
 
   // Message persistence is handled by Mastra agent memory (thread/resource)
 
-  const handleGenerationEvent = useCallback((event: StreamEvent) => {
-    switch (event.type) {
-      case "stage_update":
-        if (event.stage === "complete") {
-          setGenerationStatus("complete");
-        } else if (event.stage === "error") {
-          setGenerationStatus("error");
-        }
-        break;
-      case "agent_start":
-        setActiveAgents((prev) => [
-          ...prev.filter((a) => a.id !== event.agentId),
-          { id: event.agentId, name: event.agentName, status: "running" as const },
-        ]);
-        break;
-      case "agent_progress":
-        setActiveAgents((prev) =>
-          prev.map((a) =>
-            a.id === event.agentId ? { ...a, message: event.message } : a
-          )
-        );
-        break;
-      case "agent_complete":
-        setActiveAgents((prev) =>
-          prev.map((a) =>
-            a.id === event.agentId ? { ...a, status: "complete" as const } : a
-          )
-        );
-        break;
-      case "agent_artifact":
-        break;
-      case "plan_ready":
-        break;
-      case "file_start":
-        setGenerationFiles((prev) => {
-          const exists = prev.some((f) => f.path === event.path);
-          if (exists) {
-            return prev.map((f) => (f.path === event.path ? { ...f, status: "generating" as const } : f));
+  const handleGenerationEvent = useCallback(
+    (event: StreamEvent) => {
+      switch (event.type) {
+        case 'stage_update':
+          if (event.stage === 'complete') {
+            setGenerationStatus('complete')
+          } else if (event.stage === 'error') {
+            setGenerationStatus('error')
           }
-          return [...prev, { path: event.path, status: "generating" as const }];
-        });
-        break;
-      case "file_complete":
-        setGenerationFiles((prev) =>
-          prev.map((f) =>
-            f.path === event.path
-              ? { ...f, status: "complete" as const, lines: event.linesOfCode }
-              : f
+          break
+        case 'agent_start':
+          setActiveAgents((prev) => [
+            ...prev.filter((a) => a.id !== event.agentId),
+            { id: event.agentId, name: event.agentName, status: 'running' as const },
+          ])
+          break
+        case 'agent_progress':
+          setActiveAgents((prev) =>
+            prev.map((a) => (a.id === event.agentId ? { ...a, message: event.message } : a)),
           )
-        );
-        break;
-      case "file_error":
-        setGenerationFiles((prev) =>
-          prev.map((f) => (f.path === event.path ? { ...f, status: "error" as const } : f))
-        );
-        break;
-      case "complete":
-        setGenerationStatus("complete");
-        onGenerationComplete?.();
-        break;
-      case "error":
-        setGenerationStatus("error");
-        break;
-      case "build_error":
-        setBuildErrors(event.errors);
-        break;
-      case "checkpoint":
-        setCheckpoints((prev) => {
-          const existing = prev.findIndex((c) => c.label === event.label);
-          if (existing >= 0) {
-            const updated = [...prev];
-            updated[existing] = event;
-            return updated;
-          }
-          return [...prev, event];
-        });
-        break;
-      case "layer_commit":
-        setLayerCommits((prev) => [...prev, event]);
-        break;
-      case "credits_used":
-        setUserCredits(prev => prev ? {
-          ...prev,
-          credits_remaining: event.creditsRemaining,
-        } : prev);
-        break;
-      case "clarification_request":
-        setPendingClarification(event.questions);
-        break;
-    }
-  }, [onGenerationComplete]);
+          break
+        case 'agent_complete':
+          setActiveAgents((prev) =>
+            prev.map((a) => (a.id === event.agentId ? { ...a, status: 'complete' as const } : a)),
+          )
+          break
+        case 'agent_artifact':
+          break
+        case 'plan_ready':
+          break
+        case 'file_start':
+          setGenerationFiles((prev) => {
+            const exists = prev.some((f) => f.path === event.path)
+            if (exists) {
+              return prev.map((f) =>
+                f.path === event.path ? { ...f, status: 'generating' as const } : f,
+              )
+            }
+            return [...prev, { path: event.path, status: 'generating' as const }]
+          })
+          break
+        case 'file_complete':
+          setGenerationFiles((prev) =>
+            prev.map((f) =>
+              f.path === event.path
+                ? { ...f, status: 'complete' as const, lines: event.linesOfCode }
+                : f,
+            ),
+          )
+          break
+        case 'file_error':
+          setGenerationFiles((prev) =>
+            prev.map((f) => (f.path === event.path ? { ...f, status: 'error' as const } : f)),
+          )
+          break
+        case 'complete':
+          setGenerationStatus('complete')
+          onGenerationComplete?.()
+          break
+        case 'error':
+          setGenerationStatus('error')
+          break
+        case 'build_error':
+          setBuildErrors(event.errors)
+          break
+        case 'checkpoint':
+          setCheckpoints((prev) => {
+            const existing = prev.findIndex((c) => c.label === event.label)
+            if (existing >= 0) {
+              const updated = [...prev]
+              updated[existing] = event
+              return updated
+            }
+            return [...prev, event]
+          })
+          break
+        case 'layer_commit':
+          setLayerCommits((prev) => [...prev, event])
+          break
+        case 'credits_used':
+          setUserCredits((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  credits_remaining: event.creditsRemaining,
+                }
+              : prev,
+          )
+          break
+        case 'clarification_request':
+          setPendingClarification(event.questions)
+          break
+      }
+    },
+    [onGenerationComplete],
+  )
 
   /**
    * Parse an SSE buffer and process chat-relevant events.
@@ -226,38 +242,38 @@ export function BuilderChat({ projectId, initialPrompt, initialMessages, onGener
     (
       buffer: string,
       onChatText: ((text: string) => void) | null,
-      onGenerationEvent: ((event: StreamEvent) => void) | null
+      onGenerationEvent: ((event: StreamEvent) => void) | null,
     ): string => {
-      const events = buffer.split("\n\n");
-      const remainder = events.pop() || "";
+      const events = buffer.split('\n\n')
+      const remainder = events.pop() || ''
 
       for (const eventText of events) {
-        if (!eventText.trim() || !eventText.startsWith("data: ")) continue;
+        if (!eventText.trim() || !eventText.startsWith('data: ')) continue
         try {
-          const event = JSON.parse(eventText.replace(/^data: /, "")) as StreamEvent;
+          const event = JSON.parse(eventText.replace(/^data: /, '')) as StreamEvent
 
           // Chat-relevant: stream analyst/supervisor text into the assistant message
           if (
             onChatText &&
-            event.type === "agent_progress" &&
-            (event.agentId === "analyst" || event.agentId === "supervisor")
+            event.type === 'agent_progress' &&
+            (event.agentId === 'analyst' || event.agentId === 'supervisor')
           ) {
-            onChatText(event.message);
+            onChatText(event.message)
           }
 
           // Everything else goes to the generation event handler
           if (onGenerationEvent) {
-            onGenerationEvent(event);
+            onGenerationEvent(event)
           }
         } catch {
           // skip malformed events
         }
       }
 
-      return remainder;
+      return remainder
     },
-    []
-  );
+    [],
+  )
 
   /**
    * Send a chat message to /api/agent and stream the analyst response.
@@ -266,181 +282,182 @@ export function BuilderChat({ projectId, initialPrompt, initialMessages, onGener
   const sendChatMessage = useCallback(
     async (text: string) => {
       // Guard against concurrent calls
-      if (chatStatus === "streaming") return;
+      if (chatStatus === 'streaming') return
 
       const userMessage: ChatMessage = {
         id: `user-${Date.now()}`,
-        role: "user",
+        role: 'user',
         content: text,
-      };
-      setMessages(prev => [...prev, userMessage]);
-      setChatStatus("streaming");
-      setChatError(null);
+      }
+      setMessages((prev) => [...prev, userMessage])
+      setChatStatus('streaming')
+      setChatError(null)
 
-      const assistantId = `assistant-${Date.now()}`;
-      setMessages(prev => [
-        ...prev,
-        { id: assistantId, role: "assistant" as const, content: "" },
-      ]);
+      const assistantId = `assistant-${Date.now()}`
+      setMessages((prev) => [...prev, { id: assistantId, role: 'assistant' as const, content: '' }])
 
-      let fullText = "";
+      let fullText = ''
       // Abort any previous in-flight request
-      abortControllerRef.current?.abort();
-      const abortController = new AbortController();
-      abortControllerRef.current = abortController;
+      abortControllerRef.current?.abort()
+      const abortController = new AbortController()
+      abortControllerRef.current = abortController
 
       try {
-        const response = await fetch("/api/agent", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
+        const response = await fetch('/api/agent', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ message: text, projectId, model }),
           signal: abortController.signal,
-        });
+        })
 
         if (!response.ok || !response.body) {
           if (response.status === 402) {
-            const errorData = await response.json();
+            const errorData = await response.json()
             setChatError(
-              new Error(
-                `Out of credits. ${errorData.credits_remaining ?? 0} remaining.`
-              )
-            );
-            setMessages(prev => prev.filter(m => m.id !== assistantId));
-            setChatStatus("ready");
-            return;
+              new Error(`Out of credits. ${errorData.credits_remaining ?? 0} remaining.`),
+            )
+            setMessages((prev) => prev.filter((m) => m.id !== assistantId))
+            setChatStatus('ready')
+            return
           }
-          throw new Error(`Request failed: ${response.status}`);
+          throw new Error(`Request failed: ${response.status}`)
         }
 
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = "";
+        const reader = response.body.getReader()
+        const decoder = new TextDecoder()
+        let buffer = ''
 
         try {
           while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
+            const { done, value } = await reader.read()
+            if (done) break
 
-            buffer += decoder.decode(value, { stream: true });
+            buffer += decoder.decode(value, { stream: true })
             buffer = parseSSEBuffer(
               buffer,
               (delta: string) => {
-                fullText += delta;
-                const snapshot = fullText;
-                setMessages(prev =>
-                  prev.map(m =>
-                    m.id === assistantId ? { ...m, content: snapshot } : m
-                  )
-                );
+                fullText += delta
+                const snapshot = fullText
+                setMessages((prev) =>
+                  prev.map((m) => (m.id === assistantId ? { ...m, content: snapshot } : m)),
+                )
               },
               // Also forward generation-relevant events during chat
-              handleGenerationEvent
-            );
+              handleGenerationEvent,
+            )
           }
         } finally {
-          reader.releaseLock();
+          reader.releaseLock()
         }
       } catch (err) {
         // Silent abort on unmount or cancellation
-        if (err instanceof Error && err.name === "AbortError") return;
-        setChatError(err instanceof Error ? err : new Error("Chat failed"));
+        if (err instanceof Error && err.name === 'AbortError') return
+        setChatError(err instanceof Error ? err : new Error('Chat failed'))
         // Remove empty assistant placeholder on error
-        setMessages(prev =>
-          prev.filter(m => m.id !== assistantId || m.content.length > 0)
-        );
+        setMessages((prev) => prev.filter((m) => m.id !== assistantId || m.content.length > 0))
       } finally {
-        setChatStatus("ready");
+        setChatStatus('ready')
       }
     },
-    [projectId, model, chatStatus, parseSSEBuffer, handleGenerationEvent]
-  );
+    [projectId, model, chatStatus, parseSSEBuffer, handleGenerationEvent],
+  )
 
   // Auto-submit initial prompt (skip if conversation was restored from DB)
   useEffect(() => {
-    if (initialPrompt && !hasAutoSubmitted.current && messages.length === 0 && !initialMessages?.length) {
-      hasAutoSubmitted.current = true;
-      sendChatMessage(initialPrompt);
+    if (
+      initialPrompt &&
+      !hasAutoSubmitted.current &&
+      messages.length === 0 &&
+      !initialMessages?.length
+    ) {
+      hasAutoSubmitted.current = true
+      sendChatMessage(initialPrompt)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [])
 
   const handleSubmit = async (
     message: PromptInputMessage,
-    options: { model: string; webSearch: boolean }
+    options: { model: string; webSearch: boolean },
   ) => {
-    if (!message.text?.trim()) return;
-    setModel(options.model);
-    sendChatMessage(message.text);
-  };
+    if (!message.text?.trim()) return
+    setModel(options.model)
+    sendChatMessage(message.text)
+  }
 
   const handleSuggestionClick = (suggestion: string) => {
-    sendChatMessage(suggestion);
-  };
+    sendChatMessage(suggestion)
+  }
 
   const handleClarificationSubmit = (answersText: string) => {
-    setPendingClarification(null);
-    sendChatMessage(answersText);
-  };
+    setPendingClarification(null)
+    sendChatMessage(answersText)
+  }
 
-  const handleStartGeneration = useCallback(async (chatPlan: ChatPlan) => {
-    setGenerationStatus("generating");
-    setGenerationFiles([]);
+  const handleStartGeneration = useCallback(
+    async (chatPlan: ChatPlan) => {
+      setGenerationStatus('generating')
+      setGenerationFiles([])
 
-    abortControllerRef.current?.abort();
-    const abortController = new AbortController();
-    abortControllerRef.current = abortController;
-
-    try {
-      const response = await fetch("/api/agent", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: chatPlan.appDescription, projectId, model }),
-        signal: abortController.signal,
-      });
-
-      if (!response.ok || !response.body) {
-        if (response.status === 402) {
-          const errorData = await response.json();
-          setGenerationStatus("error");
-          setChatError(new Error(
-            `Out of credits (${errorData.credits_remaining ?? 0} remaining). Please upgrade to Pro for more credits.`
-          ));
-          return;
-        }
-        throw new Error("Generation failed");
-      }
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
+      abortControllerRef.current?.abort()
+      const abortController = new AbortController()
+      abortControllerRef.current = abortController
 
       try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
+        const response = await fetch('/api/agent', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: chatPlan.appDescription, projectId, model }),
+          signal: abortController.signal,
+        })
 
-          buffer += decoder.decode(value, { stream: true });
-          const events = buffer.split("\n\n");
-          buffer = events.pop() || "";
+        if (!response.ok || !response.body) {
+          if (response.status === 402) {
+            const errorData = await response.json()
+            setGenerationStatus('error')
+            setChatError(
+              new Error(
+                `Out of credits (${errorData.credits_remaining ?? 0} remaining). Please upgrade to Pro for more credits.`,
+              ),
+            )
+            return
+          }
+          throw new Error('Generation failed')
+        }
 
-          for (const eventText of events) {
-            if (!eventText.trim() || !eventText.startsWith("data: ")) continue;
-            try {
-              const event: StreamEvent = JSON.parse(eventText.replace(/^data: /, ""));
-              handleGenerationEvent(event);
-            } catch {
-              // skip malformed events
+        const reader = response.body.getReader()
+        const decoder = new TextDecoder()
+        let buffer = ''
+
+        try {
+          while (true) {
+            const { done, value } = await reader.read()
+            if (done) break
+
+            buffer += decoder.decode(value, { stream: true })
+            const events = buffer.split('\n\n')
+            buffer = events.pop() || ''
+
+            for (const eventText of events) {
+              if (!eventText.trim() || !eventText.startsWith('data: ')) continue
+              try {
+                const event: StreamEvent = JSON.parse(eventText.replace(/^data: /, ''))
+                handleGenerationEvent(event)
+              } catch {
+                // skip malformed events
+              }
             }
           }
+        } finally {
+          reader.releaseLock()
         }
-      } finally {
-        reader.releaseLock();
+      } catch (err) {
+        if (err instanceof Error && err.name === 'AbortError') return
+        setGenerationStatus('error')
       }
-    } catch (err) {
-      if (err instanceof Error && err.name === "AbortError") return;
-      setGenerationStatus("error");
-    }
-  }, [projectId, model, handleGenerationEvent]);
+    },
+    [projectId, model, handleGenerationEvent],
+  )
 
   return (
     <div className="flex h-full flex-col">
@@ -464,7 +481,7 @@ export function BuilderChat({ projectId, initialPrompt, initialMessages, onGener
               {messages.map((message) => (
                 <Message from={message.role} key={message.id}>
                   <MessageContent>
-                    {message.role === "user" ? (
+                    {message.role === 'user' ? (
                       <div className="whitespace-pre-wrap">{message.content}</div>
                     ) : (
                       <MessageResponse>{message.content}</MessageResponse>
@@ -474,24 +491,30 @@ export function BuilderChat({ projectId, initialPrompt, initialMessages, onGener
               ))}
 
               {/* Streaming indicator — shown only while waiting for first token */}
-              {chatStatus === "streaming" && messages.length > 0 && messages[messages.length - 1]?.role === "assistant" && !messages[messages.length - 1]?.content && (
-                <div className="mx-4 my-2 text-sm text-muted-foreground animate-pulse">
-                  Thinking...
-                </div>
-              )}
+              {chatStatus === 'streaming' &&
+                messages.length > 0 &&
+                messages[messages.length - 1]?.role === 'assistant' &&
+                !messages[messages.length - 1]?.content && (
+                  <div className="mx-4 my-2 text-sm text-muted-foreground animate-pulse">
+                    Thinking...
+                  </div>
+                )}
 
               {/* Clarification Questions — interactive multi-choice cards */}
               {pendingClarification && (
                 <ClarificationQuestions
                   questions={pendingClarification}
                   onSubmit={handleClarificationSubmit}
-                  disabled={chatStatus === "streaming"}
+                  disabled={chatStatus === 'streaming'}
                 />
               )}
 
               {/* Chat error */}
               {chatError && (
-                <div className="mx-4 my-2 rounded-md bg-red-900/50 p-3 text-sm text-red-300" data-testid="chat-error">
+                <div
+                  className="mx-4 my-2 rounded-md bg-red-900/50 p-3 text-sm text-red-300"
+                  data-testid="chat-error"
+                >
                   Chat error: {chatError.message}
                 </div>
               )}
@@ -504,10 +527,10 @@ export function BuilderChat({ projectId, initialPrompt, initialMessages, onGener
                       {generationFiles.map((file) => (
                         <QueueItem key={file.path}>
                           <div className="flex items-center gap-2">
-                            <QueueItemIndicator completed={file.status === "complete"} />
-                            <QueueItemContent completed={file.status === "complete"}>
+                            <QueueItemIndicator completed={file.status === 'complete'} />
+                            <QueueItemContent completed={file.status === 'complete'}>
                               {file.path}
-                              {file.status === "generating" && " ..."}
+                              {file.status === 'generating' && ' ...'}
                               {file.lines !== undefined && ` (${file.lines} lines)`}
                             </QueueItemContent>
                           </div>
@@ -545,7 +568,7 @@ export function BuilderChat({ projectId, initialPrompt, initialMessages, onGener
                       <CheckpointIcon />
                       <CheckpointTrigger>
                         {cp.label}
-                        {cp.status === "complete" && (
+                        {cp.status === 'complete' && (
                           <CheckCircle2 className="ml-1 inline size-3 text-green-500" />
                         )}
                       </CheckpointTrigger>
@@ -557,9 +580,7 @@ export function BuilderChat({ projectId, initialPrompt, initialMessages, onGener
                     <Commit key={lc.hash}>
                       <CommitHeader>
                         <CommitInfo>
-                          <CommitMessage>
-                            {lc.message}
-                          </CommitMessage>
+                          <CommitMessage>{lc.message}</CommitMessage>
                           <CommitHash>{lc.hash}</CommitHash>
                         </CommitInfo>
                       </CommitHeader>
@@ -600,10 +621,10 @@ export function BuilderChat({ projectId, initialPrompt, initialMessages, onGener
         <PromptBar
           onSubmit={handleSubmit}
           placeholder="Describe what you want to build..."
-          status={chatStatus === "streaming" ? "streaming" : "ready"}
-          disabled={generationStatus === "generating"}
+          status={chatStatus === 'streaming' ? 'streaming' : 'ready'}
+          disabled={generationStatus === 'generating'}
         />
       </div>
     </div>
-  );
+  )
 }

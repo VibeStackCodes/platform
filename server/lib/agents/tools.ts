@@ -1,8 +1,14 @@
-import { createTool } from '@mastra/core/tools';
-import { z } from 'zod';
-import { getSandbox, createSandbox as createSandboxFn, getPreviewUrl as getPreviewUrlFn, pushToGitHub as pushToGitHubFn, downloadDirectory } from '../sandbox';
-import { createRepo, getInstallationToken, buildRepoName } from '../github';
-import { createSupabaseProject as createSupabaseProjectFn, runMigration } from '../supabase-mgmt';
+import { createTool } from '@mastra/core/tools'
+import { z } from 'zod'
+import { buildRepoName, createRepo, getInstallationToken } from '../github'
+import {
+  createSandbox as createSandboxFn,
+  downloadDirectory,
+  getPreviewUrl as getPreviewUrlFn,
+  getSandbox,
+  pushToGitHub as pushToGitHubFn,
+} from '../sandbox'
+import { createSupabaseProject as createSupabaseProjectFn, runMigration } from '../supabase-mgmt'
 
 /**
  * Standalone Mastra tools for 9-agent architecture
@@ -13,7 +19,7 @@ import { createSupabaseProject as createSupabaseProjectFn, runMigration } from '
 
 /** Escape a string for safe use in shell commands */
 function escapeShellArg(arg: string): string {
-  return `'${arg.replace(/'/g, "'\\''")}'`;
+  return `'${arg.replace(/'/g, "'\\''")}'`
 }
 
 // ============================================================================
@@ -34,16 +40,16 @@ export const writeFileTool = createTool({
     bytesWritten: z.number(),
   }),
   execute: async (inputData, _context) => {
-    const sandbox = await getSandbox(inputData.sandboxId);
-    const fullPath = `/workspace/${inputData.path}`;
-    await sandbox.fs.uploadFile(Buffer.from(inputData.content), fullPath);
+    const sandbox = await getSandbox(inputData.sandboxId)
+    const fullPath = `/workspace/${inputData.path}`
+    await sandbox.fs.uploadFile(Buffer.from(inputData.content), fullPath)
     return {
       success: true,
       path: inputData.path,
       bytesWritten: inputData.content.length,
-    };
+    }
   },
-});
+})
 
 export const readFileTool = createTool({
   id: 'read-file',
@@ -57,22 +63,22 @@ export const readFileTool = createTool({
     exists: z.boolean(),
   }),
   execute: async (inputData, _context) => {
-    const sandbox = await getSandbox(inputData.sandboxId);
-    const fullPath = `/workspace/${inputData.path}`;
+    const sandbox = await getSandbox(inputData.sandboxId)
+    const fullPath = `/workspace/${inputData.path}`
     try {
-      const buffer = await sandbox.fs.downloadFile(fullPath);
+      const buffer = await sandbox.fs.downloadFile(fullPath)
       return {
         content: buffer.toString('utf-8'),
         exists: true,
-      };
+      }
     } catch {
       return {
         content: '',
         exists: false,
-      };
+      }
     }
   },
-});
+})
 
 export const listFilesTool = createTool({
   id: 'list-files',
@@ -86,31 +92,31 @@ export const listFilesTool = createTool({
     count: z.number(),
   }),
   execute: async (inputData, _context) => {
-    const sandbox = await getSandbox(inputData.sandboxId);
-    const fullPath = `/workspace/${inputData.directory}`;
+    const sandbox = await getSandbox(inputData.sandboxId)
+    const fullPath = `/workspace/${inputData.directory}`
 
     const result = await sandbox.process.executeCommand(
       `find ${escapeShellArg(fullPath)} -type f ! -path "*/node_modules/*" ! -path "*/.next/*" ! -path "*/.git/*" | sort`,
       '/workspace',
       undefined,
-      30
-    );
+      30,
+    )
 
     if (result.exitCode !== 0) {
-      return { files: [], count: 0 };
+      return { files: [], count: 0 }
     }
 
     const files = result.result
       .split('\n')
-      .filter(f => f.trim() !== '')
-      .map(f => f.replace(`/workspace/${inputData.directory}/`, ''));
+      .filter((f) => f.trim() !== '')
+      .map((f) => f.replace(`/workspace/${inputData.directory}/`, ''))
 
     return {
       files,
       count: files.length,
-    };
+    }
   },
-});
+})
 
 export const createDirectoryTool = createTool({
   id: 'create-directory',
@@ -124,22 +130,22 @@ export const createDirectoryTool = createTool({
     path: z.string(),
   }),
   execute: async (inputData, _context) => {
-    const sandbox = await getSandbox(inputData.sandboxId);
-    const fullPath = `/workspace/${inputData.path}`;
+    const sandbox = await getSandbox(inputData.sandboxId)
+    const fullPath = `/workspace/${inputData.path}`
 
     await sandbox.process.executeCommand(
       `mkdir -p ${escapeShellArg(fullPath)}`,
       '/workspace',
       undefined,
-      10
-    );
+      10,
+    )
 
     return {
       success: true,
       path: inputData.path,
-    };
+    }
   },
-});
+})
 
 // ============================================================================
 // Command Execution
@@ -159,23 +165,18 @@ export const runCommandTool = createTool({
     stderr: z.string(),
   }),
   execute: async (inputData, _context) => {
-    const sandbox = await getSandbox(inputData.sandboxId);
-    const workDir = inputData.cwd || '/workspace';
+    const sandbox = await getSandbox(inputData.sandboxId)
+    const workDir = inputData.cwd || '/workspace'
 
-    const result = await sandbox.process.executeCommand(
-      inputData.command,
-      workDir,
-      undefined,
-      120
-    );
+    const result = await sandbox.process.executeCommand(inputData.command, workDir, undefined, 120)
 
     return {
       exitCode: result.exitCode,
       stdout: result.result,
       stderr: result.exitCode !== 0 ? result.result : '',
-    };
+    }
   },
-});
+})
 
 export const runBuildTool = createTool({
   id: 'run-build',
@@ -188,21 +189,21 @@ export const runBuildTool = createTool({
     output: z.string(),
   }),
   execute: async (inputData, _context) => {
-    const sandbox = await getSandbox(inputData.sandboxId);
+    const sandbox = await getSandbox(inputData.sandboxId)
 
     const result = await sandbox.process.executeCommand(
       'bun run build',
       '/workspace',
       undefined,
-      120
-    );
+      120,
+    )
 
     return {
       exitCode: result.exitCode,
       output: result.result,
-    };
+    }
   },
-});
+})
 
 export const runLintTool = createTool({
   id: 'run-lint',
@@ -215,21 +216,21 @@ export const runLintTool = createTool({
     output: z.string(),
   }),
   execute: async (inputData, _context) => {
-    const sandbox = await getSandbox(inputData.sandboxId);
+    const sandbox = await getSandbox(inputData.sandboxId)
 
     const result = await sandbox.process.executeCommand(
       'npx biome check --write',
       '/workspace',
       undefined,
-      30
-    );
+      30,
+    )
 
     return {
       exitCode: result.exitCode,
       output: result.result,
-    };
+    }
   },
-});
+})
 
 export const runTypeCheckTool = createTool({
   id: 'run-typecheck',
@@ -242,21 +243,16 @@ export const runTypeCheckTool = createTool({
     output: z.string(),
   }),
   execute: async (inputData, _context) => {
-    const sandbox = await getSandbox(inputData.sandboxId);
+    const sandbox = await getSandbox(inputData.sandboxId)
 
-    const result = await sandbox.process.executeCommand(
-      'tsc --noEmit',
-      '/workspace',
-      undefined,
-      60
-    );
+    const result = await sandbox.process.executeCommand('tsc --noEmit', '/workspace', undefined, 60)
 
     return {
       exitCode: result.exitCode,
       output: result.result,
-    };
+    }
   },
-});
+})
 
 // ============================================================================
 // SQL Validation
@@ -267,12 +263,12 @@ export const runTypeCheckTool = createTool({
  * Reused across validate-sql calls to avoid ~200ms startup per invocation.
  * Each validation runs in a transaction that gets rolled back to keep state clean.
  */
-let _pgliteInstance: Awaited<ReturnType<typeof initPGlite>> | null = null;
-let _pgliteReady: Promise<void> | null = null;
+let _pgliteInstance: Awaited<ReturnType<typeof initPGlite>> | null = null
+let _pgliteReady: Promise<void> | null = null
 
 async function initPGlite() {
-  const { PGlite } = await import('@electric-sql/pglite');
-  const pg = new PGlite();
+  const { PGlite } = await import('@electric-sql/pglite')
+  const pg = new PGlite()
   const authStubs = `
     CREATE SCHEMA IF NOT EXISTS auth;
     CREATE OR REPLACE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$ SELECT '00000000-0000-0000-0000-000000000000'::uuid $$;
@@ -280,17 +276,19 @@ async function initPGlite() {
     DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN CREATE ROLE anon; END IF; END $$;
     DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'service_role') THEN CREATE ROLE service_role; END IF; END $$;
     GRANT ALL ON SCHEMA public TO authenticated, anon, service_role;
-  `;
-  await pg.exec(authStubs);
-  return pg;
+  `
+  await pg.exec(authStubs)
+  return pg
 }
 
 async function getPGlite() {
   if (!_pgliteInstance) {
-    _pgliteReady = initPGlite().then(pg => { _pgliteInstance = pg; });
+    _pgliteReady = initPGlite().then((pg) => {
+      _pgliteInstance = pg
+    })
   }
-  await _pgliteReady;
-  return _pgliteInstance!;
+  await _pgliteReady
+  return _pgliteInstance!
 }
 
 export const validateSQLTool = createTool({
@@ -304,19 +302,23 @@ export const validateSQLTool = createTool({
     error: z.string().optional(),
   }),
   execute: async (inputData, _context) => {
-    const pg = await getPGlite();
+    const pg = await getPGlite()
     try {
       // Run in a savepoint to keep PGlite clean for next call
-      await pg.exec('SAVEPOINT validate_sql');
-      await pg.exec(inputData.sql);
-      await pg.exec('ROLLBACK TO SAVEPOINT validate_sql');
-      return { valid: true };
+      await pg.exec('SAVEPOINT validate_sql')
+      await pg.exec(inputData.sql)
+      await pg.exec('ROLLBACK TO SAVEPOINT validate_sql')
+      return { valid: true }
     } catch (e) {
-      try { await pg.exec('ROLLBACK TO SAVEPOINT validate_sql'); } catch { /* already rolled back */ }
-      return { valid: false, error: e instanceof Error ? e.message : String(e) };
+      try {
+        await pg.exec('ROLLBACK TO SAVEPOINT validate_sql')
+      } catch {
+        /* already rolled back */
+      }
+      return { valid: false, error: e instanceof Error ? e.message : String(e) }
     }
   },
-});
+})
 
 // ============================================================================
 // Preview & Sandbox Management
@@ -335,18 +337,18 @@ export const getPreviewUrlTool = createTool({
     expiresAt: z.string(),
   }),
   execute: async (inputData, _context) => {
-    const sandbox = await getSandbox(inputData.sandboxId);
-    const port = inputData.port || 3000;
+    const sandbox = await getSandbox(inputData.sandboxId)
+    const port = inputData.port || 3000
 
-    const preview = await getPreviewUrlFn(sandbox, port);
+    const preview = await getPreviewUrlFn(sandbox, port)
 
     return {
       url: preview.url,
       port: preview.port,
       expiresAt: preview.expiresAt.toISOString(),
-    };
+    }
   },
-});
+})
 
 export const createSandboxTool = createTool({
   id: 'create-sandbox',
@@ -363,14 +365,14 @@ export const createSandboxTool = createTool({
       language: 'typescript',
       autoStopInterval: 60,
       labels: inputData.labels || {},
-    });
+    })
 
     return {
       sandboxId: sandbox.id,
       success: true,
-    };
+    }
   },
-});
+})
 
 // ============================================================================
 // GitHub & Deployment
@@ -389,20 +391,21 @@ export const pushToGitHubTool = createTool({
     message: z.string(),
   }),
   execute: async (inputData, _context) => {
-    const sandbox = await getSandbox(inputData.sandboxId);
+    const sandbox = await getSandbox(inputData.sandboxId)
 
-    await pushToGitHubFn(sandbox, inputData.cloneUrl, inputData.token);
+    await pushToGitHubFn(sandbox, inputData.cloneUrl, inputData.token)
 
     return {
       success: true,
       message: `Pushed to ${inputData.cloneUrl}`,
-    };
+    }
   },
-});
+})
 
 export const deployToVercelTool = createTool({
   id: 'deploy-to-vercel',
-  description: 'Deploy sandbox files to Vercel using the Vercel REST API. Downloads files from sandbox and creates a deployment.',
+  description:
+    'Deploy sandbox files to Vercel using the Vercel REST API. Downloads files from sandbox and creates a deployment.',
   inputSchema: z.object({
     sandboxId: z.string().describe('Daytona sandbox ID'),
     projectName: z.string().describe('Project name for Vercel deployment'),
@@ -414,24 +417,24 @@ export const deployToVercelTool = createTool({
     status: z.string(),
   }),
   execute: async (inputData, _context) => {
-    const vercelToken = process.env.VERCEL_TOKEN;
+    const vercelToken = process.env.VERCEL_TOKEN
     if (!vercelToken) {
-      throw new Error('VERCEL_TOKEN environment variable is required');
+      throw new Error('VERCEL_TOKEN environment variable is required')
     }
 
-    const finalTeamId = inputData.teamId || process.env.VERCEL_TEAM_ID;
+    const finalTeamId = inputData.teamId || process.env.VERCEL_TEAM_ID
 
     // Download files from sandbox
-    const sandbox = await getSandbox(inputData.sandboxId);
-    const files = await downloadDirectory(sandbox, '/workspace');
+    const sandbox = await getSandbox(inputData.sandboxId)
+    const files = await downloadDirectory(sandbox, '/workspace')
 
-    console.log(`[deploy-to-vercel] Downloaded ${files.length} files from sandbox`);
+    console.log(`[deploy-to-vercel] Downloaded ${files.length} files from sandbox`)
 
     // Prepare files in Vercel format (base64-encoded)
     const vercelFiles = files.map((f) => ({
       file: f.path,
       data: f.content.toString('base64'),
-    }));
+    }))
 
     // Create deployment
     const deploymentResponse = await fetch(
@@ -454,26 +457,30 @@ export const deployToVercelTool = createTool({
           },
           target: 'production',
         }),
-      }
-    );
+      },
+    )
 
     if (!deploymentResponse.ok) {
-      const error = await deploymentResponse.text();
-      throw new Error(`Vercel deployment failed: ${error}`);
+      const error = await deploymentResponse.text()
+      throw new Error(`Vercel deployment failed: ${error}`)
     }
 
-    const deployment = await deploymentResponse.json() as { id: string; url: string; readyState: string };
-    const deployUrl = `https://${deployment.url}`;
+    const deployment = (await deploymentResponse.json()) as {
+      id: string
+      url: string
+      readyState: string
+    }
+    const deployUrl = `https://${deployment.url}`
 
-    console.log(`[deploy-to-vercel] Deployment created: ${deployUrl} (${deployment.id})`);
+    console.log(`[deploy-to-vercel] Deployment created: ${deployUrl} (${deployment.id})`)
 
     return {
       deploymentUrl: deployUrl,
       deploymentId: deployment.id,
       status: deployment.readyState,
-    };
+    }
   },
-});
+})
 
 // ============================================================================
 // Infrastructure Tools
@@ -481,7 +488,8 @@ export const deployToVercelTool = createTool({
 
 export const createSupabaseProjectTool = createTool({
   id: 'create-supabase-project',
-  description: 'Create a new Supabase project via Management API. Waits for ACTIVE_HEALTHY status. Returns project ID, URL, and API keys.',
+  description:
+    'Create a new Supabase project via Management API. Waits for ACTIVE_HEALTHY status. Returns project ID, URL, and API keys.',
   inputSchema: z.object({
     name: z.string().describe('Project name (sanitized to lowercase alphanumeric + hyphens)'),
     region: z.string().default('us-east-1').describe('AWS region'),
@@ -494,16 +502,16 @@ export const createSupabaseProjectTool = createTool({
     dbHost: z.string(),
   }),
   execute: async (inputData) => {
-    const project = await createSupabaseProjectFn(inputData.name, inputData.region);
+    const project = await createSupabaseProjectFn(inputData.name, inputData.region)
     return {
       projectId: project.id,
       url: project.url,
       anonKey: project.anonKey,
       serviceRoleKey: project.serviceRoleKey,
       dbHost: project.dbHost,
-    };
+    }
   },
-});
+})
 
 export const runMigrationTool = createTool({
   id: 'run-migration',
@@ -518,9 +526,9 @@ export const runMigrationTool = createTool({
     executedAt: z.string(),
   }),
   execute: async (inputData) => {
-    return await runMigration(inputData.supabaseProjectId, inputData.sql);
+    return await runMigration(inputData.supabaseProjectId, inputData.sql)
   },
-});
+})
 
 export const createGitHubRepoTool = createTool({
   id: 'create-github-repo',
@@ -535,11 +543,11 @@ export const createGitHubRepoTool = createTool({
     repoName: z.string(),
   }),
   execute: async (inputData) => {
-    const repoName = buildRepoName(inputData.appName, inputData.projectId);
-    const repo = await createRepo(repoName);
-    return { cloneUrl: repo.cloneUrl, htmlUrl: repo.htmlUrl, repoName };
+    const repoName = buildRepoName(inputData.appName, inputData.projectId)
+    const repo = await createRepo(repoName)
+    return { cloneUrl: repo.cloneUrl, htmlUrl: repo.htmlUrl, repoName }
   },
-});
+})
 
 export const getGitHubTokenTool = createTool({
   id: 'get-github-token',
@@ -549,10 +557,10 @@ export const getGitHubTokenTool = createTool({
     token: z.string(),
   }),
   execute: async () => {
-    const token = await getInstallationToken();
-    return { token };
+    const token = await getInstallationToken()
+    return { token }
   },
-});
+})
 
 // ============================================================================
 // Documentation Search
@@ -560,9 +568,14 @@ export const getGitHubTokenTool = createTool({
 
 export const searchDocsTool = createTool({
   id: 'search-docs',
-  description: 'Search library documentation. Prefers llms.txt (LLM-optimized plaintext) over HTML scraping.',
+  description:
+    'Search library documentation. Prefers llms.txt (LLM-optimized plaintext) over HTML scraping.',
   inputSchema: z.object({
-    library: z.string().describe('Library name (e.g., react, supabase, shadcn-ui, vite, tailwindcss, tanstack-router)'),
+    library: z
+      .string()
+      .describe(
+        'Library name (e.g., react, supabase, shadcn-ui, vite, tailwindcss, tanstack-router)',
+      ),
     query: z.string().describe('What to search for'),
   }),
   outputSchema: z.object({
@@ -572,49 +585,49 @@ export const searchDocsTool = createTool({
   execute: async (inputData, _context) => {
     // llms.txt endpoints — LLM-optimized plaintext docs (preferred)
     const llmsTxtUrls: Record<string, string> = {
-      'supabase': 'https://supabase.com/llms.txt',
-      'vite': 'https://vite.dev/llms.txt',
-      'tailwindcss': 'https://tailwindcss.com/llms.txt',
+      supabase: 'https://supabase.com/llms.txt',
+      vite: 'https://vite.dev/llms.txt',
+      tailwindcss: 'https://tailwindcss.com/llms.txt',
       'tanstack-router': 'https://tanstack.com/router/latest/llms.txt',
       'tanstack-query': 'https://tanstack.com/query/latest/llms.txt',
       'drizzle-orm': 'https://orm.drizzle.team/llms.txt',
-      'biome': 'https://biomejs.dev/llms.txt',
-    };
+      biome: 'https://biomejs.dev/llms.txt',
+    }
 
     // Fallback HTML docs for libraries without llms.txt
     const fallbackUrls: Record<string, string> = {
-      'react': 'https://react.dev/reference/react',
+      react: 'https://react.dev/reference/react',
       'supabase-auth': 'https://supabase.com/docs/guides/auth',
       'supabase-rls': 'https://supabase.com/docs/guides/database/postgres/row-level-security',
       'shadcn-ui': 'https://ui.shadcn.com/docs/components',
-      'valibot': 'https://valibot.dev/guides/introduction/',
-    };
+      valibot: 'https://valibot.dev/guides/introduction/',
+    }
 
-    const lib = inputData.library.toLowerCase().replace(/\s+/g, '-');
-    const llmsUrl = llmsTxtUrls[lib];
-    const htmlUrl = fallbackUrls[lib];
+    const lib = inputData.library.toLowerCase().replace(/\s+/g, '-')
+    const llmsUrl = llmsTxtUrls[lib]
+    const htmlUrl = fallbackUrls[lib]
 
     if (!llmsUrl && !htmlUrl) {
       return {
         results: `No curated docs for "${inputData.library}". Available libraries: ${[...Object.keys(llmsTxtUrls), ...Object.keys(fallbackUrls)].join(', ')}. Use your training knowledge for this library.`,
         source: 'built-in',
-      };
+      }
     }
 
     // Try llms.txt first (clean plaintext, no parsing needed)
     if (llmsUrl) {
       try {
         const response = await fetch(llmsUrl, {
-          headers: { 'Accept': 'text/plain' },
+          headers: { Accept: 'text/plain' },
           signal: AbortSignal.timeout(5000),
-        });
+        })
 
         if (response.ok) {
-          const text = await response.text();
+          const text = await response.text()
           return {
             results: text.slice(0, 6000),
             source: llmsUrl,
-          };
+          }
         }
       } catch {
         // Fall through to HTML fallback
@@ -622,41 +635,41 @@ export const searchDocsTool = createTool({
     }
 
     // Fallback: fetch HTML and strip tags
-    const url = htmlUrl || llmsUrl!;
+    const url = htmlUrl || llmsUrl!
     try {
       const response = await fetch(url, {
-        headers: { 'Accept': 'text/html' },
+        headers: { Accept: 'text/html' },
         signal: AbortSignal.timeout(5000),
-      });
+      })
 
       if (!response.ok) {
         return {
           results: `Documentation for ${inputData.library} is at ${url}. Use your training knowledge for: ${inputData.query}`,
           source: url,
-        };
+        }
       }
 
-      const html = await response.text();
+      const html = await response.text()
       const text = html
         .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
         .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
         .replace(/<[^>]+>/g, ' ')
         .replace(/\s+/g, ' ')
         .trim()
-        .slice(0, 4000);
+        .slice(0, 4000)
 
       return {
         results: `Documentation excerpt from ${inputData.library}:\n${text}\n\nQuery: ${inputData.query}`,
         source: url,
-      };
+      }
     } catch {
       return {
         results: `Could not fetch docs for ${inputData.library}. Reference: ${url}. Use your training knowledge for: ${inputData.query}`,
         source: url,
-      };
+      }
     }
   },
-});
+})
 
 // ============================================================================
 // Clarification Questions (UI-bound tool — no server-side execution)
@@ -671,14 +684,27 @@ export const askClarifyingQuestionsTool = createTool({
 
 The tool returns immediately — the user's answers arrive as the next message.`,
   inputSchema: z.object({
-    questions: z.array(z.object({
-      question: z.string().describe('The question to ask'),
-      selectionMode: z.enum(['single', 'multiple']).describe('single = pick one, multiple = pick many'),
-      options: z.array(z.object({
-        label: z.string().describe('Short option label (2-5 words)'),
-        description: z.string().describe('Explanation of what this option means'),
-      })).min(2).max(4),
-    })).min(1).max(4).describe('1-4 clarifying questions'),
+    questions: z
+      .array(
+        z.object({
+          question: z.string().describe('The question to ask'),
+          selectionMode: z
+            .enum(['single', 'multiple'])
+            .describe('single = pick one, multiple = pick many'),
+          options: z
+            .array(
+              z.object({
+                label: z.string().describe('Short option label (2-5 words)'),
+                description: z.string().describe('Explanation of what this option means'),
+              }),
+            )
+            .min(2)
+            .max(4),
+        }),
+      )
+      .min(1)
+      .max(4)
+      .describe('1-4 clarifying questions'),
   }),
   outputSchema: z.object({
     status: z.literal('awaiting_user_input'),
@@ -692,6 +718,6 @@ The tool returns immediately — the user's answers arrive as the next message.`
     return {
       status: 'awaiting_user_input' as const,
       questionCount: inputData.questions.length,
-    };
+    }
   },
-});
+})

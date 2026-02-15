@@ -107,7 +107,7 @@ WHERE
       'SELECT, INSERT, UPDATE, REFERENCES'
     )
   )
-`;
+`
 
 export const tablesSql = `
 SELECT
@@ -208,4 +208,4 @@ group by
   c.relreplident,
   nc.nspname,
   pk.primary_keys
-`;
+`

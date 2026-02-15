@@ -1,33 +1,33 @@
-import { describe, expect, it } from 'vitest';
-import { z } from 'zod';
-import { generateZodSchema, getPrimaryKeys } from '@/components/supabase-manager/database';
+import { describe, expect, it } from 'vitest'
+import { z } from 'zod'
+import { generateZodSchema, getPrimaryKeys } from '@/components/supabase-manager/database'
 
 describe('generateZodSchema', () => {
   it('returns empty schema for null table', () => {
-    const schema = generateZodSchema(null);
-    expect(schema).toBeInstanceOf(z.ZodObject);
-    expect(Object.keys(schema.shape)).toHaveLength(0);
-  });
+    const schema = generateZodSchema(null)
+    expect(schema).toBeInstanceOf(z.ZodObject)
+    expect(Object.keys(schema.shape)).toHaveLength(0)
+  })
 
   it('returns empty schema for undefined table', () => {
-    const schema = generateZodSchema(undefined);
-    expect(schema).toBeInstanceOf(z.ZodObject);
-    expect(Object.keys(schema.shape)).toHaveLength(0);
-  });
+    const schema = generateZodSchema(undefined)
+    expect(schema).toBeInstanceOf(z.ZodObject)
+    expect(Object.keys(schema.shape)).toHaveLength(0)
+  })
 
   it('returns empty schema for table with no columns', () => {
-    const table = { name: 'test_table' };
-    const schema = generateZodSchema(table);
-    expect(schema).toBeInstanceOf(z.ZodObject);
-    expect(Object.keys(schema.shape)).toHaveLength(0);
-  });
+    const table = { name: 'test_table' }
+    const schema = generateZodSchema(table)
+    expect(schema).toBeInstanceOf(z.ZodObject)
+    expect(Object.keys(schema.shape)).toHaveLength(0)
+  })
 
   it('returns empty schema for table with empty columns array', () => {
-    const table = { name: 'test_table', columns: [] };
-    const schema = generateZodSchema(table);
-    expect(schema).toBeInstanceOf(z.ZodObject);
-    expect(Object.keys(schema.shape)).toHaveLength(0);
-  });
+    const table = { name: 'test_table', columns: [] }
+    const schema = generateZodSchema(table)
+    expect(schema).toBeInstanceOf(z.ZodObject)
+    expect(Object.keys(schema.shape)).toHaveLength(0)
+  })
 
   it('maps integer column to z.number()', () => {
     const table = {
@@ -41,14 +41,14 @@ describe('generateZodSchema', () => {
           is_nullable: false,
         },
       ],
-    };
-    const schema = generateZodSchema(table);
-    expect(Object.keys(schema.shape)).toContain('age');
+    }
+    const schema = generateZodSchema(table)
+    expect(Object.keys(schema.shape)).toContain('age')
 
     // Test that it validates numbers and rejects strings
-    expect(() => schema.parse({ age: 25 })).not.toThrow();
-    expect(() => schema.parse({ age: '25' })).toThrow();
-  });
+    expect(() => schema.parse({ age: 25 })).not.toThrow()
+    expect(() => schema.parse({ age: '25' })).toThrow()
+  })
 
   it('maps bigint column to z.number()', () => {
     const table = {
@@ -62,11 +62,11 @@ describe('generateZodSchema', () => {
           is_nullable: false,
         },
       ],
-    };
-    const schema = generateZodSchema(table);
-    expect(Object.keys(schema.shape)).toContain('count');
-    expect(() => schema.parse({ count: 100 })).not.toThrow();
-  });
+    }
+    const schema = generateZodSchema(table)
+    expect(Object.keys(schema.shape)).toContain('count')
+    expect(() => schema.parse({ count: 100 })).not.toThrow()
+  })
 
   it('maps numeric column to z.number()', () => {
     const table = {
@@ -80,11 +80,11 @@ describe('generateZodSchema', () => {
           is_nullable: false,
         },
       ],
-    };
-    const schema = generateZodSchema(table);
-    expect(Object.keys(schema.shape)).toContain('price');
-    expect(() => schema.parse({ price: 99.99 })).not.toThrow();
-  });
+    }
+    const schema = generateZodSchema(table)
+    expect(Object.keys(schema.shape)).toContain('price')
+    expect(() => schema.parse({ price: 99.99 })).not.toThrow()
+  })
 
   it('maps boolean column to z.boolean()', () => {
     const table = {
@@ -98,15 +98,15 @@ describe('generateZodSchema', () => {
           is_nullable: false,
         },
       ],
-    };
-    const schema = generateZodSchema(table);
-    expect(Object.keys(schema.shape)).toContain('is_active');
+    }
+    const schema = generateZodSchema(table)
+    expect(Object.keys(schema.shape)).toContain('is_active')
 
     // Test that it validates booleans and rejects strings
-    expect(() => schema.parse({ is_active: true })).not.toThrow();
-    expect(() => schema.parse({ is_active: false })).not.toThrow();
-    expect(() => schema.parse({ is_active: 'true' })).toThrow();
-  });
+    expect(() => schema.parse({ is_active: true })).not.toThrow()
+    expect(() => schema.parse({ is_active: false })).not.toThrow()
+    expect(() => schema.parse({ is_active: 'true' })).toThrow()
+  })
 
   it('maps text column to z.string()', () => {
     const table = {
@@ -120,14 +120,14 @@ describe('generateZodSchema', () => {
           is_nullable: false,
         },
       ],
-    };
-    const schema = generateZodSchema(table);
-    expect(Object.keys(schema.shape)).toContain('name');
+    }
+    const schema = generateZodSchema(table)
+    expect(Object.keys(schema.shape)).toContain('name')
 
     // Test that it validates strings and rejects numbers
-    expect(() => schema.parse({ name: 'John Doe' })).not.toThrow();
-    expect(() => schema.parse({ name: 123 })).toThrow();
-  });
+    expect(() => schema.parse({ name: 'John Doe' })).not.toThrow()
+    expect(() => schema.parse({ name: 123 })).toThrow()
+  })
 
   it('maps varchar column to z.string()', () => {
     const table = {
@@ -141,11 +141,11 @@ describe('generateZodSchema', () => {
           is_nullable: false,
         },
       ],
-    };
-    const schema = generateZodSchema(table);
-    expect(Object.keys(schema.shape)).toContain('email');
-    expect(() => schema.parse({ email: 'test@example.com' })).not.toThrow();
-  });
+    }
+    const schema = generateZodSchema(table)
+    expect(Object.keys(schema.shape)).toContain('email')
+    expect(() => schema.parse({ email: 'test@example.com' })).not.toThrow()
+  })
 
   it('maps array column to z.array(z.any())', () => {
     const table = {
@@ -159,16 +159,16 @@ describe('generateZodSchema', () => {
           is_nullable: false,
         },
       ],
-    };
-    const schema = generateZodSchema(table);
-    expect(Object.keys(schema.shape)).toContain('tags');
+    }
+    const schema = generateZodSchema(table)
+    expect(Object.keys(schema.shape)).toContain('tags')
 
     // Test that it validates arrays and rejects non-arrays
-    expect(() => schema.parse({ tags: [] })).not.toThrow();
-    expect(() => schema.parse({ tags: ['a', 'b', 'c'] })).not.toThrow();
-    expect(() => schema.parse({ tags: [1, 2, 3] })).not.toThrow();
-    expect(() => schema.parse({ tags: 'not an array' })).toThrow();
-  });
+    expect(() => schema.parse({ tags: [] })).not.toThrow()
+    expect(() => schema.parse({ tags: ['a', 'b', 'c'] })).not.toThrow()
+    expect(() => schema.parse({ tags: [1, 2, 3] })).not.toThrow()
+    expect(() => schema.parse({ tags: 'not an array' })).toThrow()
+  })
 
   it('maps user-defined enum column to z.enum()', () => {
     const table = {
@@ -183,16 +183,16 @@ describe('generateZodSchema', () => {
           is_nullable: false,
         },
       ],
-    };
-    const schema = generateZodSchema(table);
-    expect(Object.keys(schema.shape)).toContain('status');
+    }
+    const schema = generateZodSchema(table)
+    expect(Object.keys(schema.shape)).toContain('status')
 
     // Test that it validates enum values
-    expect(() => schema.parse({ status: 'pending' })).not.toThrow();
-    expect(() => schema.parse({ status: 'active' })).not.toThrow();
-    expect(() => schema.parse({ status: 'completed' })).not.toThrow();
-    expect(() => schema.parse({ status: 'invalid' })).toThrow();
-  });
+    expect(() => schema.parse({ status: 'pending' })).not.toThrow()
+    expect(() => schema.parse({ status: 'active' })).not.toThrow()
+    expect(() => schema.parse({ status: 'completed' })).not.toThrow()
+    expect(() => schema.parse({ status: 'invalid' })).toThrow()
+  })
 
   it('falls back to z.string() for user-defined without enums', () => {
     const table = {
@@ -206,11 +206,11 @@ describe('generateZodSchema', () => {
           is_nullable: false,
         },
       ],
-    };
-    const schema = generateZodSchema(table);
-    expect(Object.keys(schema.shape)).toContain('custom_type');
-    expect(() => schema.parse({ custom_type: 'any string' })).not.toThrow();
-  });
+    }
+    const schema = generateZodSchema(table)
+    expect(Object.keys(schema.shape)).toContain('custom_type')
+    expect(() => schema.parse({ custom_type: 'any string' })).not.toThrow()
+  })
 
   it('falls back to z.string() for user-defined with empty enums array', () => {
     const table = {
@@ -225,11 +225,11 @@ describe('generateZodSchema', () => {
           is_nullable: false,
         },
       ],
-    };
-    const schema = generateZodSchema(table);
-    expect(Object.keys(schema.shape)).toContain('custom_type');
-    expect(() => schema.parse({ custom_type: 'any string' })).not.toThrow();
-  });
+    }
+    const schema = generateZodSchema(table)
+    expect(Object.keys(schema.shape)).toContain('custom_type')
+    expect(() => schema.parse({ custom_type: 'any string' })).not.toThrow()
+  })
 
   it('makes nullable column optional with nullish()', () => {
     const table = {
@@ -243,16 +243,16 @@ describe('generateZodSchema', () => {
           is_nullable: true,
         },
       ],
-    };
-    const schema = generateZodSchema(table);
-    expect(Object.keys(schema.shape)).toContain('description');
+    }
+    const schema = generateZodSchema(table)
+    expect(Object.keys(schema.shape)).toContain('description')
 
     // Test that it accepts null, undefined, and strings
-    expect(() => schema.parse({ description: 'Some text' })).not.toThrow();
-    expect(() => schema.parse({ description: null })).not.toThrow();
-    expect(() => schema.parse({ description: undefined })).not.toThrow();
-    expect(() => schema.parse({})).not.toThrow(); // Missing key should be fine
-  });
+    expect(() => schema.parse({ description: 'Some text' })).not.toThrow()
+    expect(() => schema.parse({ description: null })).not.toThrow()
+    expect(() => schema.parse({ description: undefined })).not.toThrow()
+    expect(() => schema.parse({})).not.toThrow() // Missing key should be fine
+  })
 
   it('makes nullable number column accept null', () => {
     const table = {
@@ -266,14 +266,14 @@ describe('generateZodSchema', () => {
           is_nullable: true,
         },
       ],
-    };
-    const schema = generateZodSchema(table);
+    }
+    const schema = generateZodSchema(table)
 
-    expect(() => schema.parse({ score: 100 })).not.toThrow();
-    expect(() => schema.parse({ score: null })).not.toThrow();
-    expect(() => schema.parse({ score: undefined })).not.toThrow();
-    expect(() => schema.parse({})).not.toThrow();
-  });
+    expect(() => schema.parse({ score: 100 })).not.toThrow()
+    expect(() => schema.parse({ score: null })).not.toThrow()
+    expect(() => schema.parse({ score: undefined })).not.toThrow()
+    expect(() => schema.parse({})).not.toThrow()
+  })
 
   it('skips non-updatable columns', () => {
     const table = {
@@ -294,12 +294,12 @@ describe('generateZodSchema', () => {
           is_nullable: false,
         },
       ],
-    };
-    const schema = generateZodSchema(table);
+    }
+    const schema = generateZodSchema(table)
 
-    expect(Object.keys(schema.shape)).not.toContain('id');
-    expect(Object.keys(schema.shape)).toContain('name');
-  });
+    expect(Object.keys(schema.shape)).not.toContain('id')
+    expect(Object.keys(schema.shape)).toContain('name')
+  })
 
   it('skips generated columns', () => {
     const table = {
@@ -320,12 +320,12 @@ describe('generateZodSchema', () => {
           is_nullable: false,
         },
       ],
-    };
-    const schema = generateZodSchema(table);
+    }
+    const schema = generateZodSchema(table)
 
-    expect(Object.keys(schema.shape)).not.toContain('created_at');
-    expect(Object.keys(schema.shape)).toContain('name');
-  });
+    expect(Object.keys(schema.shape)).not.toContain('created_at')
+    expect(Object.keys(schema.shape)).toContain('name')
+  })
 
   it('skips both non-updatable and generated columns', () => {
     const table = {
@@ -346,12 +346,12 @@ describe('generateZodSchema', () => {
           is_nullable: false,
         },
       ],
-    };
-    const schema = generateZodSchema(table);
+    }
+    const schema = generateZodSchema(table)
 
-    expect(Object.keys(schema.shape)).not.toContain('id');
-    expect(Object.keys(schema.shape)).toContain('name');
-  });
+    expect(Object.keys(schema.shape)).not.toContain('id')
+    expect(Object.keys(schema.shape)).toContain('name')
+  })
 
   it('handles mixed column types in a complex table', () => {
     const table = {
@@ -408,21 +408,21 @@ describe('generateZodSchema', () => {
           is_nullable: false,
         },
       ],
-    };
+    }
 
-    const schema = generateZodSchema(table);
-    const keys = Object.keys(schema.shape);
+    const schema = generateZodSchema(table)
+    const keys = Object.keys(schema.shape)
 
     // Should not include generated/non-updatable id
-    expect(keys).not.toContain('id');
+    expect(keys).not.toContain('id')
 
     // Should include all updatable, non-generated columns
-    expect(keys).toContain('name');
-    expect(keys).toContain('email');
-    expect(keys).toContain('age');
-    expect(keys).toContain('is_admin');
-    expect(keys).toContain('roles');
-    expect(keys).toContain('status');
+    expect(keys).toContain('name')
+    expect(keys).toContain('email')
+    expect(keys).toContain('age')
+    expect(keys).toContain('is_admin')
+    expect(keys).toContain('roles')
+    expect(keys).toContain('status')
 
     // Test a valid object
     const validData = {
@@ -432,8 +432,8 @@ describe('generateZodSchema', () => {
       is_admin: false,
       roles: ['user', 'viewer'],
       status: 'active',
-    };
-    expect(() => schema.parse(validData)).not.toThrow();
+    }
+    expect(() => schema.parse(validData)).not.toThrow()
 
     // Test with nullable fields as null
     const validDataWithNulls = {
@@ -443,9 +443,9 @@ describe('generateZodSchema', () => {
       is_admin: true,
       roles: null,
       status: 'inactive',
-    };
-    expect(() => schema.parse(validDataWithNulls)).not.toThrow();
-  });
+    }
+    expect(() => schema.parse(validDataWithNulls)).not.toThrow()
+  })
 
   it('handles case-insensitive data types', () => {
     const table = {
@@ -473,74 +473,72 @@ describe('generateZodSchema', () => {
           is_nullable: false,
         },
       ],
-    };
+    }
 
-    const schema = generateZodSchema(table);
+    const schema = generateZodSchema(table)
 
-    expect(() => schema.parse({ field1: 1, field2: true, field3: 'text' })).not.toThrow();
-  });
-});
+    expect(() => schema.parse({ field1: 1, field2: true, field3: 'text' })).not.toThrow()
+  })
+})
 
 describe('getPrimaryKeys', () => {
   it('returns empty array for null table', () => {
-    const result = getPrimaryKeys(null);
-    expect(result).toEqual([]);
-  });
+    const result = getPrimaryKeys(null)
+    expect(result).toEqual([])
+  })
 
   it('returns empty array for undefined table', () => {
-    const result = getPrimaryKeys(undefined);
-    expect(result).toEqual([]);
-  });
+    const result = getPrimaryKeys(undefined)
+    expect(result).toEqual([])
+  })
 
   it('returns empty array for table with no primary_keys property', () => {
-    const table = { name: 'test_table' };
-    const result = getPrimaryKeys(table);
-    expect(result).toEqual([]);
-  });
+    const table = { name: 'test_table' }
+    const result = getPrimaryKeys(table)
+    expect(result).toEqual([])
+  })
 
   it('returns empty array for table with empty primary_keys array', () => {
-    const table = { name: 'test_table', primary_keys: [] };
-    const result = getPrimaryKeys(table);
-    expect(result).toEqual([]);
-  });
+    const table = { name: 'test_table', primary_keys: [] }
+    const result = getPrimaryKeys(table)
+    expect(result).toEqual([])
+  })
 
   it('returns array with single primary key name', () => {
     const table = {
       name: 'test_table',
       primary_keys: [{ name: 'id' }],
-    };
-    const result = getPrimaryKeys(table);
-    expect(result).toEqual(['id']);
-  });
+    }
+    const result = getPrimaryKeys(table)
+    expect(result).toEqual(['id'])
+  })
 
   it('returns array with multiple primary key names for composite key', () => {
     const table = {
       name: 'test_table',
       primary_keys: [{ name: 'org_id' }, { name: 'user_id' }],
-    };
-    const result = getPrimaryKeys(table);
-    expect(result).toEqual(['org_id', 'user_id']);
-  });
+    }
+    const result = getPrimaryKeys(table)
+    expect(result).toEqual(['org_id', 'user_id'])
+  })
 
   it('preserves order of primary keys', () => {
     const table = {
       name: 'test_table',
       primary_keys: [{ name: 'first' }, { name: 'second' }, { name: 'third' }],
-    };
-    const result = getPrimaryKeys(table);
-    expect(result).toEqual(['first', 'second', 'third']);
-  });
+    }
+    const result = getPrimaryKeys(table)
+    expect(result).toEqual(['first', 'second', 'third'])
+  })
 
   it('handles primary key objects with additional properties', () => {
     const table = {
       name: 'test_table',
-      primary_keys: [
-        { name: 'id', data_type: 'integer', is_nullable: false },
-      ],
-    };
-    const result = getPrimaryKeys(table);
-    expect(result).toEqual(['id']);
-  });
+      primary_keys: [{ name: 'id', data_type: 'integer', is_nullable: false }],
+    }
+    const result = getPrimaryKeys(table)
+    expect(result).toEqual(['id'])
+  })
 
   it('extracts only the name property from complex pk objects', () => {
     const table = {
@@ -549,9 +547,9 @@ describe('getPrimaryKeys', () => {
         { name: 'user_id', data_type: 'uuid', is_nullable: false, position: 1 },
         { name: 'role_id', data_type: 'uuid', is_nullable: false, position: 2 },
       ],
-    };
-    const result = getPrimaryKeys(table);
-    expect(result).toEqual(['user_id', 'role_id']);
-    expect(result).toHaveLength(2);
-  });
-});
+    }
+    const result = getPrimaryKeys(table)
+    expect(result).toEqual(['user_id', 'role_id'])
+    expect(result).toHaveLength(2)
+  })
+})

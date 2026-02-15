@@ -5,11 +5,11 @@
  * Authenticates the user and verifies project ownership before proxying.
  */
 
+import { and, eq } from 'drizzle-orm'
 import { Hono } from 'hono'
-import { authMiddleware } from '../middleware/auth'
 import { db } from '../lib/db/client'
 import { projects } from '../lib/db/schema'
-import { eq, and } from 'drizzle-orm'
+import { authMiddleware } from '../middleware/auth'
 
 const SUPABASE_API_BASE = 'https://api.supabase.com'
 
@@ -39,13 +39,11 @@ supabaseProxyRoutes.all('/*', async (c) => {
   const projectRefMatch = fullPath.match(/projects\/([^/]+)/)
   if (projectRefMatch) {
     const projectRef = projectRefMatch[1]
-    const project = await db.select({ id: projects.id })
+    const project = await db
+      .select({ id: projects.id })
       .from(projects)
-      .where(and(
-        eq(projects.supabaseProjectId, projectRef),
-        eq(projects.userId, user.id),
-      ))
-      .then(rows => rows[0] ?? null)
+      .where(and(eq(projects.supabaseProjectId, projectRef), eq(projects.userId, user.id)))
+      .then((rows) => rows[0] ?? null)
 
     if (!project) {
       return c.json({ error: 'Forbidden' }, 403)
