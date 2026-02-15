@@ -48,13 +48,16 @@ async function runMigrationInPGlite(
   sandbox: Sandbox,
   migrationSQL: string,
 ): Promise<string | null> {
+  // Strip CREATE EXTENSION statements — PGlite doesn't support extension management.
+  // gen_random_uuid() is built-in to PGlite (PG16), so pgcrypto/uuid-ossp aren't needed.
+  const cleanedSQL = migrationSQL.replace(/CREATE\s+EXTENSION\s+IF\s+NOT\s+EXISTS\s+[^;]+;/gi, '');
   const script = `
 import { PGlite } from '@electric-sql/pglite';
 
 const db = new PGlite();
 try {
   await db.exec(${JSON.stringify(AUTH_STUBS)});
-  await db.exec(${JSON.stringify(migrationSQL)});
+  await db.exec(${JSON.stringify(cleanedSQL)});
   console.log('MIGRATION_OK');
 } catch (e) {
   console.error('MIGRATION_ERROR:', e.message);

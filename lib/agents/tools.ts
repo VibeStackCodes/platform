@@ -366,10 +366,14 @@ export const validateSQLTool = createTool({
   }),
   execute: async (inputData, _context) => {
     const pg = await getPGlite();
+    // Strip CREATE EXTENSION statements — PGlite doesn't support extension management
+    // but agents often generate them (pgcrypto, uuid-ossp, etc.). PGlite has
+    // gen_random_uuid() built-in, so these extensions aren't needed for validation.
+    const sql = inputData.sql.replace(/CREATE\s+EXTENSION\s+IF\s+NOT\s+EXISTS\s+[^;]+;/gi, '');
     try {
       // Wrap in a transaction and always rollback to keep PGlite clean
       await pg.exec('BEGIN');
-      await pg.exec(inputData.sql);
+      await pg.exec(sql);
       await pg.exec('ROLLBACK');
       return { valid: true };
     } catch (e) {
