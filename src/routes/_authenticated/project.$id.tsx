@@ -70,11 +70,11 @@ function ProjectPage() {
   return (
     <ProjectLayout
       projectId={id}
-      initialPrompt={project.status === 'pending' ? project.prompt : undefined}
+      initialPrompt={project.status === 'pending' ? project.prompt ?? undefined : undefined}
       initialMessages={initialMessages}
-      initialSandboxId={project.sandboxId}
-      initialSupabaseUrl={project.supabaseUrl}
-      initialSupabaseProjectId={project.supabaseProjectId}
+      initialSandboxId={project.sandboxId ?? undefined}
+      initialSupabaseUrl={project.supabaseUrl ?? undefined}
+      initialSupabaseProjectId={project.supabaseProjectId ?? undefined}
     />
   )
 }

@@ -1,47 +1,42 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase-browser";
+import { useNavigate } from "@tanstack/react-router";
+import { supabase } from "@/lib/supabase-browser";
 import { PromptBar } from "@/components/prompt-bar";
 import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
 
 const PENDING_PROMPT_KEY = "vibestack_pending_prompt";
 
 export function HeroPrompt() {
-  const router = useRouter();
+  const navigate = useNavigate();
 
   async function handleSubmit(message: PromptInputMessage, _options?: { model: string; webSearch: boolean }) {
     const prompt = message.text.trim();
     if (!prompt) return;
 
-    const supabase = createClient();
     const {
       data: { user },
     } = await supabase.auth.getUser();
 
     if (!user) {
       sessionStorage.setItem(PENDING_PROMPT_KEY, prompt);
-      router.push("/auth/login");
+      navigate({ to: "/auth/login" });
       return;
     }
 
-    const { data: project, error } = await supabase
-      .from("projects")
-      .insert({
-        user_id: user.id,
-        name: prompt.slice(0, 80),
-        prompt,
-        status: "pending",
-      })
-      .select("id")
-      .single();
+    const res = await fetch("/api/projects", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: prompt.slice(0, 80), prompt }),
+    });
+    const project = await res.json();
 
-    if (error || !project) {
-      console.error("Failed to create project:", error);
+    if (!project?.id) {
+      console.error("Failed to create project");
       return;
     }
 
-    router.push(`/project/${project.id}`);
+    navigate({ to: "/project/$id", params: { id: project.id } });
   }
 
   return (

@@ -2,6 +2,9 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { createRouter, RouterProvider } from '@tanstack/react-router'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { ThemeProvider } from '@/components/theme-provider'
+import { Toaster } from '@/components/ui/sonner'
+import { useAuth } from '@/lib/auth'
 import { routeTree } from './routeTree.gen'
 import './index.css'
 
@@ -29,12 +32,23 @@ declare module '@tanstack/react-router' {
 }
 
 function App() {
-  // Auth will be wired in Task 21
-  const auth = { isAuthenticated: false, user: null as null }
+  const auth = useAuth()
+
+  if (auth.loading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-background">
+        <p className="text-muted-foreground">Loading...</p>
+      </div>
+    )
+  }
+
   return (
-    <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} context={{ auth, queryClient }} />
-    </QueryClientProvider>
+    <ThemeProvider defaultTheme="dark">
+      <QueryClientProvider client={queryClient}>
+        <RouterProvider router={router} context={{ auth, queryClient }} />
+        <Toaster />
+      </QueryClientProvider>
+    </ThemeProvider>
   )
 }
 
