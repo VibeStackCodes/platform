@@ -417,6 +417,9 @@ export const validateSQLTool = createTool({
       .replace(/CREATE\s+PUBLICATION\s+[^;]+;/gi, '')
       .replace(/DROP\s+PUBLICATION\s+[^;]+;/gi, '')
       .replace(/SELECT\s+pg_notify\s*\([^)]*\)\s*;/gi, '')
+      // Strip indexes using pg_trgm operator classes (gin_trgm_ops, gist_trgm_ops)
+      // PGlite doesn't bundle pg_trgm, but Supabase Postgres does
+      .replace(/CREATE\s+INDEX\s+[^;]*_trgm_ops\b[^;]*;/gi, '')
     try {
       // Wrap in a transaction and always rollback to keep PGlite clean
       await pg.exec('BEGIN')
@@ -470,9 +473,13 @@ export const getPreviewUrlTool = createTool({
 
 export const createSandboxTool = createTool({
   id: 'create-sandbox',
-  description: 'Create a new Daytona sandbox from snapshot',
+  description:
+    'Create a new Daytona sandbox from snapshot. Labels must be a JSON object (e.g. {"project": "my-app", "env": "dev"}), NOT a plain string.',
   inputSchema: z.object({
-    labels: z.record(z.string(), z.string()).optional().describe('Optional labels for the sandbox'),
+    labels: z
+      .record(z.string(), z.string())
+      .optional()
+      .describe('Optional labels as key-value object, e.g. {"project": "my-app"}'),
   }),
   outputSchema: z.object({
     sandboxId: z.string(),
@@ -628,9 +635,9 @@ export const deployToVercelTool = createTool({
 export const createSupabaseProjectTool = createTool({
   id: 'create-supabase-project',
   description:
-    'Create a new Supabase project via Management API. Waits for ACTIVE_HEALTHY status. Returns project ID, URL, and API keys.',
+    'Create a new Supabase project via Management API. Waits for ACTIVE_HEALTHY status. Returns project ID, URL, and API keys. A random suffix is appended to the name to avoid duplicates.',
   inputSchema: z.object({
-    name: z.string().describe('Project name (sanitized to lowercase alphanumeric + hyphens)'),
+    name: z.string().describe('Project name base (a random suffix will be appended automatically)'),
     region: z.string().default('us-east-1').describe('AWS region'),
   }),
   outputSchema: z.object({
@@ -643,7 +650,8 @@ export const createSupabaseProjectTool = createTool({
   }),
   execute: async (inputData) => {
     try {
-      const project = await createSupabaseProjectFn(inputData.name, inputData.region)
+      const uniqueName = `${inputData.name}-${Date.now().toString(36).slice(-5)}`
+      const project = await createSupabaseProjectFn(uniqueName, inputData.region)
       return {
         projectId: project.id,
         url: project.url,

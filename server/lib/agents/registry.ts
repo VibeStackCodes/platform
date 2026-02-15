@@ -174,8 +174,11 @@ RLS patterns (CRITICAL — every table must have RLS):
 Workflow:
 1. Generate complete SQL migration from requirements
 2. Validate with validate-sql tool (runs PGlite locally)
+   - PGlite strips pg_trgm indexes automatically — don't worry about trgm validation failures
 3. If validation fails, fix the SQL — do NOT ask for help, fix it yourself
 4. Write validated migration to sandbox: supabase/migrations/001_initial.sql
+   - You MUST use the actual sandboxId provided by the supervisor (from infra-engineer)
+   - NEVER use template variables like \${SANDBOX_ID} — if you don't have a real sandboxId, stop and report
 5. Execute migration against Supabase project via run-migration tool
 
 Required roles in SQL: authenticated, anon, service_role
@@ -423,9 +426,14 @@ Generated apps are Vite + React + Supabase, running in Daytona sandboxes.
 Phase 1 — Requirements:
   → analyst: Extract requirements from user message
 
-Phase 2 — Infrastructure (parallel):
+Phase 2a — Infrastructure:
   → infra-engineer: Create sandbox + Supabase project + GitHub repo
+  WAIT for infra-engineer to complete and return sandboxId + supabaseProjectId.
+  If infra fails, stop and report the error — do NOT proceed.
+
+Phase 2b — Database (requires infra results):
   → database-admin: Design schema + validate SQL + run migration
+  You MUST pass the concrete sandboxId and supabaseProjectId from infra-engineer.
 
 Phase 3 — Code Generation (sequential: backend then frontend):
   → backend-engineer: Generate types, hooks, auth utilities
