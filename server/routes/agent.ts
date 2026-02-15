@@ -73,8 +73,17 @@ agentRoutes.post('/', async (c) => {
   }
 
   // Inject per-request Helicone-proxied model via RequestContext
+  // Full context enables per-user, per-project, per-session cost tracking in Helicone
   const requestContext = new RequestContext()
-  requestContext.set('llm', createHeliconeProvider(user.id)(model))
+  requestContext.set(
+    'llm',
+    createHeliconeProvider({
+      userId: user.id,
+      projectId,
+      sessionId: `${projectId}:${Date.now()}`,
+      agentName: 'supervisor',
+    })(model),
+  )
   requestContext.set('userId', user.id)
 
   const supervisor = mastra.getAgent('supervisor')

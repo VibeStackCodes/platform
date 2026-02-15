@@ -4,9 +4,17 @@
 
 // Mastra instance (canonical location: src/mastra/index.ts per Mastra Cloud convention)
 export { mastra } from '../../../src/mastra/index'
-export type { AllowedModel } from './provider'
+
 // Helicone provider + model validation
-export { ALLOWED_MODELS, createHeliconeProvider, isAllowedModel } from './provider'
+export {
+  ALLOWED_MODELS,
+  createHeliconeProvider,
+  getHeliconeBaseURL,
+  getHeliconeHeaders,
+  isAllowedModel,
+} from './provider'
+export type { AllowedModel, HeliconeContext } from './provider'
+
 // Agents + RequestContext + shared store
 export {
   analystAgent,
@@ -21,8 +29,10 @@ export {
   reviewerAgent,
   supervisorAgent,
 } from './registry'
+
 // Schemas
 export * from './schemas'
+
 // Tools
 export {
   askClarifyingQuestionsTool,
@@ -43,7 +53,9 @@ export {
   runTypeCheckTool,
   searchDocsTool,
   validateSQLTool,
+  writeFilesTool,
   writeFileTool,
 } from './tools'
+
 // Workflows
 export { infraProvisionWorkflow } from './workflows'

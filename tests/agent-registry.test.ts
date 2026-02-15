@@ -63,14 +63,14 @@ describe('Agent Registry (Module-Level with Dynamic Model)', () => {
     expect(Object.keys(agents['infraEngineer'].listTools())).toHaveLength(5)
     expect(Object.keys(agents['infraEngineer'].listTools())).toContain('createSandbox')
 
-    // DBA has 6 tools
-    expect(Object.keys(agents['databaseAdmin'].listTools())).toHaveLength(6)
+    // DBA has 7 tools (includes writeFiles batch tool)
+    expect(Object.keys(agents['databaseAdmin'].listTools())).toHaveLength(7)
 
-    // Backend has 5 tools
-    expect(Object.keys(agents['backendEngineer'].listTools())).toHaveLength(5)
+    // Backend has 6 tools (includes writeFiles batch tool)
+    expect(Object.keys(agents['backendEngineer'].listTools())).toHaveLength(6)
 
-    // Frontend has 5 tools
-    expect(Object.keys(agents['frontendEngineer'].listTools())).toHaveLength(5)
+    // Frontend has 6 tools (includes writeFiles batch tool)
+    expect(Object.keys(agents['frontendEngineer'].listTools())).toHaveLength(6)
 
     // Code reviewer has only read-only tools (2 tools)
     const reviewerTools = Object.keys(agents['codeReviewer'].listTools())

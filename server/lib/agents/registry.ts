@@ -1,10 +1,12 @@
 import { Agent } from '@mastra/core/agent'
 import { RequestContext } from '@mastra/core/di'
 import type { MastraModelConfig } from '@mastra/core/llm'
+import { ModelRouterEmbeddingModel } from '@mastra/core/llm'
 import { ModerationProcessor, PromptInjectionDetector } from '@mastra/core/processors'
 import { Memory } from '@mastra/memory'
-import { PostgresStore } from '@mastra/pg'
+import { PgVector, PostgresStore } from '@mastra/pg'
 import { generateShadcnManifest } from '../shadcn-manifest'
+import { createHeliconeProvider, getHeliconeBaseURL, getHeliconeHeaders } from './provider'
 import {
   askClarifyingQuestionsTool,
   createDirectoryTool,
@@ -25,6 +27,7 @@ import {
   searchDocsTool,
   validateSQLTool,
   writeFileTool,
+  writeFilesTool,
 } from './tools'
 
 // Re-export RequestContext for route usage
@@ -63,14 +66,14 @@ function getShadcnManifestString(): string {
 /**
  * Dynamic model resolver — reads the Helicone-proxied LLM from RequestContext.
  * Returns LanguageModelV1 (from Helicone provider) or string (Mastra model router format).
- * Falls back to 'openai/gpt-5.2' for Studio playground / Mastra Cloud without RequestContext.
+ * ALL paths route through Helicone when HELICONE_API_KEY is set.
  */
 function dynamicModel({ requestContext }: { requestContext: RequestContext }): MastraModelConfig {
   if (requestContext?.has('llm')) {
     return requestContext.get('llm') as MastraModelConfig
   }
-  // Fallback for Mastra Studio / Cloud / tests (uses Mastra's built-in model router)
-  return 'openai/gpt-5.2'
+  // Fallback for Mastra Studio / Cloud / tests — still route through Helicone
+  return createHeliconeProvider('studio')('gpt-5.2')
 }
 
 // --- Module-level agents (visible to Mastra Studio) ---
@@ -112,6 +115,7 @@ Output structured JSON with: appName, description, features[], entities[], desig
     searchDocs: searchDocsTool,
     askClarifyingQuestions: askClarifyingQuestionsTool,
   },
+  defaultOptions: { maxSteps: 10 },
 })
 
 export const infraAgent = new Agent({
@@ -141,6 +145,7 @@ Always verify each step succeeded. If any step fails, report the error immediate
     createSupabaseProject: createSupabaseProjectTool,
     createGitHubRepo: createGitHubRepoTool,
   },
+  defaultOptions: { maxSteps: 15 },
 })
 
 export const dbaAgent = new Agent({
@@ -178,11 +183,13 @@ Required schema stubs: auth.uid() function must be available (provided by Supaba
   tools: {
     runCommand: runCommandTool,
     writeFile: writeFileTool,
+    writeFiles: writeFilesTool,
     readFile: readFileTool,
     validateSQL: validateSQLTool,
     searchDocs: searchDocsTool,
     runMigration: runMigrationTool,
   },
+  defaultOptions: { maxSteps: 15 },
 })
 
 export const backendAgent = new Agent({
@@ -226,11 +233,13 @@ Code quality:
 - Use @/ path alias for imports`,
   tools: {
     writeFile: writeFileTool,
+    writeFiles: writeFilesTool,
     readFile: readFileTool,
     listFiles: listFilesTool,
     createDirectory: createDirectoryTool,
     searchDocs: searchDocsTool,
   },
+  defaultOptions: { maxSteps: 20 },
 })
 
 export const frontendAgent = new Agent({
@@ -283,11 +292,13 @@ Code quality:
 - Use @/ path alias for all imports`,
   tools: {
     writeFile: writeFileTool,
+    writeFiles: writeFilesTool,
     readFile: readFileTool,
     listFiles: listFilesTool,
     createDirectory: createDirectoryTool,
     searchDocs: searchDocsTool,
   },
+  defaultOptions: { maxSteps: 25 },
 })
 
 export const reviewerAgent = new Agent({
@@ -323,6 +334,7 @@ DO NOT write files. Only report issues for other agents to fix.`,
     readFile: readFileTool,
     listFiles: listFilesTool,
   },
+  defaultOptions: { maxSteps: 10 },
 })
 
 export const qaAgent = new Agent({
@@ -360,6 +372,7 @@ Common errors in generated apps:
     listFiles: listFilesTool,
     validateSQL: validateSQLTool,
   },
+  defaultOptions: { maxSteps: 15 },
 })
 
 export const devOpsAgent = new Agent({
@@ -390,6 +403,7 @@ Report all URLs (GitHub repo, Vercel deployment) to the supervisor.`,
     runCommand: runCommandTool,
     getGitHubToken: getGitHubTokenTool,
   },
+  defaultOptions: { maxSteps: 10 },
 })
 
 // --- Supervisor (orchestrator) ---
@@ -459,12 +473,38 @@ Phase 6 — Deploy:
     qaEngineer: qaAgent,
     devOpsEngineer: devOpsAgent,
   },
+  defaultOptions: { maxSteps: 50 },
   ...(getSharedStore()
     ? {
         memory: new Memory({
           storage: getSharedStore()!,
+          ...(process.env.DATABASE_URL
+            ? {
+                vector: new PgVector({
+                  id: 'supervisor-vector',
+                  connectionString: process.env.DATABASE_URL,
+                }),
+                embedder: new ModelRouterEmbeddingModel({
+                  providerId: 'openai',
+                  modelId: 'text-embedding-3-small',
+                  ...(getHeliconeBaseURL()
+                    ? {
+                        url: getHeliconeBaseURL(),
+                        headers: getHeliconeHeaders({
+                          userId: 'system',
+                          agentName: 'embedder',
+                        }),
+                      }
+                    : {}),
+                }),
+              }
+            : {}),
           options: {
-            lastMessages: false,
+            lastMessages: 40,
+            generateTitle: true,
+            semanticRecall: process.env.DATABASE_URL
+              ? { topK: 3, messageRange: 2, scope: 'resource' as const }
+              : false,
             workingMemory: {
               enabled: true,
               scope: 'resource',

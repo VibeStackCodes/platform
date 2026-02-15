@@ -38,15 +38,67 @@ export const writeFileTool = createTool({
     success: z.boolean(),
     path: z.string(),
     bytesWritten: z.number(),
+    error: z.string().optional(),
+  }),
+  execute: async (inputData, _context) => {
+    try {
+      const sandbox = await getSandbox(inputData.sandboxId);
+      const fullPath = `/workspace/${inputData.path}`;
+      await sandbox.fs.uploadFile(Buffer.from(inputData.content), fullPath);
+      return {
+        success: true,
+        path: inputData.path,
+        bytesWritten: inputData.content.length,
+      };
+    } catch (e) {
+      return {
+        success: false,
+        path: inputData.path,
+        bytesWritten: 0,
+        error: e instanceof Error ? e.message : String(e),
+      };
+    }
+  },
+});
+
+export const writeFilesTool = createTool({
+  id: 'write-files',
+  description: 'Write multiple files to the sandbox workspace in one call. More efficient than multiple write-file calls for scaffolding.',
+  inputSchema: z.object({
+    sandboxId: z.string().describe('Daytona sandbox ID'),
+    files: z.array(z.object({
+      path: z.string().describe('File path relative to /workspace'),
+      content: z.string().describe('File content to write'),
+    })).describe('Array of files to write'),
+  }),
+  outputSchema: z.object({
+    success: z.boolean(),
+    filesWritten: z.number(),
+    totalBytes: z.number(),
+    errors: z.array(z.object({ path: z.string(), error: z.string() })),
   }),
   execute: async (inputData, _context) => {
     const sandbox = await getSandbox(inputData.sandboxId)
-    const fullPath = `/workspace/${inputData.path}`
-    await sandbox.fs.uploadFile(Buffer.from(inputData.content), fullPath)
+    let filesWritten = 0
+    let totalBytes = 0
+    const errors: { path: string; error: string }[] = []
+
+    for (const file of inputData.files) {
+      try {
+        const fullPath = `/workspace/${file.path}`
+        await sandbox.fs.uploadFile(Buffer.from(file.content), fullPath)
+        filesWritten++
+        totalBytes += file.content.length
+      } catch (e) {
+        errors.push({ path: file.path, error: e instanceof Error ? e.message : String(e) })
+      }
+    }
+
     return {
-      success: true,
-      path: inputData.path,
-      bytesWritten: inputData.content.length,
+      success: errors.length === 0,
+      filesWritten,
+      totalBytes,
+      errors,
     }
   },
 })
@@ -128,21 +180,23 @@ export const createDirectoryTool = createTool({
   outputSchema: z.object({
     success: z.boolean(),
     path: z.string(),
+    error: z.string().optional(),
   }),
   execute: async (inputData, _context) => {
-    const sandbox = await getSandbox(inputData.sandboxId)
-    const fullPath = `/workspace/${inputData.path}`
+    try {
+      const sandbox = await getSandbox(inputData.sandboxId)
+      const fullPath = `/workspace/${inputData.path}`
 
-    await sandbox.process.executeCommand(
-      `mkdir -p ${escapeShellArg(fullPath)}`,
-      '/workspace',
-      undefined,
-      10,
-    )
+      await sandbox.process.executeCommand(
+        `mkdir -p ${escapeShellArg(fullPath)}`,
+        '/workspace',
+        undefined,
+        10,
+      )
 
-    return {
-      success: true,
-      path: inputData.path,
+      return { success: true, path: inputData.path }
+    } catch (e) {
+      return { success: false, path: inputData.path, error: e instanceof Error ? e.message : String(e) }
     }
   },
 })
@@ -270,11 +324,18 @@ async function initPGlite() {
   const { PGlite } = await import('@electric-sql/pglite')
   const pg = new PGlite()
   const authStubs = `
-    CREATE SCHEMA IF NOT EXISTS auth;
-    CREATE OR REPLACE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$ SELECT '00000000-0000-0000-0000-000000000000'::uuid $$;
     DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN CREATE ROLE authenticated; END IF; END $$;
     DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN CREATE ROLE anon; END IF; END $$;
     DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'service_role') THEN CREATE ROLE service_role; END IF; END $$;
+    CREATE SCHEMA IF NOT EXISTS auth;
+    CREATE TABLE IF NOT EXISTS auth.users (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      email text,
+      role text DEFAULT 'authenticated'
+    );
+    CREATE OR REPLACE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$ SELECT '00000000-0000-0000-0000-000000000000'::uuid $$;
+    CREATE OR REPLACE FUNCTION auth.role() RETURNS text LANGUAGE sql STABLE AS $$ SELECT 'authenticated'::text $$;
+    CREATE OR REPLACE FUNCTION auth.jwt() RETURNS jsonb LANGUAGE sql STABLE AS $$ SELECT '{}'::jsonb $$;
     GRANT ALL ON SCHEMA public TO authenticated, anon, service_role;
   `
   await pg.exec(authStubs)
@@ -303,18 +364,18 @@ export const validateSQLTool = createTool({
   }),
   execute: async (inputData, _context) => {
     const pg = await getPGlite()
+    // Strip CREATE EXTENSION statements — PGlite doesn't support extension management
+    // but agents often generate them (pgcrypto, uuid-ossp, etc.). PGlite has
+    // gen_random_uuid() built-in, so these extensions aren't needed for validation.
+    const sql = inputData.sql.replace(/CREATE\s+EXTENSION\s+IF\s+NOT\s+EXISTS\s+[^;]+;/gi, '')
     try {
-      // Run in a savepoint to keep PGlite clean for next call
-      await pg.exec('SAVEPOINT validate_sql')
-      await pg.exec(inputData.sql)
-      await pg.exec('ROLLBACK TO SAVEPOINT validate_sql')
+      // Wrap in a transaction and always rollback to keep PGlite clean
+      await pg.exec('BEGIN')
+      await pg.exec(sql)
+      await pg.exec('ROLLBACK')
       return { valid: true }
     } catch (e) {
-      try {
-        await pg.exec('ROLLBACK TO SAVEPOINT validate_sql')
-      } catch {
-        /* already rolled back */
-      }
+      try { await pg.exec('ROLLBACK') } catch { /* already rolled back */ }
       return { valid: false, error: e instanceof Error ? e.message : String(e) }
     }
   },
@@ -335,17 +396,16 @@ export const getPreviewUrlTool = createTool({
     url: z.string(),
     port: z.number(),
     expiresAt: z.string(),
+    error: z.string().optional(),
   }),
   execute: async (inputData, _context) => {
-    const sandbox = await getSandbox(inputData.sandboxId)
-    const port = inputData.port || 3000
-
-    const preview = await getPreviewUrlFn(sandbox, port)
-
-    return {
-      url: preview.url,
-      port: preview.port,
-      expiresAt: preview.expiresAt.toISOString(),
+    try {
+      const sandbox = await getSandbox(inputData.sandboxId)
+      const port = inputData.port || 3000
+      const preview = await getPreviewUrlFn(sandbox, port)
+      return { url: preview.url, port: preview.port, expiresAt: preview.expiresAt.toISOString() }
+    } catch (e) {
+      return { url: '', port: inputData.port || 3000, expiresAt: '', error: e instanceof Error ? e.message : String(e) }
     }
   },
 })
@@ -359,17 +419,18 @@ export const createSandboxTool = createTool({
   outputSchema: z.object({
     sandboxId: z.string(),
     success: z.boolean(),
+    error: z.string().optional(),
   }),
   execute: async (inputData, _context) => {
-    const sandbox = await createSandboxFn({
-      language: 'typescript',
-      autoStopInterval: 60,
-      labels: inputData.labels || {},
-    })
-
-    return {
-      sandboxId: sandbox.id,
-      success: true,
+    try {
+      const sandbox = await createSandboxFn({
+        language: 'typescript',
+        autoStopInterval: 60,
+        labels: inputData.labels || {},
+      })
+      return { sandboxId: sandbox.id, success: true }
+    } catch (e) {
+      return { sandboxId: '', success: false, error: e instanceof Error ? e.message : String(e) }
     }
   },
 })
@@ -389,15 +450,15 @@ export const pushToGitHubTool = createTool({
   outputSchema: z.object({
     success: z.boolean(),
     message: z.string(),
+    error: z.string().optional(),
   }),
   execute: async (inputData, _context) => {
-    const sandbox = await getSandbox(inputData.sandboxId)
-
-    await pushToGitHubFn(sandbox, inputData.cloneUrl, inputData.token)
-
-    return {
-      success: true,
-      message: `Pushed to ${inputData.cloneUrl}`,
+    try {
+      const sandbox = await getSandbox(inputData.sandboxId)
+      await pushToGitHubFn(sandbox, inputData.cloneUrl, inputData.token)
+      return { success: true, message: `Pushed to ${inputData.cloneUrl}` }
+    } catch (e) {
+      return { success: false, message: '', error: e instanceof Error ? e.message : String(e) }
     }
   },
 })
@@ -415,69 +476,66 @@ export const deployToVercelTool = createTool({
     deploymentUrl: z.string(),
     deploymentId: z.string(),
     status: z.string(),
+    error: z.string().optional(),
   }),
   execute: async (inputData, _context) => {
-    const vercelToken = process.env.VERCEL_TOKEN
-    if (!vercelToken) {
-      throw new Error('VERCEL_TOKEN environment variable is required')
-    }
+    try {
+      const vercelToken = process.env.VERCEL_TOKEN
+      if (!vercelToken) {
+        return { deploymentUrl: '', deploymentId: '', status: 'failed', error: 'VERCEL_TOKEN environment variable is required' }
+      }
 
-    const finalTeamId = inputData.teamId || process.env.VERCEL_TEAM_ID
+      const finalTeamId = inputData.teamId || process.env.VERCEL_TEAM_ID
 
-    // Download files from sandbox
-    const sandbox = await getSandbox(inputData.sandboxId)
-    const files = await downloadDirectory(sandbox, '/workspace')
+      // Download files from sandbox
+      const sandbox = await getSandbox(inputData.sandboxId)
+      const files = await downloadDirectory(sandbox, '/workspace')
 
-    console.log(`[deploy-to-vercel] Downloaded ${files.length} files from sandbox`)
+      console.log(`[deploy-to-vercel] Downloaded ${files.length} files from sandbox`)
 
-    // Prepare files in Vercel format (base64-encoded)
-    const vercelFiles = files.map((f) => ({
-      file: f.path,
-      data: f.content.toString('base64'),
-    }))
+      // Prepare files in Vercel format (base64-encoded)
+      const vercelFiles = files.map((f) => ({
+        file: f.path,
+        data: f.content.toString('base64'),
+      }))
 
-    // Create deployment
-    const deploymentResponse = await fetch(
-      `https://api.vercel.com/v13/deployments${finalTeamId ? `?teamId=${finalTeamId}` : ''}`,
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${vercelToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          name: inputData.projectName.toLowerCase().replace(/[^a-z0-9-]/g, '-'),
-          files: vercelFiles,
-          projectSettings: {
-            framework: 'vite',
-            buildCommand: 'bun run build',
-            devCommand: 'bun run dev',
-            installCommand: 'bun install',
-            outputDirectory: 'dist',
+      // Create deployment
+      const deploymentResponse = await fetch(
+        `https://api.vercel.com/v13/deployments${finalTeamId ? `?teamId=${finalTeamId}` : ''}`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${vercelToken}`,
+            'Content-Type': 'application/json',
           },
-          target: 'production',
-        }),
-      },
-    )
+          body: JSON.stringify({
+            name: inputData.projectName.toLowerCase().replace(/[^a-z0-9-]/g, '-'),
+            files: vercelFiles,
+            projectSettings: {
+              framework: 'vite',
+              buildCommand: 'bun run build',
+              devCommand: 'bun run dev',
+              installCommand: 'bun install',
+              outputDirectory: 'dist',
+            },
+            target: 'production',
+          }),
+        },
+      )
 
-    if (!deploymentResponse.ok) {
-      const error = await deploymentResponse.text()
-      throw new Error(`Vercel deployment failed: ${error}`)
-    }
+      if (!deploymentResponse.ok) {
+        const errText = await deploymentResponse.text()
+        return { deploymentUrl: '', deploymentId: '', status: 'failed', error: `Vercel deployment failed: ${errText}` }
+      }
 
-    const deployment = (await deploymentResponse.json()) as {
-      id: string
-      url: string
-      readyState: string
-    }
-    const deployUrl = `https://${deployment.url}`
+      const deployment = await deploymentResponse.json() as { id: string; url: string; readyState: string }
+      const deployUrl = `https://${deployment.url}`
 
-    console.log(`[deploy-to-vercel] Deployment created: ${deployUrl} (${deployment.id})`)
+      console.log(`[deploy-to-vercel] Deployment created: ${deployUrl} (${deployment.id})`)
 
-    return {
-      deploymentUrl: deployUrl,
-      deploymentId: deployment.id,
-      status: deployment.readyState,
+      return { deploymentUrl: deployUrl, deploymentId: deployment.id, status: deployment.readyState }
+    } catch (e) {
+      return { deploymentUrl: '', deploymentId: '', status: 'failed', error: e instanceof Error ? e.message : String(e) }
     }
   },
 })
@@ -500,15 +558,20 @@ export const createSupabaseProjectTool = createTool({
     anonKey: z.string(),
     serviceRoleKey: z.string(),
     dbHost: z.string(),
+    error: z.string().optional(),
   }),
   execute: async (inputData) => {
-    const project = await createSupabaseProjectFn(inputData.name, inputData.region)
-    return {
-      projectId: project.id,
-      url: project.url,
-      anonKey: project.anonKey,
-      serviceRoleKey: project.serviceRoleKey,
-      dbHost: project.dbHost,
+    try {
+      const project = await createSupabaseProjectFn(inputData.name, inputData.region)
+      return {
+        projectId: project.id,
+        url: project.url,
+        anonKey: project.anonKey,
+        serviceRoleKey: project.serviceRoleKey,
+        dbHost: project.dbHost,
+      }
+    } catch (e) {
+      return { projectId: '', url: '', anonKey: '', serviceRoleKey: '', dbHost: '', error: e instanceof Error ? e.message : String(e) }
     }
   },
 })
@@ -541,11 +604,16 @@ export const createGitHubRepoTool = createTool({
     cloneUrl: z.string(),
     htmlUrl: z.string(),
     repoName: z.string(),
+    error: z.string().optional(),
   }),
   execute: async (inputData) => {
-    const repoName = buildRepoName(inputData.appName, inputData.projectId)
-    const repo = await createRepo(repoName)
-    return { cloneUrl: repo.cloneUrl, htmlUrl: repo.htmlUrl, repoName }
+    try {
+      const repoName = buildRepoName(inputData.appName, inputData.projectId)
+      const repo = await createRepo(repoName)
+      return { cloneUrl: repo.cloneUrl, htmlUrl: repo.htmlUrl, repoName }
+    } catch (e) {
+      return { cloneUrl: '', htmlUrl: '', repoName: '', error: e instanceof Error ? e.message : String(e) }
+    }
   },
 })
 
@@ -555,10 +623,15 @@ export const getGitHubTokenTool = createTool({
   inputSchema: z.object({}),
   outputSchema: z.object({
     token: z.string(),
+    error: z.string().optional(),
   }),
   execute: async () => {
-    const token = await getInstallationToken()
-    return { token }
+    try {
+      const token = await getInstallationToken()
+      return { token }
+    } catch (e) {
+      return { token: '', error: e instanceof Error ? e.message : String(e) }
+    }
   },
 })
 

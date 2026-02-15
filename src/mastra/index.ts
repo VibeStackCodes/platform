@@ -8,6 +8,12 @@
 import { Mastra } from '@mastra/core'
 import { PinoLogger } from '@mastra/loggers'
 import {
+  CloudExporter,
+  DefaultExporter,
+  Observability,
+  SensitiveDataFilter,
+} from '@mastra/observability'
+import {
   analystAgent,
   backendAgent,
   dbaAgent,
@@ -37,6 +43,20 @@ export const mastra = new Mastra({
     infraProvision: infraProvisionWorkflow,
   },
   storage: getSharedStore() ?? undefined,
+  observability: new Observability({
+    configs: {
+      default: {
+        serviceName: 'vibestack',
+        exporters: [
+          new DefaultExporter(),
+          new CloudExporter(), // Sends traces to Mastra Cloud when MASTRA_CLOUD_ACCESS_TOKEN is set
+        ],
+        spanOutputProcessors: [
+          new SensitiveDataFilter(), // Redacts passwords, tokens, API keys from traces
+        ],
+      },
+    },
+  }),
   logger: new PinoLogger({
     name: 'VibeStack',
     level: process.env.NODE_ENV === 'production' ? 'info' : 'debug',
