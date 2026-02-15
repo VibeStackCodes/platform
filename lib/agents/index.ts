@@ -5,19 +5,12 @@
 // Schemas
 export * from './schemas';
 
-// Agents + Mastra instance
-export {
-  mastra,
-  supervisorAgent,
-  analystAgent,
-  infraAgent,
-  dbaAgent,
-  backendAgent,
-  frontendAgent,
-  reviewerAgent,
-  qaAgent,
-  devOpsAgent,
-} from './registry';
+// Agent factory + Mastra instance
+export { createAgentNetwork, supervisorAgent, mastra } from './registry';
+
+// Helicone provider + model validation
+export { createHeliconeProvider, isAllowedModel, ALLOWED_MODELS } from './provider';
+export type { AllowedModel } from './provider';
 
 // Tools
 export {

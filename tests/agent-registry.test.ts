@@ -1,102 +1,114 @@
-import { describe, it, expect } from 'vitest';
-import {
-  mastra,
-  supervisorAgent,
-  analystAgent,
-  infraAgent,
-  dbaAgent,
-  backendAgent,
-  frontendAgent,
-  reviewerAgent,
-  qaAgent,
-  devOpsAgent,
-} from '@/lib/agents/registry';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-describe('Agent Registry', () => {
-  it('exports Mastra instance', () => {
-    expect(mastra).toBeDefined();
+// Mock @ai-sdk/openai to avoid real API calls
+vi.mock('@ai-sdk/openai', () => ({
+  createOpenAI: vi.fn(() => {
+    const provider = (modelId: string) => ({ modelId, provider: 'openai' });
+    return provider;
+  }),
+}));
+
+import { createAgentNetwork, mastra, supervisorAgent } from '@/lib/agents/registry';
+import type { Agent } from '@mastra/core/agent';
+
+/** Helper: listAgents() can return sync or async; we always treat it as sync in tests */
+function getSubAgents(supervisor: Agent): Record<string, Agent> {
+  return supervisor.listAgents() as Record<string, Agent>;
+}
+
+describe('Agent Registry (Factory Pattern)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
   });
 
-  it('exports all 9 agents', () => {
-    const agents = [
-      supervisorAgent, analystAgent, infraAgent, dbaAgent,
-      backendAgent, frontendAgent, reviewerAgent, qaAgent, devOpsAgent,
-    ];
-    expect(agents).toHaveLength(9);
-    agents.forEach(a => expect(a).toBeDefined());
+  it('createAgentNetwork returns an object with supervisor', () => {
+    const network = createAgentNetwork('gpt-5.2', 'user-abc');
+    expect(network).toBeDefined();
+    expect(network.supervisor).toBeDefined();
+    expect(network.supervisor.name).toBe('Supervisor');
   });
 
   it('supervisor has all 8 sub-agents registered', () => {
-    const subAgents = supervisorAgent.listAgents();
+    const network = createAgentNetwork('gpt-5.2', 'user-abc');
+    const subAgents = getSubAgents(network.supervisor);
     expect(subAgents).toBeDefined();
     expect(Object.keys(subAgents)).toHaveLength(8);
   });
 
-  it('supervisor memory getter does not throw', async () => {
-    // Memory uses PostgresStore when DATABASE_URL is set, otherwise no-op
-    expect(() => supervisorAgent.getMemory()).not.toThrow();
+  it('exports mastra instance', () => {
+    expect(mastra).toBeDefined();
   });
 
-  it('each sub-agent has name and id', () => {
-    const subAgents = [analystAgent, infraAgent, dbaAgent, backendAgent,
-      frontendAgent, reviewerAgent, qaAgent, devOpsAgent];
-    for (const agent of subAgents) {
+  it('exports backward-compatible supervisorAgent singleton', () => {
+    expect(supervisorAgent).toBeDefined();
+    expect(supervisorAgent.name).toBe('Supervisor');
+    const subAgents = getSubAgents(supervisorAgent);
+    expect(Object.keys(subAgents)).toHaveLength(8);
+  });
+
+  it('each sub-agent has correct tools', () => {
+    const network = createAgentNetwork('gpt-5.2', 'user-test');
+    const agents = getSubAgents(network.supervisor);
+
+    // Analyst has searchDocs
+    expect(Object.keys(agents['analyst'].listTools())).toContain('searchDocs');
+
+    // Infra has 5 tools: createSandbox, runCommand, getPreviewUrl, createSupabaseProject, createGitHubRepo
+    expect(Object.keys(agents['infraEngineer'].listTools())).toHaveLength(5);
+    expect(Object.keys(agents['infraEngineer'].listTools())).toContain('createSandbox');
+
+    // DBA has 6 tools
+    expect(Object.keys(agents['databaseAdmin'].listTools())).toHaveLength(6);
+
+    // Backend has 5 tools
+    expect(Object.keys(agents['backendEngineer'].listTools())).toHaveLength(5);
+
+    // Frontend has 5 tools
+    expect(Object.keys(agents['frontendEngineer'].listTools())).toHaveLength(5);
+
+    // Code reviewer has only read-only tools (2 tools)
+    const reviewerTools = Object.keys(agents['codeReviewer'].listTools());
+    expect(reviewerTools).toHaveLength(2);
+    expect(reviewerTools).toContain('readFile');
+    expect(reviewerTools).toContain('listFiles');
+    expect(reviewerTools).not.toContain('writeFile');
+
+    // QA has 7 tools
+    expect(Object.keys(agents['qaEngineer'].listTools())).toHaveLength(7);
+
+    // DevOps has 4 tools
+    expect(Object.keys(agents['devOpsEngineer'].listTools())).toHaveLength(4);
+  });
+
+  it('supervisor has no tools (pure orchestrator)', () => {
+    const network = createAgentNetwork('gpt-5.2', 'user-test');
+    const supervisorTools = network.supervisor.listTools();
+    expect(Object.keys(supervisorTools)).toHaveLength(0);
+  });
+
+  it('each sub-agent has name, id, and description', () => {
+    const network = createAgentNetwork('gpt-5.2', 'user-test');
+    const agents = getSubAgents(network.supervisor);
+
+    for (const [, agent] of Object.entries(agents)) {
       expect(agent.id).toBeDefined();
       expect(agent.name).toBeDefined();
       expect(agent.id.length).toBeGreaterThan(0);
       expect(agent.name.length).toBeGreaterThan(0);
-    }
-  });
-
-  it('Mastra instance registers the supervisor', () => {
-    const agent = mastra.getAgent('supervisor');
-    expect(agent).toBeDefined();
-  });
-
-  it('assigns correct models per tier', () => {
-    // Orchestrator tier (gpt-4o)
-    expect(supervisorAgent.model).toContain('gpt-4o');
-    expect(analystAgent.model).toContain('gpt-4o');
-    expect(dbaAgent.model).toContain('gpt-4o');
-    expect(reviewerAgent.model).toContain('gpt-4o');
-
-    // Codegen tier (gpt-4o)
-    expect(backendAgent.model).toContain('gpt-4o');
-    expect(frontendAgent.model).toContain('gpt-4o');
-
-    // Validator tier (gpt-4o-mini)
-    expect(infraAgent.model).toContain('gpt-4o-mini');
-    expect(qaAgent.model).toContain('gpt-4o-mini');
-    expect(devOpsAgent.model).toContain('gpt-4o-mini');
-  });
-
-  it('assigns correct tools per agent', () => {
-    // Supervisor has no tools (pure orchestrator)
-    const supervisorTools = supervisorAgent.listTools();
-    expect(Object.keys(supervisorTools)).toHaveLength(0);
-
-    // Sub-agents have tools
-    expect(Object.keys(analystAgent.listTools())).toContain('searchDocs');
-    expect(Object.keys(infraAgent.listTools())).toContain('createSandbox');
-    expect(Object.keys(reviewerAgent.listTools())).toContain('readFile');
-
-    // Code reviewer should only have read-only tools
-    const reviewerToolKeys = Object.keys(reviewerAgent.listTools());
-    expect(reviewerToolKeys).not.toContain('writeFile');
-
-    // Tool count assertions
-    expect(Object.keys(infraAgent.listTools())).toHaveLength(5); // createSandbox, runCommand, getPreviewUrl, createSupabaseProject, createGitHubRepo
-    expect(Object.keys(dbaAgent.listTools())).toHaveLength(6); // runCommand, writeFile, readFile, validateSQL, searchDocs, runMigration
-    expect(Object.keys(devOpsAgent.listTools())).toHaveLength(4); // pushToGitHub, deployToVercel, runCommand, getGitHubToken
-  });
-
-  it('each sub-agent has a description for routing', () => {
-    const subAgents = [analystAgent, infraAgent, dbaAgent, backendAgent,
-      frontendAgent, reviewerAgent, qaAgent, devOpsAgent];
-    for (const agent of subAgents) {
       const description = agent.getDescription();
       expect(description).toBeDefined();
       expect(description!.length).toBeGreaterThan(10);
     }
+  });
+
+  it('memory does not throw without DATABASE_URL', () => {
+    const network = createAgentNetwork('gpt-5.2', 'user-test');
+    expect(() => network.supervisor.getMemory()).not.toThrow();
+  });
+
+  it('creates independent networks per call', () => {
+    const network1 = createAgentNetwork('gpt-5.2', 'user-1');
+    const network2 = createAgentNetwork('gpt-5.2', 'user-2');
+    expect(network1.supervisor).not.toBe(network2.supervisor);
   });
 });

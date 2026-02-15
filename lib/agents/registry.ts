@@ -23,16 +23,7 @@ import {
   getGitHubTokenTool,
 } from './tools';
 import { generateShadcnManifest } from '@/lib/shadcn-manifest';
-
-/**
- * Model routing based on cost tiers (OpenAI)
- * - ORCHESTRATOR: High-capability for orchestration, planning, complex decisions
- * - CODEGEN: Optimized for code generation with extended context
- * - VALIDATOR: Fast, cheap for builds, type-checking, validation
- */
-const ORCHESTRATOR_MODEL = 'openai/gpt-4o';
-const CODEGEN_MODEL = 'openai/gpt-4o';
-const VALIDATOR_MODEL = 'openai/gpt-4o-mini';
+import { createHeliconeProvider, type AllowedModel } from './provider';
 
 /**
  * Lazily generate shadcn component manifest for frontend agent context
@@ -51,15 +42,26 @@ function getShadcnManifestString(): string {
 }
 
 /**
- * Analyst Agent
- * Converses with user to extract and clarify requirements
+ * Factory function that creates the full 9-agent network per request.
+ * Each invocation uses a Helicone-proxied provider tagged with the userId
+ * so that LLM costs are tracked per user.
+ *
+ * @param model  - The allowed model to use (e.g. 'gpt-5.2')
+ * @param userId - User ID for Helicone per-user cost tracking
+ * @returns Object containing the supervisor agent with all sub-agents wired in
  */
-export const analystAgent = new Agent({
-  id: 'analyst',
-  name: 'Analyst',
-  model: ORCHESTRATOR_MODEL,
-  description: 'Converses with users to extract and clarify app requirements',
-  instructions: `You are a requirements analyst for VibeStack, an AI app builder that generates Vite + React + Supabase applications.
+export function createAgentNetwork(model: AllowedModel, userId: string): { supervisor: Agent } {
+  const provider = createHeliconeProvider(userId);
+  const llm = provider(model);
+
+  // --- Sub-agents ---
+
+  const analystAgent = new Agent({
+    id: 'analyst',
+    name: 'Analyst',
+    model: llm,
+    description: 'Converses with users to extract and clarify app requirements',
+    instructions: `You are a requirements analyst for VibeStack, an AI app builder that generates Vite + React + Supabase applications.
 
 Your role:
 1. Extract structured requirements from user descriptions:
@@ -77,21 +79,17 @@ Your role:
 3. Ask ONE clarifying question at a time when critical requirements are ambiguous.
 
 Output structured JSON with: appName, description, features[], entities[], designTokens.`,
-  tools: {
-    searchDocs: searchDocsTool,
-  },
-});
+    tools: {
+      searchDocs: searchDocsTool,
+    },
+  });
 
-/**
- * Infrastructure Engineer Agent
- * Provisions Daytona sandbox, GitHub repo, and environment setup
- */
-export const infraAgent = new Agent({
-  id: 'infra-engineer',
-  name: 'Infrastructure Engineer',
-  model: VALIDATOR_MODEL,
-  description: 'Provisions sandbox environment and GitHub repository',
-  instructions: `You are the infrastructure engineer for VibeStack app generation.
+  const infraAgent = new Agent({
+    id: 'infra-engineer',
+    name: 'Infrastructure Engineer',
+    model: llm,
+    description: 'Provisions sandbox environment and GitHub repository',
+    instructions: `You are the infrastructure engineer for VibeStack app generation.
 
 Your role:
 1. Create a Daytona sandbox for the generated app
@@ -106,25 +104,21 @@ Execution order:
 
 Report the sandboxId, supabase project details, and GitHub clone URL to the supervisor.
 Always verify each step succeeded. If any step fails, report the error immediately — do not retry.`,
-  tools: {
-    createSandbox: createSandboxTool,
-    runCommand: runCommandTool,
-    getPreviewUrl: getPreviewUrlTool,
-    createSupabaseProject: createSupabaseProjectTool,
-    createGitHubRepo: createGitHubRepoTool,
-  },
-});
+    tools: {
+      createSandbox: createSandboxTool,
+      runCommand: runCommandTool,
+      getPreviewUrl: getPreviewUrlTool,
+      createSupabaseProject: createSupabaseProjectTool,
+      createGitHubRepo: createGitHubRepoTool,
+    },
+  });
 
-/**
- * Database Administrator Agent
- * Designs schemas and generates SQL migrations
- */
-export const dbaAgent = new Agent({
-  id: 'database-admin',
-  name: 'Database Administrator',
-  model: ORCHESTRATOR_MODEL,
-  description: 'Designs database schemas and generates SQL migrations',
-  instructions: `You are a PostgreSQL database architect for VibeStack-generated Supabase applications.
+  const dbaAgent = new Agent({
+    id: 'database-admin',
+    name: 'Database Administrator',
+    model: llm,
+    description: 'Designs database schemas and generates SQL migrations',
+    instructions: `You are a PostgreSQL database architect for VibeStack-generated Supabase applications.
 
 Generated apps use Supabase (PostgreSQL 15+) with Row-Level Security. All SQL must be valid, complete, and production-ready.
 
@@ -151,26 +145,22 @@ Workflow:
 
 Required roles in SQL: authenticated, anon, service_role
 Required schema stubs: auth.uid() function must be available (provided by Supabase)`,
-  tools: {
-    runCommand: runCommandTool,
-    writeFile: writeFileTool,
-    readFile: readFileTool,
-    validateSQL: validateSQLTool,
-    searchDocs: searchDocsTool,
-    runMigration: runMigrationTool,
-  },
-});
+    tools: {
+      runCommand: runCommandTool,
+      writeFile: writeFileTool,
+      readFile: readFileTool,
+      validateSQL: validateSQLTool,
+      searchDocs: searchDocsTool,
+      runMigration: runMigrationTool,
+    },
+  });
 
-/**
- * Backend Engineer Agent
- * Generates TypeScript types, Supabase client, and data hooks
- */
-export const backendAgent = new Agent({
-  id: 'backend-engineer',
-  name: 'Backend Engineer',
-  model: CODEGEN_MODEL,
-  description: 'Generates TypeScript types, Supabase client, and data access layer',
-  instructions: `You are the backend engineer for VibeStack-generated applications.
+  const backendAgent = new Agent({
+    id: 'backend-engineer',
+    name: 'Backend Engineer',
+    model: llm,
+    description: 'Generates TypeScript types, Supabase client, and data access layer',
+    instructions: `You are the backend engineer for VibeStack-generated applications.
 
 Generated apps are Vite + React (NOT Next.js). They use:
 - Bun runtime (not Node.js)
@@ -204,25 +194,21 @@ Code quality:
 - All Supabase queries must be typed
 - Error handling on every database call
 - Use @/ path alias for imports`,
-  tools: {
-    writeFile: writeFileTool,
-    readFile: readFileTool,
-    listFiles: listFilesTool,
-    createDirectory: createDirectoryTool,
-    searchDocs: searchDocsTool,
-  },
-});
+    tools: {
+      writeFile: writeFileTool,
+      readFile: readFileTool,
+      listFiles: listFilesTool,
+      createDirectory: createDirectoryTool,
+      searchDocs: searchDocsTool,
+    },
+  });
 
-/**
- * Frontend Engineer Agent
- * Generates React components, pages, and UI code
- */
-export const frontendAgent = new Agent({
-  id: 'frontend-engineer',
-  name: 'Frontend Engineer',
-  model: CODEGEN_MODEL,
-  description: 'Generates React 19 components, pages, and UI using shadcn/ui',
-  instructions: `You are the frontend engineer for VibeStack-generated applications.
+  const frontendAgent = new Agent({
+    id: 'frontend-engineer',
+    name: 'Frontend Engineer',
+    model: llm,
+    description: 'Generates React 19 components, pages, and UI using shadcn/ui',
+    instructions: `You are the frontend engineer for VibeStack-generated applications.
 
 Generated apps are Vite + React 19 (NOT Next.js). They use:
 - TanStack Router for file-based routing (src/routes/)
@@ -265,25 +251,21 @@ Code quality:
 - Accessible (ARIA attributes, keyboard navigation)
 - No placeholder or TODO comments — every file must be complete
 - Use @/ path alias for all imports`,
-  tools: {
-    writeFile: writeFileTool,
-    readFile: readFileTool,
-    listFiles: listFilesTool,
-    createDirectory: createDirectoryTool,
-    searchDocs: searchDocsTool,
-  },
-});
+    tools: {
+      writeFile: writeFileTool,
+      readFile: readFileTool,
+      listFiles: listFilesTool,
+      createDirectory: createDirectoryTool,
+      searchDocs: searchDocsTool,
+    },
+  });
 
-/**
- * Code Reviewer Agent
- * Reviews code quality without making changes
- */
-export const reviewerAgent = new Agent({
-  id: 'code-reviewer',
-  name: 'Code Reviewer',
-  model: ORCHESTRATOR_MODEL,
-  description: 'Reviews code quality and identifies issues (read-only)',
-  instructions: `You are the code reviewer for VibeStack-generated applications.
+  const reviewerAgent = new Agent({
+    id: 'code-reviewer',
+    name: 'Code Reviewer',
+    model: llm,
+    description: 'Reviews code quality and identifies issues (read-only)',
+    instructions: `You are the code reviewer for VibeStack-generated applications.
 
 Generated apps are Vite + React + Supabase. Review for:
 
@@ -307,22 +289,18 @@ Generated apps are Vite + React + Supabase. Review for:
 
 Report issues as: { file, line, severity: 'error'|'warning', description, suggestedFix }
 DO NOT write files. Only report issues for other agents to fix.`,
-  tools: {
-    readFile: readFileTool,
-    listFiles: listFilesTool,
-  },
-});
+    tools: {
+      readFile: readFileTool,
+      listFiles: listFilesTool,
+    },
+  });
 
-/**
- * QA Engineer Agent
- * Validates builds, runs type checks, and verifies quality
- */
-export const qaAgent = new Agent({
-  id: 'qa-engineer',
-  name: 'QA Engineer',
-  model: VALIDATOR_MODEL,
-  description: 'Validates builds, type-checking, and code quality',
-  instructions: `You are the QA engineer for VibeStack-generated applications.
+  const qaAgent = new Agent({
+    id: 'qa-engineer',
+    name: 'QA Engineer',
+    model: llm,
+    description: 'Validates builds, type-checking, and code quality',
+    instructions: `You are the QA engineer for VibeStack-generated applications.
 
 Generated apps use Bun + Vite + React. Validation commands:
 - Type check: tsc --noEmit (must have 0 errors)
@@ -343,27 +321,23 @@ Common errors in generated apps:
 - Incorrect Supabase query types
 - TanStack Router route type mismatches
 - Missing shadcn/ui component dependencies`,
-  tools: {
-    runCommand: runCommandTool,
-    runBuild: runBuildTool,
-    runLint: runLintTool,
-    runTypeCheck: runTypeCheckTool,
-    readFile: readFileTool,
-    listFiles: listFilesTool,
-    validateSQL: validateSQLTool,
-  },
-});
+    tools: {
+      runCommand: runCommandTool,
+      runBuild: runBuildTool,
+      runLint: runLintTool,
+      runTypeCheck: runTypeCheckTool,
+      readFile: readFileTool,
+      listFiles: listFilesTool,
+      validateSQL: validateSQLTool,
+    },
+  });
 
-/**
- * DevOps Engineer Agent
- * Handles Git operations and Vercel deployments
- */
-export const devOpsAgent = new Agent({
-  id: 'devops-engineer',
-  name: 'DevOps Engineer',
-  model: VALIDATOR_MODEL,
-  description: 'Manages GitHub pushes and Vercel deployments',
-  instructions: `You are the DevOps engineer for VibeStack-generated applications.
+  const devOpsAgent = new Agent({
+    id: 'devops-engineer',
+    name: 'DevOps Engineer',
+    model: llm,
+    description: 'Manages GitHub pushes and Vercel deployments',
+    instructions: `You are the DevOps engineer for VibeStack-generated applications.
 
 Deployment workflow:
 1. Git init + commit all files in sandbox:
@@ -380,24 +354,22 @@ Verify each step:
 - Vercel deploy: check deployment URL is returned
 
 Report all URLs (GitHub repo, Vercel deployment) to the supervisor.`,
-  tools: {
-    pushToGitHub: pushToGitHubTool,
-    deployToVercel: deployToVercelTool,
-    runCommand: runCommandTool,
-    getGitHubToken: getGitHubTokenTool,
-  },
-});
+    tools: {
+      pushToGitHub: pushToGitHubTool,
+      deployToVercel: deployToVercelTool,
+      runCommand: runCommandTool,
+      getGitHubToken: getGitHubTokenTool,
+    },
+  });
 
-/**
- * Supervisor Agent with Network
- * Orchestrates the entire app generation lifecycle by delegating to specialists
- */
-export const supervisorAgent = new Agent({
-  id: 'supervisor',
-  name: 'Supervisor',
-  model: ORCHESTRATOR_MODEL,
-  description: 'Orchestrates the entire app generation lifecycle by delegating to specialist agents',
-  instructions: `You orchestrate full-stack app generation for VibeStack using a team of 8 specialist agents.
+  // --- Supervisor ---
+
+  const supervisor = new Agent({
+    id: 'supervisor',
+    name: 'Supervisor',
+    model: llm,
+    description: 'Orchestrates the entire app generation lifecycle by delegating to specialist agents',
+    instructions: `You orchestrate full-stack app generation for VibeStack using a team of 8 specialist agents.
 
 Generated apps are Vite + React + Supabase, running in Daytona sandboxes.
 
@@ -431,32 +403,32 @@ Phase 6 — Deploy:
 - Track sandboxId across all tool-using agents
 - If an agent fails 3 times on the same task, report the error to the user
 - Stream progress updates at each phase transition`,
-  agents: {
-    analyst: analystAgent,
-    infraEngineer: infraAgent,
-    databaseAdmin: dbaAgent,
-    backendEngineer: backendAgent,
-    frontendEngineer: frontendAgent,
-    codeReviewer: reviewerAgent,
-    qaEngineer: qaAgent,
-    devOpsEngineer: devOpsAgent,
-  },
-  ...(process.env.DATABASE_URL
-    ? {
-        memory: new Memory({
-          storage: new PostgresStore({
-            id: 'supervisor-memory',
-            connectionString: process.env.DATABASE_URL,
-          }),
-          options: {
-            // Store FULL conversation history (no truncation)
-            lastMessages: false,
+    agents: {
+      analyst: analystAgent,
+      infraEngineer: infraAgent,
+      databaseAdmin: dbaAgent,
+      backendEngineer: backendAgent,
+      frontendEngineer: frontendAgent,
+      codeReviewer: reviewerAgent,
+      qaEngineer: qaAgent,
+      devOpsEngineer: devOpsAgent,
+    },
+    ...(process.env.DATABASE_URL
+      ? {
+          memory: new Memory({
+            storage: new PostgresStore({
+              id: 'supervisor-memory',
+              connectionString: process.env.DATABASE_URL,
+            }),
+            options: {
+              // Store FULL conversation history (no truncation)
+              lastMessages: false,
 
-            // Working Memory — persistent user context across threads
-            workingMemory: {
-              enabled: true,
-              scope: 'resource', // Shared across all projects for this user
-              template: `# User Context
+              // Working Memory — persistent user context across threads
+              workingMemory: {
+                enabled: true,
+                scope: 'resource', // Shared across all projects for this user
+                template: `# User Context
 - Name:
 - Design Preferences:
   - Primary Color:
@@ -469,28 +441,32 @@ Phase 6 — Deploy:
   - Names:
   - Common Patterns:
 - Notes:`,
+              },
+
+              // TODO: Semantic Recall — requires PgVector + embedder
+              // semanticRecall: {
+              //   topK: 5,
+              //   messageRange: 3,
+              //   scope: 'resource',
+              // },
+
+              // TODO: Observational Memory — requires Observer + Reflector agent config
+              // See: https://mastra.ai/docs/memory/overview
             },
+          }),
+        }
+      : {}),
+  });
 
-            // TODO: Semantic Recall — requires PgVector + embedder
-            // semanticRecall: {
-            //   topK: 5,
-            //   messageRange: 3,
-            //   scope: 'resource',
-            // },
+  return { supervisor };
+}
 
-            // TODO: Observational Memory — requires Observer + Reflector agent config
-            // See: https://mastra.ai/docs/memory/overview
-          },
-        }),
-      }
-    : {}),
-});
+// Backward compatibility — route.ts still imports supervisorAgent directly.
+// Task 4 will update route.ts to use createAgentNetwork and remove this.
+const _defaultNetwork = createAgentNetwork('gpt-5.2', 'system');
+export const supervisorAgent = _defaultNetwork.supervisor;
 
 /**
- * Central Mastra instance — registers the supervisor agent
+ * Central Mastra instance — bare instance since agents are now per-request.
  */
-export const mastra = new Mastra({
-  agents: {
-    supervisor: supervisorAgent,
-  },
-});
+export const mastra = new Mastra({});
