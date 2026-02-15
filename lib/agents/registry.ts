@@ -60,14 +60,14 @@ function getShadcnManifestString(): string {
 
 /**
  * Dynamic model resolver — reads the Helicone-proxied LLM from RequestContext.
- * Falls back to 'openai/gpt-4o' for Studio playground / testing without RequestContext.
+ * Falls back to 'openai/gpt-5.2' for Studio playground / Mastra Cloud without RequestContext.
  */
 function dynamicModel({ requestContext }: { requestContext: RequestContext }): string {
   if (requestContext?.has('llm')) {
     return requestContext.get('llm') as string;
   }
-  // Fallback for Mastra Studio / tests (uses Mastra's built-in model router)
-  return 'openai/gpt-4o';
+  // Fallback for Mastra Studio / Cloud / tests (uses Mastra's built-in model router)
+  return 'openai/gpt-5.2';
 }
 
 // --- Module-level agents (visible to Mastra Studio) ---
