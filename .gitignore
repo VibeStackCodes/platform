@@ -43,6 +43,9 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# mastra build output
+.mastra/
+
 # eval logs
 .eval-logs/
 
