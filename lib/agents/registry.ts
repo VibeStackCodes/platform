@@ -448,6 +448,39 @@ Phase 6 — Deploy:
             id: 'supervisor-memory',
             connectionString: process.env.DATABASE_URL,
           }),
+          options: {
+            // Store FULL conversation history (no truncation)
+            lastMessages: false,
+
+            // Working Memory — persistent user context across threads
+            workingMemory: {
+              enabled: true,
+              scope: 'resource', // Shared across all projects for this user
+              template: `# User Context
+- Name:
+- Design Preferences:
+  - Primary Color:
+  - Font:
+  - Style (minimal/bold/playful):
+- Tech Preferences:
+  - Auth Method:
+  - Preferred Libraries:
+- Past Projects:
+  - Names:
+  - Common Patterns:
+- Notes:`,
+            },
+
+            // TODO: Semantic Recall — requires PgVector + embedder
+            // semanticRecall: {
+            //   topK: 5,
+            //   messageRange: 3,
+            //   scope: 'resource',
+            // },
+
+            // TODO: Observational Memory — requires Observer + Reflector agent config
+            // See: https://mastra.ai/docs/memory/overview
+          },
         }),
       }
     : {}),
