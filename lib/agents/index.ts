@@ -33,6 +33,7 @@ export { infraProvisionWorkflow } from './workflows';
 // Tools
 export {
   writeFileTool,
+  writeFilesTool,
   readFileTool,
   listFilesTool,
   createDirectoryTool,

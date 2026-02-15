@@ -7,7 +7,7 @@
  */
 import { Mastra } from '@mastra/core';
 import { PinoLogger } from '@mastra/loggers';
-import { Observability, DefaultExporter } from '@mastra/observability';
+import { Observability, DefaultExporter, CloudExporter, SensitiveDataFilter } from '@mastra/observability';
 import {
   supervisorAgent,
   analystAgent,
@@ -42,7 +42,13 @@ export const mastra = new Mastra({
     configs: {
       default: {
         serviceName: 'vibestack',
-        exporters: [new DefaultExporter()],
+        exporters: [
+          new DefaultExporter(),
+          new CloudExporter(), // Sends traces to Mastra Cloud when MASTRA_CLOUD_ACCESS_TOKEN is set
+        ],
+        spanOutputProcessors: [
+          new SensitiveDataFilter(), // Redacts passwords, tokens, API keys from traces
+        ],
       },
     },
   }),

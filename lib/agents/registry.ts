@@ -1,11 +1,13 @@
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
-import { PostgresStore } from '@mastra/pg';
+import { PostgresStore, PgVector } from '@mastra/pg';
 import { RequestContext } from '@mastra/core/di';
 import { PromptInjectionDetector, ModerationProcessor } from '@mastra/core/processors';
+import { ModelRouterEmbeddingModel } from '@mastra/core/llm';
 import type { MastraModelConfig } from '@mastra/core/llm';
 import {
   writeFileTool,
+  writeFilesTool,
   readFileTool,
   listFilesTool,
   createDirectoryTool,
@@ -112,6 +114,7 @@ Output structured JSON with: appName, description, features[], entities[], desig
     searchDocs: searchDocsTool,
     askClarifyingQuestions: askClarifyingQuestionsTool,
   },
+  defaultOptions: { maxSteps: 10 },
 });
 
 export const infraAgent = new Agent({
@@ -141,6 +144,7 @@ Always verify each step succeeded. If any step fails, report the error immediate
     createSupabaseProject: createSupabaseProjectTool,
     createGitHubRepo: createGitHubRepoTool,
   },
+  defaultOptions: { maxSteps: 15 },
 });
 
 export const dbaAgent = new Agent({
@@ -178,11 +182,13 @@ Required schema stubs: auth.uid() function must be available (provided by Supaba
   tools: {
     runCommand: runCommandTool,
     writeFile: writeFileTool,
+    writeFiles: writeFilesTool,
     readFile: readFileTool,
     validateSQL: validateSQLTool,
     searchDocs: searchDocsTool,
     runMigration: runMigrationTool,
   },
+  defaultOptions: { maxSteps: 15 },
 });
 
 export const backendAgent = new Agent({
@@ -226,11 +232,13 @@ Code quality:
 - Use @/ path alias for imports`,
   tools: {
     writeFile: writeFileTool,
+    writeFiles: writeFilesTool,
     readFile: readFileTool,
     listFiles: listFilesTool,
     createDirectory: createDirectoryTool,
     searchDocs: searchDocsTool,
   },
+  defaultOptions: { maxSteps: 20 },
 });
 
 export const frontendAgent = new Agent({
@@ -283,11 +291,13 @@ Code quality:
 - Use @/ path alias for all imports`,
   tools: {
     writeFile: writeFileTool,
+    writeFiles: writeFilesTool,
     readFile: readFileTool,
     listFiles: listFilesTool,
     createDirectory: createDirectoryTool,
     searchDocs: searchDocsTool,
   },
+  defaultOptions: { maxSteps: 25 },
 });
 
 export const reviewerAgent = new Agent({
@@ -323,6 +333,7 @@ DO NOT write files. Only report issues for other agents to fix.`,
     readFile: readFileTool,
     listFiles: listFilesTool,
   },
+  defaultOptions: { maxSteps: 10 },
 });
 
 export const qaAgent = new Agent({
@@ -360,6 +371,7 @@ Common errors in generated apps:
     listFiles: listFilesTool,
     validateSQL: validateSQLTool,
   },
+  defaultOptions: { maxSteps: 15 },
 });
 
 export const devOpsAgent = new Agent({
@@ -390,6 +402,7 @@ Report all URLs (GitHub repo, Vercel deployment) to the supervisor.`,
     runCommand: runCommandTool,
     getGitHubToken: getGitHubTokenTool,
   },
+  defaultOptions: { maxSteps: 10 },
 });
 
 // --- Supervisor (orchestrator) ---
@@ -458,12 +471,26 @@ Phase 6 — Deploy:
     qaEngineer: qaAgent,
     devOpsEngineer: devOpsAgent,
   },
+  defaultOptions: { maxSteps: 50 },
   ...(getSharedStore()
     ? {
         memory: new Memory({
           storage: getSharedStore()!,
+          ...(process.env.DATABASE_URL
+            ? {
+                vector: new PgVector({
+                  id: 'supervisor-vector',
+                  connectionString: process.env.DATABASE_URL,
+                }),
+                embedder: new ModelRouterEmbeddingModel('openai/text-embedding-3-small'),
+              }
+            : {}),
           options: {
             lastMessages: 40,
+            generateTitle: true,
+            semanticRecall: process.env.DATABASE_URL
+              ? { topK: 3, messageRange: 2, scope: 'resource' as const }
+              : false,
             workingMemory: {
               enabled: true,
               scope: 'resource',
