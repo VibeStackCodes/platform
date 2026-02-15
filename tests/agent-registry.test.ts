@@ -8,7 +8,18 @@ vi.mock('@ai-sdk/openai', () => ({
   }),
 }));
 
-import { createAgentNetwork, mastra } from '@/lib/agents/registry';
+import {
+  mastra,
+  supervisorAgent,
+  analystAgent,
+  infraAgent,
+  dbaAgent,
+  backendAgent,
+  frontendAgent,
+  reviewerAgent,
+  qaAgent,
+  devOpsAgent,
+} from '@/lib/agents/registry';
 import type { Agent } from '@mastra/core/agent';
 
 /** Helper: listAgents() can return sync or async; we always treat it as sync in tests */
@@ -16,21 +27,24 @@ function getSubAgents(supervisor: Agent): Record<string, Agent> {
   return supervisor.listAgents() as Record<string, Agent>;
 }
 
-describe('Agent Registry (Factory Pattern)', () => {
+describe('Agent Registry (Module-Level with Dynamic Model)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('createAgentNetwork returns an object with supervisor', () => {
-    const network = createAgentNetwork('gpt-5.2', 'user-abc');
-    expect(network).toBeDefined();
-    expect(network.supervisor).toBeDefined();
-    expect(network.supervisor.name).toBe('Supervisor');
+  it('mastra instance has all 9 agents registered', () => {
+    const agents = mastra.listAgents();
+    expect(Object.keys(agents)).toHaveLength(9);
+  });
+
+  it('supervisor agent is retrievable from mastra', () => {
+    const supervisor = mastra.getAgent('supervisor');
+    expect(supervisor).toBeDefined();
+    expect(supervisor.name).toBe('Supervisor');
   });
 
   it('supervisor has all 8 sub-agents registered', () => {
-    const network = createAgentNetwork('gpt-5.2', 'user-abc');
-    const subAgents = getSubAgents(network.supervisor);
+    const subAgents = getSubAgents(supervisorAgent);
     expect(subAgents).toBeDefined();
     expect(Object.keys(subAgents)).toHaveLength(8);
   });
@@ -40,8 +54,7 @@ describe('Agent Registry (Factory Pattern)', () => {
   });
 
   it('each sub-agent has correct tools', () => {
-    const network = createAgentNetwork('gpt-5.2', 'user-test');
-    const agents = getSubAgents(network.supervisor);
+    const agents = getSubAgents(supervisorAgent);
 
     // Analyst has searchDocs
     expect(Object.keys(agents['analyst'].listTools())).toContain('searchDocs');
@@ -74,14 +87,12 @@ describe('Agent Registry (Factory Pattern)', () => {
   });
 
   it('supervisor has no tools (pure orchestrator)', () => {
-    const network = createAgentNetwork('gpt-5.2', 'user-test');
-    const supervisorTools = network.supervisor.listTools();
+    const supervisorTools = supervisorAgent.listTools();
     expect(Object.keys(supervisorTools)).toHaveLength(0);
   });
 
   it('each sub-agent has name, id, and description', () => {
-    const network = createAgentNetwork('gpt-5.2', 'user-test');
-    const agents = getSubAgents(network.supervisor);
+    const agents = getSubAgents(supervisorAgent);
 
     for (const [, agent] of Object.entries(agents)) {
       expect(agent.id).toBeDefined();
@@ -95,13 +106,18 @@ describe('Agent Registry (Factory Pattern)', () => {
   });
 
   it('memory does not throw without DATABASE_URL', () => {
-    const network = createAgentNetwork('gpt-5.2', 'user-test');
-    expect(() => network.supervisor.getMemory()).not.toThrow();
+    expect(() => supervisorAgent.getMemory()).not.toThrow();
   });
 
-  it('creates independent networks per call', () => {
-    const network1 = createAgentNetwork('gpt-5.2', 'user-1');
-    const network2 = createAgentNetwork('gpt-5.2', 'user-2');
-    expect(network1.supervisor).not.toBe(network2.supervisor);
+  it('all module-level agents are the same instances used by supervisor', () => {
+    const subAgents = getSubAgents(supervisorAgent);
+    expect(subAgents['analyst']).toBe(analystAgent);
+    expect(subAgents['infraEngineer']).toBe(infraAgent);
+    expect(subAgents['databaseAdmin']).toBe(dbaAgent);
+    expect(subAgents['backendEngineer']).toBe(backendAgent);
+    expect(subAgents['frontendEngineer']).toBe(frontendAgent);
+    expect(subAgents['codeReviewer']).toBe(reviewerAgent);
+    expect(subAgents['qaEngineer']).toBe(qaAgent);
+    expect(subAgents['devOpsEngineer']).toBe(devOpsAgent);
   });
 });

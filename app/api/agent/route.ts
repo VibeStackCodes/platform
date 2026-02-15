@@ -18,8 +18,9 @@
 import { NextRequest } from 'next/server';
 import { createSSEStream } from '@/lib/sse';
 import type { StreamEvent } from '@/lib/types';
-import { createAgentNetwork } from '@/lib/agents/registry';
+import { mastra, RequestContext } from '@/lib/agents/registry';
 import { isAllowedModel } from '@/lib/agents/provider';
+import { createHeliconeProvider } from '@/lib/agents/provider';
 import { getUser, createClient } from '@/lib/supabase-server';
 import { checkCredits, deductCredits } from '@/lib/credits';
 
@@ -74,8 +75,12 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Create per-request agent network with user's model + Helicone tracking
-  const { supervisor } = createAgentNetwork(model, user.id);
+  // Inject per-request Helicone-proxied model via RequestContext
+  const requestContext = new RequestContext();
+  requestContext.set('llm', createHeliconeProvider(user.id)(model));
+  requestContext.set('userId', user.id);
+
+  const supervisor = mastra.getAgent('supervisor');
 
   return createSSEStream(async (emit: (event: StreamEvent) => void, signal: AbortSignal) => {
     let totalTokens = 0;
@@ -88,6 +93,7 @@ export async function POST(request: NextRequest) {
           thread: projectId,
           resource: user.id,
         },
+        requestContext,
       });
 
       for await (const chunk of result) {

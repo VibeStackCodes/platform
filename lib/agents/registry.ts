@@ -2,6 +2,7 @@ import { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
 import { PostgresStore } from '@mastra/pg';
+import { RequestContext } from '@mastra/core/di';
 import {
   writeFileTool,
   readFileTool,
@@ -23,12 +24,12 @@ import {
   getGitHubTokenTool,
 } from './tools';
 import { generateShadcnManifest } from '@/lib/shadcn-manifest';
-import { createHeliconeProvider, type AllowedModel } from './provider';
+
+// Re-export RequestContext for route usage
+export { RequestContext };
 
 /**
  * Shared PostgresStore singleton — prevents per-request connection pool creation.
- * When createAgentNetwork() is called per-request, each supervisor's Memory
- * reuses this single store instance instead of spawning a new pool.
  */
 let _sharedStore: PostgresStore | null = null;
 function getSharedStore(): PostgresStore | null {
@@ -58,26 +59,25 @@ function getShadcnManifestString(): string {
 }
 
 /**
- * Factory function that creates the full 9-agent network per request.
- * Each invocation uses a Helicone-proxied provider tagged with the userId
- * so that LLM costs are tracked per user.
- *
- * @param model  - The allowed model to use (e.g. 'gpt-5.2')
- * @param userId - User ID for Helicone per-user cost tracking
- * @returns Object containing the supervisor agent with all sub-agents wired in
+ * Dynamic model resolver — reads the Helicone-proxied LLM from RequestContext.
+ * Falls back to 'openai/gpt-4o' for Studio playground / testing without RequestContext.
  */
-export function createAgentNetwork(model: AllowedModel, userId: string): { supervisor: Agent } {
-  const provider = createHeliconeProvider(userId);
-  const llm = provider(model);
+function dynamicModel({ requestContext }: { requestContext: RequestContext }): string {
+  if (requestContext?.has('llm')) {
+    return requestContext.get('llm') as string;
+  }
+  // Fallback for Mastra Studio / tests (uses Mastra's built-in model router)
+  return 'openai/gpt-4o';
+}
 
-  // --- Sub-agents ---
+// --- Module-level agents (visible to Mastra Studio) ---
 
-  const analystAgent = new Agent({
-    id: 'analyst',
-    name: 'Analyst',
-    model: llm,
-    description: 'Converses with users to extract and clarify app requirements',
-    instructions: `You are a requirements analyst for VibeStack, an AI app builder that generates Vite + React + Supabase applications.
+export const analystAgent = new Agent({
+  id: 'analyst',
+  name: 'Analyst',
+  model: dynamicModel,
+  description: 'Converses with users to extract and clarify app requirements',
+  instructions: `You are a requirements analyst for VibeStack, an AI app builder that generates Vite + React + Supabase applications.
 
 Your role:
 1. Extract structured requirements from user descriptions:
@@ -95,17 +95,17 @@ Your role:
 3. Ask ONE clarifying question at a time when critical requirements are ambiguous.
 
 Output structured JSON with: appName, description, features[], entities[], designTokens.`,
-    tools: {
-      searchDocs: searchDocsTool,
-    },
-  });
+  tools: {
+    searchDocs: searchDocsTool,
+  },
+});
 
-  const infraAgent = new Agent({
-    id: 'infra-engineer',
-    name: 'Infrastructure Engineer',
-    model: llm,
-    description: 'Provisions sandbox environment and GitHub repository',
-    instructions: `You are the infrastructure engineer for VibeStack app generation.
+export const infraAgent = new Agent({
+  id: 'infra-engineer',
+  name: 'Infrastructure Engineer',
+  model: dynamicModel,
+  description: 'Provisions sandbox environment and GitHub repository',
+  instructions: `You are the infrastructure engineer for VibeStack app generation.
 
 Your role:
 1. Create a Daytona sandbox for the generated app
@@ -120,21 +120,21 @@ Execution order:
 
 Report the sandboxId, supabase project details, and GitHub clone URL to the supervisor.
 Always verify each step succeeded. If any step fails, report the error immediately — do not retry.`,
-    tools: {
-      createSandbox: createSandboxTool,
-      runCommand: runCommandTool,
-      getPreviewUrl: getPreviewUrlTool,
-      createSupabaseProject: createSupabaseProjectTool,
-      createGitHubRepo: createGitHubRepoTool,
-    },
-  });
+  tools: {
+    createSandbox: createSandboxTool,
+    runCommand: runCommandTool,
+    getPreviewUrl: getPreviewUrlTool,
+    createSupabaseProject: createSupabaseProjectTool,
+    createGitHubRepo: createGitHubRepoTool,
+  },
+});
 
-  const dbaAgent = new Agent({
-    id: 'database-admin',
-    name: 'Database Administrator',
-    model: llm,
-    description: 'Designs database schemas and generates SQL migrations',
-    instructions: `You are a PostgreSQL database architect for VibeStack-generated Supabase applications.
+export const dbaAgent = new Agent({
+  id: 'database-admin',
+  name: 'Database Administrator',
+  model: dynamicModel,
+  description: 'Designs database schemas and generates SQL migrations',
+  instructions: `You are a PostgreSQL database architect for VibeStack-generated Supabase applications.
 
 Generated apps use Supabase (PostgreSQL 15+) with Row-Level Security. All SQL must be valid, complete, and production-ready.
 
@@ -161,22 +161,22 @@ Workflow:
 
 Required roles in SQL: authenticated, anon, service_role
 Required schema stubs: auth.uid() function must be available (provided by Supabase)`,
-    tools: {
-      runCommand: runCommandTool,
-      writeFile: writeFileTool,
-      readFile: readFileTool,
-      validateSQL: validateSQLTool,
-      searchDocs: searchDocsTool,
-      runMigration: runMigrationTool,
-    },
-  });
+  tools: {
+    runCommand: runCommandTool,
+    writeFile: writeFileTool,
+    readFile: readFileTool,
+    validateSQL: validateSQLTool,
+    searchDocs: searchDocsTool,
+    runMigration: runMigrationTool,
+  },
+});
 
-  const backendAgent = new Agent({
-    id: 'backend-engineer',
-    name: 'Backend Engineer',
-    model: llm,
-    description: 'Generates TypeScript types, Supabase client, and data access layer',
-    instructions: `You are the backend engineer for VibeStack-generated applications.
+export const backendAgent = new Agent({
+  id: 'backend-engineer',
+  name: 'Backend Engineer',
+  model: dynamicModel,
+  description: 'Generates TypeScript types, Supabase client, and data access layer',
+  instructions: `You are the backend engineer for VibeStack-generated applications.
 
 Generated apps are Vite + React (NOT Next.js). They use:
 - Bun runtime (not Node.js)
@@ -210,21 +210,21 @@ Code quality:
 - All Supabase queries must be typed
 - Error handling on every database call
 - Use @/ path alias for imports`,
-    tools: {
-      writeFile: writeFileTool,
-      readFile: readFileTool,
-      listFiles: listFilesTool,
-      createDirectory: createDirectoryTool,
-      searchDocs: searchDocsTool,
-    },
-  });
+  tools: {
+    writeFile: writeFileTool,
+    readFile: readFileTool,
+    listFiles: listFilesTool,
+    createDirectory: createDirectoryTool,
+    searchDocs: searchDocsTool,
+  },
+});
 
-  const frontendAgent = new Agent({
-    id: 'frontend-engineer',
-    name: 'Frontend Engineer',
-    model: llm,
-    description: 'Generates React 19 components, pages, and UI using shadcn/ui',
-    instructions: `You are the frontend engineer for VibeStack-generated applications.
+export const frontendAgent = new Agent({
+  id: 'frontend-engineer',
+  name: 'Frontend Engineer',
+  model: dynamicModel,
+  description: 'Generates React 19 components, pages, and UI using shadcn/ui',
+  instructions: `You are the frontend engineer for VibeStack-generated applications.
 
 Generated apps are Vite + React 19 (NOT Next.js). They use:
 - TanStack Router for file-based routing (src/routes/)
@@ -267,21 +267,21 @@ Code quality:
 - Accessible (ARIA attributes, keyboard navigation)
 - No placeholder or TODO comments — every file must be complete
 - Use @/ path alias for all imports`,
-    tools: {
-      writeFile: writeFileTool,
-      readFile: readFileTool,
-      listFiles: listFilesTool,
-      createDirectory: createDirectoryTool,
-      searchDocs: searchDocsTool,
-    },
-  });
+  tools: {
+    writeFile: writeFileTool,
+    readFile: readFileTool,
+    listFiles: listFilesTool,
+    createDirectory: createDirectoryTool,
+    searchDocs: searchDocsTool,
+  },
+});
 
-  const reviewerAgent = new Agent({
-    id: 'code-reviewer',
-    name: 'Code Reviewer',
-    model: llm,
-    description: 'Reviews code quality and identifies issues (read-only)',
-    instructions: `You are the code reviewer for VibeStack-generated applications.
+export const reviewerAgent = new Agent({
+  id: 'code-reviewer',
+  name: 'Code Reviewer',
+  model: dynamicModel,
+  description: 'Reviews code quality and identifies issues (read-only)',
+  instructions: `You are the code reviewer for VibeStack-generated applications.
 
 Generated apps are Vite + React + Supabase. Review for:
 
@@ -305,18 +305,18 @@ Generated apps are Vite + React + Supabase. Review for:
 
 Report issues as: { file, line, severity: 'error'|'warning', description, suggestedFix }
 DO NOT write files. Only report issues for other agents to fix.`,
-    tools: {
-      readFile: readFileTool,
-      listFiles: listFilesTool,
-    },
-  });
+  tools: {
+    readFile: readFileTool,
+    listFiles: listFilesTool,
+  },
+});
 
-  const qaAgent = new Agent({
-    id: 'qa-engineer',
-    name: 'QA Engineer',
-    model: llm,
-    description: 'Validates builds, type-checking, and code quality',
-    instructions: `You are the QA engineer for VibeStack-generated applications.
+export const qaAgent = new Agent({
+  id: 'qa-engineer',
+  name: 'QA Engineer',
+  model: dynamicModel,
+  description: 'Validates builds, type-checking, and code quality',
+  instructions: `You are the QA engineer for VibeStack-generated applications.
 
 Generated apps use Bun + Vite + React. Validation commands:
 - Type check: tsc --noEmit (must have 0 errors)
@@ -337,23 +337,23 @@ Common errors in generated apps:
 - Incorrect Supabase query types
 - TanStack Router route type mismatches
 - Missing shadcn/ui component dependencies`,
-    tools: {
-      runCommand: runCommandTool,
-      runBuild: runBuildTool,
-      runLint: runLintTool,
-      runTypeCheck: runTypeCheckTool,
-      readFile: readFileTool,
-      listFiles: listFilesTool,
-      validateSQL: validateSQLTool,
-    },
-  });
+  tools: {
+    runCommand: runCommandTool,
+    runBuild: runBuildTool,
+    runLint: runLintTool,
+    runTypeCheck: runTypeCheckTool,
+    readFile: readFileTool,
+    listFiles: listFilesTool,
+    validateSQL: validateSQLTool,
+  },
+});
 
-  const devOpsAgent = new Agent({
-    id: 'devops-engineer',
-    name: 'DevOps Engineer',
-    model: llm,
-    description: 'Manages GitHub pushes and Vercel deployments',
-    instructions: `You are the DevOps engineer for VibeStack-generated applications.
+export const devOpsAgent = new Agent({
+  id: 'devops-engineer',
+  name: 'DevOps Engineer',
+  model: dynamicModel,
+  description: 'Manages GitHub pushes and Vercel deployments',
+  instructions: `You are the DevOps engineer for VibeStack-generated applications.
 
 Deployment workflow:
 1. Git init + commit all files in sandbox:
@@ -370,22 +370,22 @@ Verify each step:
 - Vercel deploy: check deployment URL is returned
 
 Report all URLs (GitHub repo, Vercel deployment) to the supervisor.`,
-    tools: {
-      pushToGitHub: pushToGitHubTool,
-      deployToVercel: deployToVercelTool,
-      runCommand: runCommandTool,
-      getGitHubToken: getGitHubTokenTool,
-    },
-  });
+  tools: {
+    pushToGitHub: pushToGitHubTool,
+    deployToVercel: deployToVercelTool,
+    runCommand: runCommandTool,
+    getGitHubToken: getGitHubTokenTool,
+  },
+});
 
-  // --- Supervisor ---
+// --- Supervisor (orchestrator) ---
 
-  const supervisor = new Agent({
-    id: 'supervisor',
-    name: 'Supervisor',
-    model: llm,
-    description: 'Orchestrates the entire app generation lifecycle by delegating to specialist agents',
-    instructions: `You orchestrate full-stack app generation for VibeStack using a team of 8 specialist agents.
+export const supervisorAgent = new Agent({
+  id: 'supervisor',
+  name: 'Supervisor',
+  model: dynamicModel,
+  description: 'Orchestrates the entire app generation lifecycle by delegating to specialist agents',
+  instructions: `You orchestrate full-stack app generation for VibeStack using a team of 8 specialist agents.
 
 Generated apps are Vite + React + Supabase, running in Daytona sandboxes.
 
@@ -419,29 +419,26 @@ Phase 6 — Deploy:
 - Track sandboxId across all tool-using agents
 - If an agent fails 3 times on the same task, report the error to the user
 - Stream progress updates at each phase transition`,
-    agents: {
-      analyst: analystAgent,
-      infraEngineer: infraAgent,
-      databaseAdmin: dbaAgent,
-      backendEngineer: backendAgent,
-      frontendEngineer: frontendAgent,
-      codeReviewer: reviewerAgent,
-      qaEngineer: qaAgent,
-      devOpsEngineer: devOpsAgent,
-    },
-    ...(getSharedStore()
-      ? {
-          memory: new Memory({
-            storage: getSharedStore()!,
-            options: {
-              // Store FULL conversation history (no truncation)
-              lastMessages: false,
-
-              // Working Memory — persistent user context across threads
-              workingMemory: {
-                enabled: true,
-                scope: 'resource', // Shared across all projects for this user
-                template: `# User Context
+  agents: {
+    analyst: analystAgent,
+    infraEngineer: infraAgent,
+    databaseAdmin: dbaAgent,
+    backendEngineer: backendAgent,
+    frontendEngineer: frontendAgent,
+    codeReviewer: reviewerAgent,
+    qaEngineer: qaAgent,
+    devOpsEngineer: devOpsAgent,
+  },
+  ...(getSharedStore()
+    ? {
+        memory: new Memory({
+          storage: getSharedStore()!,
+          options: {
+            lastMessages: false,
+            workingMemory: {
+              enabled: true,
+              scope: 'resource',
+              template: `# User Context
 - Name:
 - Design Preferences:
   - Primary Color:
@@ -454,27 +451,25 @@ Phase 6 — Deploy:
   - Names:
   - Common Patterns:
 - Notes:`,
-              },
-
-              // TODO: Semantic Recall — requires PgVector + embedder
-              // semanticRecall: {
-              //   topK: 5,
-              //   messageRange: 3,
-              //   scope: 'resource',
-              // },
-
-              // TODO: Observational Memory — requires Observer + Reflector agent config
-              // See: https://mastra.ai/docs/memory/overview
             },
-          }),
-        }
-      : {}),
-  });
+          },
+        }),
+      }
+    : {}),
+});
 
-  return { supervisor };
-}
+// --- Mastra instance with all agents registered (Studio-visible) ---
 
-/**
- * Central Mastra instance — bare instance since agents are now per-request.
- */
-export const mastra = new Mastra({});
+export const mastra = new Mastra({
+  agents: {
+    supervisor: supervisorAgent,
+    analyst: analystAgent,
+    infraEngineer: infraAgent,
+    databaseAdmin: dbaAgent,
+    backendEngineer: backendAgent,
+    frontendEngineer: frontendAgent,
+    codeReviewer: reviewerAgent,
+    qaEngineer: qaAgent,
+    devOpsEngineer: devOpsAgent,
+  },
+});

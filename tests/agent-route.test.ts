@@ -12,16 +12,22 @@ vi.mock('@/lib/supabase-server', () => ({
   createClient: vi.fn().mockResolvedValue({}),
 }));
 
+const mockNetwork = vi.fn();
 vi.mock('@/lib/agents/registry', () => ({
-  createAgentNetwork: vi.fn(() => ({
-    supervisor: {
-      network: vi.fn(),
-    },
-  })),
+  mastra: {
+    getAgent: vi.fn(() => ({ network: mockNetwork })),
+  },
+  RequestContext: class MockRequestContext {
+    private store = new Map<string, unknown>();
+    set(key: string, value: unknown) { this.store.set(key, value); }
+    get(key: string) { return this.store.get(key); }
+    has(key: string) { return this.store.has(key); }
+  },
 }));
 
 vi.mock('@/lib/agents/provider', () => ({
   isAllowedModel: vi.fn((model: string) => model === 'gpt-5.2'),
+  createHeliconeProvider: vi.fn(() => (model: string) => ({ modelId: model, provider: 'openai' })),
 }));
 
 vi.mock('@/lib/credits', () => ({
@@ -36,24 +42,22 @@ vi.mock('@/lib/credits', () => ({
 
 import { POST } from '@/app/api/agent/route';
 import { getUser, createClient } from '@/lib/supabase-server';
-import { createAgentNetwork } from '@/lib/agents/registry';
+import { mastra } from '@/lib/agents/registry';
 import { isAllowedModel } from '@/lib/agents/provider';
 import { checkCredits, deductCredits } from '@/lib/credits';
 
 const mockGetUser = vi.mocked(getUser);
-const mockCreateAgentNetwork = vi.mocked(createAgentNetwork);
+const mockGetAgent = vi.mocked(mastra.getAgent);
 const mockIsAllowedModel = vi.mocked(isAllowedModel);
 const mockCheckCredits = vi.mocked(checkCredits);
 const mockDeductCredits = vi.mocked(deductCredits);
 const mockCreateClient = vi.mocked(createClient);
 
-// Helper to get the mockNetwork function from the mocked createAgentNetwork
+// Helper to configure the mockNetwork for a test
 function getMockNetwork() {
-  const mockNetwork = vi.fn();
-  mockCreateAgentNetwork.mockReturnValue({
-    supervisor: { network: mockNetwork },
-  } as any);
-  return mockNetwork;
+  const localMockNetwork = vi.fn();
+  mockGetAgent.mockReturnValue({ network: localMockNetwork } as any);
+  return localMockNetwork;
 }
 
 function createRequest(body: Record<string, unknown>): Request {
@@ -271,31 +275,32 @@ describe('POST /api/agent', () => {
     });
   });
 
-  it('calls network with correct memory params', async () => {
-    const mockNetwork = getMockNetwork();
+  it('calls network with correct memory and requestContext params', async () => {
+    const localMock = getMockNetwork();
     async function* emptyStream() {}
-    mockNetwork.mockResolvedValue(emptyStream() as any);
+    localMock.mockResolvedValue(emptyStream() as any);
 
     const req = createRequest({ message: 'Build a todo app', projectId: 'proj-42' });
     await POST(req as any);
 
-    expect(mockNetwork).toHaveBeenCalledWith('Build a todo app', {
+    expect(localMock).toHaveBeenCalledWith('Build a todo app', expect.objectContaining({
       memory: {
         thread: 'proj-42',
         resource: 'user-123',
       },
-    });
+      requestContext: expect.anything(),
+    }));
   });
 
-  it('creates agent network with correct model and userId', async () => {
-    const mockNetwork = getMockNetwork();
+  it('retrieves supervisor agent from mastra instance', async () => {
+    const localMock = getMockNetwork();
     async function* emptyStream() {}
-    mockNetwork.mockResolvedValue(emptyStream() as any);
+    localMock.mockResolvedValue(emptyStream() as any);
 
     const req = createRequest({ message: 'Build an app', projectId: 'proj-1' });
     await POST(req as any);
 
-    expect(mockCreateAgentNetwork).toHaveBeenCalledWith('gpt-5.2', 'user-123');
+    expect(mockGetAgent).toHaveBeenCalledWith('supervisor');
   });
 
   it('bridges agent-execution-event-text-delta to agent_progress', async () => {
