@@ -306,13 +306,13 @@ export const validateSQLTool = createTool({
   execute: async (inputData, _context) => {
     const pg = await getPGlite();
     try {
-      // Run in a savepoint to keep PGlite clean for next call
-      await pg.exec('SAVEPOINT validate_sql');
+      // Wrap in a transaction and always rollback to keep PGlite clean
+      await pg.exec('BEGIN');
       await pg.exec(inputData.sql);
-      await pg.exec('ROLLBACK TO SAVEPOINT validate_sql');
+      await pg.exec('ROLLBACK');
       return { valid: true };
     } catch (e) {
-      try { await pg.exec('ROLLBACK TO SAVEPOINT validate_sql'); } catch { /* already rolled back */ }
+      try { await pg.exec('ROLLBACK'); } catch { /* already rolled back */ }
       return { valid: false, error: e instanceof Error ? e.message : String(e) };
     }
   },
