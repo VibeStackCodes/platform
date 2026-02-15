@@ -463,7 +463,7 @@ Phase 6 — Deploy:
         memory: new Memory({
           storage: getSharedStore()!,
           options: {
-            lastMessages: false,
+            lastMessages: 40,
             workingMemory: {
               enabled: true,
               scope: 'resource',

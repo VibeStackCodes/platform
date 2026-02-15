@@ -7,6 +7,7 @@
  */
 import { Mastra } from '@mastra/core';
 import { PinoLogger } from '@mastra/loggers';
+import { Observability, DefaultExporter } from '@mastra/observability';
 import {
   supervisorAgent,
   analystAgent,
@@ -37,6 +38,14 @@ export const mastra = new Mastra({
     infraProvision: infraProvisionWorkflow,
   },
   storage: getSharedStore() ?? undefined,
+  observability: new Observability({
+    configs: {
+      default: {
+        serviceName: 'vibestack',
+        exporters: [new DefaultExporter()],
+      },
+    },
+  }),
   logger: new PinoLogger({
     name: 'VibeStack',
     level: process.env.NODE_ENV === 'production' ? 'info' : 'debug',
