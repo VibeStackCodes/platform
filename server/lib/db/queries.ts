@@ -24,6 +24,23 @@ export async function getProject(projectId: string, userId: string) {
     .then((rows) => rows[0] ?? null)
 }
 
+/** Get generation state for a project (used by edit machine) */
+export async function getProjectGenerationState(projectId: string, userId: string) {
+  return db
+    .select({
+      id: projects.id,
+      generationState: projects.generationState,
+      sandboxId: projects.sandboxId,
+      supabaseProjectId: projects.supabaseProjectId,
+      githubRepoUrl: projects.githubRepoUrl,
+      name: projects.name,
+      status: projects.status,
+    })
+    .from(projects)
+    .where(and(eq(projects.id, projectId), eq(projects.userId, userId)))
+    .then((rows) => rows[0] ?? null)
+}
+
 /** Update project fields by ID */
 export async function updateProject(
   projectId: string,

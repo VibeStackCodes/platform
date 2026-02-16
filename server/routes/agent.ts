@@ -21,12 +21,15 @@ import { Hono } from 'hono'
 import { createHeliconeProvider, isAllowedModel } from '../lib/agents/provider'
 import { appGenerationMachine } from '../lib/agents/machine'
 import type { MachineContext } from '../lib/agents/machine'
+import { editMachine } from '../lib/agents/edit-machine'
+import type { EditMachineContext } from '../lib/agents/edit-machine'
 import { RequestContext } from '../lib/agents/registry'
-import { getUserCredits } from '../lib/db/queries'
+import { getUserCredits, getProjectGenerationState } from '../lib/db/queries'
 import { reserveCredits, settleCredits } from '../lib/credits'
 import { createSSEStream } from '../lib/sse'
 import type { StreamEvent } from '../lib/types'
 import { authMiddleware } from '../middleware/auth'
+import * as Sentry from '@sentry/node'
 
 export const agentRoutes = new Hono()
 
@@ -41,6 +44,7 @@ interface ActiveRun {
   model: string
   createdAt: number
   reservedCredits: number
+  settled?: boolean
 }
 
 const activeRuns = new Map<string, ActiveRun>()
@@ -357,6 +361,198 @@ agentRoutes.post('/resume', async (c) => {
     } finally {
       try {
         stored.actor.stop()
+      } catch {
+        // Already stopped
+      }
+      activeRuns.delete(runId)
+    }
+  })
+})
+
+/**
+ * POST /api/agent/edit
+ * Apply an iterative edit to an existing generated project
+ */
+agentRoutes.post('/edit', async (c) => {
+  let body: {
+    message?: string
+    projectId?: string
+    model?: string
+    targetElement?: {
+      vsId: string
+      tagName: string
+      className: string
+      textContent: string
+      tailwindClasses: string[]
+      rect: { x: number; y: number; width: number; height: number }
+    } | null
+  }
+  try {
+    body = await c.req.json()
+  } catch {
+    return c.json({ error: 'Invalid request body' }, 400)
+  }
+
+  const { message, projectId, targetElement = null } = body
+
+  if (!message || !projectId) {
+    return c.json({ error: 'Missing message or projectId' }, 400)
+  }
+
+  const user = c.var.user
+
+  // Verify project has generation state
+  const project = await getProjectGenerationState(projectId, user.id)
+  if (!project) {
+    return c.json({ error: 'Project not found' }, 404)
+  }
+  if (!project.generationState || typeof project.generationState !== 'object') {
+    return c.json(
+      { error: 'Project has no generation state — generate the app first' },
+      404,
+    )
+  }
+
+  // Reserve fewer credits for edits (10 instead of 50)
+  const EDIT_CREDIT_RESERVATION = 10
+  const reserved = await reserveCredits(user.id, EDIT_CREDIT_RESERVATION)
+  if (!reserved) {
+    const credits = await getUserCredits(user.id)
+    return c.json(
+      {
+        error: 'insufficient_credits',
+        message: 'Not enough credits for edit',
+        credits_remaining: credits?.creditsRemaining ?? 0,
+      },
+      402,
+    )
+  }
+
+  // Create edit machine actor
+  const runId = crypto.randomUUID()
+  let actor: any
+  try {
+    actor = createActor(editMachine)
+    activeRuns.set(runId, {
+      actor,
+      userId: user.id,
+      projectId,
+      model: body.model || 'gpt-5.2',
+      createdAt: Date.now(),
+      reservedCredits: EDIT_CREDIT_RESERVATION,
+      settled: false,
+    })
+    actor.start()
+  } catch (error) {
+    await settleCredits(user.id, EDIT_CREDIT_RESERVATION, 0)
+    Sentry.captureException(error, {
+      tags: { route: '/api/agent/edit', operation: 'actor_creation' },
+    })
+    return c.json({ error: 'Failed to initialize edit pipeline' }, 500)
+  }
+
+  // Map edit machine states to SSE phases
+  const EDIT_STATE_PHASES: Record<string, { name: string; phase: number }> = {
+    loading: { name: 'Loading project state', phase: 1 },
+    reconnecting: { name: 'Reconnecting sandbox', phase: 2 },
+    editing: { name: 'Applying edit', phase: 3 },
+    validating: { name: 'Validating changes', phase: 4 },
+    persisting: { name: 'Persisting changes', phase: 5 },
+    complete: { name: 'Complete', phase: 6 },
+    failed: { name: 'Failed', phase: 6 },
+  }
+
+  return createSSEStream(async (emit: (event: StreamEvent) => void, signal: AbortSignal) => {
+    try {
+      emit({ type: 'stage_update', stage: 'generating' })
+
+      // Send START event with element context
+      actor.send({
+        type: 'START',
+        userMessage: message,
+        projectId,
+        userId: user.id,
+        targetElement,
+      })
+
+      // Stream edit machine states
+      await new Promise<void>((resolve, reject) => {
+        const subscription = actor.subscribe(
+          (snapshot: { value: string; context: EditMachineContext }) => {
+            if (signal.aborted) {
+              subscription.unsubscribe()
+              resolve()
+              return
+            }
+
+            const state = snapshot.value as string
+            const phaseInfo = EDIT_STATE_PHASES[state]
+            if (!phaseInfo) return
+
+            if (state === 'complete') {
+              emit({ type: 'stage_update', stage: 'complete' })
+              emit({ type: 'checkpoint', label: 'Edit complete', status: 'complete' })
+              subscription.unsubscribe()
+              resolve()
+            } else if (state === 'failed') {
+              const errorMsg = snapshot.context.error ?? 'Edit failed'
+              emit({ type: 'error', message: errorMsg, stage: 'error' })
+              subscription.unsubscribe()
+              reject(new Error(errorMsg))
+            } else {
+              emit({ type: 'stage_update', stage: 'generating' })
+              emit({
+                type: 'phase_start',
+                phase: phaseInfo.phase,
+                phaseName: phaseInfo.name,
+                agentCount: 1,
+              })
+              emit({ type: 'checkpoint', label: phaseInfo.name, status: 'active' })
+            }
+          },
+        )
+
+        signal.addEventListener('abort', () => {
+          subscription.unsubscribe()
+          resolve()
+        })
+      })
+
+      // Settle credits
+      const finalSnapshot = actor.getSnapshot()
+      const totalTokens = finalSnapshot.context.totalTokens
+      const creditsUsed = Math.ceil(totalTokens / 1000)
+
+      const activeRun = activeRuns.get(runId)
+      if (activeRun && !activeRun.settled) {
+        const settlement = await settleCredits(user.id, EDIT_CREDIT_RESERVATION, creditsUsed)
+        activeRun.settled = true
+        emit({
+          type: 'credits_used',
+          creditsUsed,
+          creditsRemaining: settlement.creditsRemaining,
+          tokensTotal: totalTokens,
+        })
+      }
+    } catch (error) {
+      const activeRun = activeRuns.get(runId)
+      if (activeRun && !activeRun.settled) {
+        await settleCredits(user.id, EDIT_CREDIT_RESERVATION, 0)
+        activeRun.settled = true
+      }
+      if (!signal.aborted) {
+        Sentry.captureException(error, {
+          tags: { route: '/api/agent/edit', operation: 'edit' },
+        })
+        emit({
+          type: 'error',
+          message: error instanceof Error ? error.message : 'Edit pipeline failed',
+          stage: 'error',
+        })
+      }
+    } finally {
+      try {
+        actor.stop()
       } catch {
         // Already stopped
       }

@@ -577,8 +577,39 @@ export async function runProvisioning(input: {
 export async function runDeployment(input: {
   sandboxId: string
   projectId: string
+  contract?: SchemaContract | null
+  blueprint?: AppBlueprint | null
+  supabaseProjectId?: string | null
+  githubCloneUrl?: string | null
 }): Promise<DeploymentResult> {
-  // Placeholder — real implementation needs Vercel deployment
+  // Download files from sandbox to build file manifest
+  const { getSandbox, downloadDirectory } = await import('../sandbox')
+  const { updateProject } = await import('../db/queries')
+
+  const sandbox = await getSandbox(input.sandboxId)
+  const builtFiles = await downloadDirectory(sandbox, '/workspace')
+
+  // Build file manifest — simple content hash using length + first/last bytes as fingerprint
+  const fileManifest: Record<string, string> = {}
+  for (const file of builtFiles) {
+    const hash = `${file.content.length}:${Buffer.from(file.content).toString('base64').slice(0, 16)}`
+    fileManifest[file.path] = hash
+  }
+
+  // Persist generation state for iterative editing
+  await updateProject(input.projectId, {
+    generationState: {
+      contract: input.contract ?? null,
+      blueprint: input.blueprint ?? null,
+      sandboxId: input.sandboxId,
+      supabaseProjectId: input.supabaseProjectId ?? null,
+      githubRepo: input.githubCloneUrl ?? null,
+      fileManifest,
+      lastEditedAt: new Date().toISOString(),
+    },
+  })
+
+  // Placeholder — actual deployment would happen via Vercel
   return {
     deploymentUrl: '',
     tokensUsed: 0,

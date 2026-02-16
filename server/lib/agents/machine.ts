@@ -141,10 +141,23 @@ export const appGenerationMachine = setup({
         return runRepair(input)
       },
     ),
-    runDeploymentActor: fromPromise(async ({ input }: { input: { sandboxId: string; projectId: string } }) => {
-      const { runDeployment } = await import('./orchestrator')
-      return runDeployment(input)
-    }),
+    runDeploymentActor: fromPromise(
+      async ({
+        input,
+      }: {
+        input: {
+          sandboxId: string
+          projectId: string
+          contract?: SchemaContract | null
+          blueprint?: AppBlueprint | null
+          supabaseProjectId?: string | null
+          githubCloneUrl?: string | null
+        }
+      }) => {
+        const { runDeployment } = await import('./orchestrator')
+        return runDeployment(input)
+      },
+    ),
     runCleanupActor: fromPromise(
       async ({ input }: { input: { sandboxId: string | null; supabaseProjectId: string | null } }) => {
         const errors: string[] = []
@@ -503,6 +516,10 @@ export const appGenerationMachine = setup({
         input: ({ context }) => ({
           sandboxId: context.sandboxId!,
           projectId: context.projectId,
+          contract: context.contract,
+          blueprint: context.blueprint,
+          supabaseProjectId: context.supabaseProjectId,
+          githubCloneUrl: context.githubCloneUrl,
         }),
         onDone: {
           target: 'complete',
