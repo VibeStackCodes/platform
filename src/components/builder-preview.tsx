@@ -1,10 +1,12 @@
 'use client'
 
-import { Rocket } from 'lucide-react'
-import { useState } from 'react'
+import { MousePointer, Pencil, Rocket, X } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { WebPreview, WebPreviewBody } from '@/components/ai-elements/web-preview'
 import { DatabaseManager } from '@/components/supabase-manager/database'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import type { ElementContext } from '@/lib/types'
 
 interface BuilderPreviewProps {
   projectId: string
@@ -13,6 +15,7 @@ interface BuilderPreviewProps {
   codeServerUrl?: string
   supabaseUrl?: string
   supabaseProjectId?: string
+  onElementSelected?: (element: ElementContext | null) => void
 }
 
 export function BuilderPreview({
@@ -20,10 +23,14 @@ export function BuilderPreview({
   previewUrl,
   codeServerUrl,
   supabaseProjectId,
+  onElementSelected,
 }: BuilderPreviewProps) {
   const [activeTab, setActiveTab] = useState('preview')
   // Track which tabs have been visited — lazy mount, then keep mounted
   const [mountedTabs, setMountedTabs] = useState<Set<string>>(new Set(['preview']))
+  const [editMode, setEditMode] = useState(false)
+  const [selectedElement, setSelectedElement] = useState<ElementContext | null>(null)
+  const iframeRef = useRef<HTMLIFrameElement>(null)
 
   const switchTab = (tab: string) => {
     setActiveTab(tab)
@@ -32,6 +39,39 @@ export function BuilderPreview({
       return new Set(prev).add(tab)
     })
   }
+
+  const toggleEditMode = useCallback(() => {
+    setEditMode((prev) => {
+      const next = !prev
+      iframeRef.current?.contentWindow?.postMessage(
+        { type: 'VIBESTACK_EDIT_MODE', enabled: next },
+        '*',
+      )
+      if (!next) {
+        setSelectedElement(null)
+        onElementSelected?.(null)
+      }
+      return next
+    })
+  }, [onElementSelected])
+
+  const dismissSelection = useCallback(() => {
+    setSelectedElement(null)
+    onElementSelected?.(null)
+  }, [onElementSelected])
+
+  // Listen for element selection messages from iframe
+  useEffect(() => {
+    const handler = (event: MessageEvent) => {
+      if (event.data?.type === 'VIBESTACK_ELEMENT_SELECTED') {
+        const element = event.data.payload as ElementContext
+        setSelectedElement(element)
+        onElementSelected?.(element)
+      }
+    }
+    window.addEventListener('message', handler)
+    return () => window.removeEventListener('message', handler)
+  }, [onElementSelected])
 
   const handleDeploy = async () => {
     try {
@@ -54,14 +94,48 @@ export function BuilderPreview({
 
   return (
     <div className="flex h-full flex-col">
-      {/* Header with Deploy button */}
+      {/* Header with Edit Mode toggle and Deploy button */}
       <div className="flex items-center justify-between border-b px-4 py-2">
         <h2 className="text-sm font-medium">Preview</h2>
-        <Button size="sm" onClick={handleDeploy}>
-          <Rocket className="mr-2 size-4" />
-          Deploy
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            size="icon"
+            variant="ghost"
+            onClick={toggleEditMode}
+            className={editMode ? 'ring-2 ring-indigo-500' : ''}
+            title={editMode ? 'Exit edit mode' : 'Enter edit mode'}
+          >
+            {editMode ? <MousePointer className="size-4" /> : <Pencil className="size-4" />}
+          </Button>
+          <Button size="sm" onClick={handleDeploy}>
+            <Rocket className="mr-2 size-4" />
+            Deploy
+          </Button>
+        </div>
       </div>
+
+      {/* Selected element badge */}
+      {selectedElement && (
+        <div className="border-b px-4 py-2">
+          <Badge variant="secondary" className="inline-flex items-center gap-2">
+            <span className="font-mono text-xs">
+              &lt;{selectedElement.tagName}&gt;
+            </span>
+            {selectedElement.textContent && (
+              <span className="max-w-xs truncate text-xs text-muted-foreground">
+                {selectedElement.textContent}
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={dismissSelection}
+              className="ml-1 rounded-full p-0.5 hover:bg-muted-foreground/20"
+            >
+              <X className="size-3" />
+            </button>
+          </Badge>
+        </div>
+      )}
 
       {/* Tab bar */}
       <div className="border-b px-4">
@@ -87,7 +161,7 @@ export function BuilderPreview({
         <div className={`absolute inset-0 ${activeTab === 'preview' ? '' : 'invisible'}`}>
           {previewUrl ? (
             <WebPreview key={previewUrl} defaultUrl={previewUrl} className="h-full">
-              <WebPreviewBody src={previewUrl} className="h-full" />
+              <WebPreviewBody ref={iframeRef} src={previewUrl} className="h-full" />
             </WebPreview>
           ) : (
             <div className="h-full" />

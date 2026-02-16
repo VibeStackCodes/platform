@@ -53,6 +53,7 @@ import type {
   ChatPlan,
   CheckpointEvent,
   ClarificationQuestion,
+  ElementContext,
   LayerCommitEvent,
   StreamEvent,
 } from '@/lib/types'
@@ -73,6 +74,8 @@ interface BuilderChatProps {
     parts: Array<Record<string, unknown>>
   }>
   onGenerationComplete?: () => void
+  selectedElement?: ElementContext | null
+  onEditComplete?: () => void
 }
 
 const SUGGESTIONS = [
@@ -87,6 +90,8 @@ export function BuilderChat({
   initialPrompt,
   initialMessages,
   onGenerationComplete,
+  selectedElement,
+  onEditComplete,
 }: BuilderChatProps) {
   const [model, setModel] = useState('gpt-5.2')
   const [generationStatus, setGenerationStatus] = useState<
@@ -279,7 +284,7 @@ export function BuilderChat({
   )
 
   /**
-   * Send a chat message to /api/agent and stream the analyst response.
+   * Send a chat message to /api/agent (or /api/agent/edit if an element is selected).
    * Replaces the Vercel AI SDK useChat + /api/chat flow.
    */
   const sendChatMessage = useCallback(
@@ -305,11 +310,17 @@ export function BuilderChat({
       const abortController = new AbortController()
       abortControllerRef.current = abortController
 
+      // Determine endpoint based on whether an element is selected
+      const endpoint = selectedElement ? '/api/agent/edit' : '/api/agent'
+      const body = selectedElement
+        ? { message: text, projectId, targetElement: selectedElement, model }
+        : { message: text, projectId, model }
+
       try {
-        const response = await fetch('/api/agent', {
+        const response = await fetch(endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message: text, projectId, model }),
+          body: JSON.stringify(body),
           signal: abortController.signal,
         })
 
@@ -352,6 +363,11 @@ export function BuilderChat({
         } finally {
           reader.releaseLock()
         }
+
+        // If this was an edit operation, notify parent to clear selection
+        if (selectedElement) {
+          onEditComplete?.()
+        }
       } catch (err) {
         // Silent abort on unmount or cancellation
         if (err instanceof Error && err.name === 'AbortError') return
@@ -362,7 +378,7 @@ export function BuilderChat({
         setChatStatus('ready')
       }
     },
-    [projectId, model, chatStatus, parseSSEBuffer, handleGenerationEvent],
+    [projectId, model, chatStatus, parseSSEBuffer, handleGenerationEvent, selectedElement, onEditComplete],
   )
 
   // Auto-submit initial prompt (skip if conversation was restored from DB)
@@ -567,7 +583,7 @@ export function BuilderChat({
                   !lastMessage?.content
                 return showThinking ? (
                   <div className="mx-4 my-2 text-sm text-muted-foreground animate-pulse">
-                    Thinking...
+                    {selectedElement ? `Editing <${selectedElement.tagName}>...` : 'Thinking...'}
                   </div>
                 ) : null
               })()}

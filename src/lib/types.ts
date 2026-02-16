@@ -442,3 +442,16 @@ export interface ClarificationRequestEvent {
   questions: ClarificationQuestion[]
   runId: string
 }
+
+// ============================================================================
+// Visual Editing
+// ============================================================================
+
+export interface ElementContext {
+  vsId: string // data-vs-id value, e.g. "src/components/Form.tsx:42"
+  tagName: string
+  className: string
+  textContent: string
+  tailwindClasses: string[]
+  rect: { x: number; y: number; width: number; height: number }
+}
