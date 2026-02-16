@@ -1,6 +1,6 @@
 // tests/schema-contract.test.ts
 
-import { type SchemaContract, validateContract } from '@server/lib/schema-contract'
+import { type SchemaContract, validateContract, inferFeatures } from '@server/lib/schema-contract'
 import { describe, expect, it } from 'vitest'
 
 describe('validateContract', () => {
@@ -105,5 +105,53 @@ describe('validateContract', () => {
     const result = validateContract(contract)
     expect(result.valid).toBe(false)
     expect(result.errors[0].toLowerCase()).toContain('circular')
+  })
+})
+
+describe('inferFeatures', () => {
+  it('detects auth when any table has user_id FK to auth.users', () => {
+    const contract: SchemaContract = {
+      tables: [
+        {
+          name: 'bookmark',
+          columns: [
+            { name: 'id', type: 'uuid', primaryKey: true, default: 'gen_random_uuid()' },
+            { name: 'user_id', type: 'uuid', nullable: false, references: { table: 'auth.users', column: 'id' } },
+            { name: 'url', type: 'text', nullable: false },
+          ],
+        },
+      ],
+    }
+    const features = inferFeatures(contract)
+    expect(features.auth).toBe(true)
+    expect(features.entities).toEqual(['bookmark'])
+  })
+
+  it('returns auth=false when no user_id FK exists', () => {
+    const contract: SchemaContract = {
+      tables: [
+        {
+          name: 'item',
+          columns: [
+            { name: 'id', type: 'uuid', primaryKey: true },
+            { name: 'title', type: 'text' },
+          ],
+        },
+      ],
+    }
+    const features = inferFeatures(contract)
+    expect(features.auth).toBe(false)
+  })
+
+  it('lists all table names as entities', () => {
+    const contract: SchemaContract = {
+      tables: [
+        { name: 'bookmark', columns: [{ name: 'id', type: 'uuid', primaryKey: true }] },
+        { name: 'tag', columns: [{ name: 'id', type: 'uuid', primaryKey: true }] },
+        { name: 'bookmark_tag', columns: [{ name: 'id', type: 'uuid', primaryKey: true }] },
+      ],
+    }
+    const features = inferFeatures(contract)
+    expect(features.entities).toEqual(['bookmark', 'tag', 'bookmark_tag'])
   })
 })

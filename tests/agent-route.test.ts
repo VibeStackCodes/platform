@@ -18,57 +18,61 @@ vi.mock('@server/lib/agents/provider', () => ({
   createHeliconeProvider: vi.fn(() => vi.fn()),
 }))
 
-vi.mock('../../src/mastra/index', () => {
-  /** Create a mock ReadableStream of WorkflowStreamEvents */
-  function createMockStream() {
-    const events = [
-      { type: 'workflow-start', runId: 'test-run', from: 'WORKFLOW', payload: { workflowId: 'app-generation' } },
-      {
-        type: 'workflow-step-start',
-        runId: 'test-run',
-        from: 'WORKFLOW',
-        id: 'analyst',
-        payload: { id: 'analyst', stepCallId: 'sc-1', status: 'running' },
-      },
-      {
-        type: 'workflow-step-finish',
-        runId: 'test-run',
-        from: 'WORKFLOW',
-        payload: { id: 'analyst', metadata: {} },
-      },
-      {
-        type: 'workflow-finish',
-        runId: 'test-run',
-        from: 'WORKFLOW',
-        payload: {
-          workflowStatus: 'success',
-          output: { usage: { inputTokens: 500, outputTokens: 500, totalTokens: 1000 } },
-          metadata: {},
-        },
-      },
-    ]
-    return new ReadableStream({
-      start(controller) {
-        for (const event of events) {
-          controller.enqueue(event)
-        }
-        controller.close()
-      },
-    })
-  }
-
+vi.mock('xstate', async () => {
+  const actual = await vi.importActual('xstate')
   return {
-    mastra: {
-      getWorkflow: vi.fn(() => ({
-        createRun: vi.fn(async () => ({
-          stream: vi.fn(() => ({
-            fullStream: createMockStream(),
-            usage: Promise.resolve({ inputTokens: 500, outputTokens: 500, totalTokens: 1000 }),
-            result: Promise.resolve({}),
-          })),
-        })),
-      })),
-    },
+    ...actual,
+    createActor: vi.fn(() => {
+      // Return a mock actor that simulates state transitions
+      const subscribers: Array<(snapshot: any) => void> = []
+      let started = false
+      return {
+        start: vi.fn(() => {
+          started = true
+        }),
+        stop: vi.fn(() => {
+          started = false
+        }),
+        send: vi.fn((event: any) => {
+          if (!started || subscribers.length === 0) return
+
+          // Simulate state transitions based on event type
+          if (event.type === 'START') {
+            // Immediately transition through analyzing → complete
+            setTimeout(() => {
+              for (const sub of subscribers) {
+                sub({ value: 'analyzing', context: { retryCount: 0 } })
+              }
+              setTimeout(() => {
+                for (const sub of subscribers) {
+                  sub({ value: 'complete', context: { retryCount: 0, error: null }, status: 'done' })
+                }
+              }, 0)
+            }, 0)
+          } else if (event.type === 'USER_ANSWERED') {
+            // Resume from clarification → complete
+            setTimeout(() => {
+              for (const sub of subscribers) {
+                sub({ value: 'analyzing', context: { retryCount: 0 } })
+              }
+              setTimeout(() => {
+                for (const sub of subscribers) {
+                  sub({ value: 'complete', context: { retryCount: 0, error: null }, status: 'done' })
+                }
+              }, 0)
+            }, 0)
+          }
+        }),
+        subscribe: vi.fn((callback: (snapshot: any) => void) => {
+          subscribers.push(callback)
+          return { unsubscribe: vi.fn(() => {
+            const index = subscribers.indexOf(callback)
+            if (index > -1) subscribers.splice(index, 1)
+          }) }
+        }),
+        getSnapshot: vi.fn(() => ({ value: 'idle', context: { retryCount: 0 } })),
+      }
+    }),
   }
 })
 
@@ -240,7 +244,7 @@ describe('POST /api/agent', () => {
     const dataLine = lines.find((line) => line.startsWith('data: '))
     expect(dataLine).toBeDefined()
 
-    const eventData = JSON.parse(dataLine?.replace('data: ', ''))
+    const eventData = JSON.parse(dataLine?.replace('data: ', '') ?? '{}')
     expect(eventData).toEqual({ type: 'stage_update', stage: 'generating' })
 
     reader.releaseLock()

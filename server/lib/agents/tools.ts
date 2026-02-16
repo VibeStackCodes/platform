@@ -8,9 +8,6 @@ import {
   getSandbox,
   pushToGitHub as pushToGitHubFn,
 } from '../sandbox'
-import { contractToHooks } from '../contract-to-hooks'
-import { contractToRoutes } from '../contract-to-routes'
-import { SchemaContractSchema } from '../schema-contract'
 import { createSupabaseProject as createSupabaseProjectFn, runMigration } from '../supabase-mgmt'
 
 /**
@@ -851,44 +848,6 @@ export const searchDocsTool = createTool({
         source: url,
       }
     }
-  },
-})
-
-// ============================================================================
-// Contract-to-Code Generators (deterministic scaffolding)
-// ============================================================================
-
-export const contractToHooksTool = createTool({
-  id: 'contract-to-hooks',
-  description:
-    'Generate TanStack Query CRUD hooks from a SchemaContract. Produces typed useQuery/useMutation hooks for every table.',
-  inputSchema: z.object({
-    contract: SchemaContractSchema.describe('Database schema contract'),
-  }),
-  outputSchema: z.object({
-    code: z.string().describe('Generated TypeScript hooks code'),
-    tableCount: z.number().describe('Number of tables processed'),
-  }),
-  execute: async (inputData) => {
-    const code = contractToHooks(inputData.contract)
-    return { code, tableCount: inputData.contract.tables.length }
-  },
-})
-
-export const contractToRoutesTool = createTool({
-  id: 'contract-to-routes',
-  description:
-    'Generate TanStack Router route definitions from a SchemaContract. Produces list + detail routes for every table.',
-  inputSchema: z.object({
-    contract: SchemaContractSchema.describe('Database schema contract'),
-  }),
-  outputSchema: z.object({
-    code: z.string().describe('Generated TypeScript route definitions'),
-    tableCount: z.number().describe('Number of tables processed'),
-  }),
-  execute: async (inputData) => {
-    const code = contractToRoutes(inputData.contract)
-    return { code, tableCount: inputData.contract.tables.length }
   },
 })
 

@@ -15,20 +15,13 @@ export {
 } from './provider'
 export type { AllowedModel, HeliconeContext } from './provider'
 
-// Agents + RequestContext + shared store
+// Agents + RequestContext
 export {
   analystAgent,
   backendAgent,
-  dbaAgent,
-  devOpsAgent,
   frontendAgent,
-  getSharedStore,
-  infraAgent,
-  pmAgent,
-  qaAgent,
+  repairAgent,
   RequestContext,
-  reviewerAgent,
-  supervisorAgent,
 } from './registry'
 
 // Schemas
@@ -37,8 +30,6 @@ export * from './schemas'
 // Tools
 export {
   askClarifyingQuestionsTool,
-  contractToHooksTool,
-  contractToRoutesTool,
   createDirectoryTool,
   createGitHubRepoTool,
   createSandboxTool,
@@ -61,11 +52,4 @@ export {
   writeFileTool,
 } from './tools'
 
-// Workflows
-export {
-  appGenerationWorkflow,
-  deployWorkflow,
-  infraProvisionWorkflow,
-  qaWorkflow,
-  validateSQLStep,
-} from './workflows'
+// Workflows removed - replaced by XState machine in machine.ts

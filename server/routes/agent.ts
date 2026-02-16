@@ -1,6 +1,6 @@
 /**
  * POST /api/agent
- * Unified agent route that bridges Mastra appGenerationWorkflow to SSE streaming
+ * XState-based agent route that orchestrates app generation via state machine
  *
  * Request body:
  *   { message: string, projectId: string, model?: string }
@@ -16,13 +16,12 @@
  */
 
 import crypto from 'node:crypto'
-import { sql } from 'drizzle-orm'
+import { createActor } from 'xstate'
 import { Hono } from 'hono'
-import type { WorkflowStreamEvent } from '@mastra/core/workflows'
-import { mastra } from '../../src/mastra/index'
 import { createHeliconeProvider, isAllowedModel } from '../lib/agents/provider'
+import { appGenerationMachine } from '../lib/agents/machine'
+import type { MachineContext } from '../lib/agents/machine'
 import { RequestContext } from '../lib/agents/registry'
-import { db } from '../lib/db/client'
 import { getUserCredits } from '../lib/db/queries'
 import { createSSEStream } from '../lib/sse'
 import type { StreamEvent } from '../lib/types'
@@ -33,312 +32,137 @@ export const agentRoutes = new Hono()
 // Apply auth middleware to all routes
 agentRoutes.use('*', authMiddleware)
 
-// biome-ignore lint/suspicious/noExplicitAny: Mastra Run type is complex generic
-const activeRuns = new Map<
-  string,
-  { run: any; userId: string; projectId: string; model: string; createdAt: number }
->()
+interface ActiveRun {
+  // biome-ignore lint/suspicious/noExplicitAny: XState Actor type is complex generic
+  actor: any
+  userId: string
+  projectId: string
+  model: string
+  createdAt: number
+}
 
+const activeRuns = new Map<string, ActiveRun>()
+
+// Cleanup expired runs every 30 minutes
 setInterval(() => {
-  const cutoff = Date.now() - 3600_000
+  const cutoff = Date.now() - 3600_000 // 1 hour
   for (const [id, entry] of activeRuns) {
-    if (entry.createdAt < cutoff) activeRuns.delete(id)
+    if (entry.createdAt < cutoff) {
+      try {
+        entry.actor.stop()
+      } catch {
+        // Already stopped
+      }
+      activeRuns.delete(id)
+    }
   }
 }, 1800_000)
 
-/** Map workflow step IDs to human-readable phase names */
-const STEP_PHASES: Record<string, { name: string; phase: number }> = {
-  analyst: { name: 'Analyzing requirements', phase: 1 },
-  'prepare-analyst-prompt': { name: 'Preparing analysis', phase: 1 },
-  'create-sandbox': { name: 'Creating sandbox', phase: 2 },
-  'create-supabase': { name: 'Creating database', phase: 2 },
-  'create-github-repo': { name: 'Creating repository', phase: 2 },
-  'prepare-infra-input': { name: 'Provisioning infrastructure', phase: 2 },
-  'merge-infra': { name: 'Infrastructure ready', phase: 2 },
-  'prepare-schema-input': { name: 'Preparing schema', phase: 3 },
-  'schema-generation': { name: 'Generating schema', phase: 3 },
-  'write-migration': { name: 'Writing migration', phase: 4 },
-  'prepare-run-migration': { name: 'Preparing migration', phase: 4 },
-  'run-migration': { name: 'Running migration', phase: 4 },
-  'prepare-codegen-input': { name: 'Preparing code generation', phase: 5 },
-  'code-generation': { name: 'Generating code', phase: 5 },
-  'prepare-integration-input': { name: 'Preparing integration', phase: 6 },
-  integration: { name: 'Wiring app together', phase: 6 },
-  'prepare-qa-input': { name: 'Preparing validation', phase: 7 },
-  'final-qa-gate': { name: 'Running QA checks', phase: 7 },
-  'assemble-output': { name: 'Assembling results', phase: 8 },
+/** Map XState states to human-readable phase names */
+const STATE_PHASES: Record<string, { name: string; phase: number }> = {
+  analyzing: { name: 'Analyzing requirements', phase: 1 },
+  awaitingClarification: { name: 'Awaiting clarification', phase: 1 },
+  blueprinting: { name: 'Creating blueprint', phase: 2 },
+  provisioning: { name: 'Provisioning infrastructure', phase: 3 },
+  generating: { name: 'Generating code', phase: 4 },
+  validating: { name: 'Validating code', phase: 5 },
+  repairing: { name: 'Repairing errors', phase: 5 },
+  deploying: { name: 'Deploying application', phase: 6 },
+  complete: { name: 'Complete', phase: 7 },
+  failed: { name: 'Failed', phase: 7 },
 }
 
-async function processWorkflowStream(
-  // biome-ignore lint/suspicious/noExplicitAny: WorkflowRunOutput has complex generic type
-  output: any,
+/**
+ * Subscribe to XState actor and emit SSE events for state transitions.
+ * Returns a Promise that resolves when the actor reaches a final state.
+ */
+function streamActorStates(
+  // biome-ignore lint/suspicious/noExplicitAny: XState Actor type is complex generic
+  actor: any,
   emit: (event: StreamEvent) => void,
   signal: AbortSignal,
-  user: { id: string },
-  projectId: string,
-  model: string,
   runId: string,
 ): Promise<void> {
-  for await (const event of output.fullStream) {
-    if (signal.aborted) {
-      console.log('[agent] Client disconnected, stopping stream')
-      break
-    }
+  return new Promise((resolve, reject) => {
+    const subscription = actor.subscribe((snapshot: { value: string; context: MachineContext; status?: string }) => {
+      if (signal.aborted) {
+        subscription.unsubscribe()
+        resolve()
+        return
+      }
 
-    const wfEvent = event as WorkflowStreamEvent
+      const state = snapshot.value as string
+      const phaseInfo = STATE_PHASES[state]
 
-    switch (wfEvent.type) {
-      case 'workflow-start':
+      if (!phaseInfo) {
+        return
+      }
+
+      // Emit phase events
+      if (state === 'complete') {
+        emit({ type: 'stage_update', stage: 'complete' })
+        emit({
+          type: 'checkpoint',
+          label: 'Pipeline complete',
+          status: 'complete',
+        })
+        subscription.unsubscribe()
+        resolve()
+      } else if (state === 'failed') {
+        const errorMsg = snapshot.context.error ?? 'Pipeline failed'
+        emit({
+          type: 'error',
+          message: errorMsg,
+          stage: 'error',
+        })
+        subscription.unsubscribe()
+        reject(new Error(errorMsg))
+      } else if (state === 'awaitingClarification') {
+        // Special handling for clarification state
+        const questions = snapshot.context.clarificationQuestions
+        if (questions) {
+          emit({
+            type: 'clarification_request',
+            questions: questions as any[],
+            runId,
+          })
+        }
+        emit({
+          type: 'checkpoint',
+          label: phaseInfo.name,
+          status: 'active',
+        })
+      } else {
+        // Regular state transition
         emit({
           type: 'stage_update',
           stage: 'generating',
         })
-        break
-
-      case 'workflow-step-start': {
-        const stepId = wfEvent.payload?.id ?? ''
-        const phaseInfo = STEP_PHASES[stepId]
-        if (phaseInfo) {
-          emit({
-            type: 'phase_start',
-            phase: phaseInfo.phase,
-            phaseName: phaseInfo.name,
-            agentCount: 1,
-          })
-          emit({
-            type: 'checkpoint',
-            label: phaseInfo.name,
-            status: 'active',
-          })
-        }
-        break
-      }
-
-      case 'workflow-step-finish': {
-        const stepId = wfEvent.payload?.id ?? ''
-        const phaseInfo = STEP_PHASES[stepId]
-        if (phaseInfo) {
-          emit({
-            type: 'checkpoint',
-            label: `${phaseInfo.name} complete`,
-            status: 'complete',
-          })
-          emit({
-            type: 'phase_complete',
-            phase: phaseInfo.phase,
-            phaseName: phaseInfo.name,
-          })
-        }
-        break
-      }
-
-      case 'workflow-step-result': {
-        const stepId = wfEvent.payload?.id ?? ''
-        const status = wfEvent.payload?.status
-
-        if (stepId === 'write-migration' && status === 'success') {
-          emit({
-            type: 'file_complete',
-            path: 'supabase/migrations/001_initial.sql',
-            linesOfCode: 0,
-          })
-        }
-
-        if (stepId === 'final-qa-gate' && wfEvent.payload?.output) {
-          const qa = wfEvent.payload.output as {
-            typecheckPassed?: boolean
-            lintPassed?: boolean
-            buildPassed?: boolean
-            typecheckOutput?: string
-            lintOutput?: string
-            buildOutput?: string
-          }
-          if (!qa.typecheckPassed || !qa.lintPassed || !qa.buildPassed) {
-            const errors = []
-            if (!qa.typecheckPassed)
-              errors.push({
-                file: 'tsc',
-                message: qa.typecheckOutput ?? 'Type check failed',
-                raw: qa.typecheckOutput ?? '',
-              })
-            if (!qa.lintPassed)
-              errors.push({ file: 'lint', message: qa.lintOutput ?? 'Lint failed', raw: qa.lintOutput ?? '' })
-            if (!qa.buildPassed)
-              errors.push({
-                file: 'build',
-                message: qa.buildOutput ?? 'Build failed',
-                raw: qa.buildOutput ?? '',
-              })
-            emit({ type: 'build_error', errors })
-          }
-        }
-        break
-      }
-
-      case 'workflow-step-output':
-        processNestedEvent(wfEvent.payload?.output, emit)
-        break
-
-      case 'workflow-step-suspended': {
-        const suspendPayload = wfEvent.payload?.suspendPayload
-        if (suspendPayload?.questions && Array.isArray(suspendPayload.questions)) {
-          emit({
-            type: 'clarification_request',
-            questions: suspendPayload.questions,
-            runId: runId,
-          })
-        } else {
-          emit({
-            type: 'plan_ready',
-            plan: suspendPayload ?? {},
-          })
-        }
-        break
-      }
-
-      case 'workflow-finish': {
-        const wfStatus = wfEvent.payload?.workflowStatus
-        if (wfStatus === 'success') {
-          emit({
-            type: 'checkpoint',
-            label: 'Pipeline complete',
-            status: 'complete',
-          })
-        } else if (wfStatus === 'failed') {
-          // biome-ignore lint/suspicious/noExplicitAny: workflow payload has dynamic structure
-          const errorMsg =
-            typeof (wfEvent.payload as any)?.error === 'string'
-              ? (wfEvent.payload as any).error
-              : 'Pipeline failed'
-          emit({
-            type: 'error',
-            message: errorMsg,
-            stage: 'error',
-          })
-        }
-        break
-      }
-
-      case 'workflow-canceled':
         emit({
-          type: 'error',
-          message: 'Workflow was canceled',
-          stage: 'error',
+          type: 'phase_start',
+          phase: phaseInfo.phase,
+          phaseName: phaseInfo.name,
+          agentCount: 1,
         })
-        break
-
-      default:
-        if (process.env.NODE_ENV === 'development') {
-          console.log(
-            `[agent] Unhandled workflow event: ${wfEvent.type}`,
-            JSON.stringify(wfEvent.payload ?? {}).slice(0, 200),
-          )
-        }
-        break
-    }
-  }
-
-  const usage = await output.usage
-  const totalTokens = (usage?.inputTokens ?? 0) + (usage?.outputTokens ?? 0)
-
-  if (totalTokens > 0) {
-    const creditsUsed = Math.ceil(totalTokens / 1000)
-
-    await db.execute(sql`SELECT deduct_credits(
-      ${user.id}::uuid,
-      ${creditsUsed}::int,
-      ${projectId}::uuid,
-      ${model}::text,
-      ${'generation'}::text,
-      ${usage?.inputTokens ?? 0}::int,
-      ${usage?.outputTokens ?? 0}::int,
-      ${totalTokens}::int
-    )`)
-
-    const updatedCredits = await getUserCredits(user.id)
-    emit({
-      type: 'credits_used',
-      creditsUsed,
-      creditsRemaining: updatedCredits?.creditsRemaining ?? 0,
-      tokensTotal: totalTokens,
+        emit({
+          type: 'checkpoint',
+          label: phaseInfo.name,
+          status: 'active',
+        })
+      }
     })
-  }
 
-  emit({ type: 'stage_update', stage: 'complete' })
-}
-
-/**
- * Process nested agent/tool events from workflow-step-output.
- * When a workflow step runs an agent (e.g., codeGenStep calling pmAgent),
- * the agent's inner events bubble up as nested ChunkType payloads.
- */
-function processNestedEvent(
-  // biome-ignore lint/suspicious/noExplicitAny: Mastra nested payloads have dynamic structure
-  nestedOutput: any,
-  emit: (event: StreamEvent) => void,
-): void {
-  if (!nestedOutput || typeof nestedOutput !== 'object') return
-
-  const type = nestedOutput.type as string | undefined
-  // biome-ignore lint/suspicious/noExplicitAny: runtime payload
-  const payload = (nestedOutput as any).payload ?? nestedOutput
-
-  switch (type) {
-    case 'tool-call':
-      emit({
-        type: 'agent_artifact',
-        agentId: payload.toolName ?? 'pm',
-        artifactType: 'tool-start',
-        artifactName: payload.toolName ?? 'unknown',
-      })
-      break
-
-    case 'tool-result': {
-      const toolName = payload.toolName as string | undefined
-      if (toolName === 'write-file' || toolName === 'write-files') {
-        const result = payload.result as Record<string, unknown> | undefined
-        emit({
-          type: 'file_complete',
-          path: (result?.path as string) ?? '',
-          linesOfCode: (result?.bytesWritten as number) ?? 0,
-        })
-      } else {
-        emit({
-          type: 'agent_artifact',
-          agentId: payload.toolName ?? 'pm',
-          artifactType: 'tool-result',
-          artifactName: toolName ?? 'unknown',
-        })
-      }
-      break
-    }
-
-    case 'text-delta':
-      if (payload.text) {
-        emit({
-          type: 'agent_progress',
-          agentId: 'code-generation',
-          message: payload.text,
-        })
-      }
-      break
-
-    case 'finish':
-      // Agent finished generating — no action needed, workflow continues
-      break
-
-    default:
-      // Recursively check for nested output (NestedWorkflowOutput)
-      if (payload?.output) {
-        processNestedEvent(payload.output, emit)
-      }
-      break
-  }
+    // Clean up subscription on abort
+    signal.addEventListener('abort', () => {
+      subscription.unsubscribe()
+      resolve()
+    })
+  })
 }
 
 /**
  * POST /api/agent
- * Stream agent execution via SSE
+ * Stream agent execution via SSE using XState actor
  */
 agentRoutes.post('/', async (c) => {
   // Parse request body
@@ -390,21 +214,33 @@ agentRoutes.post('/', async (c) => {
   )
   requestContext.set('userId', user.id)
 
-  // Get the workflow and create a run
-  const workflow = mastra.getWorkflow('appGeneration')
+  // Create XState actor
   const runId = crypto.randomUUID()
-  const run = await workflow.createRun({ runId })
-  activeRuns.set(runId, { run, userId: user.id, projectId, model, createdAt: Date.now() })
+  const actor = createActor(appGenerationMachine)
+  activeRuns.set(runId, { actor, userId: user.id, projectId, model, createdAt: Date.now() })
+
+  // Start actor
+  actor.start()
 
   // Return SSE stream
   return createSSEStream(async (emit: (event: StreamEvent) => void, signal: AbortSignal) => {
     try {
       emit({ type: 'stage_update', stage: 'generating' })
-      const output = run.stream({
-        inputData: { userMessage: message, projectId },
-        requestContext,
+
+      // Send START event to actor
+      actor.send({ type: 'START', userMessage: message, projectId })
+
+      // Stream state transitions
+      await streamActorStates(actor, emit, signal, runId)
+
+      // For now, emit placeholder credits_used event
+      // TODO: Track actual token usage from LLM calls in actor invoke handlers
+      emit({
+        type: 'credits_used',
+        creditsUsed: 1,
+        creditsRemaining: credits.creditsRemaining - 1,
+        tokensTotal: 1000,
       })
-      await processWorkflowStream(output, emit, signal, user, projectId, model, runId)
     } catch (error) {
       if (signal.aborted) {
         console.log('[agent] Stream aborted by client')
@@ -416,11 +252,20 @@ agentRoutes.post('/', async (c) => {
         stage: 'error',
       })
     } finally {
+      try {
+        actor.stop()
+      } catch {
+        // Already stopped
+      }
       activeRuns.delete(runId)
     }
   })
 })
 
+/**
+ * POST /api/agent/resume
+ * Resume a suspended actor with user answers
+ */
 agentRoutes.post('/resume', async (c) => {
   let body: { runId?: string; answers?: string }
   try {
@@ -446,12 +291,19 @@ agentRoutes.post('/resume', async (c) => {
 
   return createSSEStream(async (emit: (event: StreamEvent) => void, signal: AbortSignal) => {
     try {
-      const output = stored.run.resumeStream({
-        resumeData: { answers },
-        step: 'analyst',
-      })
+      // Send USER_ANSWERED event to actor
+      stored.actor.send({ type: 'USER_ANSWERED', answers })
 
-      await processWorkflowStream(output, emit, signal, user, stored.projectId, stored.model, runId)
+      // Stream state transitions
+      await streamActorStates(stored.actor, emit, signal, runId)
+
+      // For now, emit placeholder credits_used event
+      emit({
+        type: 'credits_used',
+        creditsUsed: 1,
+        creditsRemaining: 0,
+        tokensTotal: 1000,
+      })
     } catch (error) {
       if (signal.aborted) return
       emit({
@@ -460,6 +312,11 @@ agentRoutes.post('/resume', async (c) => {
         stage: 'error',
       })
     } finally {
+      try {
+        stored.actor.stop()
+      } catch {
+        // Already stopped
+      }
       activeRuns.delete(runId)
     }
   })

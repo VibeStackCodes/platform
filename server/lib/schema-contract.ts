@@ -215,3 +215,32 @@ function detectCycle(tables: TableDef[]): string[] | null {
   }
   return null
 }
+
+// ============================================================================
+// Feature inference — detect app capabilities from schema structure
+// ============================================================================
+
+export interface InferredFeatures {
+  auth: boolean
+  entities: string[]
+}
+
+/**
+ * Infer app features from the schema contract.
+ * - auth: true if any table has a user_id column referencing auth.users
+ * - entities: list of all table names
+ */
+export function inferFeatures(contract: SchemaContract): InferredFeatures {
+  const hasAuth = contract.tables.some((table) =>
+    table.columns.some(
+      (col) =>
+        col.references?.table === 'auth.users' &&
+        col.name.endsWith('user_id'),
+    ),
+  )
+
+  return {
+    auth: hasAuth,
+    entities: contract.tables.map((t) => t.name),
+  }
+}
