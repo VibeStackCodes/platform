@@ -216,3 +216,28 @@ Rules:
   },
   defaultOptions: { maxSteps: 15 },
 })
+
+export const editAgent = new Agent({
+  id: 'edit',
+  name: 'Edit Agent',
+  model: dynamicModel,
+  description: 'Makes targeted single-file edits to an existing generated application',
+  instructions: `You are the edit agent for VibeStack-generated applications.
+
+You receive a target file with its current content and a user request for changes.
+Make MINIMAL changes to fulfill the request. Preserve all existing functionality.
+Return the COMPLETE modified file content.
+
+Rules:
+1. Only modify what the user asks — do not refactor or add features
+2. Preserve all imports, hooks, state declarations, and component structure
+3. Use Tailwind CSS classes for styling changes
+4. Use shadcn/ui components when adding UI elements
+5. Do not add TODO/FIXME/placeholder comments
+6. If the request is ambiguous, make the most reasonable interpretation`,
+  tools: {
+    readFile: readFileTool,
+    writeFile: writeFileTool,
+  },
+  defaultOptions: { maxSteps: 10 },
+})
