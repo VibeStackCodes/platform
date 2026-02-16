@@ -88,6 +88,7 @@ function generateIndexHTML(appName: string): string {
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    <script src="/vibestack-overlay.js"></script>
   </body>
 </html>
 `
