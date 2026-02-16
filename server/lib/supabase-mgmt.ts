@@ -119,6 +119,64 @@ export async function mgmtFetch(path: string, options: RequestInit = {}): Promis
 // ============================================================================
 
 /**
+ * Wait for a Supabase project to reach ACTIVE_HEALTHY status with exponential backoff
+ *
+ * @param projectId - Supabase project ID
+ * @param maxWaitMs - Maximum time to wait (default: 5 minutes)
+ */
+async function waitForProjectReady(projectId: string, maxWaitMs: number = 300_000): Promise<void> {
+  const startTime = Date.now()
+  let delay = 1000 // Start at 1s
+  const maxDelay = 15_000 // Cap at 15s
+  let consecutiveFailures = 0
+
+  while (Date.now() - startTime < maxWaitMs) {
+    await new Promise((resolve) => setTimeout(resolve, delay))
+
+    try {
+      const statusResponse = await mgmtFetch(`/projects/${projectId}`)
+      if (!statusResponse.ok) {
+        consecutiveFailures++
+        if (consecutiveFailures >= 5) {
+          throw new Error(`Supabase project ${projectId} status check failed 5 times consecutively`)
+        }
+      } else {
+        consecutiveFailures = 0 // Reset on success
+        const project = (await statusResponse.json()) as SupabaseAPIProject
+        console.log(`[supabase-mgmt] Project status: ${project.status}`)
+
+        if (project.status === 'ACTIVE_HEALTHY') {
+          return
+        }
+
+        if (project.status.includes('ERROR') || project.status.includes('FAILED')) {
+          throw new Error(`Project creation failed with status: ${project.status}`)
+        }
+      }
+    } catch (error) {
+      // Retry on transient errors (57P03, TLS, ECONNRESET)
+      const msg = error instanceof Error ? error.message : String(error)
+      if (
+        msg.includes('57P03') ||
+        msg.includes('TLS') ||
+        msg.includes('ECONNRESET') ||
+        msg.includes('ECONNREFUSED')
+      ) {
+        consecutiveFailures++
+        if (consecutiveFailures >= 5) throw error
+      } else {
+        throw error // Non-transient error, don't retry
+      }
+    }
+
+    // Exponential backoff with jitter
+    delay = Math.min(delay * 2 + Math.random() * 500, maxDelay)
+  }
+
+  throw new Error(`Supabase project ${projectId} not ready after ${maxWaitMs / 1000}s`)
+}
+
+/**
  * Create a new Supabase project and poll until it's ready (ACTIVE_HEALTHY)
  *
  * @param name - Project name (will be slugified)
@@ -169,60 +227,41 @@ export async function createSupabaseProject(
 
   console.log(`[supabase-mgmt] Created project ${project.id}, waiting for ACTIVE_HEALTHY status...`)
 
-  // Poll until project is ready
-  const maxAttempts = 60 // 5 minutes with 5s intervals
-  const pollInterval = 5000 // 5 seconds
+  // Wait for project to be ready with exponential backoff
+  await waitForProjectReady(project.id)
 
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    await new Promise((resolve) => setTimeout(resolve, pollInterval))
-
-    // Use SDK health check to verify project is ready
-    // Note: checkServiceHealth requires the project ref and a list of services
-    // We'll use raw fetch for polling status since SDK doesn't have a direct "get project status" method
-    const statusResponse = await mgmtFetch(`/projects/${project.id}`)
-    if (!statusResponse.ok) {
-      throw new Error(`Failed to check project status: ${await statusResponse.text()}`)
-    }
-
-    const currentProject = (await statusResponse.json()) as SupabaseAPIProject
-    console.log(
-      `[supabase-mgmt] Project status: ${currentProject.status} (attempt ${attempt + 1}/${maxAttempts})`,
-    )
-
-    if (currentProject.status === 'ACTIVE_HEALTHY') {
-      // Fetch API keys using SDK
-      const keys = await client.getProjectApiKeys(project.id)
-      if (!keys) {
-        throw new Error('Failed to fetch API keys from SDK')
-      }
-
-      const anonKey = keys.find((k) => k.name === 'anon')?.api_key
-      const serviceRoleKey = keys.find((k) => k.name === 'service_role')?.api_key
-
-      if (!anonKey || !serviceRoleKey) {
-        throw new Error('Failed to retrieve API keys from project')
-      }
-
-      // Map to shared SupabaseProject type
-      return {
-        id: currentProject.id,
-        name: currentProject.name,
-        orgId: currentProject.organization_id,
-        region: currentProject.region,
-        dbHost: currentProject.database.host,
-        dbPassword: password,
-        anonKey,
-        serviceRoleKey,
-        url: `https://${currentProject.id}.supabase.co`,
-      }
-    }
-
-    if (currentProject.status.includes('ERROR') || currentProject.status.includes('FAILED')) {
-      throw new Error(`Project creation failed with status: ${currentProject.status}`)
-    }
+  // Fetch API keys using SDK
+  const keys = await client.getProjectApiKeys(project.id)
+  if (!keys) {
+    throw new Error('Failed to fetch API keys from SDK')
   }
 
-  throw new Error('Project creation timed out waiting for ACTIVE_HEALTHY status')
+  const anonKey = keys.find((k) => k.name === 'anon')?.api_key
+  const serviceRoleKey = keys.find((k) => k.name === 'service_role')?.api_key
+
+  if (!anonKey || !serviceRoleKey) {
+    throw new Error('Failed to retrieve API keys from project')
+  }
+
+  // Fetch final project details
+  const statusResponse = await mgmtFetch(`/projects/${project.id}`)
+  if (!statusResponse.ok) {
+    throw new Error(`Failed to fetch final project details: ${await statusResponse.text()}`)
+  }
+  const currentProject = (await statusResponse.json()) as SupabaseAPIProject
+
+  // Map to shared SupabaseProject type
+  return {
+    id: currentProject.id,
+    name: currentProject.name,
+    orgId: currentProject.organization_id,
+    region: currentProject.region,
+    dbHost: currentProject.database.host,
+    dbPassword: password,
+    anonKey,
+    serviceRoleKey,
+    url: `https://${currentProject.id}.supabase.co`,
+  }
 }
 
 /**
@@ -240,6 +279,10 @@ export async function deleteSupabaseProject(projectId: string): Promise<void> {
 // Schema Management
 // ============================================================================
 
+// Circuit breaker for migrations
+let migrationFailureCount = 0
+const MAX_CONSECUTIVE_MIGRATION_FAILURES = 3
+
 /**
  * Run a SQL migration against a Supabase project
  *
@@ -252,11 +295,21 @@ export async function runMigration(projectId: string, sql: string): Promise<Migr
   try {
     await client.runQuery(projectId, sql)
 
+    // Reset circuit breaker on success
+    migrationFailureCount = 0
+
     return {
       success: true,
       executedAt: new Date().toISOString(),
     }
   } catch (error) {
+    migrationFailureCount++
+    if (migrationFailureCount >= MAX_CONSECUTIVE_MIGRATION_FAILURES) {
+      throw new Error(
+        `Circuit breaker: ${migrationFailureCount} consecutive migration failures. Last error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      )
+    }
+
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error',
@@ -264,6 +317,11 @@ export async function runMigration(projectId: string, sql: string): Promise<Migr
     }
   }
 }
+
+/**
+ * Regex for safe SQL identifiers (table names, bucket names, etc.)
+ */
+const SAFE_IDENTIFIER = /^[a-z_][a-z0-9_-]*$/
 
 /**
  * Complete schema setup: migrations, RLS policies, seed data, and realtime
@@ -289,7 +347,7 @@ export async function setupSchema(
     }
     for (const table of s.realtimeTables) {
       // Validate table name to prevent SQL injection
-      if (!/^[a-z0-9_]+$/.test(table)) {
+      if (!SAFE_IDENTIFIER.test(table)) {
         console.error(`[supabase-mgmt] Invalid table name for realtime: ${table}`)
         results.push({
           success: false,
@@ -304,7 +362,7 @@ export async function setupSchema(
     }
     for (const bucket of s.storageBuckets) {
       // Validate bucket name to prevent SQL injection
-      if (!/^[a-z0-9_]+$/.test(bucket)) {
+      if (!SAFE_IDENTIFIER.test(bucket)) {
         console.error(`[supabase-mgmt] Invalid bucket name: ${bucket}`)
         results.push({
           success: false,
@@ -313,10 +371,12 @@ export async function setupSchema(
         })
         continue
       }
+      // Escape single quotes in bucket name (defense in depth)
+      const escapedBucket = bucket.replace(/'/g, "''")
       results.push(
         await runMigration(
           projectId,
-          `INSERT INTO storage.buckets (id, name, public) VALUES ('${bucket}', '${bucket}', true) ON CONFLICT DO NOTHING;`,
+          `INSERT INTO storage.buckets (id, name, public) VALUES ('${escapedBucket}', '${escapedBucket}', true) ON CONFLICT DO NOTHING;`,
         ),
       )
     }

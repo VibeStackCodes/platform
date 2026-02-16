@@ -1,5 +1,6 @@
 // lib/contract-to-sql.ts
 import type { SchemaContract, TableDef } from './schema-contract'
+import { SQL_IDENTIFIER } from './schema-contract'
 
 const SQL_TYPE_MAP: Record<string, string> = {
   uuid: 'UUID',
@@ -17,11 +18,28 @@ const SQL_TYPE_MAP: Record<string, string> = {
  * Tables are topologically sorted by FK dependencies — correct by construction.
  */
 export function contractToSQL(contract: SchemaContract): string {
+  // Validate all identifiers before generating SQL
+  for (const table of contract.tables) {
+    if (!SQL_IDENTIFIER.test(table.name)) {
+      throw new Error(`Invalid table name: ${table.name}`)
+    }
+    for (const col of table.columns) {
+      if (!SQL_IDENTIFIER.test(col.name)) {
+        throw new Error(`Invalid column name: ${table.name}.${col.name}`)
+      }
+    }
+  }
+  for (const e of contract.enums ?? []) {
+    if (!SQL_IDENTIFIER.test(e.name)) {
+      throw new Error(`Invalid enum name: ${e.name}`)
+    }
+  }
+
   const parts: string[] = []
 
-  // 1. Enums
+  // 1. Enums (escape single quotes in values)
   for (const e of contract.enums ?? []) {
-    parts.push(`CREATE TYPE ${e.name} AS ENUM (${e.values.map((v) => `'${v}'`).join(', ')});`)
+    parts.push(`CREATE TYPE ${e.name} AS ENUM (${e.values.map((v) => `'${v.replace(/'/g, "''")}'`).join(', ')});`)
   }
 
   // 2. updated_at trigger function (emitted once, before tables)

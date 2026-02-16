@@ -3,6 +3,26 @@
 import { z } from 'zod'
 
 // ============================================================================
+// SQL identifier validation
+// ============================================================================
+
+// PostgreSQL identifier validation: lowercase snake_case
+export const SQL_IDENTIFIER = /^[a-z_][a-z0-9_]*$/
+
+// PostgreSQL reserved words (must be quoted or avoided)
+export const SQL_RESERVED_WORDS = new Set([
+  'user', 'order', 'select', 'insert', 'update', 'delete', 'table', 'column',
+  'index', 'constraint', 'primary', 'foreign', 'references', 'group', 'having',
+  'where', 'from', 'join', 'left', 'right', 'inner', 'outer', 'on', 'as',
+  'and', 'or', 'not', 'null', 'true', 'false', 'default', 'check', 'unique',
+  'public', 'grant', 'revoke', 'create', 'drop', 'alter', 'trigger', 'function',
+  'procedure', 'view', 'schema', 'database', 'role', 'type', 'cast', 'case',
+  'when', 'then', 'else', 'end', 'between', 'like', 'in', 'exists', 'all', 'any',
+  'limit', 'offset', 'fetch', 'union', 'intersect', 'except', 'distinct', 'into',
+  'values', 'set', 'begin', 'commit', 'rollback', 'abort',
+])
+
+// ============================================================================
 // Zod schemas (runtime validation — used by structuredOutput + tools)
 // ============================================================================
 
@@ -42,7 +62,13 @@ const FKReferenceSchema = z
 const nullish = (val: unknown) => (val === null ? undefined : val)
 
 export const ColumnDefSchema = z.object({
-  name: z.string().describe('Column name (snake_case)'),
+  name: z.string()
+    .max(63, 'Identifier exceeds PostgreSQL 63-character limit')
+    .regex(SQL_IDENTIFIER, 'Invalid column name: must be lowercase snake_case')
+    .refine((name) => !SQL_RESERVED_WORDS.has(name), {
+      message: 'Column name is a PostgreSQL reserved word',
+    })
+    .describe('Column name (snake_case)'),
   type: SQLTypeSchema.describe('PostgreSQL data type'),
   nullable: z.preprocess(nullish, z.boolean().optional()).describe('Whether column is nullable'),
   // Accept any primitive, coerce to string (LLMs emit numbers/booleans for defaults)
@@ -65,14 +91,22 @@ export const ColumnDefSchema = z.object({
 })
 
 export const RLSPolicySchema = z.object({
-  name: z.string().describe('Policy name'),
+  name: z.string()
+    .max(63, 'Policy name exceeds PostgreSQL 63-character limit')
+    .describe('Policy name (can contain spaces, always quoted in SQL)'),
   operation: z.enum(['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'ALL']).describe('SQL operation'),
   using: z.preprocess(nullish, z.string().optional()).describe('USING expression for row filtering'),
   withCheck: z.preprocess(nullish, z.string().optional()).describe('WITH CHECK expression for mutations'),
 })
 
 export const TableDefSchema = z.object({
-  name: z.string().describe('Table name (snake_case, singular)'),
+  name: z.string()
+    .max(63, 'Identifier exceeds PostgreSQL 63-character limit')
+    .regex(SQL_IDENTIFIER, 'Invalid table name: must be lowercase snake_case')
+    .refine((name) => !SQL_RESERVED_WORDS.has(name), {
+      message: 'Table name is a PostgreSQL reserved word',
+    })
+    .describe('Table name (snake_case, singular)'),
   columns: z.array(ColumnDefSchema).describe('Table columns'),
   // Accept string or array — LLMs sometimes emit "enable RLS" as a string
   rlsPolicies: z.preprocess(
@@ -86,8 +120,16 @@ export const TableDefSchema = z.object({
 })
 
 export const EnumDefSchema = z.object({
-  name: z.string().describe('Enum type name'),
-  values: z.array(z.string()).describe('Enum values'),
+  name: z.string()
+    .max(63, 'Identifier exceeds PostgreSQL 63-character limit')
+    .regex(SQL_IDENTIFIER, 'Invalid enum name: must be lowercase snake_case')
+    .refine((name) => !SQL_RESERVED_WORDS.has(name), {
+      message: 'Enum name is a PostgreSQL reserved word',
+    })
+    .describe('Enum type name'),
+  values: z.array(
+    z.string().regex(/^[a-zA-Z0-9_-]+$/, 'Invalid enum value: must be alphanumeric with underscores/hyphens')
+  ).describe('Enum values'),
 })
 
 export const SchemaContractSchema = z.object({

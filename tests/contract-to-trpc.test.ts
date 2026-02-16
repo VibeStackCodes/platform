@@ -160,7 +160,7 @@ describe('contractToTrpc', () => {
     expect(content).toContain('userId: ctx.userId')
   })
 
-  it('generates Zod input schema with correct field types', () => {
+  it('uses drizzle-orm/zod createInsertSchema', () => {
     const contract: SchemaContract = {
       tables: [
         {
@@ -182,24 +182,20 @@ describe('contractToTrpc', () => {
     const result = contractToTrpc(contract)
     const content = result[0].content
 
-    // Check Zod schema field types
-    expect(content).toContain('title: z.string()')
-    expect(content).toContain('description: z.string().optional()')
-    expect(content).toContain('priority: z.number().int().optional()')
-    expect(content).toContain('completed: z.boolean().optional()')
-    expect(content).toContain('dueDate: z.string().datetime().optional()')
-    expect(content).toContain('metadata: z.record(z.unknown()).optional()')
+    // Check imports drizzle-orm/zod
+    expect(content).toContain("import { createInsertSchema } from 'drizzle-orm/zod'")
 
-    // Should NOT include id, created_at, updated_at in the create input schema
-    // Extract the create input schema specifically
-    const createInputMatch = content.match(/create:.*?\.input\((z\.object\(\{[^}]+\}\))\)/s)
-    expect(createInputMatch).toBeTruthy()
-    const createInput = createInputMatch![1]
-    expect(createInput).not.toContain('id:')
-    expect(createInput).not.toContain('createdAt:')
+    // Check schema generation
+    expect(content).toContain('const insertTaskSchema = createInsertSchema(task)')
+
+    // Check create uses omit with schema
+    expect(content).toContain('insertTaskSchema.omit({ id: true, createdAt: true, updatedAt: true })')
+
+    // Check update uses partial with merge
+    expect(content).toContain('insertTaskSchema.partial().omit({ id: true, createdAt: true, updatedAt: true })')
   })
 
-  it('skips user_id in Zod schema for owned tables', () => {
+  it('skips user_id in schema omit for owned tables', () => {
     const contract: SchemaContract = {
       tables: [
         {
@@ -216,11 +212,10 @@ describe('contractToTrpc', () => {
     const result = contractToTrpc(contract)
     const content = result[0].content
 
-    // user_id should not appear in Zod schema (injected by backend)
-    const zodSchemaMatch = content.match(/z\.object\(\{([^}]+)\}\)/s)
-    expect(zodSchemaMatch).toBeTruthy()
-    const zodFields = zodSchemaMatch![1]
-    expect(zodFields).not.toContain('userId:')
+    // Should omit standard fields in schema
+    expect(content).toContain('omit({ id: true, createdAt: true, updatedAt: true })')
+    // userId injected by backend, not via schema
+    expect(content).toContain('userId: ctx.userId')
   })
 
   it('includes SLOT marker for custom procedures', () => {
@@ -260,13 +255,18 @@ describe('contractToTrpc', () => {
     const result = contractToTrpc(contract)
     const content = result[0].content
 
-    // Check camelCase in code
+    // Check camelCase in router name
     expect(content).toMatch(/export const userProfileRouter/)
-    expect(content).toMatch(/firstName:\s*z\.string/)
-    expect(content).toMatch(/lastName:\s*z\.string/)
 
     // Check snake_case in SQL/imports
     expect(content).toContain('user_profile')
+
+    // Check camelCase in sortBy enum (derived from columns)
+    expect(content).toContain('firstName')
+    expect(content).toContain('lastName')
+
+    // Check schema generation uses PascalCase
+    expect(content).toContain('const insertUserProfileSchema = createInsertSchema(user_profile)')
   })
 
   it('exports router with correct name', () => {
@@ -305,9 +305,144 @@ describe('contractToTrpc', () => {
     const content = result[0].content
 
     expect(content).toContain("import { z } from 'zod'")
-    expect(content).toContain("import { eq } from 'drizzle-orm'")
+    expect(content).toContain("import { eq, asc, desc, gt, and } from 'drizzle-orm'")
+    expect(content).toContain("import { createInsertSchema } from 'drizzle-orm/zod'")
     expect(content).toMatch(/import.*task.*from.*schema/)
     expect(content).toMatch(/import.*router.*from.*trpc/)
+  })
+
+  it('generates cursor-based pagination for list procedure', () => {
+    const contract: SchemaContract = {
+      tables: [
+        {
+          name: 'task',
+          columns: [
+            { name: 'id', type: 'uuid', primaryKey: true },
+            { name: 'title', type: 'text' },
+            { name: 'created_at', type: 'timestamptz', default: 'now()' },
+          ],
+        },
+      ],
+    }
+
+    const result = contractToTrpc(contract)
+    const content = result[0].content
+
+    // Check list input has pagination params
+    expect(content).toContain('cursor: z.string().uuid().optional()')
+    expect(content).toContain('limit: z.number().int().min(1).max(100).default(20)')
+
+    // Check cursor logic
+    expect(content).toContain('if (input.cursor)')
+    expect(content).toContain('gt(task.id, input.cursor)')
+
+    // Check return shape
+    expect(content).toContain('items: hasMore ? items.slice(0, -1) : items')
+    expect(content).toContain('nextCursor: hasMore ? items[input.limit - 1].id : null')
+  })
+
+  it('generates sorting parameters for list procedure', () => {
+    const contract: SchemaContract = {
+      tables: [
+        {
+          name: 'task',
+          columns: [
+            { name: 'id', type: 'uuid', primaryKey: true },
+            { name: 'title', type: 'text' },
+            { name: 'status', type: 'text' },
+            { name: 'created_at', type: 'timestamptz', default: 'now()' },
+          ],
+        },
+      ],
+    }
+
+    const result = contractToTrpc(contract)
+    const content = result[0].content
+
+    // Check sortBy enum includes table columns (excluding jsonb)
+    expect(content).toMatch(/sortBy: z\.enum\(\[.*'id'.*'title'.*'status'.*'createdAt'.*\]\)/)
+
+    // Check sortOrder enum
+    expect(content).toContain("sortOrder: z.enum(['asc', 'desc'])")
+
+    // Check default sort is created_at
+    expect(content).toContain(".default('createdAt')")
+
+    // Check sorting logic
+    expect(content).toContain('const orderCol = task[input.sortBy]')
+    expect(content).toContain("const orderFn = input.sortOrder === 'asc' ? asc : desc")
+    expect(content).toContain('.orderBy(orderFn(orderCol))')
+  })
+
+  it('defaults to id sorting when no created_at column', () => {
+    const contract: SchemaContract = {
+      tables: [
+        {
+          name: 'tag',
+          columns: [
+            { name: 'id', type: 'uuid', primaryKey: true },
+            { name: 'name', type: 'text' },
+          ],
+        },
+      ],
+    }
+
+    const result = contractToTrpc(contract)
+    const content = result[0].content
+
+    // Should default to id when created_at not present
+    expect(content).toMatch(/sortBy:.*\.default\('id'\)/)
+  })
+
+  it('excludes jsonb columns from sortBy enum', () => {
+    const contract: SchemaContract = {
+      tables: [
+        {
+          name: 'document',
+          columns: [
+            { name: 'id', type: 'uuid', primaryKey: true },
+            { name: 'title', type: 'text' },
+            { name: 'metadata', type: 'jsonb' },
+            { name: 'created_at', type: 'timestamptz' },
+          ],
+        },
+      ],
+    }
+
+    const result = contractToTrpc(contract)
+    const content = result[0].content
+
+    // Should include text and timestamp columns
+    expect(content).toMatch(/sortBy:.*'title'/)
+    expect(content).toMatch(/sortBy:.*'createdAt'/)
+
+    // Should NOT include jsonb column
+    expect(content).not.toMatch(/sortBy:.*'metadata'/)
+  })
+
+  it('combines user ownership filter with cursor pagination', () => {
+    const contract: SchemaContract = {
+      tables: [
+        {
+          name: 'bookmark',
+          columns: [
+            { name: 'id', type: 'uuid', primaryKey: true },
+            { name: 'user_id', type: 'uuid', references: { table: 'auth.users', column: 'id' } },
+            { name: 'url', type: 'text' },
+            { name: 'created_at', type: 'timestamptz' },
+          ],
+        },
+      ],
+    }
+
+    const result = contractToTrpc(contract)
+    const content = result[0].content
+
+    // Should use and() to combine conditions
+    expect(content).toContain('const conditions = [')
+    expect(content).toContain('eq(bookmark.user_id, ctx.userId)')
+    expect(content).toContain('conditions.push(gt(bookmark.id, input.cursor))')
+    expect(content).toContain('.where(and(...conditions))')
   })
 })
 

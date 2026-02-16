@@ -15,7 +15,6 @@ import {
   writeFileTool,
   writeFilesTool,
 } from './tools'
-// qaWorkflow removed from agents — only runs as final workflow gate after integrationStep
 
 // Re-export RequestContext for route usage
 export { RequestContext }
@@ -70,7 +69,19 @@ const frontendWorkspace = new Workspace({
   tools: noWorkspaceTools,
 })
 
-// --- Module-level agents (visible to Mastra Studio) ---
+// ============================================================================
+// Agent Definitions (4-agent hybrid architecture)
+// ============================================================================
+//
+// Current workflow:
+// 1. analystAgent: Extracts requirements, produces SchemaContract
+// 2. Infrastructure provisioning (parallel): Sandbox + Supabase + GitHub repo
+// 3. AppBlueprint generation: contract → SQL + types + tRPC + routes + pages
+// 4. Code generation:
+//    - backendAgent: Fills SLOT markers in tRPC router files
+//    - frontendAgent: Fills SLOT markers in page skeleton files
+// 5. repairAgent: Fixes validation errors (TypeScript, lint, build)
+// 6. Deployment: Push to GitHub + Vercel
 
 export const analystAgent = new Agent({
   id: 'analyst',

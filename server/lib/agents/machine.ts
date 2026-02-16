@@ -1,7 +1,16 @@
-import { assign, setup } from 'xstate'
+import { assign, fromPromise, setup } from 'xstate'
 import type { AppBlueprint } from '../app-blueprint'
 import type { DesignPreferences, SchemaContract } from '../schema-contract'
 import type { ValidationGateResult } from './validation'
+import type {
+  AnalysisResult,
+  BlueprintResult,
+  CodeGenResult,
+  ValidationResult,
+  RepairResult,
+  ProvisioningResult,
+  DeploymentResult,
+} from './orchestrator'
 
 // ============================================================================
 // Context type — all data flowing through the machine
@@ -36,9 +45,13 @@ export interface MachineContext {
   // Validation
   validation: ValidationGateResult | null
   retryCount: number
+  previousValidationErrors: ValidationGateResult | null
 
   // Deploy
   deploymentUrl: string | null
+
+  // Token tracking
+  totalTokens: number
 
   // Error
   error: string | null
@@ -87,6 +100,68 @@ export const appGenerationMachine = setup({
     context: {} as MachineContext,
     events: {} as MachineEvent,
   },
+  actors: {
+    runAnalysisActor: fromPromise(async ({ input }: { input: { userMessage: string; projectId: string } }) => {
+      const { runAnalysis } = await import('./orchestrator')
+      return runAnalysis(input)
+    }),
+    runBlueprintActor: fromPromise(
+      async ({
+        input,
+      }: {
+        input: { appName: string; appDescription: string; contract: SchemaContract; designPreferences: DesignPreferences }
+      }) => {
+        const { runBlueprint } = await import('./orchestrator')
+        return runBlueprint(input)
+      },
+    ),
+    runProvisioningActor: fromPromise(async ({ input }: { input: { appName: string; projectId: string } }) => {
+      const { runProvisioning } = await import('./orchestrator')
+      return runProvisioning(input)
+    }),
+    runCodeGenerationActor: fromPromise(
+      async ({ input }: { input: { blueprint: AppBlueprint; contract: SchemaContract; sandboxId: string } }) => {
+        const { runCodeGeneration } = await import('./orchestrator')
+        return runCodeGeneration(input)
+      },
+    ),
+    runValidationActor: fromPromise(async ({ input }: { input: { blueprint: AppBlueprint; sandboxId: string } }) => {
+      const { runValidation } = await import('./orchestrator')
+      return runValidation(input)
+    }),
+    runRepairActor: fromPromise(
+      async ({ input }: { input: { blueprint: AppBlueprint; validation: ValidationGateResult; sandboxId: string } }) => {
+        const { runRepair } = await import('./orchestrator')
+        return runRepair(input)
+      },
+    ),
+    runDeploymentActor: fromPromise(async ({ input }: { input: { sandboxId: string; projectId: string } }) => {
+      const { runDeployment } = await import('./orchestrator')
+      return runDeployment(input)
+    }),
+    runCleanupActor: fromPromise(
+      async ({ input }: { input: { sandboxId: string | null; supabaseProjectId: string | null } }) => {
+        const errors: string[] = []
+        if (input.sandboxId) {
+          try {
+            const { getDaytonaClient, getSandbox } = await import('../sandbox')
+            const daytona = getDaytonaClient()
+            const sandbox = await getSandbox(input.sandboxId)
+            await daytona.delete(sandbox)
+            console.log(`[cleanup] Deleted sandbox: ${input.sandboxId}`)
+          } catch (e) {
+            errors.push(`Sandbox cleanup failed: ${e instanceof Error ? e.message : String(e)}`)
+          }
+        }
+        // Note: Don't delete Supabase project — user might want to inspect it
+        // Just log for manual cleanup
+        if (input.supabaseProjectId) {
+          console.warn(`[cleanup] Supabase project ${input.supabaseProjectId} left for manual cleanup`)
+        }
+        return { errors }
+      },
+    ),
+  },
   guards: {
     canRetry: ({ context }) => context.retryCount < 2,
     cannotRetry: ({ context }) => context.retryCount >= 2,
@@ -112,7 +187,9 @@ export const appGenerationMachine = setup({
     repoName: null,
     validation: null,
     retryCount: 0,
+    previousValidationErrors: null,
     deploymentUrl: null,
+    totalTokens: 0,
     error: null,
   },
   states: {
@@ -129,26 +206,42 @@ export const appGenerationMachine = setup({
     },
 
     analyzing: {
-      on: {
-        ANALYST_DONE: {
-          target: 'blueprinting',
-          actions: assign({
-            appName: ({ event }) => event.appName,
-            appDescription: ({ event }) => event.appDescription,
-            contract: ({ event }) => event.contract,
-            designPreferences: ({ event }) => event.designPreferences,
-          }),
-        },
-        CLARIFICATION_NEEDED: {
-          target: 'awaitingClarification',
-          actions: assign({
-            clarificationQuestions: ({ event }) => event.questions,
-          }),
-        },
-        ERROR: {
+      invoke: {
+        src: 'runAnalysisActor',
+        input: ({ context }) => ({
+          userMessage: context.userMessage,
+          projectId: context.projectId,
+        }),
+        onDone: [
+          {
+            guard: ({ event }) => event.output.type === 'clarification',
+            target: 'awaitingClarification',
+            actions: assign({
+              clarificationQuestions: ({ event }) => (event.output as Extract<AnalysisResult, { type: 'clarification' }>).questions,
+              totalTokens: ({ context, event }) => context.totalTokens + event.output.tokensUsed,
+            }),
+          },
+          {
+            target: 'blueprinting',
+            actions: assign({
+              appName: ({ event }) => (event.output as Extract<AnalysisResult, { type: 'done' }>).appName,
+              appDescription: ({ event }) => (event.output as Extract<AnalysisResult, { type: 'done' }>).appDescription,
+              contract: ({ event }) => (event.output as Extract<AnalysisResult, { type: 'done' }>).contract,
+              designPreferences: ({ event }) => (event.output as Extract<AnalysisResult, { type: 'done' }>).designPreferences,
+              totalTokens: ({ context, event }) => context.totalTokens + event.output.tokensUsed,
+            }),
+          },
+        ],
+        onError: {
           target: 'failed',
           actions: assign({
-            error: ({ event }) => event.error,
+            error: ({ event }) => {
+              const err = event.error
+              if (err instanceof Error) {
+                return `${err.message}${err.stack ? `\n${err.stack}` : ''}`
+              }
+              return String(err)
+            },
           }),
         },
       },
@@ -167,110 +260,209 @@ export const appGenerationMachine = setup({
     },
 
     blueprinting: {
-      on: {
-        BLUEPRINT_DONE: {
+      invoke: {
+        src: 'runBlueprintActor',
+        input: ({ context }) => ({
+          appName: context.appName ?? '',
+          appDescription: context.appDescription ?? '',
+          contract: context.contract!,
+          designPreferences: context.designPreferences!,
+        }),
+        onDone: {
           target: 'provisioning',
           actions: assign({
-            blueprint: ({ event }) => event.blueprint,
+            blueprint: ({ event }) => event.output.blueprint,
+            totalTokens: ({ context, event }) => context.totalTokens + event.output.tokensUsed,
           }),
         },
-        ERROR: {
+        onError: {
           target: 'failed',
           actions: assign({
-            error: ({ event }) => event.error,
+            error: ({ event }) => {
+              const err = event.error
+              if (err instanceof Error) {
+                return `${err.message}${err.stack ? `\n${err.stack}` : ''}`
+              }
+              return String(err)
+            },
           }),
         },
       },
     },
 
     provisioning: {
-      on: {
-        PROVISION_DONE: {
+      invoke: {
+        src: 'runProvisioningActor',
+        input: ({ context }) => ({
+          appName: context.appName ?? '',
+          projectId: context.projectId,
+        }),
+        onDone: {
           target: 'generating',
           actions: assign({
-            sandboxId: ({ event }) => event.sandboxId,
-            supabaseProjectId: ({ event }) => event.supabaseProjectId,
-            supabaseUrl: ({ event }) => event.supabaseUrl,
-            supabaseAnonKey: ({ event }) => event.supabaseAnonKey,
-            githubCloneUrl: ({ event }) => event.githubCloneUrl,
-            githubHtmlUrl: ({ event }) => event.githubHtmlUrl,
-            repoName: ({ event }) => event.repoName,
+            sandboxId: ({ event }) => event.output.sandboxId,
+            supabaseProjectId: ({ event }) => event.output.supabaseProjectId,
+            supabaseUrl: ({ event }) => event.output.supabaseUrl,
+            supabaseAnonKey: ({ event }) => event.output.supabaseAnonKey,
+            githubCloneUrl: ({ event }) => event.output.githubCloneUrl,
+            githubHtmlUrl: ({ event }) => event.output.githubHtmlUrl,
+            repoName: ({ event }) => event.output.repoName,
+            totalTokens: ({ context, event }) => context.totalTokens + event.output.tokensUsed,
           }),
         },
-        ERROR: {
-          target: 'failed',
+        onError: {
+          target: 'cleanup',
           actions: assign({
-            error: ({ event }) => event.error,
+            error: ({ event }) => {
+              const err = event.error
+              if (err instanceof Error) {
+                return `${err.message}${err.stack ? `\n${err.stack}` : ''}`
+              }
+              return String(err)
+            },
           }),
         },
       },
     },
 
     generating: {
-      on: {
-        CODEGEN_DONE: 'validating',
-        ERROR: {
-          target: 'failed',
+      invoke: {
+        src: 'runCodeGenerationActor',
+        input: ({ context }) => ({
+          blueprint: context.blueprint!,
+          contract: context.contract!,
+          sandboxId: context.sandboxId!,
+        }),
+        onDone: {
+          target: 'validating',
           actions: assign({
-            error: ({ event }) => event.error,
+            totalTokens: ({ context, event }) => context.totalTokens + event.output.tokensUsed,
+          }),
+        },
+        onError: {
+          target: 'cleanup',
+          actions: assign({
+            error: ({ event }) => {
+              const err = event.error
+              if (err instanceof Error) {
+                return `${err.message}${err.stack ? `\n${err.stack}` : ''}`
+              }
+              return String(err)
+            },
           }),
         },
       },
     },
 
     validating: {
-      on: {
-        VALIDATION_PASS: 'deploying',
-        VALIDATION_FAIL: [
+      invoke: {
+        src: 'runValidationActor',
+        input: ({ context }) => ({
+          blueprint: context.blueprint!,
+          sandboxId: context.sandboxId!,
+        }),
+        onDone: [
           {
-            guard: 'canRetry',
-            target: 'repairing',
+            guard: ({ event }) => event.output.allPassed,
+            target: 'deploying',
             actions: assign({
-              validation: ({ event }) => event.validation,
-              retryCount: ({ context }) => context.retryCount + 1,
+              totalTokens: ({ context, event }) => context.totalTokens + event.output.tokensUsed,
             }),
           },
           {
-            guard: 'cannotRetry',
-            target: 'failed',
+            guard: ({ context, event }) => {
+              // Can retry AND errors have changed (or first attempt)
+              if (context.retryCount >= 2) return false
+              const currentErrors = JSON.stringify(event.output.validation)
+              const previousErrors = context.previousValidationErrors ? JSON.stringify(context.previousValidationErrors) : null
+              return currentErrors !== previousErrors
+            },
+            target: 'repairing',
             actions: assign({
-              error: () => 'Validation failed after maximum retries',
+              validation: ({ event }) => event.output.validation,
+              previousValidationErrors: ({ event }) => event.output.validation,
+              retryCount: ({ context }) => context.retryCount + 1,
+              totalTokens: ({ context, event }) => context.totalTokens + event.output.tokensUsed,
+            }),
+          },
+          {
+            target: 'cleanup',
+            actions: assign({
+              error: ({ context }) =>
+                context.previousValidationErrors
+                  ? 'Validation errors unchanged after repair - halting retry loop'
+                  : 'Validation failed after maximum retries',
             }),
           },
         ],
-        ERROR: {
-          target: 'failed',
+        onError: {
+          target: 'cleanup',
           actions: assign({
-            error: ({ event }) => event.error,
+            error: ({ event }) => {
+              const err = event.error
+              if (err instanceof Error) {
+                return `${err.message}${err.stack ? `\n${err.stack}` : ''}`
+              }
+              return String(err)
+            },
           }),
         },
       },
     },
 
     repairing: {
-      on: {
-        REPAIR_DONE: 'validating',
-        ERROR: {
-          target: 'failed',
+      invoke: {
+        src: 'runRepairActor',
+        input: ({ context }) => ({
+          blueprint: context.blueprint!,
+          validation: context.validation!,
+          sandboxId: context.sandboxId!,
+        }),
+        onDone: {
+          target: 'validating',
           actions: assign({
-            error: ({ event }) => event.error,
+            totalTokens: ({ context, event }) => context.totalTokens + event.output.tokensUsed,
+          }),
+        },
+        onError: {
+          target: 'cleanup',
+          actions: assign({
+            error: ({ event }) => {
+              const err = event.error
+              if (err instanceof Error) {
+                return `${err.message}${err.stack ? `\n${err.stack}` : ''}`
+              }
+              return String(err)
+            },
           }),
         },
       },
     },
 
     deploying: {
-      on: {
-        DEPLOY_DONE: {
+      invoke: {
+        src: 'runDeploymentActor',
+        input: ({ context }) => ({
+          sandboxId: context.sandboxId!,
+          projectId: context.projectId,
+        }),
+        onDone: {
           target: 'complete',
           actions: assign({
-            deploymentUrl: ({ event }) => event.deploymentUrl,
+            deploymentUrl: ({ event }) => event.output.deploymentUrl,
+            totalTokens: ({ context, event }) => context.totalTokens + event.output.tokensUsed,
           }),
         },
-        ERROR: {
-          target: 'failed',
+        onError: {
+          target: 'cleanup',
           actions: assign({
-            error: ({ event }) => event.error,
+            error: ({ event }) => {
+              const err = event.error
+              if (err instanceof Error) {
+                return `${err.message}${err.stack ? `\n${err.stack}` : ''}`
+              }
+              return String(err)
+            },
           }),
         },
       },
@@ -278,6 +470,18 @@ export const appGenerationMachine = setup({
 
     complete: {
       type: 'final',
+    },
+
+    cleanup: {
+      invoke: {
+        src: 'runCleanupActor',
+        input: ({ context }) => ({
+          sandboxId: context.sandboxId,
+          supabaseProjectId: context.supabaseProjectId,
+        }),
+        onDone: { target: 'failed' },
+        onError: { target: 'failed' }, // Cleanup failure shouldn't block failure reporting
+      },
     },
 
     failed: {

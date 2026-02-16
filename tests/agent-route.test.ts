@@ -82,8 +82,14 @@ vi.mock('@server/lib/db/client', () => ({
   },
 }))
 
+vi.mock('@server/lib/credits', () => ({
+  reserveCredits: vi.fn(),
+  settleCredits: vi.fn().mockResolvedValue({ creditsRemaining: 50 }),
+}))
+
 import { isAllowedModel } from '@server/lib/agents/provider'
 import { getUserCredits } from '@server/lib/db/queries'
+import { reserveCredits } from '@server/lib/credits'
 import { agentRoutes } from '@server/routes/agent'
 
 describe('POST /api/agent', () => {
@@ -153,6 +159,7 @@ describe('POST /api/agent', () => {
   it('returns 402 when user has no credits (null)', async () => {
     vi.mocked(getUserCredits).mockResolvedValue(null)
     vi.mocked(isAllowedModel).mockReturnValue(true)
+    vi.mocked(reserveCredits).mockResolvedValue(false)
 
     const res = await app.request('/api/agent', {
       method: 'POST',
@@ -162,12 +169,9 @@ describe('POST /api/agent', () => {
 
     expect(res.status).toBe(402)
     const json = await res.json()
-    expect(json).toEqual({
-      error: 'insufficient_credits',
-      credits_remaining: 0,
-      credits_reset_at: null,
-    })
-    expect(getUserCredits).toHaveBeenCalledWith('user-123')
+    expect(json.error).toBe('insufficient_credits')
+    expect(json.credits_remaining).toBe(0)
+    expect(json.credits_reset_at).toBeNull()
   })
 
   it('returns 402 when user credits are 0', async () => {
@@ -178,6 +182,7 @@ describe('POST /api/agent', () => {
       plan: 'free',
     })
     vi.mocked(isAllowedModel).mockReturnValue(true)
+    vi.mocked(reserveCredits).mockResolvedValue(false)
 
     const res = await app.request('/api/agent', {
       method: 'POST',
@@ -187,11 +192,9 @@ describe('POST /api/agent', () => {
 
     expect(res.status).toBe(402)
     const json = await res.json()
-    expect(json).toEqual({
-      error: 'insufficient_credits',
-      credits_remaining: 0,
-      credits_reset_at: '2026-03-01T00:00:00Z',
-    })
+    expect(json.error).toBe('insufficient_credits')
+    expect(json.credits_remaining).toBe(0)
+    expect(json.credits_reset_at).toBe('2026-03-01T00:00:00Z')
   })
 
   it('returns SSE stream with text/event-stream content-type for valid request', async () => {
@@ -202,6 +205,7 @@ describe('POST /api/agent', () => {
       plan: 'free',
     })
     vi.mocked(isAllowedModel).mockReturnValue(true)
+    vi.mocked(reserveCredits).mockResolvedValue(true)
 
     const res = await app.request('/api/agent', {
       method: 'POST',
@@ -223,6 +227,7 @@ describe('POST /api/agent', () => {
       plan: 'free',
     })
     vi.mocked(isAllowedModel).mockReturnValue(true)
+    vi.mocked(reserveCredits).mockResolvedValue(true)
 
     const res = await app.request('/api/agent', {
       method: 'POST',

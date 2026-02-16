@@ -23,6 +23,7 @@ import { appGenerationMachine } from '../lib/agents/machine'
 import type { MachineContext } from '../lib/agents/machine'
 import { RequestContext } from '../lib/agents/registry'
 import { getUserCredits } from '../lib/db/queries'
+import { reserveCredits, settleCredits } from '../lib/credits'
 import { createSSEStream } from '../lib/sse'
 import type { StreamEvent } from '../lib/types'
 import { authMiddleware } from '../middleware/auth'
@@ -39,6 +40,7 @@ interface ActiveRun {
   projectId: string
   model: string
   createdAt: number
+  reservedCredits: number
 }
 
 const activeRuns = new Map<string, ActiveRun>()
@@ -188,12 +190,16 @@ agentRoutes.post('/', async (c) => {
   // Get authenticated user from middleware
   const user = c.var.user
 
-  // Credit check using Drizzle
-  const credits = await getUserCredits(user.id)
-  if (!credits || credits.creditsRemaining <= 0) {
+  // Reserve credits atomically to prevent race conditions
+  const CREDIT_RESERVATION = 50 // Minimum reservation amount
+  const reserved = await reserveCredits(user.id, CREDIT_RESERVATION)
+  if (!reserved) {
+    // Check current credits for detailed error message
+    const credits = await getUserCredits(user.id)
     return c.json(
       {
         error: 'insufficient_credits',
+        message: 'Not enough credits to start generation',
         credits_remaining: credits?.creditsRemaining ?? 0,
         credits_reset_at: credits?.creditsResetAt ?? null,
       },
@@ -217,13 +223,21 @@ agentRoutes.post('/', async (c) => {
   // Create XState actor
   const runId = crypto.randomUUID()
   const actor = createActor(appGenerationMachine)
-  activeRuns.set(runId, { actor, userId: user.id, projectId, model, createdAt: Date.now() })
+  activeRuns.set(runId, {
+    actor,
+    userId: user.id,
+    projectId,
+    model,
+    createdAt: Date.now(),
+    reservedCredits: CREDIT_RESERVATION,
+  })
 
   // Start actor
   actor.start()
 
   // Return SSE stream
   return createSSEStream(async (emit: (event: StreamEvent) => void, signal: AbortSignal) => {
+    let generationFailed = false
     try {
       emit({ type: 'stage_update', stage: 'generating' })
 
@@ -233,19 +247,31 @@ agentRoutes.post('/', async (c) => {
       // Stream state transitions
       await streamActorStates(actor, emit, signal, runId)
 
-      // For now, emit placeholder credits_used event
-      // TODO: Track actual token usage from LLM calls in actor invoke handlers
+      // Get final snapshot to read totalTokens from machine context
+      const finalSnapshot = actor.getSnapshot()
+      const totalTokens = finalSnapshot.context.totalTokens
+      const creditsUsed = Math.ceil(totalTokens / 1000) // 1 credit = 1,000 tokens
+
+      // Settle reserved credits with actual usage
+      const settlement = await settleCredits(user.id, CREDIT_RESERVATION, creditsUsed)
+
+      // Emit real credit usage with settled remaining balance
       emit({
         type: 'credits_used',
-        creditsUsed: 1,
-        creditsRemaining: credits.creditsRemaining - 1,
-        tokensTotal: 1000,
+        creditsUsed,
+        creditsRemaining: settlement.creditsRemaining,
+        tokensTotal: totalTokens,
       })
     } catch (error) {
+      generationFailed = true
       if (signal.aborted) {
         console.log('[agent] Stream aborted by client')
+        // Refund reserved credits on abort
+        await settleCredits(user.id, CREDIT_RESERVATION, 0)
         return
       }
+      // Refund reserved credits on error
+      await settleCredits(user.id, CREDIT_RESERVATION, 0)
       emit({
         type: 'error',
         message: error instanceof Error ? error.message : 'Agent pipeline failed',
@@ -290,6 +316,7 @@ agentRoutes.post('/resume', async (c) => {
   }
 
   return createSSEStream(async (emit: (event: StreamEvent) => void, signal: AbortSignal) => {
+    let generationFailed = false
     try {
       // Send USER_ANSWERED event to actor
       stored.actor.send({ type: 'USER_ANSWERED', answers })
@@ -297,15 +324,31 @@ agentRoutes.post('/resume', async (c) => {
       // Stream state transitions
       await streamActorStates(stored.actor, emit, signal, runId)
 
-      // For now, emit placeholder credits_used event
+      // Get final snapshot to read totalTokens from machine context
+      const finalSnapshot = stored.actor.getSnapshot()
+      const totalTokens = finalSnapshot.context.totalTokens
+      const creditsUsed = Math.ceil(totalTokens / 1000) // 1 credit = 1,000 tokens
+
+      // Settle reserved credits with actual usage (from initial reservation)
+      const settlement = await settleCredits(user.id, stored.reservedCredits, creditsUsed)
+
+      // Emit real credit usage with settled remaining balance
       emit({
         type: 'credits_used',
-        creditsUsed: 1,
-        creditsRemaining: 0,
-        tokensTotal: 1000,
+        creditsUsed,
+        creditsRemaining: settlement.creditsRemaining,
+        tokensTotal: totalTokens,
       })
     } catch (error) {
-      if (signal.aborted) return
+      generationFailed = true
+      if (signal.aborted) {
+        console.log('[agent] Resume stream aborted by client')
+        // Refund reserved credits on abort
+        await settleCredits(user.id, stored.reservedCredits, 0)
+        return
+      }
+      // Refund reserved credits on error
+      await settleCredits(user.id, stored.reservedCredits, 0)
       emit({
         type: 'error',
         message: error instanceof Error ? error.message : 'Resume failed',

@@ -5,7 +5,8 @@ import { getCookie } from 'hono/cookie'
 import { createMiddleware } from 'hono/factory'
 
 const MOCK_MODE =
-  process.env.VITE_MOCK_MODE === 'true' || process.env.NEXT_PUBLIC_MOCK_MODE === 'true'
+  process.env.NODE_ENV !== 'production' &&
+  (process.env.VITE_MOCK_MODE === 'true' || process.env.NEXT_PUBLIC_MOCK_MODE === 'true')
 
 /** Stable mock user for E2E tests */
 export const MOCK_USER = {

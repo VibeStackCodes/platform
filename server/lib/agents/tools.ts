@@ -1,5 +1,6 @@
 import { createTool } from '@mastra/core/tools'
 import { z } from 'zod'
+import path from 'node:path'
 import { buildRepoName, createRepo, getInstallationToken } from '../github'
 import {
   createSandbox as createSandboxFn,
@@ -22,6 +23,20 @@ function escapeShellArg(arg: string): string {
   return `'${arg.replace(/'/g, "'\\''")}'`
 }
 
+/** Sanitize a path to prevent traversal outside /workspace */
+function sanitizeSandboxPath(inputPath: string): string {
+  // Normalize and strip leading slashes
+  const normalized = path.posix.normalize(inputPath).replace(/^\/+/, '')
+  // Block any remaining path traversal
+  if (normalized.startsWith('..') || normalized.includes('/../')) {
+    throw new Error(`Path traversal blocked: ${inputPath}`)
+  }
+  return `/workspace/${normalized}`
+}
+
+/** Maximum file size in bytes (10MB) */
+const MAX_FILE_SIZE = 10 * 1024 * 1024
+
 // ============================================================================
 // File Operations
 // ============================================================================
@@ -42,8 +57,18 @@ export const writeFileTool = createTool({
   }),
   execute: async (inputData, _context) => {
     try {
+      // Check file size limit
+      if (inputData.content.length > MAX_FILE_SIZE) {
+        return {
+          success: false,
+          path: inputData.path,
+          bytesWritten: 0,
+          error: `File exceeds ${MAX_FILE_SIZE / 1024 / 1024}MB limit`,
+        }
+      }
+
       const sandbox = await getSandbox(inputData.sandboxId)
-      const fullPath = `/workspace/${inputData.path}`
+      const fullPath = sanitizeSandboxPath(inputData.path)
       await sandbox.fs.uploadFile(Buffer.from(inputData.content), fullPath)
       return {
         success: true,
@@ -81,8 +106,22 @@ export const writeFilesTool = createTool({
     filesWritten: z.number(),
     totalBytes: z.number(),
     errors: z.array(z.object({ path: z.string(), error: z.string() })),
+    error: z.string().optional(),
   }),
   execute: async (inputData, _context) => {
+    // Check file size limits for all files first
+    for (const file of inputData.files) {
+      if (file.content.length > MAX_FILE_SIZE) {
+        return {
+          success: false,
+          filesWritten: 0,
+          totalBytes: 0,
+          errors: [],
+          error: `File ${file.path} exceeds ${MAX_FILE_SIZE / 1024 / 1024}MB limit`,
+        }
+      }
+    }
+
     const sandbox = await getSandbox(inputData.sandboxId)
     let filesWritten = 0
     let totalBytes = 0
@@ -90,7 +129,7 @@ export const writeFilesTool = createTool({
 
     for (const file of inputData.files) {
       try {
-        const fullPath = `/workspace/${file.path}`
+        const fullPath = sanitizeSandboxPath(file.path)
         await sandbox.fs.uploadFile(Buffer.from(file.content), fullPath)
         filesWritten++
         totalBytes += file.content.length
@@ -118,20 +157,22 @@ export const readFileTool = createTool({
   outputSchema: z.object({
     content: z.string(),
     exists: z.boolean(),
+    error: z.string().optional(),
   }),
   execute: async (inputData, _context) => {
-    const sandbox = await getSandbox(inputData.sandboxId)
-    const fullPath = `/workspace/${inputData.path}`
     try {
+      const sandbox = await getSandbox(inputData.sandboxId)
+      const fullPath = sanitizeSandboxPath(inputData.path)
       const buffer = await sandbox.fs.downloadFile(fullPath)
       return {
         content: buffer.toString('utf-8'),
         exists: true,
       }
-    } catch {
+    } catch (e) {
       return {
         content: '',
         exists: false,
+        error: e instanceof Error ? e.message : String(e),
       }
     }
   },
@@ -147,30 +188,39 @@ export const listFilesTool = createTool({
   outputSchema: z.object({
     files: z.array(z.string()),
     count: z.number(),
+    error: z.string().optional(),
   }),
   execute: async (inputData, _context) => {
-    const sandbox = await getSandbox(inputData.sandboxId)
-    const fullPath = `/workspace/${inputData.directory}`
+    try {
+      const sandbox = await getSandbox(inputData.sandboxId)
+      const fullPath = sanitizeSandboxPath(inputData.directory)
 
-    const result = await sandbox.process.executeCommand(
-      `find ${escapeShellArg(fullPath)} -type f ! -path "*/node_modules/*" ! -path "*/.next/*" ! -path "*/.git/*" | sort`,
-      '/workspace',
-      undefined,
-      30,
-    )
+      const result = await sandbox.process.executeCommand(
+        `find ${escapeShellArg(fullPath)} -type f ! -path "*/node_modules/*" ! -path "*/.next/*" ! -path "*/.git/*" | sort`,
+        '/workspace',
+        undefined,
+        30,
+      )
 
-    if (result.exitCode !== 0) {
-      return { files: [], count: 0 }
-    }
+      if (result.exitCode !== 0) {
+        return { files: [], count: 0 }
+      }
 
-    const files = result.result
-      .split('\n')
-      .filter((f) => f.trim() !== '')
-      .map((f) => f.replace(`/workspace/${inputData.directory}/`, ''))
+      const files = result.result
+        .split('\n')
+        .filter((f) => f.trim() !== '')
+        .map((f) => f.replace(`/workspace/${inputData.directory}/`, ''))
 
-    return {
-      files,
-      count: files.length,
+      return {
+        files,
+        count: files.length,
+      }
+    } catch (e) {
+      return {
+        files: [],
+        count: 0,
+        error: e instanceof Error ? e.message : String(e),
+      }
     }
   },
 })
@@ -190,7 +240,7 @@ export const createDirectoryTool = createTool({
   execute: async (inputData, _context) => {
     try {
       const sandbox = await getSandbox(inputData.sandboxId)
-      const fullPath = `/workspace/${inputData.path}`
+      const fullPath = sanitizeSandboxPath(inputData.path)
 
       await sandbox.process.executeCommand(
         `mkdir -p ${escapeShellArg(fullPath)}`,
@@ -383,16 +433,20 @@ async function initPGlite() {
 }
 
 async function getPGlite() {
-  if (!_pgliteInstance) {
-    _pgliteReady = initPGlite().then((pg) => {
-      _pgliteInstance = pg
-    })
+  if (_pgliteInstance) return _pgliteInstance
+  if (!_pgliteReady) {
+    _pgliteReady = initPGlite().then(
+      (pg) => {
+        _pgliteInstance = pg
+      },
+      (err) => {
+        _pgliteReady = null // Reset on failure so next call retries
+        throw err
+      },
+    )
   }
   await _pgliteReady
-  if (!_pgliteInstance) {
-    throw new Error('PGlite failed to initialize')
-  }
-  return _pgliteInstance
+  return _pgliteInstance!
 }
 
 export const validateSQLTool = createTool({
@@ -720,18 +774,26 @@ export const createGitHubRepoTool = createTool({
 
 export const getGitHubTokenTool = createTool({
   id: 'get-github-token',
-  description: 'Get a GitHub App installation token for git push authentication',
+  description:
+    'Get a GitHub App installation token for git push authentication. Token expires in 1 hour.',
   inputSchema: z.object({}),
   outputSchema: z.object({
     token: z.string(),
+    expiresIn: z.string().optional(),
     error: z.string().optional(),
   }),
   execute: async () => {
     try {
       const token = await getInstallationToken()
-      return { token }
+      // Token is returned for git operations, but we redact it from error messages
+      return { token, expiresIn: '1 hour' }
     } catch (e) {
-      return { token: '', error: e instanceof Error ? e.message : String(e) }
+      const msg = e instanceof Error ? e.message : String(e)
+      // Redact any token-like strings from error messages
+      const sanitizedMsg = msg
+        .replace(/ghp_[a-zA-Z0-9]+/g, 'ghp_[REDACTED]')
+        .replace(/ghs_[a-zA-Z0-9]+/g, 'ghs_[REDACTED]')
+      return { token: '', error: sanitizedMsg }
     }
   },
 })
