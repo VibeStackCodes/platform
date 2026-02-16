@@ -63,6 +63,22 @@ export const usageEvents = pgTable('usage_events', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 })
 
+export const warmSupabaseProjects = pgTable('warm_supabase_projects', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  supabaseProjectId: text('supabase_project_id').notNull().unique(),
+  supabaseUrl: text('supabase_url').notNull(),
+  anonKey: text('anon_key').notNull(),
+  serviceRoleKey: text('service_role_key').notNull(),
+  dbHost: text('db_host').notNull(),
+  dbPassword: text('db_password').notNull(),
+  region: text('region').notNull().default('us-east-1'),
+  status: text('status').notNull().default('available'), // 'available', 'claimed', 'creating', 'error'
+  claimedBy: uuid('claimed_by').references(() => profiles.id),
+  claimedAt: timestamp('claimed_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  errorMessage: text('error_message'),
+})
+
 // Type inference
 export type Profile = typeof profiles.$inferSelect
 export type NewProfile = typeof profiles.$inferInsert
@@ -70,3 +86,5 @@ export type Project = typeof projects.$inferSelect
 export type NewProject = typeof projects.$inferInsert
 export type ChatMessage = typeof chatMessages.$inferSelect
 export type UsageEvent = typeof usageEvents.$inferSelect
+export type WarmSupabaseProject = typeof warmSupabaseProjects.$inferSelect
+export type NewWarmSupabaseProject = typeof warmSupabaseProjects.$inferInsert

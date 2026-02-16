@@ -132,7 +132,101 @@ export function runBlueprint(input: {
 // Code Generation handler (Task 8 + E1 jsonrepair)
 // ============================================================================
 
-export function buildFeatureAnalysisPrompt(table: TableDef, contract: SchemaContract): string {
+// Pre-loaded sandbox context to eliminate agent readFile calls
+// These come from the warmup-scaffold and don't change between runs
+const SANDBOX_CONTEXT = {
+  packageJson: `{
+  "dependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "@tanstack/react-router": "^1.0.0",
+    "@supabase/supabase-js": "^2.95.0",
+    "valibot": "^1.0.0",
+    "@sentry/react": "^9.0.0",
+    "lucide-react": "^0.460.0",
+    "clsx": "^2.1.1",
+    "tailwind-merge": "^3.0.0",
+    "class-variance-authority": "^0.7.1",
+    "radix-ui": "^1.1.0",
+    "@trpc/client": "^11.0.0",
+    "@trpc/server": "^11.0.0",
+    "@trpc/react-query": "^11.0.0",
+    "@tanstack/react-query": "^5.0.0",
+    "drizzle-orm": "^0.45.0",
+    "hono": "^4.0.0",
+    "@hono/node-server": "^1.0.0",
+    "zod": "^4.0.0"
+  }
+}`,
+  tsConfig: `{
+  "compilerOptions": {
+    "target": "ES2020",
+    "useDefineForClassFields": true,
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "skipLibCheck": true,
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true
+  }
+}`,
+  componentList: [
+    'Button',
+    'Card',
+    'CardHeader',
+    'CardTitle',
+    'CardContent',
+    'CardFooter',
+    'Input',
+    'Label',
+    'Select',
+    'SelectContent',
+    'SelectItem',
+    'SelectTrigger',
+    'SelectValue',
+    'Badge',
+    'Dialog',
+    'DialogContent',
+    'DialogHeader',
+    'DialogTitle',
+    'DialogTrigger',
+    'Table',
+    'TableBody',
+    'TableCell',
+    'TableHead',
+    'TableHeader',
+    'TableRow',
+    'Tabs',
+    'TabsContent',
+    'TabsList',
+    'TabsTrigger',
+    'DropdownMenu',
+    'DropdownMenuContent',
+    'DropdownMenuItem',
+    'DropdownMenuTrigger',
+    'AlertDialog',
+    'Checkbox',
+    'Switch',
+    'Textarea',
+    'Separator',
+    'Skeleton',
+    'Toast',
+    'Sonner',
+  ],
+}
+
+export function buildFeatureAnalysisPrompt(
+  table: TableDef,
+  contract: SchemaContract,
+  sandboxContext?: { packageJson?: string; tsConfig?: string; componentList?: string[] },
+): string {
   const columns = table.columns
     .map((c) => {
       const mods: string[] = [c.type]
@@ -152,7 +246,7 @@ export function buildFeatureAnalysisPrompt(table: TableDef, contract: SchemaCont
     )
     .map((t) => t.name)
 
-  return `Analyze the "${table.name}" entity and produce a PageFeatureSpec.
+  let prompt = `Analyze the "${table.name}" entity and produce a PageFeatureSpec.
 
 Table columns:
 ${columns}
@@ -166,6 +260,22 @@ Rules:
 - Use 'select' inputType for enum-like text fields with known values
 - Provide a friendly emptyStateMessage
 - For filters, use 'search' for text fields, 'select' for enum-like fields, 'boolean' for boolean columns`
+
+  if (sandboxContext) {
+    prompt += `\n\n## Pre-loaded Context (DO NOT read these files — they are already provided)
+
+### Available Dependencies (from package.json)
+${sandboxContext.packageJson ?? 'Not available'}
+
+### TypeScript Config
+${sandboxContext.tsConfig ?? 'Not available'}
+
+### Available UI Components
+${sandboxContext.componentList?.join(', ') ?? 'Standard shadcn/ui components'}
+`
+  }
+
+  return prompt
 }
 
 export async function runCodeGeneration(input: {
@@ -180,107 +290,132 @@ export async function runCodeGeneration(input: {
   )
   const { assembleListPage, assembleDetailPage, assembleProcedures } = await import('./assembler')
 
-  let totalTokens = 0
   const assembledFiles: Array<{ path: string; content: string }> = []
   const validationWarnings: Array<{ table: string; errors: string[] }> = []
   const skippedEntities: string[] = []
 
-  // For each entity table, run feature analysis + procedure generation in parallel
-  for (const table of input.contract.tables) {
-    // Skip junction/system tables
-    if (table.name.startsWith('_')) continue
+  // Filter entity tables (skip junction/system tables)
+  const entityTables = input.contract.tables.filter((t) => !t.name.startsWith('_'))
 
-    // 1. Feature analysis — LLM returns PageFeatureSpec via structured output
-    const featurePrompt = buildFeatureAnalysisPrompt(table, input.contract)
+  // Process all entities in parallel
+  const entityResults = await Promise.allSettled(
+    entityTables.map(async (table) => {
+      const files: Array<{ path: string; content: string }> = []
+      let tokens = 0
+      let warning: { table: string; errors: string[] } | undefined
+      let skipped = false
 
-    const [featureResult, procedureResult] = await Promise.allSettled([
-      frontendAgent.generate(featurePrompt, {
-        structuredOutput: { schema: PageFeatureSchema },
-        maxSteps: 1,
-      }),
-      backendAgent.generate(
-        `Generate custom tRPC procedures for the "${table.name}" entity. Include search, filtering, and any business logic.`,
-        {
-          structuredOutput: { schema: CustomProcedureSchema },
+      // 1. Feature analysis — LLM returns PageFeatureSpec via structured output
+      const featurePrompt = buildFeatureAnalysisPrompt(table, input.contract, SANDBOX_CONTEXT)
+
+      const [featureResult, procedureResult] = await Promise.allSettled([
+        frontendAgent.generate(featurePrompt, {
+          structuredOutput: { schema: PageFeatureSchema },
           maxSteps: 1,
-        },
-      ),
-    ])
+        }),
+        backendAgent.generate(
+          `Generate custom tRPC procedures for the "${table.name}" entity. Include search, filtering, and any business logic.`,
+          {
+            structuredOutput: { schema: CustomProcedureSchema },
+            maxSteps: 1,
+          },
+        ),
+      ])
 
-    // 2. Parse feature spec with jsonrepair (E1)
-    if (featureResult.status === 'rejected') {
-      console.error(`Feature analysis failed for ${table.name}:`, featureResult.reason)
-      skippedEntities.push(table.name)
-      continue // Skip this entity
-    }
+      // 2. Parse feature spec with jsonrepair (E1)
+      if (featureResult.status === 'rejected') {
+        console.error(`Feature analysis failed for ${table.name}:`, featureResult.reason)
+        skipped = true
+        return { files, tokens, warning, skipped, table: table.name }
+      }
 
-    totalTokens += featureResult.value.totalUsage?.totalTokens ?? 0
+      tokens += featureResult.value.totalUsage?.totalTokens ?? 0
 
-    // Validate the feature spec with Zod
-    const featureParsed = PageFeatureSchema.safeParse(
-      featureResult.value.object ?? featureResult.value,
-    )
-    if (!featureParsed.success) {
-      console.error(`Feature spec validation failed for ${table.name}:`, featureParsed.error.format())
-      skippedEntities.push(table.name)
-      continue
-    }
-
-    const featureSpec = featureParsed.data
-
-    // Validate against contract
-    const validation = validateFeatureSpec(featureSpec, input.contract)
-    if (!validation.valid) {
-      validationWarnings.push({ table: table.name, errors: validation.errors })
-      // Continue with what we have — the assembler handles missing fields gracefully
-    }
-
-    // 3. Assemble pages deterministically
-    const listPageContent = assembleListPage(featureSpec, input.contract)
-    const detailPageContent = assembleDetailPage(featureSpec, input.contract)
-
-    // Find the blueprint file paths for this entity's pages
-    const entityKebab = table.name.replace(/_/g, '-')
-    const entityPlural = entityKebab.endsWith('y')
-      ? entityKebab.slice(0, -1) + 'ies'
-      : entityKebab.endsWith('s') ||
-          entityKebab.endsWith('sh') ||
-          entityKebab.endsWith('ch') ||
-          entityKebab.endsWith('x')
-        ? entityKebab + 'es'
-        : entityKebab + 's'
-
-    assembledFiles.push(
-      { path: `src/routes/_authenticated/${entityPlural}.tsx`, content: listPageContent },
-      { path: `src/routes/_authenticated/${entityPlural}.$id.tsx`, content: detailPageContent },
-    )
-
-    // 4. Assemble custom procedures
-    if (procedureResult.status === 'fulfilled') {
-      totalTokens += procedureResult.value.totalUsage?.totalTokens ?? 0
-
-      // Validate the procedure spec with Zod
-      const procParsed = CustomProcedureSchema.safeParse(
-        procedureResult.value.object ?? procedureResult.value,
+      // Validate the feature spec with Zod
+      const featureParsed = PageFeatureSchema.safeParse(
+        featureResult.value.object ?? featureResult.value,
       )
-      if (!procParsed.success) {
+      if (!featureParsed.success) {
         console.error(
-          `Procedure spec validation failed for ${table.name}:`,
-          procParsed.error.format(),
+          `Feature spec validation failed for ${table.name}:`,
+          featureParsed.error.format(),
         )
-        // Skip custom procedures but keep the base router
-      } else {
-        const procSpec = procParsed.data
+        skipped = true
+        return { files, tokens, warning, skipped, table: table.name }
+      }
 
-        // Find the tRPC router in the blueprint
-        const routerFile = input.blueprint.fileTree.find(
-          (f) => f.path === `server/trpc/routers/${table.name}.ts`,
+      const featureSpec = featureParsed.data
+
+      // Validate against contract
+      const validation = validateFeatureSpec(featureSpec, input.contract)
+      if (!validation.valid) {
+        warning = { table: table.name, errors: validation.errors }
+        // Continue with what we have — the assembler handles missing fields gracefully
+      }
+
+      // 3. Assemble pages deterministically
+      const listPageContent = assembleListPage(featureSpec, input.contract)
+      const detailPageContent = assembleDetailPage(featureSpec, input.contract)
+
+      // Find the blueprint file paths for this entity's pages
+      const entityKebab = table.name.replace(/_/g, '-')
+      const entityPlural = entityKebab.endsWith('y')
+        ? entityKebab.slice(0, -1) + 'ies'
+        : entityKebab.endsWith('s') ||
+            entityKebab.endsWith('sh') ||
+            entityKebab.endsWith('ch') ||
+            entityKebab.endsWith('x')
+          ? entityKebab + 'es'
+          : entityKebab + 's'
+
+      files.push(
+        { path: `src/routes/_authenticated/${entityPlural}.tsx`, content: listPageContent },
+        { path: `src/routes/_authenticated/${entityPlural}.$id.tsx`, content: detailPageContent },
+      )
+
+      // 4. Assemble custom procedures
+      if (procedureResult.status === 'fulfilled') {
+        tokens += procedureResult.value.totalUsage?.totalTokens ?? 0
+
+        // Validate the procedure spec with Zod
+        const procParsed = CustomProcedureSchema.safeParse(
+          procedureResult.value.object ?? procedureResult.value,
         )
-        if (routerFile) {
-          const patchedRouter = assembleProcedures(routerFile.content, procSpec)
-          assembledFiles.push({ path: routerFile.path, content: patchedRouter })
+        if (!procParsed.success) {
+          console.error(
+            `Procedure spec validation failed for ${table.name}:`,
+            procParsed.error.format(),
+          )
+          // Skip custom procedures but keep the base router
+        } else {
+          const procSpec = procParsed.data
+
+          // Find the tRPC router in the blueprint
+          const routerFile = input.blueprint.fileTree.find(
+            (f) => f.path === `server/trpc/routers/${table.name}.ts`,
+          )
+          if (routerFile) {
+            const patchedRouter = assembleProcedures(routerFile.content, procSpec)
+            files.push({ path: routerFile.path, content: patchedRouter })
+          }
         }
       }
+
+      return { files, tokens, warning, skipped, table: table.name }
+    }),
+  )
+
+  // Aggregate results
+  let totalTokens = 0
+  for (const result of entityResults) {
+    if (result.status === 'fulfilled') {
+      assembledFiles.push(...result.value.files)
+      totalTokens += result.value.tokens
+      if (result.value.warning) validationWarnings.push(result.value.warning)
+      if (result.value.skipped) skippedEntities.push(result.value.table)
+    } else {
+      // Log but don't fail — other entities may succeed
+      console.error('Entity processing failed:', result.reason)
     }
   }
 
@@ -350,17 +485,87 @@ export async function runRepair(input: {
 export async function runProvisioning(input: {
   appName: string
   projectId: string
+  userId?: string
 }): Promise<ProvisioningResult> {
-  // This will be wired to create Daytona sandbox + Supabase project
-  // For now, return placeholder — real implementation needs sandbox.ts + supabase-mgmt.ts
+  // Run all three infrastructure operations in parallel — they have ZERO dependencies on each other
+  const [supabaseResult, sandboxResult, githubResult] = await Promise.allSettled([
+    // 1. Try warm pool first, fall back to cold creation
+    (async () => {
+      // Try warm pool if userId is available
+      if (input.userId) {
+        try {
+          const { claimWarmProject } = await import('../supabase-pool')
+          const warm = await claimWarmProject(input.userId)
+          if (warm) {
+            return {
+              supabaseProjectId: warm.supabaseProjectId,
+              supabaseUrl: warm.supabaseUrl,
+              anonKey: warm.anonKey,
+              serviceRoleKey: warm.serviceRoleKey,
+              dbHost: warm.dbHost,
+              dbPassword: warm.dbPassword,
+            }
+          }
+        } catch (error) {
+          // Warm pool not available or failed, fall through to cold creation
+          console.warn(
+            '[provisioning] Warm pool unavailable, falling back to cold creation:',
+            error,
+          )
+        }
+      }
+
+      // Fallback: cold creation (60-120s)
+      const { createSupabaseProject } = await import('../supabase-mgmt')
+      const project = await createSupabaseProject(input.appName)
+      return {
+        supabaseProjectId: project.id,
+        supabaseUrl: project.url,
+        anonKey: project.anonKey,
+        serviceRoleKey: project.serviceRoleKey,
+        dbHost: project.dbHost,
+        dbPassword: project.dbPassword,
+      }
+    })(),
+    // 2. Create sandbox (~10-20s)
+    (async () => {
+      const { createSandbox } = await import('../sandbox')
+      return createSandbox({
+        language: 'typescript',
+        autoStopInterval: 60,
+        labels: { project: input.projectId },
+      })
+    })(),
+    // 3. Create GitHub repo (~2-5s)
+    (async () => {
+      const { createRepo, buildRepoName } = await import('../github')
+      return createRepo(buildRepoName(input.appName, input.projectId))
+    })(),
+  ])
+
+  // Handle failures — any infrastructure failure is fatal
+  if (supabaseResult.status === 'rejected') {
+    throw new Error(`Supabase provisioning failed: ${supabaseResult.reason}`)
+  }
+  if (sandboxResult.status === 'rejected') {
+    throw new Error(`Sandbox creation failed: ${sandboxResult.reason}`)
+  }
+  if (githubResult.status === 'rejected') {
+    throw new Error(`GitHub repo creation failed: ${githubResult.reason}`)
+  }
+
+  const supabase = supabaseResult.value
+  const sandbox = sandboxResult.value
+  const github = githubResult.value
+
   return {
-    sandboxId: '',
-    supabaseProjectId: '',
-    supabaseUrl: '',
-    supabaseAnonKey: '',
-    githubCloneUrl: '',
-    githubHtmlUrl: '',
-    repoName: '',
+    sandboxId: sandbox.id,
+    supabaseProjectId: supabase.supabaseProjectId,
+    supabaseUrl: supabase.supabaseUrl,
+    supabaseAnonKey: supabase.anonKey,
+    githubCloneUrl: github.cloneUrl,
+    githubHtmlUrl: github.htmlUrl,
+    repoName: github.repoName,
     tokensUsed: 0,
   }
 }

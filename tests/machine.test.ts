@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 import type { SchemaContract } from '@server/lib/schema-contract'
 import type { AppBlueprint } from '@server/lib/app-blueprint'
 import type { ValidationGateResult } from '@server/lib/agents/validation'
+import type { CodeReviewResult } from '@server/lib/agents/code-review'
 
 describe('appGenerationMachine', () => {
   it('starts in idle state', () => {
@@ -33,6 +34,7 @@ describe('appGenerationMachine', () => {
     expect(states).toContain('generating')
     expect(states).toContain('validating')
     expect(states).toContain('repairing')
+    expect(states).toContain('reviewing')
     expect(states).toContain('deploying')
     expect(states).toContain('cleanup')
     expect(states).toContain('complete')
@@ -73,6 +75,18 @@ describe('appGenerationMachine', () => {
   it('machine has invoke on validating state', () => {
     const state = appGenerationMachine.config.states?.validating
     expect(state?.invoke).toBeDefined()
+  })
+
+  it('machine has invoke on reviewing state', () => {
+    const state = appGenerationMachine.config.states?.reviewing
+    expect(state?.invoke).toBeDefined()
+  })
+
+  it('context includes reviewResult', () => {
+    const actor = createActor(appGenerationMachine)
+    actor.start()
+    expect(actor.getSnapshot().context.reviewResult).toBe(null)
+    actor.stop()
   })
 
   it('awaitingClarification still has USER_ANSWERED event', () => {
@@ -213,7 +227,7 @@ describe('state transitions', () => {
     actor.stop()
   })
 
-  it('transitions through full happy path: analyzing → blueprinting → provisioning → generating → validating → deploying → complete', async () => {
+  it('transitions through full happy path: analyzing → blueprinting → provisioning → generating → validating → reviewing → deploying → complete', async () => {
     const mockContract: SchemaContract = { tables: [], enums: [] }
     const mockBlueprint: AppBlueprint = {
       name: 'TestApp',
@@ -256,6 +270,12 @@ describe('state transitions', () => {
           validation: { tscErrors: [], buildErrors: [], testErrors: [] },
           tokensUsed: 150,
         })),
+        runCodeReviewActor: fromPromise(async () => ({
+          passed: true,
+          deterministicIssues: [],
+          llmIssues: [],
+          tokensUsed: 300,
+        })),
         runDeploymentActor: fromPromise(async () => ({
           deploymentUrl: 'https://test.vercel.app',
           tokensUsed: 100,
@@ -277,6 +297,7 @@ describe('state transitions', () => {
     await waitFor(actor, (state) => state.matches('provisioning'), { timeout: 1000 })
     await waitFor(actor, (state) => state.matches('generating'), { timeout: 1000 })
     await waitFor(actor, (state) => state.matches('validating'), { timeout: 1000 })
+    await waitFor(actor, (state) => state.matches('reviewing'), { timeout: 1000 })
     await waitFor(actor, (state) => state.matches('deploying'), { timeout: 1000 })
     await waitFor(actor, (state) => state.matches('complete'), { timeout: 1000 })
 
@@ -291,7 +312,7 @@ describe('state transitions', () => {
 // ============================================================================
 
 describe('validation and repair loop', () => {
-  it('transitions validating → deploying when allPassed is true', async () => {
+  it('transitions validating → reviewing when allPassed is true', async () => {
     const mockContract: SchemaContract = { tables: [], enums: [] }
     const mockBlueprint: AppBlueprint = {
       name: 'TestApp',
@@ -345,8 +366,8 @@ describe('validation and repair loop', () => {
       projectId: 'test-validation-pass',
     })
 
-    await waitFor(actor, (state) => state.matches('deploying'), { timeout: 2000 })
-    expect(actor.getSnapshot().value).toBe('deploying')
+    await waitFor(actor, (state) => state.matches('reviewing'), { timeout: 2000 })
+    expect(actor.getSnapshot().value).toBe('reviewing')
     actor.stop()
   })
 
@@ -1120,6 +1141,285 @@ describe('context updates', () => {
     await waitFor(actor, (state) => state.matches('failed'), { timeout: 5000 })
     const finalRetryCount = actor.getSnapshot().context.retryCount
     expect(finalRetryCount).toBeGreaterThanOrEqual(2)
+    actor.stop()
+  })
+})
+
+// ============================================================================
+// Code Review State Transition Tests
+// ============================================================================
+
+describe('code review state transitions', () => {
+  it('transitions reviewing → deploying when review passes', async () => {
+    const mockContract: SchemaContract = { tables: [], enums: [] }
+    const mockBlueprint: AppBlueprint = {
+      name: 'TestApp',
+      description: 'Test',
+      features: [],
+      pages: [],
+      contract: mockContract,
+      designPreferences: null,
+    }
+
+    const testMachine = appGenerationMachine.provide({
+      actors: {
+        runAnalysisActor: fromPromise(async () => ({
+          type: 'done' as const,
+          appName: 'TestApp',
+          appDescription: 'Test',
+          contract: mockContract,
+          designPreferences: null,
+          tokensUsed: 100,
+        })),
+        runBlueprintActor: fromPromise(async () => ({
+          blueprint: mockBlueprint,
+          tokensUsed: 200,
+        })),
+        runProvisioningActor: fromPromise(async () => ({
+          sandboxId: 'sandbox-123',
+          supabaseProjectId: 'supabase-123',
+          supabaseUrl: 'https://test.supabase.co',
+          supabaseAnonKey: 'anon-key',
+          githubCloneUrl: 'https://github.com/test/repo.git',
+          githubHtmlUrl: 'https://github.com/test/repo',
+          repoName: 'test-repo',
+          tokensUsed: 50,
+        })),
+        runCodeGenerationActor: fromPromise(async () => ({
+          tokensUsed: 500,
+        })),
+        runValidationActor: fromPromise(async () => ({
+          allPassed: true,
+          validation: { tscErrors: [], buildErrors: [], testErrors: [] },
+          tokensUsed: 150,
+        })),
+        runCodeReviewActor: fromPromise(async () => ({
+          passed: true,
+          deterministicIssues: [],
+          llmIssues: [{ severity: 'info', category: 'ux', file: 'test.tsx', description: 'Minor suggestion', suggestion: 'Add tooltip' }],
+          tokensUsed: 300,
+        })),
+      },
+    })
+
+    const actor = createActor(testMachine)
+    actor.start()
+    actor.send({
+      type: 'START',
+      userMessage: 'Build a blog',
+      projectId: 'test-review-pass',
+    })
+
+    await waitFor(actor, (state) => state.matches('reviewing'), { timeout: 2000 })
+    await waitFor(actor, (state) => state.matches('deploying'), { timeout: 2000 })
+    expect(actor.getSnapshot().value).toBe('deploying')
+    expect(actor.getSnapshot().context.reviewResult?.passed).toBe(true)
+    actor.stop()
+  })
+
+  it('transitions reviewing → cleanup when review finds critical issues', async () => {
+    const mockContract: SchemaContract = { tables: [], enums: [] }
+    const mockBlueprint: AppBlueprint = {
+      name: 'TestApp',
+      description: 'Test',
+      features: [],
+      pages: [],
+      contract: mockContract,
+      designPreferences: null,
+    }
+
+    const testMachine = appGenerationMachine.provide({
+      actors: {
+        runAnalysisActor: fromPromise(async () => ({
+          type: 'done' as const,
+          appName: 'TestApp',
+          appDescription: 'Test',
+          contract: mockContract,
+          designPreferences: null,
+          tokensUsed: 100,
+        })),
+        runBlueprintActor: fromPromise(async () => ({
+          blueprint: mockBlueprint,
+          tokensUsed: 200,
+        })),
+        runProvisioningActor: fromPromise(async () => ({
+          sandboxId: 'sandbox-123',
+          supabaseProjectId: 'supabase-123',
+          supabaseUrl: 'https://test.supabase.co',
+          supabaseAnonKey: 'anon-key',
+          githubCloneUrl: 'https://github.com/test/repo.git',
+          githubHtmlUrl: 'https://github.com/test/repo',
+          repoName: 'test-repo',
+          tokensUsed: 50,
+        })),
+        runCodeGenerationActor: fromPromise(async () => ({
+          tokensUsed: 500,
+        })),
+        runValidationActor: fromPromise(async () => ({
+          allPassed: true,
+          validation: { tscErrors: [], buildErrors: [], testErrors: [] },
+          tokensUsed: 150,
+        })),
+        runCodeReviewActor: fromPromise(async () => ({
+          passed: false,
+          deterministicIssues: [
+            { type: 'missing_route_export', file: 'routes/tasks.tsx', message: 'Missing Route export', severity: 'critical' },
+          ],
+          llmIssues: [],
+          tokensUsed: 300,
+        })),
+        runCleanupActor: fromPromise(async () => ({ errors: [] })),
+      },
+    })
+
+    const actor = createActor(testMachine)
+    actor.start()
+    actor.send({
+      type: 'START',
+      userMessage: 'Build a blog',
+      projectId: 'test-review-fail',
+    })
+
+    await waitFor(actor, (state) => state.matches('reviewing'), { timeout: 2000 })
+    await waitFor(actor, (state) => state.matches('failed'), { timeout: 3000 })
+    expect(actor.getSnapshot().value).toBe('failed')
+    expect(actor.getSnapshot().context.error).toContain('Code review failed')
+    expect(actor.getSnapshot().context.reviewResult?.passed).toBe(false)
+    actor.stop()
+  })
+
+  it('transitions reviewing → deploying when review crashes (soft failure)', async () => {
+    const mockContract: SchemaContract = { tables: [], enums: [] }
+    const mockBlueprint: AppBlueprint = {
+      name: 'TestApp',
+      description: 'Test',
+      features: [],
+      pages: [],
+      contract: mockContract,
+      designPreferences: null,
+    }
+
+    const testMachine = appGenerationMachine.provide({
+      actors: {
+        runAnalysisActor: fromPromise(async () => ({
+          type: 'done' as const,
+          appName: 'TestApp',
+          appDescription: 'Test',
+          contract: mockContract,
+          designPreferences: null,
+          tokensUsed: 100,
+        })),
+        runBlueprintActor: fromPromise(async () => ({
+          blueprint: mockBlueprint,
+          tokensUsed: 200,
+        })),
+        runProvisioningActor: fromPromise(async () => ({
+          sandboxId: 'sandbox-123',
+          supabaseProjectId: 'supabase-123',
+          supabaseUrl: 'https://test.supabase.co',
+          supabaseAnonKey: 'anon-key',
+          githubCloneUrl: 'https://github.com/test/repo.git',
+          githubHtmlUrl: 'https://github.com/test/repo',
+          repoName: 'test-repo',
+          tokensUsed: 50,
+        })),
+        runCodeGenerationActor: fromPromise(async () => ({
+          tokensUsed: 500,
+        })),
+        runValidationActor: fromPromise(async () => ({
+          allPassed: true,
+          validation: { tscErrors: [], buildErrors: [], testErrors: [] },
+          tokensUsed: 150,
+        })),
+        runCodeReviewActor: fromPromise(async () => {
+          throw new Error('LLM service unavailable')
+        }),
+      },
+    })
+
+    const actor = createActor(testMachine)
+    actor.start()
+    actor.send({
+      type: 'START',
+      userMessage: 'Build a blog',
+      projectId: 'test-review-crash',
+    })
+
+    await waitFor(actor, (state) => state.matches('reviewing'), { timeout: 2000 })
+    await waitFor(actor, (state) => state.matches('deploying'), { timeout: 2000 })
+    // Review crash should NOT block deployment
+    expect(actor.getSnapshot().value).toBe('deploying')
+    expect(actor.getSnapshot().context.error).toBeNull()
+    actor.stop()
+  })
+
+  it('accumulates reviewResult tokens in totalTokens', async () => {
+    const mockContract: SchemaContract = { tables: [], enums: [] }
+    const mockBlueprint: AppBlueprint = {
+      name: 'TestApp',
+      description: 'Test',
+      features: [],
+      pages: [],
+      contract: mockContract,
+      designPreferences: null,
+    }
+
+    const testMachine = appGenerationMachine.provide({
+      actors: {
+        runAnalysisActor: fromPromise(async () => ({
+          type: 'done' as const,
+          appName: 'TestApp',
+          appDescription: 'Test',
+          contract: mockContract,
+          designPreferences: null,
+          tokensUsed: 100,
+        })),
+        runBlueprintActor: fromPromise(async () => ({
+          blueprint: mockBlueprint,
+          tokensUsed: 200,
+        })),
+        runProvisioningActor: fromPromise(async () => ({
+          sandboxId: 'sandbox-123',
+          supabaseProjectId: 'supabase-123',
+          supabaseUrl: 'https://test.supabase.co',
+          supabaseAnonKey: 'anon-key',
+          githubCloneUrl: 'https://github.com/test/repo.git',
+          githubHtmlUrl: 'https://github.com/test/repo',
+          repoName: 'test-repo',
+          tokensUsed: 50,
+        })),
+        runCodeGenerationActor: fromPromise(async () => ({
+          tokensUsed: 500,
+        })),
+        runValidationActor: fromPromise(async () => ({
+          allPassed: true,
+          validation: { tscErrors: [], buildErrors: [], testErrors: [] },
+          tokensUsed: 150,
+        })),
+        runCodeReviewActor: fromPromise(async () => ({
+          passed: true,
+          deterministicIssues: [],
+          llmIssues: [],
+          tokensUsed: 300,
+        })),
+        runDeploymentActor: fromPromise(async () => ({
+          deploymentUrl: 'https://test.vercel.app',
+          tokensUsed: 100,
+        })),
+      },
+    })
+
+    const actor = createActor(testMachine)
+    actor.start()
+    actor.send({
+      type: 'START',
+      userMessage: 'Build a blog',
+      projectId: 'test-review-tokens',
+    })
+
+    await waitFor(actor, (state) => state.matches('complete'), { timeout: 3000 })
+    // 100 + 200 + 50 + 500 + 150 + 300 + 100 = 1400
+    expect(actor.getSnapshot().context.totalTokens).toBe(1400)
     actor.stop()
   })
 })

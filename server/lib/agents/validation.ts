@@ -25,6 +25,7 @@ export interface ValidationGateResult {
   typecheck: ValidationResult
   lint: ValidationResult
   build: ValidationResult
+  vercelChecks?: Array<{ name: string; passed: boolean; message: string; severity: 'error' | 'warning' }>
   allPassed: boolean
 }
 
@@ -307,16 +308,41 @@ export async function runValidationGate(
     }
   }
 
+  // 6. Vercel build validation (runs only if build passed)
+  let vercelChecks: Array<{ name: string; passed: boolean; message: string; severity: 'error' | 'warning' }> | undefined
+  let vercelPassed = true
+
+  if (results.build.passed) {
+    try {
+      const { validateVercelBuild } = await import('./build-validator')
+      const vercelResult = await validateVercelBuild(sandbox)
+      vercelChecks = vercelResult.checks
+      vercelPassed = vercelResult.allPassed
+    } catch (error) {
+      vercelChecks = [
+        {
+          name: 'vercel_validation',
+          passed: false,
+          message: `Vercel validation failed: ${error instanceof Error ? error.message : String(error)}`,
+          severity: 'error',
+        },
+      ]
+      vercelPassed = false
+    }
+  }
+
   // Determine overall pass/fail
   const allPassed =
     results.manifest.passed &&
     results.scaffold.passed &&
     results.typecheck.passed &&
     results.lint.passed &&
-    results.build.passed
+    results.build.passed &&
+    vercelPassed
 
   return {
     ...results,
+    vercelChecks,
     allPassed,
   }
 }

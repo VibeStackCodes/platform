@@ -2,6 +2,7 @@ import { assign, fromPromise, setup } from 'xstate'
 import type { AppBlueprint } from '../app-blueprint'
 import type { DesignPreferences, SchemaContract } from '../schema-contract'
 import type { ValidationGateResult } from './validation'
+import type { CodeReviewResult } from './code-review'
 import type {
   AnalysisResult,
   BlueprintResult,
@@ -47,6 +48,9 @@ export interface MachineContext {
   retryCount: number
   previousValidationErrors: ValidationGateResult | null
 
+  // Code Review
+  reviewResult: CodeReviewResult | null
+
   // Deploy
   deploymentUrl: string | null
 
@@ -88,6 +92,8 @@ type MachineEvent =
   | { type: 'VALIDATION_PASS' }
   | { type: 'VALIDATION_FAIL'; validation: ValidationGateResult }
   | { type: 'REPAIR_DONE' }
+  | { type: 'REVIEW_PASS' }
+  | { type: 'REVIEW_FAIL' }
   | { type: 'DEPLOY_DONE'; deploymentUrl: string }
   | { type: 'ERROR'; error: string }
 
@@ -161,6 +167,12 @@ export const appGenerationMachine = setup({
         return { errors }
       },
     ),
+    runCodeReviewActor: fromPromise(
+      async ({ input }: { input: { blueprint: AppBlueprint; contract: SchemaContract; sandboxId: string } }) => {
+        const { runCodeReview } = await import('./code-review')
+        return runCodeReview(input)
+      },
+    ),
   },
   guards: {
     canRetry: ({ context }) => context.retryCount < 2,
@@ -188,6 +200,7 @@ export const appGenerationMachine = setup({
     validation: null,
     retryCount: 0,
     previousValidationErrors: null,
+    reviewResult: null,
     deploymentUrl: null,
     totalTokens: 0,
     error: null,
@@ -364,7 +377,7 @@ export const appGenerationMachine = setup({
         onDone: [
           {
             guard: ({ event }) => event.output.allPassed,
-            target: 'deploying',
+            target: 'reviewing',
             actions: assign({
               totalTokens: ({ context, event }) => context.totalTokens + event.output.tokensUsed,
             }),
@@ -434,6 +447,51 @@ export const appGenerationMachine = setup({
               }
               return String(err)
             },
+          }),
+        },
+      },
+    },
+
+    reviewing: {
+      invoke: {
+        src: 'runCodeReviewActor',
+        input: ({ context }) => ({
+          blueprint: context.blueprint!,
+          contract: context.contract!,
+          sandboxId: context.sandboxId!,
+        }),
+        onDone: [
+          {
+            guard: ({ event }) => event.output.passed,
+            target: 'deploying',
+            actions: assign({
+              reviewResult: ({ event }) => event.output,
+              totalTokens: ({ context, event }) => context.totalTokens + event.output.tokensUsed,
+            }),
+          },
+          {
+            // Review found critical issues — fail the pipeline
+            target: 'cleanup',
+            actions: assign({
+              reviewResult: ({ event }) => event.output,
+              totalTokens: ({ context, event }) => context.totalTokens + event.output.tokensUsed,
+              error: ({ event }) => {
+                const criticals = [
+                  ...event.output.deterministicIssues.filter((i: any) => i.severity === 'critical'),
+                  ...event.output.llmIssues.filter((i: any) => i.severity === 'critical'),
+                ]
+                return `Code review failed with ${criticals.length} critical issue(s): ${criticals.map((i: any) => i.message || i.description).join('; ')}`
+              },
+            }),
+          },
+        ],
+        onError: {
+          // Review failure should NOT block deployment — it's a quality gate, not a hard gate
+          // Log the error but proceed to deploying
+          target: 'deploying',
+          actions: assign({
+            totalTokens: ({ context }) => context.totalTokens,
+            // Don't set error — this is a soft failure
           }),
         },
       },
