@@ -18,18 +18,18 @@
 import crypto from 'node:crypto'
 import { createActor } from 'xstate'
 import { Hono } from 'hono'
+import * as Sentry from '@sentry/node'
 import { createHeliconeProvider, isAllowedModel } from '../lib/agents/provider'
 import { appGenerationMachine } from '../lib/agents/machine'
 import type { MachineContext } from '../lib/agents/machine'
 import { editMachine } from '../lib/agents/edit-machine'
 import type { EditMachineContext } from '../lib/agents/edit-machine'
 import { RequestContext } from '../lib/agents/registry'
-import { getUserCredits, getProjectGenerationState } from '../lib/db/queries'
+import { getUserCredits, getProjectGenerationState, updateProject } from '../lib/db/queries'
 import { reserveCredits, settleCredits } from '../lib/credits'
 import { createSSEStream } from '../lib/sse'
 import type { StreamEvent } from '../lib/types'
 import { authMiddleware } from '../middleware/auth'
-import * as Sentry from '@sentry/node'
 
 export const agentRoutes = new Hono()
 
@@ -44,7 +44,7 @@ interface ActiveRun {
   model: string
   createdAt: number
   reservedCredits: number
-  settled?: boolean
+  settled: boolean
 }
 
 const activeRuns = new Map<string, ActiveRun>()
@@ -78,6 +78,21 @@ const STATE_PHASES: Record<string, { name: string; phase: number }> = {
   failed: { name: 'Failed', phase: 7 },
 }
 
+/** Map XState states to DB status values for project updates */
+const STATE_TO_DB_STATUS: Record<string, string> = {
+  analyzing: 'planning',
+  awaitingClarification: 'planning',
+  blueprinting: 'planning',
+  provisioning: 'generating',
+  generating: 'generating',
+  validating: 'verifying',
+  repairing: 'verifying',
+  reviewing: 'verifying',
+  deploying: 'deploying',
+  complete: 'deployed',
+  failed: 'error',
+}
+
 /**
  * Subscribe to XState actor and emit SSE events for state transitions.
  * Returns a Promise that resolves when the actor reaches a final state.
@@ -88,6 +103,7 @@ function streamActorStates(
   emit: (event: StreamEvent) => void,
   signal: AbortSignal,
   runId: string,
+  projectId: string,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     const subscription = actor.subscribe((snapshot: { value: string; context: MachineContext; status?: string }) => {
@@ -99,6 +115,14 @@ function streamActorStates(
 
       const state = snapshot.value as string
       const phaseInfo = STATE_PHASES[state]
+
+      // Update project status in DB based on state transition (fire-and-forget)
+      const dbStatus = STATE_TO_DB_STATUS[state]
+      if (dbStatus) {
+        updateProject(projectId, { status: dbStatus }).catch((err) => {
+          console.error('[agent] Failed to update project status:', err)
+        })
+      }
 
       if (!phaseInfo) {
         return
@@ -116,6 +140,10 @@ function streamActorStates(
         resolve()
       } else if (state === 'failed') {
         const errorMsg = snapshot.context.error ?? 'Pipeline failed'
+        Sentry.captureMessage(errorMsg, {
+          level: 'error',
+          tags: { operation: 'state_machine', state: 'failed' },
+        })
         emit({
           type: 'error',
           message: errorMsg,
@@ -211,6 +239,20 @@ agentRoutes.post('/', async (c) => {
     )
   }
 
+  // M4: Check concurrent generation limit (max 3 per user)
+  const userRuns = [...activeRuns.values()].filter((r) => r.userId === user.id).length
+  if (userRuns >= 3) {
+    // Refund the reservation we just made
+    await settleCredits(user.id, CREDIT_RESERVATION, 0)
+    return c.json(
+      {
+        error: 'concurrent_limit',
+        message: 'Maximum 3 concurrent generations',
+      },
+      429,
+    )
+  }
+
   // Inject per-request Helicone-proxied model via RequestContext
   const requestContext = new RequestContext()
   requestContext.set(
@@ -224,20 +266,36 @@ agentRoutes.post('/', async (c) => {
   )
   requestContext.set('userId', user.id)
 
-  // Create XState actor
+  // H1: Create XState actor with error handling to refund credits on failure
   const runId = crypto.randomUUID()
-  const actor = createActor(appGenerationMachine)
-  activeRuns.set(runId, {
-    actor,
-    userId: user.id,
-    projectId,
-    model,
-    createdAt: Date.now(),
-    reservedCredits: CREDIT_RESERVATION,
-  })
-
-  // Start actor
-  actor.start()
+  let actor: any
+  try {
+    actor = createActor(appGenerationMachine)
+    activeRuns.set(runId, {
+      actor,
+      userId: user.id,
+      projectId,
+      model,
+      createdAt: Date.now(),
+      reservedCredits: CREDIT_RESERVATION,
+      settled: false,
+    })
+    actor.start()
+  } catch (error) {
+    // Refund reserved credits if actor creation fails
+    await settleCredits(user.id, CREDIT_RESERVATION, 0)
+    Sentry.captureException(error, {
+      tags: { route: '/api/agent', operation: 'actor_creation' },
+      extra: { projectId, model, userId: user.id },
+    })
+    return c.json(
+      {
+        error: 'actor_creation_failed',
+        message: 'Failed to initialize generation pipeline',
+      },
+      500,
+    )
+  }
 
   // Return SSE stream
   return createSSEStream(async (emit: (event: StreamEvent) => void, signal: AbortSignal) => {
@@ -246,36 +304,53 @@ agentRoutes.post('/', async (c) => {
       emit({ type: 'stage_update', stage: 'generating' })
 
       // Send START event to actor
-      actor.send({ type: 'START', userMessage: message, projectId })
+      actor.send({ type: 'START', userMessage: message, projectId, userId: user.id })
 
       // Stream state transitions
-      await streamActorStates(actor, emit, signal, runId)
+      await streamActorStates(actor, emit, signal, runId, projectId)
 
       // Get final snapshot to read totalTokens from machine context
       const finalSnapshot = actor.getSnapshot()
       const totalTokens = finalSnapshot.context.totalTokens
       const creditsUsed = Math.ceil(totalTokens / 1000) // 1 credit = 1,000 tokens
 
-      // Settle reserved credits with actual usage
-      const settlement = await settleCredits(user.id, CREDIT_RESERVATION, creditsUsed)
+      // B2: Check settled flag to prevent double-settlement
+      const activeRun = activeRuns.get(runId)
+      if (activeRun && !activeRun.settled) {
+        // Settle reserved credits with actual usage
+        const settlement = await settleCredits(user.id, CREDIT_RESERVATION, creditsUsed)
+        activeRun.settled = true
 
-      // Emit real credit usage with settled remaining balance
-      emit({
-        type: 'credits_used',
-        creditsUsed,
-        creditsRemaining: settlement.creditsRemaining,
-        tokensTotal: totalTokens,
-      })
+        // Emit real credit usage with settled remaining balance
+        emit({
+          type: 'credits_used',
+          creditsUsed,
+          creditsRemaining: settlement.creditsRemaining,
+          tokensTotal: totalTokens,
+        })
+      }
     } catch (error) {
       generationFailed = true
       if (signal.aborted) {
         console.log('[agent] Stream aborted by client')
-        // Refund reserved credits on abort
-        await settleCredits(user.id, CREDIT_RESERVATION, 0)
+        // Refund reserved credits on abort (check settled flag)
+        const activeRun = activeRuns.get(runId)
+        if (activeRun && !activeRun.settled) {
+          await settleCredits(user.id, CREDIT_RESERVATION, 0)
+          activeRun.settled = true
+        }
         return
       }
-      // Refund reserved credits on error
-      await settleCredits(user.id, CREDIT_RESERVATION, 0)
+      // Refund reserved credits on error (check settled flag)
+      const activeRun = activeRuns.get(runId)
+      if (activeRun && !activeRun.settled) {
+        await settleCredits(user.id, CREDIT_RESERVATION, 0)
+        activeRun.settled = true
+      }
+      Sentry.captureException(error, {
+        tags: { route: '/api/agent', operation: 'generation' },
+        extra: { projectId, model, userId: user.id },
+      })
       emit({
         type: 'error',
         message: error instanceof Error ? error.message : 'Agent pipeline failed',
@@ -326,33 +401,47 @@ agentRoutes.post('/resume', async (c) => {
       stored.actor.send({ type: 'USER_ANSWERED', answers })
 
       // Stream state transitions
-      await streamActorStates(stored.actor, emit, signal, runId)
+      await streamActorStates(stored.actor, emit, signal, runId, stored.projectId)
 
       // Get final snapshot to read totalTokens from machine context
       const finalSnapshot = stored.actor.getSnapshot()
       const totalTokens = finalSnapshot.context.totalTokens
       const creditsUsed = Math.ceil(totalTokens / 1000) // 1 credit = 1,000 tokens
 
-      // Settle reserved credits with actual usage (from initial reservation)
-      const settlement = await settleCredits(user.id, stored.reservedCredits, creditsUsed)
+      // B2: Check settled flag to prevent double-settlement
+      if (!stored.settled) {
+        // Settle reserved credits with actual usage (from initial reservation)
+        const settlement = await settleCredits(user.id, stored.reservedCredits, creditsUsed)
+        stored.settled = true
 
-      // Emit real credit usage with settled remaining balance
-      emit({
-        type: 'credits_used',
-        creditsUsed,
-        creditsRemaining: settlement.creditsRemaining,
-        tokensTotal: totalTokens,
-      })
+        // Emit real credit usage with settled remaining balance
+        emit({
+          type: 'credits_used',
+          creditsUsed,
+          creditsRemaining: settlement.creditsRemaining,
+          tokensTotal: totalTokens,
+        })
+      }
     } catch (error) {
       generationFailed = true
       if (signal.aborted) {
         console.log('[agent] Resume stream aborted by client')
-        // Refund reserved credits on abort
-        await settleCredits(user.id, stored.reservedCredits, 0)
+        // Refund reserved credits on abort (check settled flag)
+        if (!stored.settled) {
+          await settleCredits(user.id, stored.reservedCredits, 0)
+          stored.settled = true
+        }
         return
       }
-      // Refund reserved credits on error
-      await settleCredits(user.id, stored.reservedCredits, 0)
+      // Refund reserved credits on error (check settled flag)
+      if (!stored.settled) {
+        await settleCredits(user.id, stored.reservedCredits, 0)
+        stored.settled = true
+      }
+      Sentry.captureException(error, {
+        tags: { route: '/api/agent/resume', operation: 'resume' },
+        extra: { runId },
+      })
       emit({
         type: 'error',
         message: error instanceof Error ? error.message : 'Resume failed',

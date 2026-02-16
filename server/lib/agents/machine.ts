@@ -1,4 +1,5 @@
 import { assign, fromPromise, setup } from 'xstate'
+import * as Sentry from '@sentry/node'
 import type { AppBlueprint } from '../app-blueprint'
 import type { DesignPreferences, SchemaContract } from '../schema-contract'
 import type { ValidationGateResult } from './validation'
@@ -21,6 +22,7 @@ export interface MachineContext {
   // Input
   userMessage: string
   projectId: string
+  userId: string
 
   // Analyst output
   appName: string
@@ -50,6 +52,7 @@ export interface MachineContext {
 
   // Code Review
   reviewResult: CodeReviewResult | null
+  reviewSkipped: boolean
 
   // Deploy
   deploymentUrl: string | null
@@ -66,7 +69,7 @@ export interface MachineContext {
 // ============================================================================
 
 type MachineEvent =
-  | { type: 'START'; userMessage: string; projectId: string }
+  | { type: 'START'; userMessage: string; projectId: string; userId: string }
   | { type: 'USER_ANSWERED'; answers: string }
   | {
       type: 'ANALYST_DONE'
@@ -121,7 +124,7 @@ export const appGenerationMachine = setup({
         return runBlueprint(input)
       },
     ),
-    runProvisioningActor: fromPromise(async ({ input }: { input: { appName: string; projectId: string } }) => {
+    runProvisioningActor: fromPromise(async ({ input }: { input: { appName: string; projectId: string; userId: string } }) => {
       const { runProvisioning } = await import('./orchestrator')
       return runProvisioning(input)
     }),
@@ -161,6 +164,8 @@ export const appGenerationMachine = setup({
     runCleanupActor: fromPromise(
       async ({ input }: { input: { sandboxId: string | null; supabaseProjectId: string | null } }) => {
         const errors: string[] = []
+
+        // Delete sandbox FIRST (before releasing pool project)
         if (input.sandboxId) {
           try {
             const { getDaytonaClient, getSandbox } = await import('../sandbox')
@@ -169,14 +174,29 @@ export const appGenerationMachine = setup({
             await daytona.delete(sandbox)
             console.log(`[cleanup] Deleted sandbox: ${input.sandboxId}`)
           } catch (e) {
-            errors.push(`Sandbox cleanup failed: ${e instanceof Error ? e.message : String(e)}`)
+            const errorMsg = `Sandbox cleanup failed: ${e instanceof Error ? e.message : String(e)}`
+            errors.push(errorMsg)
+            // Capture sandbox deletion errors to Sentry
+            Sentry.captureException(e, {
+              tags: { cleanup_stage: 'sandbox_deletion' },
+              extra: { sandboxId: input.sandboxId },
+            })
           }
         }
-        // Note: Don't delete Supabase project — user might want to inspect it
-        // Just log for manual cleanup
+
+        // Try to release warm pool project back to pool (after sandbox deletion)
         if (input.supabaseProjectId) {
-          console.warn(`[cleanup] Supabase project ${input.supabaseProjectId} left for manual cleanup`)
+          try {
+            const { releaseProject } = await import('../supabase-pool')
+            await releaseProject(input.supabaseProjectId)
+            console.log(`[cleanup] Released warm pool project: ${input.supabaseProjectId}`)
+          } catch (releaseError) {
+            // Release failed — project may not be from warm pool
+            // Just log, don't add to errors since Supabase project still works
+            console.warn(`[cleanup] Could not release to pool (may not be warm project): ${releaseError}`)
+          }
         }
+
         return { errors }
       },
     ),
@@ -197,6 +217,7 @@ export const appGenerationMachine = setup({
   context: {
     userMessage: '',
     projectId: '',
+    userId: '',
     appName: '',
     appDescription: '',
     contract: null,
@@ -214,6 +235,7 @@ export const appGenerationMachine = setup({
     retryCount: 0,
     previousValidationErrors: null,
     reviewResult: null,
+    reviewSkipped: false,
     deploymentUrl: null,
     totalTokens: 0,
     error: null,
@@ -226,12 +248,21 @@ export const appGenerationMachine = setup({
           actions: assign({
             userMessage: ({ event }) => event.userMessage,
             projectId: ({ event }) => event.projectId,
+            userId: ({ event }) => event.userId,
           }),
         },
       },
     },
 
     analyzing: {
+      after: {
+        180_000: {
+          target: 'failed',
+          actions: assign({
+            error: () => 'Analysis timed out after 3 minutes',
+          }),
+        },
+      },
       invoke: {
         src: 'runAnalysisActor',
         input: ({ context }) => ({
@@ -274,6 +305,14 @@ export const appGenerationMachine = setup({
     },
 
     awaitingClarification: {
+      after: {
+        1_800_000: {
+          target: 'failed',
+          actions: assign({
+            error: () => 'Awaiting clarification timed out after 30 minutes',
+          }),
+        },
+      },
       on: {
         USER_ANSWERED: {
           target: 'analyzing',
@@ -286,6 +325,14 @@ export const appGenerationMachine = setup({
     },
 
     blueprinting: {
+      after: {
+        120_000: {
+          target: 'failed',
+          actions: assign({
+            error: () => 'Blueprinting timed out after 2 minutes',
+          }),
+        },
+      },
       invoke: {
         src: 'runBlueprintActor',
         input: ({ context }) => ({
@@ -317,11 +364,20 @@ export const appGenerationMachine = setup({
     },
 
     provisioning: {
+      after: {
+        300_000: {
+          target: 'cleanup',
+          actions: assign({
+            error: () => 'Provisioning timed out after 5 minutes',
+          }),
+        },
+      },
       invoke: {
         src: 'runProvisioningActor',
         input: ({ context }) => ({
           appName: context.appName ?? '',
           projectId: context.projectId,
+          userId: context.userId,
         }),
         onDone: {
           target: 'generating',
@@ -352,6 +408,14 @@ export const appGenerationMachine = setup({
     },
 
     generating: {
+      after: {
+        600_000: {
+          target: 'cleanup',
+          actions: assign({
+            error: () => 'Code generation timed out after 10 minutes',
+          }),
+        },
+      },
       invoke: {
         src: 'runCodeGenerationActor',
         input: ({ context }) => ({
@@ -381,6 +445,14 @@ export const appGenerationMachine = setup({
     },
 
     validating: {
+      after: {
+        180_000: {
+          target: 'cleanup',
+          actions: assign({
+            error: () => 'Validation timed out after 3 minutes',
+          }),
+        },
+      },
       invoke: {
         src: 'runValidationActor',
         input: ({ context }) => ({
@@ -437,6 +509,14 @@ export const appGenerationMachine = setup({
     },
 
     repairing: {
+      after: {
+        300_000: {
+          target: 'cleanup',
+          actions: assign({
+            error: () => 'Repair timed out after 5 minutes',
+          }),
+        },
+      },
       invoke: {
         src: 'runRepairActor',
         input: ({ context }) => ({
@@ -466,6 +546,14 @@ export const appGenerationMachine = setup({
     },
 
     reviewing: {
+      after: {
+        180_000: {
+          target: 'cleanup',
+          actions: assign({
+            error: () => 'Code review timed out after 3 minutes',
+          }),
+        },
+      },
       invoke: {
         src: 'runCodeReviewActor',
         input: ({ context }) => ({
@@ -503,14 +591,25 @@ export const appGenerationMachine = setup({
           // Log the error but proceed to deploying
           target: 'deploying',
           actions: assign({
+            reviewSkipped: () => true,
             totalTokens: ({ context }) => context.totalTokens,
-            // Don't set error — this is a soft failure
           }),
+          entry: ({ event }: { event: { error: unknown } }) => {
+            console.error('[machine] Code review crashed, skipping and proceeding to deployment:', event.error)
+          },
         },
       },
     },
 
     deploying: {
+      after: {
+        600_000: {
+          target: 'cleanup',
+          actions: assign({
+            error: () => 'Deployment timed out after 10 minutes',
+          }),
+        },
+      },
       invoke: {
         src: 'runDeploymentActor',
         input: ({ context }) => ({
@@ -548,6 +647,17 @@ export const appGenerationMachine = setup({
     },
 
     cleanup: {
+      after: {
+        120_000: {
+          target: 'failed',
+          actions: assign({
+            error: ({ context }) =>
+              context.error
+                ? `${context.error}\n\nCleanup timed out after 2 minutes`
+                : 'Cleanup timed out after 2 minutes',
+          }),
+        },
+      },
       invoke: {
         src: 'runCleanupActor',
         input: ({ context }) => ({

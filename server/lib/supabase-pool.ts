@@ -12,6 +12,7 @@
  */
 
 import { sql } from 'drizzle-orm'
+import * as Sentry from '@sentry/node'
 import { db } from './db/client'
 import { createSupabaseProject, runMigration } from './supabase-mgmt'
 import type { WarmSupabaseProject } from './db/schema'
@@ -84,6 +85,13 @@ export async function claimWarmProject(userId: string): Promise<WarmProject | nu
 
     const row = result.rows[0] as WarmSupabaseProject
 
+    // Fire-and-forget: replenish pool in background after claim
+    // This ensures the pool stays topped up without needing an external cron
+    replenishPool().catch((error) => {
+      console.error('[supabase-pool] Background replenishment failed:', error)
+      Sentry.captureException(error, { tags: { operation: 'pool_replenish' } })
+    })
+
     return {
       id: row.id,
       supabaseProjectId: row.supabaseProjectId,
@@ -98,6 +106,7 @@ export async function claimWarmProject(userId: string): Promise<WarmProject | nu
     }
   } catch (error) {
     console.error('[supabase-pool] Claim failed:', error)
+    Sentry.captureException(error, { tags: { operation: 'claim_project' } })
     return null
   }
 }
@@ -112,29 +121,49 @@ export async function releaseProject(supabaseProjectId: string): Promise<void> {
   try {
     // Step 1: Reset the database schema
     const resetSQL = `
+      -- Drop and recreate public schema (removes all tables, views, functions, policies)
       DROP SCHEMA public CASCADE;
       CREATE SCHEMA public;
+
+      -- Restore default grants
       GRANT ALL ON SCHEMA public TO postgres;
       GRANT ALL ON SCHEMA public TO public;
+      GRANT USAGE ON SCHEMA public TO anon;
+      GRANT USAGE ON SCHEMA public TO authenticated;
+      GRANT USAGE ON SCHEMA public TO service_role;
+
+      -- Restore commonly needed extensions
       CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+      CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+      -- Reset default privileges for future objects
+      ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO postgres;
+      ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO service_role;
+      ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO anon;
+      ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO authenticated;
     `
 
     const migrationResult = await runMigration(supabaseProjectId, resetSQL)
 
     if (!migrationResult.success) {
+      const errorMsg = migrationResult.error || 'Schema reset failed'
       console.error(
         `[supabase-pool] Failed to reset schema for ${supabaseProjectId}:`,
-        migrationResult.error,
+        errorMsg,
       )
       // Mark as error instead of available if schema reset fails
       await db.execute(
         sql`UPDATE warm_supabase_projects
             SET status = 'error',
-                error_message = ${migrationResult.error || 'Schema reset failed'},
+                error_message = ${errorMsg},
                 claimed_by = NULL,
                 claimed_at = NULL
             WHERE supabase_project_id = ${supabaseProjectId}`,
       )
+      Sentry.captureException(new Error(errorMsg), {
+        tags: { operation: 'schema_reset' },
+        extra: { supabaseProjectId },
+      })
       return
     }
 
@@ -151,6 +180,10 @@ export async function releaseProject(supabaseProjectId: string): Promise<void> {
     console.log(`[supabase-pool] Released project ${supabaseProjectId} back to pool`)
   } catch (error) {
     console.error(`[supabase-pool] Failed to release project ${supabaseProjectId}:`, error)
+    Sentry.captureException(error, {
+      tags: { operation: 'release_project' },
+      extra: { supabaseProjectId },
+    })
     throw error
   }
 }
@@ -159,6 +192,8 @@ export async function releaseProject(supabaseProjectId: string): Promise<void> {
  * Replenish the pool by creating new Supabase projects up to target size
  * Should be called by background job/cron
  *
+ * Uses PostgreSQL advisory lock to prevent concurrent replenishment race conditions.
+ *
  * @param targetSize - Target pool size (defaults to WARM_POOL_SIZE env var or 5)
  * @returns Summary of created projects and any errors
  */
@@ -166,24 +201,37 @@ export async function replenishPool(
   targetSize: number = POOL_SIZE,
 ): Promise<{ created: number; errors: string[] }> {
   try {
-    // Count current available projects
-    const statusResult = await db.execute(
-      sql`SELECT COUNT(*) as count
-          FROM warm_supabase_projects
-          WHERE status = 'available'`,
+    // Try to acquire advisory lock (non-blocking)
+    // Lock ID is a fixed constant — only one replenish can run at a time
+    const REPLENISH_LOCK_ID = 42_424_242
+    const lockResult = await db.execute(
+      sql`SELECT pg_try_advisory_lock(${REPLENISH_LOCK_ID}) as acquired`,
     )
-
-    const availableCount = Number((statusResult.rows[0] as { count: string }).count || '0')
-    const needed = Math.max(0, targetSize - availableCount)
-
-    if (needed === 0) {
-      console.log(`[supabase-pool] Pool is full (${availableCount}/${targetSize})`)
+    const acquired = (lockResult.rows[0] as { acquired: boolean }).acquired
+    if (!acquired) {
+      console.log('[supabase-pool] Replenishment already in progress, skipping')
       return { created: 0, errors: [] }
     }
 
-    console.log(
-      `[supabase-pool] Replenishing pool: ${availableCount}/${targetSize}, creating ${needed} projects...`,
-    )
+    try {
+      // Count current available projects
+      const statusResult = await db.execute(
+        sql`SELECT COUNT(*) as count
+            FROM warm_supabase_projects
+            WHERE status = 'available'`,
+      )
+
+      const availableCount = Number((statusResult.rows[0] as { count: string }).count || '0')
+      const needed = Math.max(0, targetSize - availableCount)
+
+      if (needed === 0) {
+        console.log(`[supabase-pool] Pool is full (${availableCount}/${targetSize})`)
+        return { created: 0, errors: [] }
+      }
+
+      console.log(
+        `[supabase-pool] Replenishing pool: ${availableCount}/${targetSize}, creating ${needed} projects...`,
+      )
 
     const errors: string[] = []
     let created = 0
@@ -249,16 +297,25 @@ export async function replenishPool(
         const errorMsg = error instanceof Error ? error.message : String(error)
         errors.push(errorMsg)
         console.error(`[supabase-pool] Failed to create project ${i + 1}/${needed}:`, errorMsg)
+        Sentry.captureException(error, {
+          tags: { operation: 'create_warm_project' },
+          extra: { projectIndex: i + 1, needed },
+        })
       }
     }
 
-    console.log(
-      `[supabase-pool] Replenishment complete: created ${created}/${needed}, errors: ${errors.length}`,
-    )
-    return { created, errors }
+      console.log(
+        `[supabase-pool] Replenishment complete: created ${created}/${needed}, errors: ${errors.length}`,
+      )
+      return { created, errors }
+    } finally {
+      // Always release the lock, even if replenishment throws
+      await db.execute(sql`SELECT pg_advisory_unlock(${REPLENISH_LOCK_ID})`)
+    }
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error)
     console.error('[supabase-pool] Replenishment failed:', errorMsg)
+    Sentry.captureException(error, { tags: { operation: 'pool_replenish' } })
     return { created: 0, errors: [errorMsg] }
   }
 }
@@ -286,6 +343,84 @@ export async function getPoolStatus(): Promise<PoolStatus> {
     }
   } catch (error) {
     console.error('[supabase-pool] Failed to get pool status:', error)
+    Sentry.captureException(error, { tags: { operation: 'get_pool_status' } })
     return { available: 0, claimed: 0, total: 0 }
+  }
+}
+
+/**
+ * Clean up zombie projects — claimed but abandoned (no generation completed).
+ * Projects claimed more than `maxAgeMs` ago are released back to pool.
+ *
+ * @param maxAgeMs - Maximum age for claimed projects (default: 30 minutes)
+ * @returns Summary of cleaned up projects
+ */
+export async function cleanupZombieProjects(
+  maxAgeMs: number = 30 * 60 * 1000,
+): Promise<{ released: number; errors: string[] }> {
+  const errors: string[] = []
+  let released = 0
+
+  try {
+    const cutoff = new Date(Date.now() - maxAgeMs)
+
+    // Find zombie projects
+    const result = await db.execute(
+      sql`SELECT supabase_project_id
+          FROM warm_supabase_projects
+          WHERE status = 'claimed'
+          AND claimed_at < ${cutoff.toISOString()}::timestamptz`,
+    )
+
+    if (result.rows.length === 0) {
+      return { released: 0, errors: [] }
+    }
+
+    console.log(`[supabase-pool] Found ${result.rows.length} zombie projects to clean up`)
+
+    // Release each zombie
+    for (const row of result.rows) {
+      const projectId = (row as { supabase_project_id: string }).supabase_project_id
+      try {
+        await releaseProject(projectId)
+        released++
+      } catch (error) {
+        const msg = `Failed to release zombie ${projectId}: ${error instanceof Error ? error.message : String(error)}`
+        errors.push(msg)
+        Sentry.captureException(error, {
+          tags: { operation: 'zombie_cleanup' },
+          extra: { supabaseProjectId: projectId },
+        })
+      }
+    }
+
+    console.log(`[supabase-pool] Zombie cleanup: released ${released}, errors: ${errors.length}`)
+    return { released, errors }
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error)
+    Sentry.captureException(error, { tags: { operation: 'zombie_cleanup' } })
+    return { released: 0, errors: [msg] }
+  }
+}
+
+/**
+ * Remove projects in error state from the pool (they're unusable).
+ * Note: Does NOT delete the actual Supabase project — just removes from pool tracking.
+ */
+export async function cleanupErrorProjects(): Promise<number> {
+  try {
+    const result = await db.execute(
+      sql`DELETE FROM warm_supabase_projects
+          WHERE status = 'error'
+          RETURNING id`,
+    )
+    const count = result.rows.length
+    if (count > 0) {
+      console.log(`[supabase-pool] Removed ${count} error projects from pool`)
+    }
+    return count
+  } catch (error) {
+    Sentry.captureException(error, { tags: { operation: 'cleanup_errors' } })
+    return 0
   }
 }

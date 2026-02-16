@@ -574,6 +574,23 @@ export async function runProvisioning(input: {
 // Deployment handler (bonus — for the deploying state)
 // ============================================================================
 
+/**
+ * Fetch with timeout protection
+ */
+async function fetchWithTimeout(
+  url: string,
+  options: RequestInit & { timeout?: number } = {},
+): Promise<Response> {
+  const { timeout = 30_000, ...fetchOptions } = options
+  const controller = new AbortController()
+  const id = setTimeout(() => controller.abort(), timeout)
+  try {
+    return await fetch(url, { ...fetchOptions, signal: controller.signal })
+  } finally {
+    clearTimeout(id)
+  }
+}
+
 export async function runDeployment(input: {
   sandboxId: string
   projectId: string
@@ -582,36 +599,218 @@ export async function runDeployment(input: {
   supabaseProjectId?: string | null
   githubCloneUrl?: string | null
 }): Promise<DeploymentResult> {
-  // Download files from sandbox to build file manifest
-  const { getSandbox, downloadDirectory } = await import('../sandbox')
+  // Lazy imports to avoid circular dependencies
+  const { getSandbox, runCommand, downloadDirectory } = await import('../sandbox')
   const { updateProject } = await import('../db/queries')
+  const { buildAppSlug } = await import('../slug')
+  const { db } = await import('../db/client')
+  const { eq } = await import('drizzle-orm')
+  const { projects } = await import('../db/schema')
+  const Sentry = await import('@sentry/node')
 
-  const sandbox = await getSandbox(input.sandboxId)
-  const builtFiles = await downloadDirectory(sandbox, '/workspace')
+  try {
+    // 1. Get sandbox
+    const sandbox = await getSandbox(input.sandboxId)
 
-  // Build file manifest — simple content hash using length + first/last bytes as fingerprint
-  const fileManifest: Record<string, string> = {}
-  for (const file of builtFiles) {
-    const hash = `${file.content.length}:${Buffer.from(file.content).toString('base64').slice(0, 16)}`
-    fileManifest[file.path] = hash
-  }
+    // 2. Build file manifest from source files for generation state persistence
+    const sourceFiles = await downloadDirectory(sandbox, '/workspace')
+    const fileManifest: Record<string, string> = {}
+    for (const file of sourceFiles) {
+      const hash = `${file.content.length}:${Buffer.from(file.content).toString('base64').slice(0, 16)}`
+      fileManifest[file.path] = hash
+    }
 
-  // Persist generation state for iterative editing
-  await updateProject(input.projectId, {
-    generationState: {
-      contract: input.contract ?? null,
-      blueprint: input.blueprint ?? null,
-      sandboxId: input.sandboxId,
-      supabaseProjectId: input.supabaseProjectId ?? null,
-      githubRepo: input.githubCloneUrl ?? null,
-      fileManifest,
-      lastEditedAt: new Date().toISOString(),
-    },
-  })
+    // 3. Persist generation state early (enables iterative editing even if deployment fails)
+    await updateProject(input.projectId, {
+      generationState: {
+        contract: input.contract ?? null,
+        blueprint: input.blueprint ?? null,
+        sandboxId: input.sandboxId,
+        supabaseProjectId: input.supabaseProjectId ?? null,
+        githubRepo: input.githubCloneUrl ?? null,
+        fileManifest,
+        lastEditedAt: new Date().toISOString(),
+      },
+    })
 
-  // Placeholder — actual deployment would happen via Vercel
-  return {
-    deploymentUrl: '',
-    tokensUsed: 0,
+    // 4. Get project details from DB for deployment
+    const [project] = await db
+      .select()
+      .from(projects)
+      .where(eq(projects.id, input.projectId))
+      .limit(1)
+
+    if (!project) {
+      throw new Error(`Project ${input.projectId} not found`)
+    }
+
+    // 5. Write production env vars
+    const envContent = [
+      project.supabaseUrl ? `VITE_SUPABASE_URL=${project.supabaseUrl}` : '',
+      project.supabaseAnonKey ? `VITE_SUPABASE_ANON_KEY=${project.supabaseAnonKey}` : '',
+    ]
+      .filter(Boolean)
+      .join('\n')
+
+    if (envContent) {
+      await sandbox.fs.uploadFile(Buffer.from(envContent + '\n'), '/workspace/.env.production')
+    }
+
+    // 6. Production build
+    const buildResult = await runCommand(sandbox, 'bun run build', 'deploy-build', {
+      cwd: '/workspace',
+      timeout: 120,
+    })
+
+    if (buildResult.exitCode !== 0) {
+      const output = buildResult.stdout?.slice(-2000) || ''
+      const stderr = buildResult.stderr?.slice(-1000) || ''
+      throw new Error(
+        `Production build failed (exit code ${buildResult.exitCode}):\n${output}\n${stderr}`,
+      )
+    }
+
+    // 7. Download dist/ for Vercel deployment
+    const builtFiles = await downloadDirectory(sandbox, '/workspace/dist')
+
+    // 8. Deploy to Vercel
+    const vercelToken = process.env.VERCEL_TOKEN
+    if (!vercelToken) {
+      throw new Error('VERCEL_TOKEN environment variable is required for deployment')
+    }
+
+    const teamId = process.env.VERCEL_TEAM_ID
+    const slug = (project.name || 'app').toLowerCase().replace(/[^a-z0-9-]/g, '-')
+
+    const vercelFiles = builtFiles.map((f) => ({
+      file: f.path,
+      data: f.content.toString('base64'),
+    }))
+
+    const envVars: Record<string, string> = {}
+    if (project.supabaseUrl) envVars.VITE_SUPABASE_URL = project.supabaseUrl
+    if (project.supabaseAnonKey) envVars.VITE_SUPABASE_ANON_KEY = project.supabaseAnonKey
+
+    // Deploy with retry (max 2 attempts)
+    let deployResponse: Response | null = null
+    for (let attempt = 0; attempt < 2; attempt++) {
+      deployResponse = await fetchWithTimeout(
+        `https://api.vercel.com/v13/deployments${teamId ? `?teamId=${teamId}` : ''}`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${vercelToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            name: slug,
+            files: vercelFiles,
+            projectSettings: {
+              framework: 'vite',
+              buildCommand: 'bun run build',
+              devCommand: 'bun run dev',
+              installCommand: 'bun install',
+              outputDirectory: 'dist',
+            },
+            target: 'production',
+            ...(Object.keys(envVars).length > 0 ? { env: envVars } : {}),
+          }),
+          timeout: 60_000,
+        },
+      )
+      if (deployResponse.ok || deployResponse.status < 500) break
+      if (attempt < 1) {
+        console.warn(`[deployment] Vercel returned ${deployResponse.status}, retrying...`)
+        await new Promise((r) => setTimeout(r, 2000))
+      }
+    }
+
+    if (!deployResponse!.ok) {
+      const error = await deployResponse!.text()
+      throw new Error(`Vercel deployment failed: ${error}`)
+    }
+
+    const deployment = (await deployResponse!.json()) as { id: string; url: string }
+    let deploymentUrl = `https://${deployment.url}`
+
+    // Poll with explicit timeout
+    const POLL_TIMEOUT_MS = 5 * 60 * 1000 // 5 minutes
+    const POLL_INTERVAL_MS = 5_000
+    const pollStart = Date.now()
+    let lastState = 'UNKNOWN'
+
+    while (Date.now() - pollStart < POLL_TIMEOUT_MS) {
+      const statusRes = await fetchWithTimeout(
+        `https://api.vercel.com/v13/deployments/${deployment.id}${teamId ? `?teamId=${teamId}` : ''}`,
+        {
+          headers: { Authorization: `Bearer ${vercelToken}` },
+          timeout: 10_000,
+        },
+      )
+
+      if (statusRes.ok) {
+        const status = (await statusRes.json()) as { readyState: string }
+        lastState = status.readyState
+        if (status.readyState === 'READY') {
+          console.log(`[deployment] Deployment ready: ${deploymentUrl}`)
+          break
+        }
+        if (status.readyState === 'ERROR' || status.readyState === 'CANCELED') {
+          throw new Error(`Deployment ${status.readyState}`)
+        }
+      }
+
+      await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS))
+    }
+
+    if (lastState !== 'READY') {
+      throw new Error(
+        `Deployment timed out after ${Math.ceil(POLL_TIMEOUT_MS / 1000)}s — last state: ${lastState}`,
+      )
+    }
+
+    // 9. Optional: assign custom domain
+    const wildcardDomain = process.env.VERCEL_WILDCARD_DOMAIN
+    if (wildcardDomain) {
+      const appSlug = buildAppSlug(project.name, input.projectId)
+      const customDomain = `${appSlug}.${wildcardDomain}`
+
+      const domainResponse = await fetchWithTimeout(
+        `https://api.vercel.com/v10/projects/${slug}/domains${teamId ? `?teamId=${teamId}` : ''}`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${vercelToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ name: customDomain }),
+          timeout: 10_000,
+        },
+      )
+
+      if (domainResponse.ok) {
+        deploymentUrl = `https://${customDomain}`
+        console.log(`[deployment] Custom domain assigned: ${deploymentUrl}`)
+      } else {
+        console.warn(`[deployment] Custom domain assignment failed: ${await domainResponse.text()}`)
+      }
+    }
+
+    // 10. Update project record with deployment URL
+    await updateProject(input.projectId, {
+      deployUrl: deploymentUrl,
+      status: 'deployed',
+    })
+
+    return {
+      deploymentUrl,
+      tokensUsed: 0,
+    }
+  } catch (error) {
+    Sentry.captureException(error, {
+      tags: { operation: 'deployment' },
+      extra: { sandboxId: input.sandboxId, projectId: input.projectId },
+    })
+    throw error
   }
 }

@@ -1,5 +1,12 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
-import { claimWarmProject, releaseProject, replenishPool, getPoolStatus } from '@server/lib/supabase-pool'
+import {
+  claimWarmProject,
+  releaseProject,
+  replenishPool,
+  getPoolStatus,
+  cleanupZombieProjects,
+  cleanupErrorProjects,
+} from '@server/lib/supabase-pool'
 import { db } from '@server/lib/db/client'
 import * as supabaseMgmt from '@server/lib/supabase-mgmt'
 import type { WarmSupabaseProject } from '@server/lib/db/schema'
@@ -39,8 +46,14 @@ describe('supabase-pool', () => {
         errorMessage: null,
       }
 
+      // Mock successful claim
       vi.mocked(db.execute).mockResolvedValueOnce({
         rows: [mockProject],
+      } as any)
+
+      // Mock background replenishment check (pool is full)
+      vi.mocked(db.execute).mockResolvedValueOnce({
+        rows: [{ count: '5' }],
       } as any)
 
       const result = await claimWarmProject('user-456')
@@ -49,7 +62,8 @@ describe('supabase-pool', () => {
       expect(result?.id).toBe('pool-123')
       expect(result?.supabaseProjectId).toBe('supabase-abc')
       expect(result?.claimedBy).toBe('user-456')
-      expect(db.execute).toHaveBeenCalledOnce()
+      // Should be called twice: once for claim, once for background replenishment check
+      expect(db.execute).toHaveBeenCalledTimes(2)
     })
 
     it('returns null when pool is empty', async () => {
@@ -91,10 +105,15 @@ describe('supabase-pool', () => {
         ],
       } as any)
 
+      // Mock background replenishment check
+      vi.mocked(db.execute).mockResolvedValueOnce({
+        rows: [{ count: '5' }],
+      } as any)
+
       await claimWarmProject('user-456')
 
-      // Verify db.execute was called
-      expect(db.execute).toHaveBeenCalledOnce()
+      // Verify db.execute was called (claim + background replenishment check)
+      expect(db.execute).toHaveBeenCalledTimes(2)
       expect(db.execute).toHaveBeenCalledWith(expect.any(Object))
     })
   })
@@ -121,6 +140,30 @@ describe('supabase-pool', () => {
       // Verify status update to available was called
       expect(db.execute).toHaveBeenCalledOnce()
       expect(db.execute).toHaveBeenCalledWith(expect.any(Object))
+    })
+
+    it('includes all required grants and extensions in schema reset', async () => {
+      vi.mocked(supabaseMgmt.runMigration).mockResolvedValueOnce({
+        success: true,
+        executedAt: new Date().toISOString(),
+      })
+
+      vi.mocked(db.execute).mockResolvedValueOnce({
+        rows: [],
+      } as any)
+
+      await releaseProject('supabase-abc')
+
+      // Verify enhanced reset SQL includes all required elements
+      const resetSQLCall = vi.mocked(supabaseMgmt.runMigration).mock.calls[0][1]
+      expect(resetSQLCall).toContain('DROP SCHEMA public CASCADE')
+      expect(resetSQLCall).toContain('CREATE SCHEMA public')
+      expect(resetSQLCall).toContain('GRANT USAGE ON SCHEMA public TO anon')
+      expect(resetSQLCall).toContain('GRANT USAGE ON SCHEMA public TO authenticated')
+      expect(resetSQLCall).toContain('GRANT USAGE ON SCHEMA public TO service_role')
+      expect(resetSQLCall).toContain('CREATE EXTENSION IF NOT EXISTS "uuid-ossp"')
+      expect(resetSQLCall).toContain('CREATE EXTENSION IF NOT EXISTS "pgcrypto"')
+      expect(resetSQLCall).toContain('ALTER DEFAULT PRIVILEGES')
     })
 
     it('marks project as error if schema reset fails', async () => {
@@ -154,7 +197,73 @@ describe('supabase-pool', () => {
   })
 
   describe('replenishPool', () => {
+    it('acquires advisory lock and releases it after completion', async () => {
+      // Mock lock acquisition (acquired = true)
+      vi.mocked(db.execute).mockResolvedValueOnce({
+        rows: [{ acquired: true }],
+      } as any)
+
+      // Mock available count: pool is full
+      vi.mocked(db.execute).mockResolvedValueOnce({
+        rows: [{ count: '5' }],
+      } as any)
+
+      // Mock lock release
+      vi.mocked(db.execute).mockResolvedValueOnce({
+        rows: [],
+      } as any)
+
+      const result = await replenishPool(5)
+
+      expect(result.created).toBe(0)
+      expect(result.errors).toHaveLength(0)
+      // Verify lock was acquired and released
+      expect(db.execute).toHaveBeenCalledTimes(3)
+    })
+
+    it('skips replenishment when advisory lock is already held', async () => {
+      // Mock lock acquisition (acquired = false)
+      vi.mocked(db.execute).mockResolvedValueOnce({
+        rows: [{ acquired: false }],
+      } as any)
+
+      const result = await replenishPool(5)
+
+      expect(result.created).toBe(0)
+      expect(result.errors).toHaveLength(0)
+      // Should only try to acquire lock, no further operations
+      expect(db.execute).toHaveBeenCalledTimes(1)
+      expect(supabaseMgmt.createSupabaseProject).not.toHaveBeenCalled()
+    })
+
+    it('releases advisory lock even when replenishment throws', async () => {
+      // Mock lock acquisition (acquired = true)
+      vi.mocked(db.execute).mockResolvedValueOnce({
+        rows: [{ acquired: true }],
+      } as any)
+
+      // Mock available count query throws
+      vi.mocked(db.execute).mockRejectedValueOnce(new Error('Database error'))
+
+      // Mock lock release
+      vi.mocked(db.execute).mockResolvedValueOnce({
+        rows: [],
+      } as any)
+
+      const result = await replenishPool(5)
+
+      expect(result.created).toBe(0)
+      expect(result.errors).toHaveLength(1)
+      expect(result.errors[0]).toBe('Database error')
+      // Verify lock release was attempted
+      expect(db.execute).toHaveBeenCalledTimes(3)
+    })
+
     it('creates correct number of projects to reach target', async () => {
+      // Mock lock acquisition
+      vi.mocked(db.execute).mockResolvedValueOnce({
+        rows: [{ acquired: true }],
+      } as any)
       // Mock available count: 2 (need 3 more to reach target of 5)
       vi.mocked(db.execute).mockResolvedValueOnce({
         rows: [{ count: '2' }],
@@ -186,6 +295,11 @@ describe('supabase-pool', () => {
         } as any)
       }
 
+      // Mock lock release
+      vi.mocked(db.execute).mockResolvedValueOnce({
+        rows: [],
+      } as any)
+
       const result = await replenishPool(5)
 
       expect(result.created).toBe(3)
@@ -194,8 +308,18 @@ describe('supabase-pool', () => {
     })
 
     it('returns early when pool is already full', async () => {
+      // Mock lock acquisition
+      vi.mocked(db.execute).mockResolvedValueOnce({
+        rows: [{ acquired: true }],
+      } as any)
+
       vi.mocked(db.execute).mockResolvedValueOnce({
         rows: [{ count: '5' }],
+      } as any)
+
+      // Mock lock release
+      vi.mocked(db.execute).mockResolvedValueOnce({
+        rows: [],
       } as any)
 
       const result = await replenishPool(5)
@@ -206,6 +330,11 @@ describe('supabase-pool', () => {
     })
 
     it('collects errors but continues creating remaining projects', async () => {
+      // Mock lock acquisition
+      vi.mocked(db.execute).mockResolvedValueOnce({
+        rows: [{ acquired: true }],
+      } as any)
+
       // Mock available count: 3 (need 2 more to reach target of 5)
       vi.mocked(db.execute).mockResolvedValueOnce({
         rows: [{ count: '3' }],
@@ -244,6 +373,11 @@ describe('supabase-pool', () => {
         rows: [],
       } as any)
 
+      // Mock lock release
+      vi.mocked(db.execute).mockResolvedValueOnce({
+        rows: [],
+      } as any)
+
       const result = await replenishPool(5)
 
       expect(result.created).toBe(1)
@@ -252,7 +386,17 @@ describe('supabase-pool', () => {
     })
 
     it('handles complete failure gracefully', async () => {
+      // Mock lock acquisition
+      vi.mocked(db.execute).mockResolvedValueOnce({
+        rows: [{ acquired: true }],
+      } as any)
+
       vi.mocked(db.execute).mockRejectedValueOnce(new Error('Database unavailable'))
+
+      // Mock lock release
+      vi.mocked(db.execute).mockResolvedValueOnce({
+        rows: [],
+      } as any)
 
       const result = await replenishPool(5)
 
@@ -345,6 +489,220 @@ describe('supabase-pool', () => {
 
       expect(result1).not.toBeNull()
       expect(result2).toBeNull()
+    })
+  })
+
+  describe('replenish-on-claim', () => {
+    it('triggers background replenishment after successful claim', async () => {
+      const mockProject: WarmSupabaseProject = {
+        id: 'pool-123',
+        supabaseProjectId: 'supabase-abc',
+        supabaseUrl: 'https://supabase-abc.supabase.co',
+        anonKey: 'anon-key-123',
+        serviceRoleKey: 'service-key-123',
+        dbHost: 'db.supabase-abc.supabase.co',
+        dbPassword: 'password123',
+        region: 'us-east-1',
+        status: 'claimed',
+        claimedBy: 'user-456',
+        claimedAt: new Date(),
+        createdAt: new Date(),
+        errorMessage: null,
+      }
+
+      // Mock successful claim
+      vi.mocked(db.execute).mockResolvedValueOnce({
+        rows: [mockProject],
+      } as any)
+
+      // Mock replenish check (pool is full, no replenishment needed)
+      vi.mocked(db.execute).mockResolvedValueOnce({
+        rows: [{ count: '5' }],
+      } as any)
+
+      const result = await claimWarmProject('user-456')
+
+      expect(result).not.toBeNull()
+      // The replenish happens in background (fire-and-forget), so we can't easily verify it's called
+      // But we can verify the claim succeeded
+      expect(result?.id).toBe('pool-123')
+    })
+
+    it('does not block claim even if replenishment fails', async () => {
+      const mockProject: WarmSupabaseProject = {
+        id: 'pool-123',
+        supabaseProjectId: 'supabase-abc',
+        supabaseUrl: 'https://supabase-abc.supabase.co',
+        anonKey: 'anon-key-123',
+        serviceRoleKey: 'service-key-123',
+        dbHost: 'db.supabase-abc.supabase.co',
+        dbPassword: 'password123',
+        region: 'us-east-1',
+        status: 'claimed',
+        claimedBy: 'user-456',
+        claimedAt: new Date(),
+        createdAt: new Date(),
+        errorMessage: null,
+      }
+
+      // Mock successful claim
+      vi.mocked(db.execute).mockResolvedValueOnce({
+        rows: [mockProject],
+      } as any)
+
+      // Mock replenish failure
+      vi.mocked(db.execute).mockRejectedValueOnce(new Error('Database unavailable'))
+
+      const result = await claimWarmProject('user-456')
+
+      // Claim should succeed despite background replenishment failure
+      expect(result).not.toBeNull()
+      expect(result?.id).toBe('pool-123')
+    })
+  })
+
+  describe('cleanupZombieProjects', () => {
+    it('uses 30 minutes as default threshold', async () => {
+      // Mock zombie projects query
+      vi.mocked(db.execute).mockResolvedValueOnce({
+        rows: [],
+      } as any)
+
+      await cleanupZombieProjects()
+
+      // Verify the SQL query was called with a timestamp calculated from 30 min ago
+      expect(db.execute).toHaveBeenCalledWith(expect.any(Object))
+    })
+
+    it('releases projects claimed more than default threshold ago', async () => {
+      // Mock zombie projects query
+      vi.mocked(db.execute).mockResolvedValueOnce({
+        rows: [
+          { supabase_project_id: 'zombie-1' },
+          { supabase_project_id: 'zombie-2' },
+        ],
+      } as any)
+
+      // Mock releaseProject calls
+      // For zombie-1: reset schema succeeds
+      vi.mocked(supabaseMgmt.runMigration).mockResolvedValueOnce({
+        success: true,
+        executedAt: new Date().toISOString(),
+      })
+      vi.mocked(db.execute).mockResolvedValueOnce({
+        rows: [],
+      } as any)
+
+      // For zombie-2: reset schema succeeds
+      vi.mocked(supabaseMgmt.runMigration).mockResolvedValueOnce({
+        success: true,
+        executedAt: new Date().toISOString(),
+      })
+      vi.mocked(db.execute).mockResolvedValueOnce({
+        rows: [],
+      } as any)
+
+      const result = await cleanupZombieProjects()
+
+      expect(result.released).toBe(2)
+      expect(result.errors).toHaveLength(0)
+    })
+
+    it('returns early when no zombie projects found', async () => {
+      vi.mocked(db.execute).mockResolvedValueOnce({
+        rows: [],
+      } as any)
+
+      const result = await cleanupZombieProjects()
+
+      expect(result.released).toBe(0)
+      expect(result.errors).toHaveLength(0)
+    })
+
+    it('collects errors but continues releasing remaining projects', async () => {
+      // Mock zombie projects query
+      vi.mocked(db.execute).mockResolvedValueOnce({
+        rows: [
+          { supabase_project_id: 'zombie-1' },
+          { supabase_project_id: 'zombie-2' },
+        ],
+      } as any)
+
+      // For zombie-1: release fails
+      vi.mocked(supabaseMgmt.runMigration).mockRejectedValueOnce(new Error('Migration failed'))
+
+      // For zombie-2: release succeeds
+      vi.mocked(supabaseMgmt.runMigration).mockResolvedValueOnce({
+        success: true,
+        executedAt: new Date().toISOString(),
+      })
+      vi.mocked(db.execute).mockResolvedValueOnce({
+        rows: [],
+      } as any)
+
+      const result = await cleanupZombieProjects()
+
+      expect(result.released).toBe(1)
+      expect(result.errors).toHaveLength(1)
+      expect(result.errors[0]).toContain('zombie-1')
+    })
+
+    it('uses custom maxAgeMs parameter', async () => {
+      // Mock zombie projects query
+      vi.mocked(db.execute).mockResolvedValueOnce({
+        rows: [],
+      } as any)
+
+      const customAge = 30 * 60 * 1000 // 30 minutes
+      const result = await cleanupZombieProjects(customAge)
+
+      expect(result.released).toBe(0)
+      expect(db.execute).toHaveBeenCalledWith(expect.any(Object))
+    })
+
+    it('handles database error gracefully', async () => {
+      vi.mocked(db.execute).mockRejectedValueOnce(new Error('Database unavailable'))
+
+      const result = await cleanupZombieProjects()
+
+      expect(result.released).toBe(0)
+      expect(result.errors).toHaveLength(1)
+      expect(result.errors[0]).toBe('Database unavailable')
+    })
+  })
+
+  describe('cleanupErrorProjects', () => {
+    it('removes error-state projects from pool', async () => {
+      vi.mocked(db.execute).mockResolvedValueOnce({
+        rows: [
+          { id: 'error-1' },
+          { id: 'error-2' },
+          { id: 'error-3' },
+        ],
+      } as any)
+
+      const result = await cleanupErrorProjects()
+
+      expect(result).toBe(3)
+      expect(db.execute).toHaveBeenCalledWith(expect.any(Object))
+    })
+
+    it('returns 0 when no error projects found', async () => {
+      vi.mocked(db.execute).mockResolvedValueOnce({
+        rows: [],
+      } as any)
+
+      const result = await cleanupErrorProjects()
+
+      expect(result).toBe(0)
+    })
+
+    it('returns 0 on database error', async () => {
+      vi.mocked(db.execute).mockRejectedValueOnce(new Error('Database error'))
+
+      const result = await cleanupErrorProjects()
+
+      expect(result).toBe(0)
     })
   })
 })

@@ -1,13 +1,15 @@
 // server/index.ts — must import sentry first for instrumentation
 import './sentry'
 import { sentry } from '@hono/sentry'
+import { sql } from 'drizzle-orm'
 import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import { cors } from 'hono/cors'
-import { createMiddleware } from 'hono/factory'
 import { secureHeaders } from 'hono/secure-headers'
 import { handle } from 'hono/vercel'
 
+import { db } from './lib/db/client'
+import { createRateLimiter } from './lib/rate-limit'
 import { agentRoutes } from './routes/agent'
 import { authCallbackRoutes } from './routes/auth-callback'
 import { projectRoutes } from './routes/projects'
@@ -16,42 +18,7 @@ import { sandboxUrlRoutes } from './routes/sandbox-urls'
 import { stripeCheckoutRoutes } from './routes/stripe-checkout'
 import { stripeWebhookRoutes } from './routes/stripe-webhook'
 import { supabaseProxyRoutes } from './routes/supabase-proxy'
-
-/**
- * Simple in-memory rate limiter
- * Tracks requests per user/IP within a sliding window
- */
-function createRateLimiter(opts: { windowMs: number; max: number }) {
-  const hits = new Map<string, { count: number; resetAt: number }>()
-
-  // Cleanup expired entries every minute
-  setInterval(() => {
-    const now = Date.now()
-    for (const [key, val] of hits) {
-      if (val.resetAt <= now) hits.delete(key)
-    }
-  }, 60_000)
-
-  return createMiddleware(async (c, next) => {
-    const key = c.get('user')?.id ?? c.req.header('x-forwarded-for') ?? 'anonymous'
-    const now = Date.now()
-    const entry = hits.get(key)
-
-    if (!entry || entry.resetAt <= now) {
-      hits.set(key, { count: 1, resetAt: now + opts.windowMs })
-      return next()
-    }
-
-    entry.count++
-    if (entry.count > opts.max) {
-      return c.json(
-        { error: 'rate_limit_exceeded', retryAfter: Math.ceil((entry.resetAt - now) / 1000) },
-        429,
-      )
-    }
-    return next()
-  })
-}
+import { adminRoutes } from './routes/admin'
 
 const app = new Hono().basePath('/api')
 
@@ -80,12 +47,24 @@ app.use(
 app.use('/api/*', bodyLimit({ maxSize: 10 * 1024 * 1024 }))
 
 // Rate limiting on agent endpoint (5 requests per minute per user)
-app.use('/api/agent', createRateLimiter({ windowMs: 60_000, max: 5 }))
+app.use('/agent', createRateLimiter({ windowMs: 60_000, max: 5, prefix: 'agent' }))
 // More generous limit on other API routes (60 requests per minute)
-app.use('/api/*', createRateLimiter({ windowMs: 60_000, max: 60 }))
+app.use('/*', createRateLimiter({ windowMs: 60_000, max: 60, prefix: 'api' }))
 
-// Health check
-app.get('/health', (c) => c.json({ status: 'ok' }))
+// Health check with DB connectivity verification
+app.get('/health', async (c) => {
+  try {
+    // Quick DB check
+    const result = await db.execute(sql`SELECT 1 as ok`)
+    return c.json({
+      status: 'ok',
+      db: result.rows.length > 0 ? 'connected' : 'error',
+      timestamp: new Date().toISOString(),
+    })
+  } catch {
+    return c.json({ status: 'degraded', db: 'error', timestamp: new Date().toISOString() }, 503)
+  }
+})
 
 // Mount routes
 app.route('/agent', agentRoutes)
@@ -96,6 +75,7 @@ app.route('/stripe/checkout', stripeCheckoutRoutes)
 app.route('/stripe/webhook', stripeWebhookRoutes)
 app.route('/supabase-proxy', supabaseProxyRoutes)
 app.route('/auth/callback', authCallbackRoutes)
+app.route('/admin', adminRoutes)
 
 // Vercel adapter for production (serverless)
 export default handle(app)
