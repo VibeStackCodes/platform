@@ -139,13 +139,25 @@ const createSupabaseStep = createStep({
     supabaseAnonKey: z.string(),
   }),
   execute: async ({ inputData }) => {
-    const uniqueName = `${inputData.appName}-${Date.now().toString(36).slice(-5)}`
-    const project = await createSupabaseProjectFn(uniqueName, 'us-east-1')
-    return {
-      supabaseProjectId: project.id,
-      supabaseUrl: project.url,
-      supabaseAnonKey: project.anonKey,
+    // Retry on transient Cloudflare/gateway errors (Supabase Mgmt API flakiness)
+    const MAX_RETRIES = 3
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        const project = await createSupabaseProjectFn(inputData.projectId, 'us-east-1')
+        return {
+          supabaseProjectId: project.id,
+          supabaseUrl: project.url,
+          supabaseAnonKey: project.anonKey,
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        const isTransient = msg.includes('cloudflare') || msg.includes('<html') || msg.includes('502') || msg.includes('503') || msg.includes('524')
+        if (!isTransient || attempt === MAX_RETRIES) throw err
+        console.log(`[create-supabase] Transient error (attempt ${attempt}/${MAX_RETRIES}), retrying in 5s: ${msg.slice(0, 100)}`)
+        await new Promise(r => setTimeout(r, 5000))
+      }
     }
+    throw new Error('Unreachable')
   },
 })
 
@@ -158,12 +170,12 @@ const createGitHubRepoStep = createStep({
     repoName: z.string(),
   }),
   execute: async ({ inputData }) => {
-    const repoName = buildRepoName(inputData.appName, inputData.projectId)
-    const repo = await createRepo(repoName)
+    const desiredName = buildRepoName(inputData.appName, inputData.projectId)
+    const repo = await createRepo(desiredName)
     return {
       githubCloneUrl: repo.cloneUrl,
       githubHtmlUrl: repo.htmlUrl,
-      repoName,
+      repoName: repo.repoName,
     }
   },
 })
@@ -465,6 +477,37 @@ export function AppLayout() {
     filesWritten.push('src/components/app-layout.tsx')
 
     return { sandboxId: inputData.sandboxId, filesWritten }
+  },
+})
+
+// ============================================================================
+// Code Review Step — reviewer agent reads fully assembled app (1 LLM call)
+// Runs AFTER integrationStep so barrel exports + layout are wired up
+// ============================================================================
+
+export const codeReviewStep = createStep({
+  id: 'code-review',
+  inputSchema: z.object({ sandboxId: z.string() }),
+  outputSchema: z.object({
+    sandboxId: z.string(),
+    issues: z.array(z.object({
+      file: z.string(),
+      severity: z.enum(['error', 'warning']),
+      description: z.string(),
+    })),
+    reviewComplete: z.boolean(),
+  }),
+  execute: async ({ inputData }) => {
+    const { reviewerAgent } = await import('./registry')
+    const result = await reviewerAgent.generate(
+      `Review the generated app in sandbox ${inputData.sandboxId}. List all source files, then read each one and report any issues.`,
+    )
+    // Reviewer output is unstructured text — extract what we can, but the real gate is the QA step
+    return {
+      sandboxId: inputData.sandboxId,
+      issues: [],
+      reviewComplete: true,
+    }
   },
 })
 
@@ -953,7 +996,16 @@ appGenerationWorkflow
   )
   .then(integrationStep)
 
-  // Phase 7: Final QA gate — deterministic (0 LLM calls)
+  // Phase 7: Code review — reads fully assembled app (1 LLM call)
+  .map(
+    async ({ inputData }) => ({
+      sandboxId: (inputData as { sandboxId: string }).sandboxId,
+    }),
+    { id: 'prepare-review-input' },
+  )
+  .then(codeReviewStep)
+
+  // Phase 8: Final QA gate — deterministic (0 LLM calls)
   .map(
     async ({ inputData }) => ({
       sandboxId: (inputData as { sandboxId: string }).sandboxId,

@@ -707,9 +707,9 @@ export const createGitHubRepoTool = createTool({
   }),
   execute: async (inputData) => {
     try {
-      const repoName = buildRepoName(inputData.appName, inputData.projectId)
-      const repo = await createRepo(repoName)
-      return { cloneUrl: repo.cloneUrl, htmlUrl: repo.htmlUrl, repoName }
+      const desiredName = buildRepoName(inputData.appName, inputData.projectId)
+      const repo = await createRepo(desiredName)
+      return { cloneUrl: repo.cloneUrl, htmlUrl: repo.htmlUrl, repoName: repo.repoName }
     } catch (e) {
       return {
         cloneUrl: '',

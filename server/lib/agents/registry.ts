@@ -34,7 +34,7 @@ import {
   writeFileTool,
   writeFilesTool,
 } from './tools'
-import { qaWorkflow } from './workflows'
+// qaWorkflow removed from agents — only runs as final workflow gate after integrationStep
 
 // Re-export RequestContext for route usage
 export { RequestContext }
@@ -257,8 +257,7 @@ Code quality:
 - Error handling on every database call
 - Use @/ path alias for imports
 
-After writing all files, call workflow-qaValidation to verify your code compiles.
-Fix any errors it reports before reporting done.`,
+Do NOT attempt to run tsc or build — you are writing a slice of the app; the full project build runs after all agents finish.`,
   tools: {
     writeFile: writeFileTool,
     writeFiles: writeFilesTool,
@@ -267,9 +266,6 @@ Fix any errors it reports before reporting done.`,
     createDirectory: createDirectoryTool,
     searchDocs: searchDocsTool,
     contractToHooks: contractToHooksTool,
-  },
-  workflows: {
-    qaValidation: qaWorkflow,
   },
   workspace: backendWorkspace,
   defaultOptions: { maxSteps: 25 },
@@ -325,8 +321,7 @@ Code quality:
 - No placeholder or TODO comments — every file must be complete
 - Use @/ path alias for all imports
 
-After writing all files, call workflow-qaValidation to verify your code compiles.
-Fix any errors it reports before reporting done.`,
+Do NOT attempt to run tsc or build — you are writing a slice of the app; the full project build runs after all agents finish.`,
   tools: {
     writeFile: writeFileTool,
     writeFiles: writeFilesTool,
@@ -335,9 +330,6 @@ Fix any errors it reports before reporting done.`,
     createDirectory: createDirectoryTool,
     searchDocs: searchDocsTool,
     contractToRoutes: contractToRoutesTool,
-  },
-  workflows: {
-    qaValidation: qaWorkflow,
   },
   workspace: frontendWorkspace,
   defaultOptions: { maxSteps: 30 },
@@ -460,42 +452,33 @@ export const pmAgent = new Agent({
 
 ## Your Role
 1. Receive a SchemaContract, design preferences, and app metadata
-2. Decompose requirements into discrete features (auth, CRUD for each entity, dashboard, etc.)
+2. Decompose requirements into discrete features (auth, CRUD per entity, dashboard, etc.)
 3. Assign file paths per feature to avoid conflicts between agents
 4. Call backend agents (agent-backend1, agent-backend2) for data/auth features
 5. Call frontend agents (agent-frontend1, agent-frontend2) for UI features
 6. Call MULTIPLE agents in PARALLEL when features are independent — use parallel tool calls
-7. After agents complete, call agent-reviewer to review their code
-8. If reviewer finds issues, route fixes to the appropriate agent
-9. When all features pass review, call workflow-qaValidation for final check
+7. After all agents report completion, you are done — report completion
 
 ## File Coordination Rules
 - Each agent gets exclusive ownership of specific files
-- Shared files (barrel exports, root route, app layout) are NOT written by agents — the integrationStep handles those
+- Shared files (barrel exports, root route, app layout) are NOT written by agents — integrationStep handles those
 - Backend agents own: src/lib/, src/hooks/
 - Frontend agents own: src/routes/, src/components/ (except ui/ which is pre-vendored)
 
 ## Calling Agents
 - agent-backend1 / agent-backend2: Pass sandboxId + feature description + file paths to write
 - agent-frontend1 / agent-frontend2: Pass sandboxId + feature description + component specs
-- agent-reviewer: Pass sandboxId + list of files to review
 
-## Quality Gate
-After all agents complete and reviewer approves:
-1. Call workflow-qaValidation with the sandboxId
-2. If it fails, route errors to the appropriate agent for fixing
-3. Maximum 3 fix iterations before reporting failure`,
+## Important
+Do NOT call any build, tsc, lint, or validation tools. The workflow runs integration + review + QA after you finish.
+Just write all the feature code and report completion.`,
   agents: {
     backend1: backendAgent,
     backend2: backendAgent,
     frontend1: frontendAgent,
     frontend2: frontendAgent,
-    reviewer: reviewerAgent,
   },
-  workflows: {
-    qaValidation: qaWorkflow,
-  },
-  defaultOptions: { maxSteps: 40 },
+  defaultOptions: { maxSteps: 30 },
 })
 
 // --- Supervisor (orchestrator — LEGACY, kept for Studio visibility) ---
