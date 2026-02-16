@@ -1,8 +1,11 @@
 /**
- * VibeStack Overlay — element selection bridge
+ * VibeStack Overlay — element selection bridge (lovable-tagger edition)
  *
  * Listens for VIBESTACK_EDIT_MODE postMessage from parent frame.
  * When active, highlights elements on hover and sends selection data on click.
+ *
+ * Uses lovable-tagger's Symbol-based element tracking instead of DOM attributes.
+ * Each React element gets Symbol.for("__jsxSource__") metadata with fileName, lineNumber, columnNumber.
  *
  * Protocol:
  *   Parent → iframe: { type: 'VIBESTACK_EDIT_MODE', enabled: boolean }
@@ -11,6 +14,9 @@
 ;(function () {
   let editMode = false
   let highlightEl = null
+
+  // Symbol key used by lovable-tagger for source metadata
+  const SOURCE_KEY = Symbol.for('__jsxSource__')
 
   // Create highlight overlay element
   function createHighlight() {
@@ -23,12 +29,16 @@
     return el
   }
 
-  function getVsId(el) {
-    // Walk up DOM to find nearest element with data-vs-id
+  /**
+   * Walk up DOM tree to find nearest element with __jsxSource__ metadata
+   * Returns { element, source } or null
+   */
+  function getSourceInfo(el) {
     let current = el
     while (current && current !== document.body) {
-      if (current.dataset && current.dataset.vsId) {
-        return current
+      const source = current[SOURCE_KEY]
+      if (source && source.fileName) {
+        return { element: current, source: source }
       }
       current = current.parentElement
     }
@@ -47,12 +57,12 @@
 
   function handleMouseMove(e) {
     if (!editMode) return
-    const tagged = getVsId(e.target)
-    if (!tagged) {
+    const info = getSourceInfo(e.target)
+    if (!info) {
       if (highlightEl) highlightEl.style.display = 'none'
       return
     }
-    const rect = tagged.getBoundingClientRect()
+    const rect = info.element.getBoundingClientRect()
     if (!highlightEl) highlightEl = createHighlight()
     highlightEl.style.display = 'block'
     highlightEl.style.left = rect.left + 'px'
@@ -66,16 +76,20 @@
     e.preventDefault()
     e.stopPropagation()
 
-    const tagged = getVsId(e.target)
-    if (!tagged) return
+    const info = getSourceInfo(e.target)
+    if (!info) return
 
-    const rect = tagged.getBoundingClientRect()
+    const rect = info.element.getBoundingClientRect()
+    const sourceInfo = info.source
+
     const payload = {
-      vsId: tagged.dataset.vsId,
-      tagName: tagged.tagName.toLowerCase(),
-      className: tagged.className || '',
-      textContent: (tagged.textContent || '').trim().slice(0, 100),
-      tailwindClasses: extractTailwindClasses(tagged.className),
+      fileName: sourceInfo.fileName,
+      lineNumber: sourceInfo.lineNumber,
+      columnNumber: sourceInfo.columnNumber,
+      tagName: info.element.tagName.toLowerCase(),
+      className: info.element.className || '',
+      textContent: (info.element.textContent || '').trim().slice(0, 100),
+      tailwindClasses: extractTailwindClasses(info.element.className),
       rect: {
         x: Math.round(rect.x),
         y: Math.round(rect.y),

@@ -110,7 +110,9 @@ describe('editMachine', () => {
       actor.start()
 
       const targetElement: ElementContext = {
-        vsId: 'src/components/Button.tsx:10',
+        fileName: 'src/components/Button.tsx',
+        lineNumber: 10,
+        columnNumber: 0,
         tagName: 'button',
         className: 'bg-blue-500',
         textContent: 'Click me',
@@ -183,7 +185,9 @@ describe('editMachine', () => {
       actor.start()
 
       const targetElement: ElementContext = {
-        vsId: 'src/components/Form.tsx:42',
+        fileName: 'src/components/Form.tsx',
+        lineNumber: 42,
+        columnNumber: 0,
         tagName: 'input',
         className: 'border p-2',
         textContent: '',
@@ -369,7 +373,9 @@ describe('editMachine', () => {
       actor.start()
 
       const targetElement: ElementContext = {
-        vsId: 'src/components/Button.tsx:10',
+        fileName: 'src/components/Button.tsx',
+        lineNumber: 10,
+        columnNumber: 0,
         tagName: 'button',
         className: 'bg-blue-500',
         textContent: 'Click',
@@ -425,7 +431,9 @@ describe('editMachine', () => {
       actor.start()
 
       const targetElement: ElementContext = {
-        vsId: 'src/components/Button.tsx:10',
+        fileName: 'src/components/Button.tsx',
+        lineNumber: 10,
+        columnNumber: 0,
         tagName: 'button',
         className: 'bg-blue-500',
         textContent: 'Click',
@@ -478,7 +486,9 @@ describe('editMachine', () => {
       actor.start()
 
       const targetElement: ElementContext = {
-        vsId: 'src/components/Button.tsx:10',
+        fileName: 'src/components/Button.tsx',
+        lineNumber: 10,
+        columnNumber: 0,
         tagName: 'button',
         className: 'bg-blue-500',
         textContent: 'Click',
@@ -533,7 +543,9 @@ describe('editMachine', () => {
       actor.start()
 
       const targetElement: ElementContext = {
-        vsId: 'src/components/Button.tsx:10',
+        fileName: 'src/components/Button.tsx',
+        lineNumber: 10,
+        columnNumber: 0,
         tagName: 'button',
         className: 'bg-blue-500',
         textContent: 'Click',
@@ -592,7 +604,9 @@ describe('editMachine', () => {
       actor.start()
 
       const targetElement: ElementContext = {
-        vsId: 'src/components/Button.tsx:10',
+        fileName: 'src/components/Button.tsx',
+        lineNumber: 10,
+        columnNumber: 0,
         tagName: 'button',
         className: 'bg-blue-500',
         textContent: 'Click',

@@ -5,7 +5,9 @@ import type { ElementContext } from '@server/lib/agents/edit-machine'
 // Helper to create a mock ElementContext
 function makeElement(className: string): ElementContext {
   return {
-    vsId: 'src/components/Button.tsx:10',
+    fileName: 'src/components/Button.tsx',
+    lineNumber: 10,
+    columnNumber: 0,
     tagName: 'button',
     className,
     textContent: 'Submit',

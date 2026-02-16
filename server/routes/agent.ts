@@ -468,7 +468,9 @@ agentRoutes.post('/edit', async (c) => {
     projectId?: string
     model?: string
     targetElement?: {
-      vsId: string
+      fileName: string
+      lineNumber: number
+      columnNumber: number
       tagName: string
       className: string
       textContent: string

@@ -7,7 +7,9 @@ import type { AppBlueprint } from '../app-blueprint'
 // ============================================================================
 
 export interface ElementContext {
-  vsId: string // data-vs-id value (e.g., "src/components/Form.tsx:42")
+  fileName: string      // Source file path, e.g. "src/components/Form.tsx"
+  lineNumber: number    // Line number in source file
+  columnNumber: number  // Column number in source file
   tagName: string
   className: string
   textContent: string
@@ -194,10 +196,8 @@ export const editMachine = setup({
       }) => {
         // Determine target file from element context
         let targetFile: string | null = null
-        if (input.targetElement?.vsId) {
-          // vsId format: "src/components/Form.tsx:42"
-          const [filePath] = input.targetElement.vsId.split(':')
-          targetFile = filePath
+        if (input.targetElement?.fileName) {
+          targetFile = input.targetElement.fileName
         }
 
         if (!targetFile) {
@@ -219,7 +219,7 @@ export const editMachine = setup({
 
             // Find the line and replace className
             const lines = fileContent.split('\n')
-            const lineNum = Number.parseInt(input.targetElement!.vsId.split(':')[1], 10) - 1
+            const lineNum = input.targetElement!.lineNumber - 1
             if (lineNum >= 0 && lineNum < lines.length) {
               const line = lines[lineNum]
               // Replace className in this line

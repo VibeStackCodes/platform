@@ -448,7 +448,9 @@ export interface ClarificationRequestEvent {
 // ============================================================================
 
 export interface ElementContext {
-  vsId: string // data-vs-id value, e.g. "src/components/Form.tsx:42"
+  fileName: string      // Source file path, e.g. "src/components/Form.tsx"
+  lineNumber: number    // Line number in source file
+  columnNumber: number  // Column number in source file
   tagName: string
   className: string
   textContent: string

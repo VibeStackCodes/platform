@@ -2,10 +2,14 @@ import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import { resolve } from 'node:path'
 import { defineConfig } from 'vite'
-import { vibestackTagger } from './plugins/vibestack-tagger'
+import { componentTagger } from 'lovable-tagger'
 
 export default defineConfig({
-  plugins: [vibestackTagger(), react(), tailwindcss()],
+  plugins: [
+    componentTagger({ jsxSource: true, virtualOverrides: true, tailwindConfig: false }),
+    react(),
+    tailwindcss(),
+  ],
   resolve: {
     alias: {
       '@': resolve(__dirname, './src'),

@@ -75,7 +75,7 @@ Important:
     parts.push(`- Tag: <${input.targetElement.tagName}>`)
     parts.push(`- Text: "${input.targetElement.textContent?.slice(0, 100) || '(no text)'}..."`)
     parts.push(`- Classes: ${input.targetElement.className || '(no classes)'}`)
-    parts.push(`- Location: ${input.targetElement.vsId}`)
+    parts.push(`- Location: ${input.targetElement.fileName}:${input.targetElement.lineNumber}`)
     parts.push(
       `- Position: x=${input.targetElement.rect.x}, y=${input.targetElement.rect.y}, w=${input.targetElement.rect.width}, h=${input.targetElement.rect.height}`,
     )

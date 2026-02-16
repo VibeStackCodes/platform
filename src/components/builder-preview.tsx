@@ -119,7 +119,7 @@ export function BuilderPreview({
         <div className="border-b px-4 py-2">
           <Badge variant="secondary" className="inline-flex items-center gap-2">
             <span className="font-mono text-xs">
-              &lt;{selectedElement.tagName}&gt;
+              {selectedElement.fileName.split('/').pop()}:{selectedElement.lineNumber}
             </span>
             {selectedElement.textContent && (
               <span className="max-w-xs truncate text-xs text-muted-foreground">
