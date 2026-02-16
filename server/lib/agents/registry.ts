@@ -4,7 +4,7 @@ import { RequestContext } from '@mastra/core/di'
 import type { MastraModelConfig } from '@mastra/core/llm'
 import { ModelRouterEmbeddingModel } from '@mastra/core/llm'
 import { ModerationProcessor, PromptInjectionDetector } from '@mastra/core/processors'
-import { Workspace, LocalFilesystem } from '@mastra/core/workspace'
+import { Workspace, LocalFilesystem, WORKSPACE_TOOLS } from '@mastra/core/workspace'
 import { Memory } from '@mastra/memory'
 import { PgVector, PostgresStore } from '@mastra/pg'
 import { generateShadcnManifest } from '../shadcn-manifest'
@@ -86,9 +86,23 @@ function dynamicModel({ requestContext }: { requestContext: RequestContext }): M
 
 const skillsRoot = path.resolve(import.meta.dirname, 'skills')
 
+// Disable ALL workspace filesystem/sandbox tools — we only want skills (domain knowledge)
+// injected into agent context. File operations go through our custom Daytona sandbox tools.
+const noWorkspaceTools = {
+  [WORKSPACE_TOOLS.FILESYSTEM.READ_FILE]: { enabled: false },
+  [WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]: { enabled: false },
+  [WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE]: { enabled: false },
+  [WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES]: { enabled: false },
+  [WORKSPACE_TOOLS.FILESYSTEM.DELETE]: { enabled: false },
+  [WORKSPACE_TOOLS.FILESYSTEM.MKDIR]: { enabled: false },
+  [WORKSPACE_TOOLS.FILESYSTEM.FILE_STAT]: { enabled: false },
+  [WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: { enabled: false },
+} as const
+
 const backendWorkspace = new Workspace({
   filesystem: new LocalFilesystem({ basePath: skillsRoot }),
   skills: ['/supabase-js', '/tanstack-query', '/vite-app'],
+  tools: noWorkspaceTools,
 })
 
 const frontendWorkspace = new Workspace({
@@ -102,6 +116,7 @@ const frontendWorkspace = new Workspace({
     '/react-19',
     '/vite-app',
   ],
+  tools: noWorkspaceTools,
 })
 
 // --- Module-level agents (visible to Mastra Studio) ---

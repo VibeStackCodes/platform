@@ -139,11 +139,12 @@ const createSupabaseStep = createStep({
     supabaseAnonKey: z.string(),
   }),
   execute: async ({ inputData }) => {
-    // Retry on transient Cloudflare/gateway errors (Supabase Mgmt API flakiness)
+    // Retry on transient Cloudflare/gateway errors and name collisions
     const MAX_RETRIES = 3
+    let projectName = inputData.projectId
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
       try {
-        const project = await createSupabaseProjectFn(inputData.projectId, 'us-east-1')
+        const project = await createSupabaseProjectFn(projectName, 'us-east-1')
         return {
           supabaseProjectId: project.id,
           supabaseUrl: project.url,
@@ -152,7 +153,13 @@ const createSupabaseStep = createStep({
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err)
         const isTransient = msg.includes('cloudflare') || msg.includes('<html') || msg.includes('502') || msg.includes('503') || msg.includes('524')
-        if (!isTransient || attempt === MAX_RETRIES) throw err
+        const isDuplicate = msg.includes('already exists')
+        if (isDuplicate) {
+          // Name collision — append random suffix for next attempt
+          projectName = `${inputData.projectId}-${Math.random().toString(36).slice(2, 6)}`
+          console.log(`[create-supabase] Name collision, retrying as ${projectName}`)
+        }
+        if (!isTransient && !isDuplicate || attempt === MAX_RETRIES) throw err
         console.log(`[create-supabase] Transient error (attempt ${attempt}/${MAX_RETRIES}), retrying in 5s: ${msg.slice(0, 100)}`)
         await new Promise(r => setTimeout(r, 5000))
       }
@@ -283,11 +290,36 @@ export const runMigrationStep = createStep({
     executedAt: z.string(),
   }),
   execute: async ({ inputData }) => {
-    const result = await runMigration(inputData.supabaseProjectId, inputData.sql)
-    if (!result.success) {
-      throw new Error(`Migration failed: ${result.error}`)
+    // Supabase has multiple transient failure modes after reporting ACTIVE_HEALTHY:
+    // - 57P03: Postgres still starting up
+    // - TLS disconnects: network socket closed before TLS handshake
+    // - Cloudflare 502/503/524: gateway errors
+    // Retry up to 5 times with 10s backoff for all transient errors.
+    const MAX_RETRIES = 5
+    const TRANSIENT_PATTERNS = ['57P03', 'starting up', 'TLS', 'ECONNRESET', 'socket', 'cloudflare', '502', '503', '524']
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        const result = await runMigration(inputData.supabaseProjectId, inputData.sql)
+        if (result.success) return result
+
+        const errLower = (result.error ?? '').toLowerCase()
+        const isTransient = TRANSIENT_PATTERNS.some(p => errLower.includes(p.toLowerCase()))
+        if (!isTransient || attempt === MAX_RETRIES) {
+          throw new Error(`Migration failed: ${result.error}`)
+        }
+        console.log(`[run-migration] Transient error (attempt ${attempt}/${MAX_RETRIES}): ${result.error?.slice(0, 80)}, retrying in 10s`)
+        await new Promise(r => setTimeout(r, 10_000))
+      } catch (err) {
+        // Also catch thrown exceptions (network errors from the SDK itself)
+        const msg = err instanceof Error ? err.message : String(err)
+        const errLower = msg.toLowerCase()
+        const isTransient = TRANSIENT_PATTERNS.some(p => errLower.includes(p.toLowerCase()))
+        if (!isTransient || attempt === MAX_RETRIES) throw err
+        console.log(`[run-migration] Transient exception (attempt ${attempt}/${MAX_RETRIES}): ${msg.slice(0, 80)}, retrying in 10s`)
+        await new Promise(r => setTimeout(r, 10_000))
+      }
     }
-    return result
+    throw new Error('Unreachable')
   },
 })
 
@@ -570,10 +602,8 @@ ${data.sql}
 2. Assign file paths per feature to prevent conflicts
 3. Call backend agents for data/auth features, frontend agents for UI features
 4. Use PARALLEL tool calls for independent features
-5. After agents complete, call agent-reviewer to review
-6. If reviewer finds issues, route fixes to the appropriate agent
-7. Call workflow-qaValidation for final build check
-8. Maximum 3 fix iterations before reporting failure`
+5. After ALL agents report completion, you are DONE — report completion
+6. Do NOT call any build, tsc, lint, or validation tools — the workflow handles review + QA after you finish`
 }
 
 export const codeGenStep = createStep({
