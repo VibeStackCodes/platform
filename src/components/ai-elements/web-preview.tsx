@@ -160,12 +160,13 @@ export type WebPreviewBodyProps = ComponentProps<'iframe'> & {
   loading?: ReactNode
 }
 
-export const WebPreviewBody = ({ className, loading, src, ...props }: WebPreviewBodyProps) => {
+export const WebPreviewBody = ({ className, loading, src, ref, ...props }: WebPreviewBodyProps) => {
   const { url } = useWebPreview()
 
   return (
     <div className="flex-1">
       <iframe
+        ref={ref}
         className={cn('size-full', className)}
         // TODO: Phase 2 — Cloudflare proxy (*.preview.vibestack.app) will make this same-origin
         // See docs/plans/2026-02-14-sandbox-preview-architecture-design.md

@@ -2,9 +2,10 @@ import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import { resolve } from 'node:path'
 import { defineConfig } from 'vite'
+import { vibestackTagger } from './plugins/vibestack-tagger'
 
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [vibestackTagger(), react(), tailwindcss()],
   resolve: {
     alias: {
       '@': resolve(__dirname, './src'),
