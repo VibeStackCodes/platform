@@ -222,6 +222,18 @@ agentRoutes.post('/', async (c) => {
   // Get authenticated user from middleware
   const user = c.var.user
 
+  // M4: Check concurrent generation limit FIRST (before reserving credits)
+  const userRuns = [...activeRuns.values()].filter((r) => r.userId === user.id).length
+  if (userRuns >= 3) {
+    return c.json(
+      {
+        error: 'concurrent_limit',
+        message: 'Maximum 3 concurrent generations',
+      },
+      429,
+    )
+  }
+
   // Reserve credits atomically to prevent race conditions
   const CREDIT_RESERVATION = 50 // Minimum reservation amount
   const reserved = await reserveCredits(user.id, CREDIT_RESERVATION)
@@ -236,20 +248,6 @@ agentRoutes.post('/', async (c) => {
         credits_reset_at: credits?.creditsResetAt ?? null,
       },
       402,
-    )
-  }
-
-  // M4: Check concurrent generation limit (max 3 per user)
-  const userRuns = [...activeRuns.values()].filter((r) => r.userId === user.id).length
-  if (userRuns >= 3) {
-    // Refund the reservation we just made
-    await settleCredits(user.id, CREDIT_RESERVATION, 0)
-    return c.json(
-      {
-        error: 'concurrent_limit',
-        message: 'Maximum 3 concurrent generations',
-      },
-      429,
     )
   }
 

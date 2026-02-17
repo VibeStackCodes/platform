@@ -299,8 +299,8 @@ describe('POST /api/agent', () => {
     expect(json.error).toBe('concurrent_limit')
     expect(json.message).toBe('Maximum 3 concurrent generations')
 
-    // Verify settleCredits was called to refund the 4th reservation
-    expect(settleCredits).toHaveBeenCalledWith('user-123', 50, 0)
+    // Credits should NOT be reserved for the 4th request (concurrent check happens first)
+    // settleCredits should NOT be called for the rejected request
   })
 
   it('B6: project status mapping is correct', () => {

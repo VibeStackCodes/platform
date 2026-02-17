@@ -31,9 +31,31 @@ supabaseProxyRoutes.all('/*', async (c) => {
 
   const user = c.var.user
 
+  // Security: Only allow safe HTTP methods
+  const ALLOWED_METHODS = new Set(['GET', 'POST'])
+  const method = c.req.method
+  if (!ALLOWED_METHODS.has(method)) {
+    return c.json({ error: 'Method not allowed' }, 405)
+  }
+
+  // Security: Allowlist of safe API endpoint patterns
+  const ALLOWED_PATH_PATTERNS = [
+    /^rest\/v1\//,                                           // PostgREST data access
+    /^v1\/projects\/[a-z0-9_-]+\/database\/query$/,          // SQL queries
+    /^v1\/projects\/[a-z0-9_-]+\/database\/tables(\/.*)?$/,  // Table list + nested
+    /^v1\/projects\/[a-z0-9_-]+\/database\/columns$/,        // Column list
+    /^v1\/projects\/[a-z0-9_-]+\/database\/schemas$/,        // Schema list
+  ]
+
   // Extract path after /api/supabase-proxy/
   // c.req.path returns full path like /api/supabase-proxy/v1/projects/xxx/database/query
   const fullPath = c.req.path.replace(/^\/api\/supabase-proxy\//, '')
+
+  // Security: Validate path against allowlist
+  const pathAllowed = ALLOWED_PATH_PATTERNS.some(pattern => pattern.test(fullPath))
+  if (!pathAllowed) {
+    return c.json({ error: 'Forbidden — path not allowed' }, 403)
+  }
 
   // Verify project ownership if path contains a project ref
   const projectRefMatch = fullPath.match(/projects\/([^/]+)/)
@@ -50,6 +72,33 @@ supabaseProxyRoutes.all('/*', async (c) => {
     }
   }
 
+  // Security: For POST to query endpoints, validate body doesn't contain DDL
+  if (method === 'POST' && fullPath.includes('/database/query')) {
+    const bodyText = await c.req.text()
+    const DDL_KEYWORDS = /\b(DROP|ALTER|CREATE|TRUNCATE|DELETE|UPDATE|INSERT)\b/i
+    if (DDL_KEYWORDS.test(bodyText)) {
+      return c.json({ error: 'Forbidden — DDL operations not allowed' }, 403)
+    }
+    // Restore body for fetch
+    const fetchOptions: RequestInit = {
+      method,
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: bodyText,
+    }
+
+    const targetUrl = `${SUPABASE_API_BASE}/${fullPath}`
+    const response = await fetch(targetUrl, fetchOptions)
+    const data = await response.text()
+
+    return new Response(data, {
+      status: response.status,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  }
+
   // Forward to Supabase Management API
   const targetUrl = `${SUPABASE_API_BASE}/${fullPath}`
   const headers: Record<string, string> = {
@@ -57,7 +106,6 @@ supabaseProxyRoutes.all('/*', async (c) => {
     'Content-Type': 'application/json',
   }
 
-  const method = c.req.method
   const fetchOptions: RequestInit = { method, headers }
   if (method === 'POST') {
     fetchOptions.body = await c.req.text()

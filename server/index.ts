@@ -1,5 +1,6 @@
 // server/index.ts — must import sentry first for instrumentation
 import './sentry'
+import './lib/env'
 import { sentry } from '@hono/sentry'
 import { sql } from 'drizzle-orm'
 import { Hono } from 'hono'
@@ -23,7 +24,23 @@ import { adminRoutes } from './routes/admin'
 const app = new Hono().basePath('/api')
 
 // Global middleware — applied in order
-app.use('*', cors())
+app.use('*', cors({
+  origin: (origin) => {
+    const allowed = [
+      'https://vibestack.com',
+      'https://www.vibestack.com',
+      'https://app.vibestack.com',
+    ]
+    if (process.env.NODE_ENV !== 'production') {
+      allowed.push('http://localhost:3000', 'http://localhost:5173')
+    }
+    return allowed.includes(origin ?? '') || (origin ?? '').endsWith('.vercel.app')
+      ? origin!
+      : allowed[0]
+  },
+  credentials: true,
+  maxAge: 86400,
+}))
 if (process.env.SENTRY_DSN) {
   app.use('*', sentry({ dsn: process.env.SENTRY_DSN }))
 }

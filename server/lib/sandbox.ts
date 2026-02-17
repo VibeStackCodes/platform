@@ -399,8 +399,10 @@ export async function downloadDirectory(
     // Hoist RegExp creation outside the loop for better performance
     const pathRegex = new RegExp(`^${remotePath}/?`)
 
-    // Download all files in parallel
-    const files = await Promise.all(
+    // Download all files in parallel with timeout
+    const DOWNLOAD_TIMEOUT_MS = 60_000
+
+    const downloadPromise = Promise.all(
       filePaths.map(async (filePath) => {
         const content = await downloadFile(sandbox, filePath)
         // Make path relative to workspace
@@ -411,6 +413,12 @@ export async function downloadDirectory(
         }
       }),
     )
+
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error(`downloadDirectory timed out after ${DOWNLOAD_TIMEOUT_MS}ms`)), DOWNLOAD_TIMEOUT_MS)
+    )
+
+    const files = await Promise.race([downloadPromise, timeoutPromise])
 
     console.log(`✓ Downloaded ${files.length} files from ${remotePath}`)
     return files

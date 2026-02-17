@@ -29,8 +29,15 @@ adminRoutes.use('*', async (c, next) => {
   const user = c.var.user
   const adminIds = (process.env.ADMIN_USER_IDS || '').split(',').map(s => s.trim()).filter(Boolean)
 
-  // If no admin IDs configured, allow any authenticated user (dev mode)
-  if (adminIds.length > 0 && !adminIds.includes(user.id)) {
+  if (adminIds.length === 0) {
+    if (process.env.NODE_ENV === 'production') {
+      return c.json({ error: 'Admin endpoints disabled — ADMIN_USER_IDS not configured' }, 503)
+    }
+    // Dev mode: allow any authenticated user
+    return next()
+  }
+
+  if (!adminIds.includes(user.id)) {
     return c.json({ error: 'Forbidden — admin access required' }, 403)
   }
 
@@ -241,10 +248,7 @@ adminRoutes.get('/env-check', async (c) => {
   const requiredStatus = required.map(v => ({
     ...v,
     set: !!process.env[v.name],
-    // Show first/last 4 chars for debugging (mask middle)
-    preview: process.env[v.name]
-      ? `${process.env[v.name]!.slice(0, 4)}...${process.env[v.name]!.slice(-4)}`
-      : null,
+    preview: process.env[v.name] ? 'SET' : 'NOT SET',
   }))
 
   const optionalStatus = optional.map(v => ({

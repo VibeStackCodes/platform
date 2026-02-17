@@ -28,5 +28,24 @@ export default defineConfig({
   build: {
     target: 'esnext',
     outDir: 'dist/client',
+    sourcemap: false,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (id.includes('react') || id.includes('react-dom')) {
+              return 'react-vendor'
+            }
+            if (id.includes('@tanstack/react-router') || id.includes('@tanstack/react-query')) {
+              return 'router-vendor'
+            }
+            if (id.includes('lucide-react') || id.includes('motion')) {
+              return 'ui-vendor'
+            }
+          }
+        },
+      },
+    },
+    chunkSizeWarningLimit: 1000,
   },
 })

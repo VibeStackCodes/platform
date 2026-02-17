@@ -446,7 +446,7 @@ describe('Admin Routes', () => {
       // Check required vars are marked as set
       const dbUrlVar = data.required.find((v: any) => v.name === 'DATABASE_URL')
       expect(dbUrlVar.set).toBe(true)
-      expect(dbUrlVar.preview).toBe('post...test')
+      expect(dbUrlVar.preview).toBe('SET')
 
       // Check optional vars
       const poolSizeVar = data.optional.find((v: any) => v.name === 'WARM_POOL_SIZE')
@@ -482,7 +482,7 @@ describe('Admin Routes', () => {
       // All required vars should be marked as not set
       const dbUrlVar = data.required.find((v: any) => v.name === 'DATABASE_URL')
       expect(dbUrlVar.set).toBe(false)
-      expect(dbUrlVar.preview).toBeNull()
+      expect(dbUrlVar.preview).toBe('NOT SET')
     })
   })
 
