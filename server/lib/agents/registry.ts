@@ -22,8 +22,8 @@ export { RequestContext }
 // All paths route through Helicone when HELICONE_API_KEY is set.
 const orchestratorModel = createAgentModelResolver('orchestrator') // gpt-5.2
 const codegenModel = createAgentModelResolver('codegen')           // gpt-5.2-codex
-const repairModel = createAgentModelResolver('repair')             // gpt-5-mini
-const editModel = createAgentModelResolver('edit')                 // gpt-5-mini
+const repairModel = createAgentModelResolver('repair')             // gpt-5.2-codex
+const editModel = createAgentModelResolver('edit')                 // gpt-5.2-codex
 
 // --- Workspace Skills (domain knowledge for code-gen agents) ---
 
@@ -108,6 +108,7 @@ When using askClarifyingQuestions:
     askClarifyingQuestions: askClarifyingQuestionsTool,
     submitRequirements: submitRequirementsTool,
   },
+  defaultOptions: { modelSettings: { temperature: 0.4 } },
 })
 
 export const backendAgent = new Agent({
@@ -142,7 +143,7 @@ Rules:
     searchDocs: searchDocsTool,
   },
   workspace: backendWorkspace,
-  defaultOptions: { maxSteps: 25 },
+  defaultOptions: { maxSteps: 25, modelSettings: { temperature: 0.2 } },
 })
 
 export const frontendAgent = new Agent({
@@ -183,7 +184,7 @@ Rules:
     searchDocs: searchDocsTool,
   },
   workspace: frontendWorkspace,
-  defaultOptions: { maxSteps: 30 },
+  defaultOptions: { maxSteps: 30, modelSettings: { temperature: 0.3 } },
 })
 
 export const repairAgent = new Agent({
@@ -207,7 +208,7 @@ Rules:
     readFile: readFileTool,
     runCommand: runCommandTool,
   },
-  defaultOptions: { maxSteps: 15 },
+  defaultOptions: { maxSteps: 15, modelSettings: { temperature: 0.1 } },
 })
 
 export const editAgent = new Agent({
@@ -232,5 +233,5 @@ Rules:
     readFile: readFileTool,
     writeFile: writeFileTool,
   },
-  defaultOptions: { maxSteps: 10 },
+  defaultOptions: { maxSteps: 10, modelSettings: { temperature: 0.2 } },
 })

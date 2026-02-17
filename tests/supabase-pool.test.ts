@@ -9,8 +9,6 @@ import {
 } from '@server/lib/supabase-pool'
 import { db } from '@server/lib/db/client'
 import * as supabaseMgmt from '@server/lib/supabase-mgmt'
-import type { WarmSupabaseProject } from '@server/lib/db/schema'
-
 // Mock dependencies
 vi.mock('@server/lib/db/client', () => ({
   db: {
@@ -30,20 +28,21 @@ describe('supabase-pool', () => {
 
   describe('claimWarmProject', () => {
     it('claims an available project and marks it as claimed', async () => {
-      const mockProject: WarmSupabaseProject = {
+      // Raw SQL returns snake_case column names from Postgres
+      const mockProject = {
         id: 'pool-123',
-        supabaseProjectId: 'supabase-abc',
-        supabaseUrl: 'https://supabase-abc.supabase.co',
-        anonKey: 'anon-key-123',
-        serviceRoleKey: 'service-key-123',
-        dbHost: 'db.supabase-abc.supabase.co',
-        dbPassword: 'password123',
+        supabase_project_id: 'supabase-abc',
+        supabase_url: 'https://supabase-abc.supabase.co',
+        anon_key: 'anon-key-123',
+        service_role_key: 'service-key-123',
+        db_host: 'db.supabase-abc.supabase.co',
+        db_password: 'password123',
         region: 'us-east-1',
         status: 'claimed',
-        claimedBy: 'user-456',
-        claimedAt: new Date(),
-        createdAt: new Date(),
-        errorMessage: null,
+        claimed_by: 'user-456',
+        claimed_at: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+        error_message: null,
       }
 
       // Mock successful claim
@@ -89,19 +88,19 @@ describe('supabase-pool', () => {
         rows: [
           {
             id: 'pool-123',
-            supabaseProjectId: 'supabase-abc',
-            supabaseUrl: 'https://supabase-abc.supabase.co',
-            anonKey: 'anon-key-123',
-            serviceRoleKey: 'service-key-123',
-            dbHost: 'db.supabase-abc.supabase.co',
-            dbPassword: 'password123',
+            supabase_project_id: 'supabase-abc',
+            supabase_url: 'https://supabase-abc.supabase.co',
+            anon_key: 'anon-key-123',
+            service_role_key: 'service-key-123',
+            db_host: 'db.supabase-abc.supabase.co',
+            db_password: 'password123',
             region: 'us-east-1',
             status: 'claimed',
-            claimedBy: 'user-456',
-            claimedAt: new Date(),
-            createdAt: new Date(),
-            errorMessage: null,
-          } as WarmSupabaseProject,
+            claimed_by: 'user-456',
+            claimed_at: new Date().toISOString(),
+            created_at: new Date().toISOString(),
+            error_message: null,
+          },
         ],
       } as any)
 
@@ -461,20 +460,21 @@ describe('supabase-pool', () => {
   describe('concurrent claim prevention', () => {
     it('atomic SQL prevents double allocation', async () => {
       // Simulate concurrent claims - only one should succeed
-      const mockProject: WarmSupabaseProject = {
+      // Raw SQL returns snake_case column names from Postgres
+      const mockProject = {
         id: 'pool-123',
-        supabaseProjectId: 'supabase-abc',
-        supabaseUrl: 'https://supabase-abc.supabase.co',
-        anonKey: 'anon-key-123',
-        serviceRoleKey: 'service-key-123',
-        dbHost: 'db.supabase-abc.supabase.co',
-        dbPassword: 'password123',
+        supabase_project_id: 'supabase-abc',
+        supabase_url: 'https://supabase-abc.supabase.co',
+        anon_key: 'anon-key-123',
+        service_role_key: 'service-key-123',
+        db_host: 'db.supabase-abc.supabase.co',
+        db_password: 'password123',
         region: 'us-east-1',
         status: 'claimed',
-        claimedBy: 'user-456',
-        claimedAt: new Date(),
-        createdAt: new Date(),
-        errorMessage: null,
+        claimed_by: 'user-456',
+        claimed_at: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+        error_message: null,
       }
 
       // First claim succeeds
@@ -499,20 +499,21 @@ describe('supabase-pool', () => {
 
   describe('replenish-on-claim', () => {
     it('triggers background replenishment after successful claim', async () => {
-      const mockProject: WarmSupabaseProject = {
+      // Raw SQL returns snake_case column names from Postgres
+      const mockProject = {
         id: 'pool-123',
-        supabaseProjectId: 'supabase-abc',
-        supabaseUrl: 'https://supabase-abc.supabase.co',
-        anonKey: 'anon-key-123',
-        serviceRoleKey: 'service-key-123',
-        dbHost: 'db.supabase-abc.supabase.co',
-        dbPassword: 'password123',
+        supabase_project_id: 'supabase-abc',
+        supabase_url: 'https://supabase-abc.supabase.co',
+        anon_key: 'anon-key-123',
+        service_role_key: 'service-key-123',
+        db_host: 'db.supabase-abc.supabase.co',
+        db_password: 'password123',
         region: 'us-east-1',
         status: 'claimed',
-        claimedBy: 'user-456',
-        claimedAt: new Date(),
-        createdAt: new Date(),
-        errorMessage: null,
+        claimed_by: 'user-456',
+        claimed_at: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+        error_message: null,
       }
 
       // Mock successful claim
@@ -534,20 +535,21 @@ describe('supabase-pool', () => {
     })
 
     it('does not block claim even if replenishment fails', async () => {
-      const mockProject: WarmSupabaseProject = {
+      // Raw SQL returns snake_case column names from Postgres
+      const mockProject = {
         id: 'pool-123',
-        supabaseProjectId: 'supabase-abc',
-        supabaseUrl: 'https://supabase-abc.supabase.co',
-        anonKey: 'anon-key-123',
-        serviceRoleKey: 'service-key-123',
-        dbHost: 'db.supabase-abc.supabase.co',
-        dbPassword: 'password123',
+        supabase_project_id: 'supabase-abc',
+        supabase_url: 'https://supabase-abc.supabase.co',
+        anon_key: 'anon-key-123',
+        service_role_key: 'service-key-123',
+        db_host: 'db.supabase-abc.supabase.co',
+        db_password: 'password123',
         region: 'us-east-1',
         status: 'claimed',
-        claimedBy: 'user-456',
-        claimedAt: new Date(),
-        createdAt: new Date(),
-        errorMessage: null,
+        claimed_by: 'user-456',
+        claimed_at: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+        error_message: null,
       }
 
       // Mock successful claim

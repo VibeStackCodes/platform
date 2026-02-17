@@ -127,17 +127,15 @@ export function createHeliconeProvider(ctx: HeliconeContext | string) {
  * - orchestrator (analyst, PM): gpt-5.2 — best reasoning for requirement extraction
  * - codegen (frontend, backend): gpt-5.2-codex — agentic coding, context compaction
  * - review: gpt-5.1 — configurable reasoning, sufficient for code review
- * - repair: gpt-5-mini — well-defined error fixing, cost-efficient
- * - edit: gpt-5-mini — small focused single-file edits
- * - format: gpt-5-nano — two-stage structured output conversion (trivial task)
+ * - repair: gpt-5.2-codex — agentic coding for targeted error fixes
+ * - edit: gpt-5.2-codex — agentic coding for single-file edits
  */
 export const PIPELINE_MODELS = {
   orchestrator: 'gpt-5.2',
   codegen: 'gpt-5.2-codex',
-  review: 'gpt-5.1',
-  repair: 'gpt-5-mini',
-  edit: 'gpt-5-mini',
-  format: 'gpt-5-nano',
+  review: 'gpt-5.2',
+  repair: 'gpt-5.2-codex',
+  edit: 'gpt-5.2-codex',
 } as const
 
 export type PipelineRole = keyof typeof PIPELINE_MODELS
@@ -145,8 +143,17 @@ export type PipelineRole = keyof typeof PIPELINE_MODELS
 /**
  * Creates a Mastra-compatible model resolver for a specific pipeline role.
  * Reads Helicone context from RequestContext for per-user observability.
- * Falls back to a 'studio' context for Mastra Studio / tests.
+ * Falls back to global context (for scripts/tests) or 'studio' context.
  */
+
+// Global context for scripts that run outside Hono request scope
+let _globalHeliconeContext: HeliconeContext | null = null
+
+/** Set a global Helicone context for E2E scripts and tests */
+export function setGlobalHeliconeContext(ctx: HeliconeContext) {
+  _globalHeliconeContext = ctx
+}
+
 export function createAgentModelResolver(role: PipelineRole) {
   const modelId = PIPELINE_MODELS[role]
   return function resolveModel({
@@ -158,8 +165,11 @@ export function createAgentModelResolver(role: PipelineRole) {
       const ctx = requestContext.get('heliconeContext') as HeliconeContext
       return createHeliconeProvider({ ...ctx, agentName: role })(modelId)
     }
-    // Fallback: Mastra Studio / direct tests — still route through Helicone
-    return createHeliconeProvider('studio')(modelId)
+    // Fallback: global context (E2E scripts) or 'studio' (Mastra Studio)
+    const fallbackCtx = _globalHeliconeContext
+      ? { ..._globalHeliconeContext, agentName: role }
+      : { userId: 'studio' } as HeliconeContext
+    return createHeliconeProvider(fallbackCtx)(modelId)
   }
 }
 

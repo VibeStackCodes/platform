@@ -115,4 +115,50 @@ describe('assembleListPage', () => {
     expect(result).toContain('onClick={() => {')
     expect(result).toContain("sortBy === '")
   })
+
+  it('skips FK select queries for columns with empty references (Bug 1 guard)', () => {
+    const contractWithEmptyRefs: SchemaContract = {
+      tables: [
+        {
+          name: 'user_profile',
+          columns: [
+            { name: 'id', type: 'uuid', primaryKey: true, default: 'gen_random_uuid()' },
+            { name: 'display_name', type: 'text', references: { table: '', column: '' } },
+            { name: 'email', type: 'text', references: { table: '', column: 'id' } },
+            { name: 'user_id', type: 'uuid', nullable: false, references: { table: 'auth.users', column: 'id' } },
+            { name: 'created_at', type: 'timestamptz', default: 'now()' },
+          ],
+        },
+      ],
+    }
+    const spec: PageFeatureSpec = {
+      entityName: 'user_profile',
+      listPage: {
+        columns: [
+          { field: 'display_name', label: 'Display Name', format: 'text' },
+          { field: 'email', label: 'Email', format: 'text' },
+        ],
+        searchFields: ['display_name'],
+        sortDefault: 'created_at',
+        sortDirection: 'desc',
+        createFormFields: [
+          { field: 'display_name', label: 'Display Name', inputType: 'text', placeholder: 'Enter name' },
+        ],
+        emptyStateMessage: 'No profiles yet.',
+      },
+      detailPage: {
+        headerField: 'display_name',
+        sections: [],
+        editFormFields: [],
+      },
+    }
+    const result = assembleListPage(spec, contractWithEmptyRefs)
+    // Should NOT generate trpc..list (empty table name) or trpc queries for empty refs
+    expect(result).not.toContain('trpc..list')
+    expect(result).not.toContain('trpc..list.useQuery')
+    // Should still be valid-looking code (no parse errors)
+    const opens = (result.match(/{/g) || []).length
+    const closes = (result.match(/}/g) || []).length
+    expect(opens).toBe(closes)
+  })
 })

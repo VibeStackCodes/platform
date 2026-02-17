@@ -15,7 +15,6 @@ import { sql } from 'drizzle-orm'
 import * as Sentry from '@sentry/node'
 import { db } from './db/client'
 import { createSupabaseProject, runMigration } from './supabase-mgmt'
-import type { WarmSupabaseProject } from './db/schema'
 
 // ============================================================================
 // Types
@@ -83,7 +82,8 @@ export async function claimWarmProject(userId: string): Promise<WarmProject | nu
       return null
     }
 
-    const row = result.rows[0] as WarmSupabaseProject
+    // Raw SQL returns snake_case columns — map to camelCase
+    const row = result.rows[0] as Record<string, unknown>
 
     // Fire-and-forget: replenish pool in background after claim
     // This ensures the pool stays topped up without needing an external cron
@@ -93,22 +93,23 @@ export async function claimWarmProject(userId: string): Promise<WarmProject | nu
     })
 
     return {
-      id: row.id,
-      supabaseProjectId: row.supabaseProjectId,
-      supabaseUrl: row.supabaseUrl,
-      anonKey: row.anonKey,
-      serviceRoleKey: row.serviceRoleKey,
-      dbHost: row.dbHost,
-      dbPassword: row.dbPassword,
-      region: row.region,
-      claimedBy: row.claimedBy,
-      claimedAt: row.claimedAt,
+      id: row.id as string,
+      supabaseProjectId: row.supabase_project_id as string,
+      supabaseUrl: row.supabase_url as string,
+      anonKey: row.anon_key as string,
+      serviceRoleKey: row.service_role_key as string,
+      dbHost: row.db_host as string,
+      dbPassword: row.db_password as string,
+      region: row.region as string,
+      claimedBy: (row.claimed_by as string) ?? null,
+      claimedAt: row.claimed_at ? new Date(row.claimed_at as string) : null,
     }
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error)
+    const cause = error instanceof Error && 'cause' in error ? (error.cause as { code?: string })?.code : undefined
     // Table doesn't exist yet — expected when warm pool migration hasn't run
-    // Drizzle wraps the error as "Failed query: UPDATE warm_supabase_projects..."
-    if (msg.includes('does not exist') || msg.includes('warm_supabase_projects')) {
+    // Postgres error code 42P01 = "undefined_table"
+    if (cause === '42P01' || msg.includes('does not exist')) {
       console.warn('[supabase-pool] Warm pool table not found — falling back to cold creation')
     } else {
       console.error('[supabase-pool] Claim failed:', msg)

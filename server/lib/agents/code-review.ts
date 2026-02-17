@@ -147,6 +147,7 @@ export async function runLLMReview(
     name: 'code-reviewer',
     instructions: 'You are a code review expert. Review generated application code for functional, UX, security, and accessibility issues. Only report real, actionable issues.',
     model: createAgentModelResolver('review'),
+    defaultOptions: { modelSettings: { temperature: 0.3 } },
   })
 
   // Build review prompt with relevant code files (not ALL files)

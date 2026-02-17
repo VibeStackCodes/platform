@@ -1,4 +1,5 @@
-import { assign, fromPromise, setup } from 'xstate'
+import { assign, createActor, fromPromise, setup } from 'xstate'
+import type { ActorOptions } from 'xstate'
 import * as Sentry from '@sentry/node'
 import type { AppBlueprint } from '../app-blueprint'
 import type { DesignPreferences, SchemaContract } from '../schema-contract'
@@ -677,3 +678,34 @@ export const appGenerationMachine = setup({
     },
   },
 })
+
+// ============================================================================
+// Inspector-aware actor factory
+// ============================================================================
+
+let _inspector: { inspect: any; stop: () => void } | null = null
+
+/**
+ * Creates an XState actor with optional Stately Inspector.
+ * Set XSTATE_INSPECT=true to stream state transitions to stately.ai/inspect.
+ */
+export async function createInspectedActor(options?: ActorOptions<typeof appGenerationMachine>) {
+  if (process.env.XSTATE_INSPECT === 'true' && !_inspector) {
+    const { createSkyInspector } = await import('@statelyai/inspect')
+    _inspector = createSkyInspector({
+      onerror: (err) => console.error('[xstate-inspect] Error:', err.message),
+    })
+    console.log('[xstate-inspect] Inspector started — view at https://stately.ai/inspect')
+  }
+
+  return createActor(appGenerationMachine, {
+    ...options,
+    inspect: _inspector?.inspect ?? options?.inspect,
+  })
+}
+
+/** Stop the inspector (call at process exit) */
+export function stopInspector() {
+  _inspector?.stop()
+  _inspector = null
+}

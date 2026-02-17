@@ -1,6 +1,4 @@
-import { generateText } from 'ai'
 import { getSandbox, downloadFile, uploadFile } from '../sandbox'
-import { createHeliconeProvider } from './provider'
 import type { ElementContext } from './edit-machine'
 import type { SchemaContract } from '../schema-contract'
 
@@ -40,27 +38,6 @@ export async function runLLMEdit(input: {
   const sandbox = await getSandbox(input.sandboxId)
   const fileBuffer = await downloadFile(sandbox, `/workspace/${input.targetFile}`)
   const fileContent = fileBuffer.toString('utf-8')
-
-  // Build system prompt
-  const systemPrompt = `You are editing a single file in an existing React + Tailwind + Supabase application.
-
-Rules:
-- Make MINIMAL changes to fulfill the request
-- Preserve ALL existing functionality
-- Keep ALL existing imports, hooks, and component structure
-- Return the COMPLETE modified file content
-- Do NOT add comments like "// modified" or "// changed"
-- Do NOT remove existing code unless explicitly asked
-- Use Tailwind CSS classes for styling
-- Use shadcn/ui components when adding UI elements
-- If adding data fetching, use TanStack Query hooks
-- If the file already has Supabase client setup, reuse it
-
-Important:
-- Your response should be ONLY the complete file content
-- Do NOT wrap in markdown code fences
-- Do NOT add explanations or commentary
-- The file must be syntactically valid TypeScript/TSX`
 
   // Build user prompt with rich context
   const parts: string[] = []
@@ -112,18 +89,11 @@ Important:
     `Return the COMPLETE modified file content. Do NOT use markdown code fences. Just raw TypeScript/TSX code.`,
   )
 
-  // Call the LLM using the AI SDK's generateText (gpt-5-mini for focused edits)
-  const { PIPELINE_MODELS } = await import('./provider')
-  const model = createHeliconeProvider({
-    userId: 'edit-agent',
-    agentName: 'edit',
-  })(PIPELINE_MODELS.edit)
+  // Use the Mastra editAgent (temperature 0.2 via defaultOptions in registry)
+  const { editAgent } = await import('./registry')
 
-  const result = await generateText({
-    model,
-    system: systemPrompt,
-    prompt: parts.join('\n'),
-    temperature: 0.2, // Low temperature for consistent code edits
+  const result = await editAgent.generate(parts.join('\n'), {
+    maxSteps: 1,
   })
 
   // Extract the file content from the response, stripping any code fences
@@ -145,6 +115,6 @@ Important:
 
   return {
     newContent,
-    tokensUsed: result.usage?.totalTokens ?? 0,
+    tokensUsed: result.totalUsage?.totalTokens ?? 0,
   }
 }

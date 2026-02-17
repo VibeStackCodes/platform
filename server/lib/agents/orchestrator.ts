@@ -4,6 +4,7 @@
 // The machine calls these via fromPromise actors.
 
 import type { SchemaContract, DesignPreferences, TableDef } from '../schema-contract'
+import { SchemaContractSchema, DesignPreferencesSchema } from '../schema-contract'
 import type { AppBlueprint } from '../app-blueprint'
 import { contractToBlueprint } from '../app-blueprint'
 import type { ValidationGateResult } from './validation'
@@ -90,12 +91,21 @@ export async function runAnalysis(input: {
       if (part.type !== 'tool-call') continue
 
       if (part.toolName === 'submitRequirements') {
+        // Parse contract through Zod schema to apply all z.preprocess() coercions
+        // (strips invalid FK refs, normalizes nulls, coerces string defaults, etc.)
+        const contractParsed = SchemaContractSchema.safeParse(part.input.contract)
+        if (!contractParsed.success) {
+          console.error('[analysis] Contract schema validation failed:', contractParsed.error.format())
+          throw new Error(`Analyst produced invalid contract: ${contractParsed.error.issues.map(i => i.message).join(', ')}`)
+        }
+        const designParsed = DesignPreferencesSchema.safeParse(part.input.designPreferences)
+
         return {
           type: 'done',
           appName: part.input.appName,
           appDescription: part.input.appDescription,
-          contract: part.input.contract,
-          designPreferences: part.input.designPreferences,
+          contract: contractParsed.data,
+          designPreferences: designParsed.success ? designParsed.data : { style: 'modern', primaryColor: '#3b82f6', fontFamily: 'Inter' },
           tokensUsed,
         }
       }
@@ -393,7 +403,8 @@ export async function runCodeGeneration(input: {
       const featurePrompt = buildFeatureAnalysisPrompt(table, input.contract, SANDBOX_CONTEXT)
       const procedurePrompt = `Analyze the "${table.name}" entity and design custom tRPC procedures. Include search, filtering, and any business logic.\n\nThink step-by-step:\n1. What queries would a user need beyond basic CRUD?\n2. What filters make sense for this entity's columns?\n3. What aggregations or computed values would be useful?\n\nDescribe each procedure with: name, purpose, query/mutation, input parameters, and the Drizzle ORM implementation.`
 
-      // Feature config + procedures in parallel (codex with constrained decoding)
+      // Feature config + procedures in parallel (constrained decoding)
+      // Temperature set via agent defaultOptions (frontend: 0.3, backend: 0.2)
       const [configResult, procedureResult] = await Promise.allSettled([
         frontendAgent.generate(featurePrompt, {
           maxSteps: 1,
@@ -458,10 +469,12 @@ export async function runCodeGeneration(input: {
       if (procedureResult.status === 'fulfilled') {
         tokens += procedureResult.value.totalUsage?.totalTokens ?? 0
 
-        const procParsed = CustomProcedureSchema.safeParse(procedureResult.value.object)
+        // Default to empty procedures when LLM returns undefined (common with constrained decoding)
+        const procObj = procedureResult.value.object ?? { procedures: [] }
+        const procParsed = CustomProcedureSchema.safeParse(procObj)
         if (!procParsed.success) {
-          console.error(
-            `[codegen] Procedure schema validation failed for ${table.name}:`,
+          console.warn(
+            `[codegen] Procedure schema validation failed for ${table.name}, using empty procedures:`,
             procParsed.error.format(),
           )
         } else {

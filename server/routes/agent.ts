@@ -20,7 +20,7 @@ import { createActor } from 'xstate'
 import { Hono } from 'hono'
 import * as Sentry from '@sentry/node'
 import { createHeliconeProvider, isAllowedModel } from '../lib/agents/provider'
-import { appGenerationMachine } from '../lib/agents/machine'
+import { appGenerationMachine, createInspectedActor } from '../lib/agents/machine'
 import type { MachineContext } from '../lib/agents/machine'
 import { editMachine } from '../lib/agents/edit-machine'
 import type { EditMachineContext } from '../lib/agents/edit-machine'
@@ -284,7 +284,7 @@ agentRoutes.post('/', async (c) => {
   const runId = crypto.randomUUID()
   let actor: any
   try {
-    actor = createActor(appGenerationMachine)
+    actor = await createInspectedActor()
     activeRuns.set(runId, {
       actor,
       userId: user.id,

@@ -102,6 +102,7 @@
     "@faker-js/faker": "^10.3.0",
     "@mastra/deployer": "^1.4.0",
     "@playwright/test": "^1.58.2",
+    "@statelyai/inspect": "^0.4.0",
     "@types/common-tags": "^1.8.4",
     "@types/node": "^20",
     "@types/pg": "8.16.0",

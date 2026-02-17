@@ -145,6 +145,30 @@ describe('contractToSQL', () => {
     expect(sql).toContain('CREATE INDEX idx_comments_user_id ON comments (user_id)')
   })
 
+  it('silently skips columns with empty FK references', () => {
+    const contract: SchemaContract = {
+      tables: [
+        {
+          name: 'user_profile',
+          columns: [
+            { name: 'id', type: 'uuid', primaryKey: true },
+            // Simulate LLM producing empty references (Bug 1 from E2E run)
+            { name: 'display_name', type: 'text', references: { table: '', column: '' } },
+            { name: 'email', type: 'text', references: { table: '', column: 'id' } },
+          ],
+        },
+      ],
+    }
+    const sql = contractToSQL(contract)
+    // Should NOT produce REFERENCES () or REFERENCES (id)
+    expect(sql).not.toContain('REFERENCES')
+    // Should NOT produce FK indexes for empty references
+    expect(sql).not.toContain('CREATE INDEX')
+    // But columns themselves should still be generated
+    expect(sql).toContain('display_name TEXT')
+    expect(sql).toContain('email TEXT')
+  })
+
   it('generates updated_at trigger function and per-table triggers', () => {
     const contract: SchemaContract = {
       tables: [

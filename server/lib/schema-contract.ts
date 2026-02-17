@@ -186,9 +186,9 @@ export function validateContract(contract: SchemaContract): ValidationResult {
       colNames.add(col.name)
     }
 
-    // Check FK references exist
+    // Check FK references exist (skip empty/invalid references)
     for (const col of table.columns) {
-      if (col.references) {
+      if (col.references?.table && col.references?.column) {
         const refTable = col.references.table
         if (!tableNames.has(refTable) && !EXTERNAL_TABLES.has(refTable)) {
           errors.push(

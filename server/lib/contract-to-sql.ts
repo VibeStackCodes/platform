@@ -75,7 +75,7 @@ $$;`,
 
     // FK indexes
     for (const col of table.columns) {
-      if (col.references) {
+      if (col.references?.table && col.references?.column) {
         parts.push(`CREATE INDEX idx_${table.name}_${col.name} ON ${table.name} (${col.name});`)
       }
     }
@@ -100,7 +100,7 @@ function generateCreateTable(table: TableDef): string {
     if (col.default) parts.push(`DEFAULT ${col.default}`)
     if (col.primaryKey) parts.push('PRIMARY KEY')
     if (col.unique) parts.push('UNIQUE')
-    if (col.references) {
+    if (col.references?.table && col.references?.column) {
       parts.push(`REFERENCES ${col.references.table}(${col.references.column}) ON DELETE CASCADE`)
     }
 

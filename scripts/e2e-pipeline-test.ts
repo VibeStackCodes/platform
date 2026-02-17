@@ -230,7 +230,7 @@ async function phase4_scaffold(blueprint: any, sandboxId: string, supabaseUrl: s
 // Phase 5: Code Generation (LLM fills SLOT markers)
 // ============================================================================
 
-async function phase5_codegen(blueprint: any, contract: any, sandboxId: string, supabaseUrl: string, supabaseAnonKey: string) {
+async function phase5_codegen(blueprint: any, contract: any, sandboxId: string, supabaseProjectId: string, supabaseUrl: string, supabaseAnonKey: string) {
   const { runCodeGeneration } = await import('../server/lib/agents/orchestrator')
 
   log('Running code generation (scaffold + LLM fill + assembly write)...')
@@ -239,6 +239,7 @@ async function phase5_codegen(blueprint: any, contract: any, sandboxId: string, 
     blueprint,
     contract,
     sandboxId,
+    supabaseProjectId,
     supabaseUrl,
     supabaseAnonKey,
   })
@@ -570,6 +571,18 @@ async function main() {
   log(`Model: gpt-5.2 via Helicone`)
   log('')
 
+  // Set up Helicone session context so all LLM calls appear in Sessions tab
+  const sessionId = `e2e-${Date.now()}`
+  const { setGlobalHeliconeContext } = await import('../server/lib/agents/provider')
+  setGlobalHeliconeContext({
+    userId: 'e2e-test',
+    projectId: sessionId,
+    sessionId,
+    environment: 'e2e-test',
+  })
+  log(`Helicone session: ${sessionId}`)
+  log('View at: https://helicone.ai → Sessions tab')
+
   const notes: string[] = []
   let sandboxId: string | null = null
   let supabaseProjectId: string | null = null
@@ -627,6 +640,7 @@ async function main() {
     const phaseStart5 = Date.now()
     const codegenResult = await phase5_codegen(
       blueprint, analysisResult.contract, sandboxId,
+      provisioningResult.supabaseProjectId,
       provisioningResult.supabaseUrl, provisioningResult.supabaseAnonKey,
     )
     const duration5 = Date.now() - phaseStart5

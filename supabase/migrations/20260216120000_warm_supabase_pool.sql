@@ -11,7 +11,7 @@ CREATE TABLE warm_supabase_projects (
   db_password TEXT NOT NULL,
   region TEXT NOT NULL DEFAULT 'us-east-1',
   status TEXT NOT NULL DEFAULT 'available' CHECK (status IN ('available', 'claimed', 'creating', 'error')),
-  claimed_by UUID REFERENCES profiles(id),
+  claimed_by UUID,  -- No FK: pool is server-side infra, profiles may not exist yet
   claimed_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   error_message TEXT

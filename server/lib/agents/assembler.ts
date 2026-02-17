@@ -21,7 +21,7 @@ function detectForeignKeys(entityName: string, contract: SchemaContract): Foreig
   const table = contract.tables.find((t) => t.name === entityName)
   if (!table) return []
   return table.columns
-    .filter((c) => c.references && c.references.table !== 'auth.users')
+    .filter((c) => c.references?.table && c.references?.column && c.references.table !== 'auth.users')
     .map((c) => ({
       column: c.name,
       refTable: c.references!.table,

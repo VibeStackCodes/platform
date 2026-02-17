@@ -73,7 +73,7 @@ export const warmSupabaseProjects = pgTable('warm_supabase_projects', {
   dbPassword: text('db_password').notNull(),
   region: text('region').notNull().default('us-east-1'),
   status: text('status').notNull().default('available'), // 'available', 'claimed', 'creating', 'error'
-  claimedBy: uuid('claimed_by').references(() => profiles.id),
+  claimedBy: uuid('claimed_by'),
   claimedAt: timestamp('claimed_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   errorMessage: text('error_message'),
