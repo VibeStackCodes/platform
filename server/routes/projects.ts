@@ -66,7 +66,9 @@ projectRoutes.get('/:id', async (c) => {
     return c.json({ error: 'Project not found' }, 404)
   }
 
-  return c.json(project)
+  // Strip sensitive fields before sending to client
+  const { supabaseServiceRoleKey: _, ...safeProject } = project
+  return c.json(safeProject)
 })
 
 /**
@@ -78,12 +80,12 @@ projectRoutes.get('/:id/messages', async (c) => {
   const user = c.var.user
   const id = c.req.param('id')
 
-  // Parallelize project ownership check and messages fetch
-  const [project, messages] = await Promise.all([getProject(id, user.id), getProjectMessages(id)])
-
+  // Verify ownership BEFORE fetching messages (prevents IDOR)
+  const project = await getProject(id, user.id)
   if (!project) {
     return c.json({ error: 'Project not found' }, 404)
   }
 
+  const messages = await getProjectMessages(id)
   return c.json(messages)
 })

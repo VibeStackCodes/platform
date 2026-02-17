@@ -15,7 +15,17 @@ export const authCallbackRoutes = new Hono()
  */
 authCallbackRoutes.get('/', async (c) => {
   const code = c.req.query('code')
-  const origin = new URL(c.req.url).origin
+
+  // Hardcode allowed origin — never derive from Host header (open redirect risk)
+  const ALLOWED_ORIGINS = [
+    'https://app.vibestack.com',
+    'https://vibestack.com',
+    'https://www.vibestack.com',
+  ]
+  const rawOrigin = new URL(c.req.url).origin
+  const origin = ALLOWED_ORIGINS.includes(rawOrigin) ? rawOrigin : (
+    process.env.NODE_ENV !== 'production' ? rawOrigin : ALLOWED_ORIGINS[0]
+  )
 
   if (code) {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.VITE_SUPABASE_URL
@@ -32,7 +42,8 @@ authCallbackRoutes.get('/', async (c) => {
       const { error } = await supabase.auth.exchangeCodeForSession(code)
       if (error) {
         console.error('Auth callback error:', error)
-        return c.redirect(`${origin}/?error=${error.message}`)
+        // Never reflect raw error.message in redirect URL — use a fixed error code
+        return c.redirect(`${origin}/?error=authentication_failed`)
       }
     } catch (error) {
       console.error('Unexpected auth error:', error)

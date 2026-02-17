@@ -43,10 +43,13 @@ export function BuilderPreview({
   const toggleEditMode = useCallback(() => {
     setEditMode((prev) => {
       const next = !prev
-      iframeRef.current?.contentWindow?.postMessage(
-        { type: 'VIBESTACK_EDIT_MODE', enabled: next },
-        '*',
-      )
+      // Only send postMessage when we know the iframe origin (never use '*')
+      if (previewUrl && iframeRef.current?.contentWindow) {
+        iframeRef.current.contentWindow.postMessage(
+          { type: 'VIBESTACK_EDIT_MODE', enabled: next },
+          new URL(previewUrl).origin,
+        )
+      }
       if (!next) {
         setSelectedElement(null)
         onElementSelected?.(null)
@@ -60,9 +63,15 @@ export function BuilderPreview({
     onElementSelected?.(null)
   }, [onElementSelected])
 
-  // Listen for element selection messages from iframe
+  // Listen for element selection messages from iframe (validate origin)
   useEffect(() => {
     const handler = (event: MessageEvent) => {
+      // Only accept messages from our own origin or Daytona sandbox previews
+      const isAllowedOrigin =
+        event.origin === window.location.origin ||
+        /^https:\/\/[a-z0-9-]+\.daytona\.io$/.test(event.origin)
+      if (!isAllowedOrigin) return
+
       if (event.data?.type === 'VIBESTACK_ELEMENT_SELECTED') {
         const element = event.data.payload as ElementContext
         setSelectedElement(element)

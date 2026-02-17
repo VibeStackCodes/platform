@@ -25,7 +25,7 @@ import type { MachineContext } from '../lib/agents/machine'
 import { editMachine } from '../lib/agents/edit-machine'
 import type { EditMachineContext } from '../lib/agents/edit-machine'
 import { RequestContext } from '../lib/agents/registry'
-import { getUserCredits, getProjectGenerationState, updateProject } from '../lib/db/queries'
+import { getProject, getUserCredits, getProjectGenerationState, updateProject } from '../lib/db/queries'
 import { reserveCredits, settleCredits } from '../lib/credits'
 import { createSSEStream } from '../lib/sse'
 import type { StreamEvent } from '../lib/types'
@@ -47,22 +47,28 @@ interface ActiveRun {
   settled: boolean
 }
 
+// TODO: Move to Redis/Vercel KV for cross-instance state in multi-instance deployments.
+// In-memory Map works for single-instance but won't share state across Vercel cold starts.
 const activeRuns = new Map<string, ActiveRun>()
 
-// Cleanup expired runs every 30 minutes
-setInterval(() => {
-  const cutoff = Date.now() - 3600_000 // 1 hour
-  for (const [id, entry] of activeRuns) {
-    if (entry.createdAt < cutoff) {
-      try {
-        entry.actor.stop()
-      } catch {
-        // Already stopped
+// Note: In Vercel serverless, setInterval is a no-op across cold starts.
+// activeRuns cleanup happens in the `finally` block of each request handler.
+// This interval only helps during long-running dev server sessions.
+if (process.env.NODE_ENV !== 'production') {
+  setInterval(() => {
+    const cutoff = Date.now() - 3600_000 // 1 hour
+    for (const [id, entry] of activeRuns) {
+      if (entry.createdAt < cutoff) {
+        try {
+          entry.actor.stop()
+        } catch {
+          // Already stopped
+        }
+        activeRuns.delete(id)
       }
-      activeRuns.delete(id)
     }
-  }
-}, 1800_000)
+  }, 1800_000)
+}
 
 /** Map XState states to human-readable phase names */
 const STATE_PHASES: Record<string, { name: string; phase: number }> = {
@@ -104,6 +110,7 @@ function streamActorStates(
   signal: AbortSignal,
   runId: string,
   projectId: string,
+  userId: string,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     const subscription = actor.subscribe((snapshot: { value: string; context: MachineContext; status?: string }) => {
@@ -119,7 +126,7 @@ function streamActorStates(
       // Update project status in DB based on state transition (fire-and-forget)
       const dbStatus = STATE_TO_DB_STATUS[state]
       if (dbStatus) {
-        updateProject(projectId, { status: dbStatus }).catch((err) => {
+        updateProject(projectId, { status: dbStatus }, userId).catch((err) => {
           console.error('[agent] Failed to update project status:', err)
         })
       }
@@ -222,6 +229,12 @@ agentRoutes.post('/', async (c) => {
   // Get authenticated user from middleware
   const user = c.var.user
 
+  // Verify project ownership before starting generation
+  const ownedProject = await getProject(projectId, user.id)
+  if (!ownedProject) {
+    return c.json({ error: 'Project not found' }, 404)
+  }
+
   // M4: Check concurrent generation limit FIRST (before reserving credits)
   const userRuns = [...activeRuns.values()].filter((r) => r.userId === user.id).length
   if (userRuns >= 3) {
@@ -305,7 +318,7 @@ agentRoutes.post('/', async (c) => {
       actor.send({ type: 'START', userMessage: message, projectId, userId: user.id })
 
       // Stream state transitions
-      await streamActorStates(actor, emit, signal, runId, projectId)
+      await streamActorStates(actor, emit, signal, runId, projectId, user.id)
 
       // Get final snapshot to read totalTokens from machine context
       const finalSnapshot = actor.getSnapshot()
@@ -351,7 +364,7 @@ agentRoutes.post('/', async (c) => {
       })
       emit({
         type: 'error',
-        message: error instanceof Error ? error.message : 'Agent pipeline failed',
+        message: 'Agent pipeline failed — please try again',
         stage: 'error',
       })
     } finally {
@@ -399,7 +412,7 @@ agentRoutes.post('/resume', async (c) => {
       stored.actor.send({ type: 'USER_ANSWERED', answers })
 
       // Stream state transitions
-      await streamActorStates(stored.actor, emit, signal, runId, stored.projectId)
+      await streamActorStates(stored.actor, emit, signal, runId, stored.projectId, stored.userId)
 
       // Get final snapshot to read totalTokens from machine context
       const finalSnapshot = stored.actor.getSnapshot()
@@ -442,7 +455,7 @@ agentRoutes.post('/resume', async (c) => {
       })
       emit({
         type: 'error',
-        message: error instanceof Error ? error.message : 'Resume failed',
+        message: 'Resume failed — please try again',
         stage: 'error',
       })
     } finally {
@@ -635,7 +648,7 @@ agentRoutes.post('/edit', async (c) => {
         })
         emit({
           type: 'error',
-          message: error instanceof Error ? error.message : 'Edit pipeline failed',
+          message: 'Edit pipeline failed — please try again',
           stage: 'error',
         })
       }

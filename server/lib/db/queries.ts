@@ -41,15 +41,19 @@ export async function getProjectGenerationState(projectId: string, userId: strin
     .then((rows) => rows[0] ?? null)
 }
 
-/** Update project fields by ID */
+/** Update project fields by ID, optionally scoped to owner */
 export async function updateProject(
   projectId: string,
   fields: Partial<typeof projects.$inferInsert>,
+  userId?: string,
 ) {
+  const conditions = userId
+    ? and(eq(projects.id, projectId), eq(projects.userId, userId))
+    : eq(projects.id, projectId)
   return db
     .update(projects)
     .set({ ...fields, updatedAt: new Date() })
-    .where(eq(projects.id, projectId))
+    .where(conditions)
     .returning()
     .then((rows) => rows[0] ?? null)
 }

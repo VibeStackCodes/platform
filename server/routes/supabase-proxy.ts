@@ -9,6 +9,7 @@ import { and, eq } from 'drizzle-orm'
 import { Hono } from 'hono'
 import { db } from '../lib/db/client'
 import { projects } from '../lib/db/schema'
+import { fetchWithTimeout } from '../lib/fetch'
 import { authMiddleware } from '../middleware/auth'
 
 const SUPABASE_API_BASE = 'https://api.supabase.com'
@@ -72,12 +73,22 @@ supabaseProxyRoutes.all('/*', async (c) => {
     }
   }
 
-  // Security: For POST to query endpoints, validate body doesn't contain DDL
+  // Security: Only allow SELECT queries (with CTEs) through the proxy
   if (method === 'POST' && fullPath.includes('/database/query')) {
     const bodyText = await c.req.text()
-    const DDL_KEYWORDS = /\b(DROP|ALTER|CREATE|TRUNCATE|DELETE|UPDATE|INSERT)\b/i
-    if (DDL_KEYWORDS.test(bodyText)) {
-      return c.json({ error: 'Forbidden — DDL operations not allowed' }, 403)
+    // Parse JSON body to get the query string
+    let queryText = bodyText
+    try {
+      const parsed = JSON.parse(bodyText)
+      queryText = parsed.query ?? parsed.sql ?? bodyText
+    } catch {
+      // Not JSON, use raw body
+    }
+    // Strip comments and normalize whitespace for safe matching
+    const normalized = queryText.replace(/--[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '').trim()
+    // Only allow SELECT or WITH...SELECT (CTEs)
+    if (!/^(SELECT|WITH)\b/i.test(normalized)) {
+      return c.json({ error: 'Forbidden — only SELECT queries are allowed' }, 403)
     }
     // Restore body for fetch
     const fetchOptions: RequestInit = {
@@ -90,7 +101,7 @@ supabaseProxyRoutes.all('/*', async (c) => {
     }
 
     const targetUrl = `${SUPABASE_API_BASE}/${fullPath}`
-    const response = await fetch(targetUrl, fetchOptions)
+    const response = await fetchWithTimeout(targetUrl, fetchOptions)
     const data = await response.text()
 
     return new Response(data, {

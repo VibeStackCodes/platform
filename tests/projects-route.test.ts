@@ -331,8 +331,8 @@ describe('Project Routes', () => {
 
       expect(res.status).toBe(404)
       expect(data).toEqual({ error: 'Project not found' })
-      // Note: getProjectMessages is called due to Promise.all parallel execution
-      expect(getProjectMessages).toHaveBeenCalledWith('nonexistent')
+      // Ownership check fails first — messages should NOT be fetched (IDOR prevention)
+      expect(getProjectMessages).not.toHaveBeenCalled()
     })
 
     it('returns 404 when user is not project owner for messages endpoint', async () => {
@@ -342,8 +342,8 @@ describe('Project Routes', () => {
       const res = await app.request('/api/projects/other-user-project/messages', { method: 'GET' })
 
       expect(res.status).toBe(404)
-      // Note: getProjectMessages is called due to Promise.all parallel execution
-      expect(getProjectMessages).toHaveBeenCalledWith('other-user-project')
+      // Ownership check fails first — messages should NOT be fetched (IDOR prevention)
+      expect(getProjectMessages).not.toHaveBeenCalled()
     })
 
     it('returns empty array when project has no messages', async () => {

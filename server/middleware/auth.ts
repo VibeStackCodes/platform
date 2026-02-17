@@ -28,6 +28,10 @@ declare module 'hono' {
   }
 }
 
+// Short-lived token cache to avoid calling getUser() on every request (30s TTL)
+const tokenCache = new Map<string, { user: User; expiresAt: number }>()
+const TOKEN_CACHE_TTL = 30_000
+
 /**
  * Auth middleware — extracts Supabase session from cookies, verifies user.
  * In mock mode, always returns MOCK_USER.
@@ -57,6 +61,13 @@ export const authMiddleware = createMiddleware(async (c, next) => {
     return c.json({ error: 'Unauthorized' }, 401)
   }
 
+  // Check cache first to avoid network call on every request
+  const cached = tokenCache.get(accessToken)
+  if (cached && cached.expiresAt > Date.now()) {
+    c.set('user', cached.user)
+    return next()
+  }
+
   const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     global: {
       headers: {
@@ -82,6 +93,9 @@ export const authMiddleware = createMiddleware(async (c, next) => {
     return c.json({ error: 'Unauthorized' }, 401)
   }
 
-  c.set('user', user as unknown as User)
+  const typedUser = user as unknown as User
+  // Cache the verified user to avoid redundant getUser() calls
+  tokenCache.set(accessToken, { user: typedUser, expiresAt: Date.now() + TOKEN_CACHE_TTL })
+  c.set('user', typedUser)
   return next()
 })

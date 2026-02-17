@@ -7,16 +7,39 @@ export function useAuth() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      setUser(data.user)
-      setLoading(false)
-    })
+    let mounted = true
+
+    supabase.auth
+      .getUser()
+      .then(({ data, error }) => {
+        if (!mounted) return
+        if (error) {
+          console.error('[auth] getUser failed:', error.message)
+          setUser(null)
+        } else {
+          setUser(data.user)
+        }
+        setLoading(false)
+      })
+      .catch(() => {
+        if (mounted) {
+          setUser(null)
+          setLoading(false)
+        }
+      })
+
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null)
+      if (mounted) {
+        setUser(session?.user ?? null)
+      }
     })
-    return () => subscription.unsubscribe()
+
+    return () => {
+      mounted = false
+      subscription.unsubscribe()
+    }
   }, [])
 
   return { user, isAuthenticated: !!user, loading }

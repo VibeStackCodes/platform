@@ -18,6 +18,7 @@ import {
   waitForCodeServer,
   waitForDevServer,
 } from '../lib/sandbox'
+import { getProject } from '../lib/db/queries'
 import { authMiddleware } from '../middleware/auth'
 
 export const sandboxUrlRoutes = new Hono()
@@ -29,6 +30,13 @@ sandboxUrlRoutes.use('*', authMiddleware)
  */
 sandboxUrlRoutes.get('/:id/sandbox-urls', async (c) => {
   const id = c.req.param('id')
+  const user = c.var.user
+
+  // Verify project ownership before exposing sandbox URLs
+  const project = await getProject(id, user.id)
+  if (!project) {
+    return c.json({ error: 'Project not found' }, 404)
+  }
 
   const sandbox = await findSandboxByProject(id)
   if (!sandbox) {

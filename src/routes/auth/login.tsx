@@ -56,7 +56,7 @@ function LoginPage() {
         },
       })
       if (error) {
-        setError(error.message)
+        setError(error.message.includes('not confirmed') ? 'Please confirm your email first.' : 'Sign up failed. Please try again.')
       } else if (data.session && data.user) {
         await redirectAfterAuth(data.user.id)
       } else {
@@ -68,7 +68,7 @@ function LoginPage() {
         password,
       })
       if (error) {
-        setError(error.message)
+        setError('Invalid email or password.')
       } else if (data.user) {
         await redirectAfterAuth(data.user.id)
       }

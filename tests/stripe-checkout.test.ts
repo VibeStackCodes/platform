@@ -320,7 +320,7 @@ describe('Stripe Checkout Routes', () => {
 
       expect(res.status).toBe(500)
       const data = await res.json()
-      expect(data.error).toContain('Stripe API error')
+      expect(data.error).toBe('Failed to create checkout session')
     })
 
     it('returns 500 when customer creation fails', async () => {
@@ -342,7 +342,7 @@ describe('Stripe Checkout Routes', () => {
 
       expect(res.status).toBe(500)
       const data = await res.json()
-      expect(data.error).toContain('Customer creation failed')
+      expect(data.error).toBe('Failed to create checkout session')
     })
 
     it('requires authentication', async () => {

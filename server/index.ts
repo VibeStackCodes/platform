@@ -34,7 +34,9 @@ app.use('*', cors({
     if (process.env.NODE_ENV !== 'production') {
       allowed.push('http://localhost:3000', 'http://localhost:5173')
     }
-    return allowed.includes(origin ?? '') || (origin ?? '').endsWith('.vercel.app')
+    // Only allow our own Vercel deployments (vibestack-*.vercel.app)
+    const isAllowedVercel = (origin ?? '').match(/^https:\/\/vibestack-[a-z0-9-]+\.vercel\.app$/)
+    return allowed.includes(origin ?? '') || isAllowedVercel
       ? origin!
       : allowed[0]
   },
@@ -56,12 +58,23 @@ app.use(
       imgSrc: ["'self'", 'data:', 'https:'],
       connectSrc: ["'self'", 'https://*.supabase.co', 'wss://*.supabase.co'],
       frameSrc: ["'self'", 'https://*.daytona.io'],
+      baseUri: ["'self'"],
+      formAction: ["'self'"],
+      objectSrc: ["'none'"],
+      upgradeInsecureRequests: [],
+    },
+    referrerPolicy: 'strict-origin-when-cross-origin',
+    permissionsPolicy: {
+      geolocation: [],
+      microphone: [],
+      camera: [],
     },
   }),
 )
 
 // Body size limit (10MB for all API routes)
-app.use('/api/*', bodyLimit({ maxSize: 10 * 1024 * 1024 }))
+// Note: basePath is '/api', so '/*' matches '/api/*' in the actual URL
+app.use('/*', bodyLimit({ maxSize: 10 * 1024 * 1024 }))
 
 // Rate limiting on agent endpoint (5 requests per minute per user)
 app.use('/agent', createRateLimiter({ windowMs: 60_000, max: 5, prefix: 'agent' }))

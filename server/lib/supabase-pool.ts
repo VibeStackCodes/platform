@@ -238,6 +238,7 @@ export async function replenishPool(
 
     // Create projects sequentially to avoid overwhelming the API
     for (let i = 0; i < needed; i++) {
+      let placeholderId: string | undefined
       try {
         // Mark as creating first (so other replenish calls don't try to create the same slot)
         const placeholder = await db.execute(
@@ -263,7 +264,7 @@ export async function replenishPool(
               RETURNING id`,
         )
 
-        const placeholderId = (placeholder.rows[0] as { id: string }).id
+        placeholderId = (placeholder.rows[0] as { id: string }).id
 
         // Create the actual Supabase project
         const timestamp = Date.now()
@@ -297,6 +298,13 @@ export async function replenishPool(
         const errorMsg = error instanceof Error ? error.message : String(error)
         errors.push(errorMsg)
         console.error(`[supabase-pool] Failed to create project ${i + 1}/${needed}:`, errorMsg)
+        // Mark placeholder as 'error' so cleanupErrorProjects() can remove it
+        if (placeholderId) {
+          await db.execute(
+            sql`UPDATE warm_supabase_projects SET status = 'error', error_message = ${errorMsg}
+                WHERE id = ${placeholderId}`,
+          ).catch(() => {}) // best-effort
+        }
         Sentry.captureException(error, {
           tags: { operation: 'create_warm_project' },
           extra: { projectIndex: i + 1, needed },

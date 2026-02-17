@@ -251,7 +251,7 @@ describe('Supabase Proxy Route', () => {
 
     expect(res.status).toBe(403)
     const json = await res.json()
-    expect(json).toEqual({ error: 'Forbidden — DDL operations not allowed' })
+    expect(json).toEqual({ error: 'Forbidden — only SELECT queries are allowed' })
     expect(global.fetch).not.toHaveBeenCalled()
   })
 })

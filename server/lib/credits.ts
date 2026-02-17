@@ -69,7 +69,7 @@ export async function settleCredits(
   try {
     const result = await db.execute(
       sql`UPDATE profiles
-          SET credits_remaining = credits_remaining + ${diff}
+          SET credits_remaining = GREATEST(0, credits_remaining + ${diff})
           WHERE id = ${userId}
           RETURNING credits_remaining`,
     )

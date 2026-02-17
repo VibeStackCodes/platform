@@ -33,7 +33,9 @@ export function createRateLimiter(config: RateLimitConfig) {
   const { windowMs, max, prefix = 'default' } = config
 
   return createMiddleware(async (c, next) => {
-    const key = c.get('user')?.id ?? c.req.header('x-forwarded-for') ?? 'anonymous'
+    const xff = c.req.header('x-forwarded-for')
+    const ip = xff ? xff.split(',')[0].trim() : 'anonymous'
+    const key = c.get('user')?.id ?? ip
     const fullKey = `${prefix}:${key}`
     const windowStart = new Date(Date.now() - windowMs)
 
@@ -69,7 +71,7 @@ export function createRateLimiter(config: RateLimitConfig) {
       const intervalSeconds = Math.ceil(windowMs / 1000)
       await db.execute(
         sql`INSERT INTO rate_limit_hits (key, created_at, expires_at)
-            VALUES (${fullKey}, NOW(), NOW() + interval '${sql.raw(String(intervalSeconds))} seconds')`,
+            VALUES (${fullKey}, NOW(), NOW() + make_interval(secs => ${intervalSeconds}))`,
       )
 
       return next()

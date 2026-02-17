@@ -11,5 +11,10 @@ const pool = new Pool({
   connectionTimeoutMillis: 5000,
 })
 
+// Prevent unhandled errors from crashing the process
+pool.on('error', (err) => {
+  console.error('[db] Unexpected pool error:', err.message)
+})
+
 export const db = drizzle(pool, { schema: { ...schema, ...relations } })
 export { pool }

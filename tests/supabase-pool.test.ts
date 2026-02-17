@@ -350,6 +350,11 @@ describe('supabase-pool', () => {
         new Error('API rate limit'),
       )
 
+      // First project error: UPDATE placeholder to 'error' status (catch block)
+      vi.mocked(db.execute).mockResolvedValueOnce({
+        rows: [],
+      } as any)
+
       // Second project: placeholder INSERT succeeds
       vi.mocked(db.execute).mockResolvedValueOnce({
         rows: [{ id: 'placeholder-2' }],

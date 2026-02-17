@@ -387,12 +387,26 @@ export async function setupSchema(
   // Handle structured DatabaseSchema
   // 1. Create tables
   for (const table of schema.tables) {
+    // Validate table name to prevent SQL injection
+    if (!SAFE_IDENTIFIER.test(table.name)) {
+      results.push({ success: false, error: `Invalid table name: ${table.name}` })
+      continue
+    }
+
     const columns = table.columns
       .map(
-        (col: { name: string; type: string; nullable?: boolean; default?: string }) =>
-          `${col.name} ${col.type}${col.nullable === false ? ' NOT NULL' : ''}${
+        (col: { name: string; type: string; nullable?: boolean; default?: string }) => {
+          // Validate column name and type
+          if (!SAFE_IDENTIFIER.test(col.name)) {
+            throw new Error(`Invalid column name: ${col.name}`)
+          }
+          if (!/^[a-z_][a-z0-9_() ]*$/i.test(col.type)) {
+            throw new Error(`Invalid column type: ${col.type}`)
+          }
+          return `${col.name} ${col.type}${col.nullable === false ? ' NOT NULL' : ''}${
             col.default ? ` DEFAULT ${col.default}` : ''
-          }`,
+          }`
+        },
       )
       .join(', ')
 
@@ -430,8 +444,9 @@ export async function setupSchema(
     results.push(seedResult)
   }
 
-  // 5. Enable realtime for all tables
+  // 5. Enable realtime for all tables (names already validated above)
   const realtimeSql = schema.tables
+    .filter((table: { name: string }) => SAFE_IDENTIFIER.test(table.name))
     .map(
       (table: { name: string }) => `ALTER PUBLICATION supabase_realtime ADD TABLE ${table.name};`,
     )

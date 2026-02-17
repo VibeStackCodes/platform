@@ -10,6 +10,8 @@ vi.mock('@server/middleware/auth', () => ({
 }))
 
 vi.mock('@server/lib/db/queries', () => ({
+  getProject: vi.fn().mockResolvedValue({ id: 'proj-1', userId: 'user-123' }),
+  getProjectGenerationState: vi.fn().mockResolvedValue({ id: 'proj-1', generationState: {} }),
   getUserCredits: vi.fn(),
   updateProject: vi.fn().mockResolvedValue({}),
 }))

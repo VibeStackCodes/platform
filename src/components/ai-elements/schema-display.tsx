@@ -141,22 +141,23 @@ export type SchemaDisplayPathProps = HTMLAttributes<HTMLSpanElement>
 export const SchemaDisplayPath = ({ className, children, ...props }: SchemaDisplayPathProps) => {
   const { path } = useContext(SchemaDisplayContext)
 
-  // Highlight path parameters
-  const highlightedPath = path.replaceAll(
-    /\{([^}]+)\}/g,
-    '<span class="text-blue-600 dark:text-blue-400">{$1}</span>',
-  )
+  // Safe rendering: split path on {param} patterns and render as React elements
+  const parts = path.split(/(\{[^}]+\})/g)
 
   return (
-    <span
-      className={cn('font-mono text-sm', className)}
-      // biome-ignore lint/security/noDangerouslySetInnerHtml: "needed for parameter highlighting"
-      // oxlint-disable-next-line eslint-plugin-react(no-danger)
-      dangerouslySetInnerHTML={{
-        __html: (typeof children === 'string' ? children : null) ?? highlightedPath,
-      }}
-      {...props}
-    />
+    <span className={cn('font-mono text-sm', className)} {...props}>
+      {typeof children === 'string'
+        ? children
+        : parts.map((part, i) =>
+            part.startsWith('{') && part.endsWith('}') ? (
+              <span key={i} className="text-blue-600 dark:text-blue-400">
+                {part}
+              </span>
+            ) : (
+              part
+            ),
+          )}
+    </span>
   )
 }
 

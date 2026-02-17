@@ -52,8 +52,16 @@ stripeCheckoutRoutes.post('/', async (c) => {
       await setStripeCustomerId(user.id, customerId)
     }
 
-    // Get origin for success/cancel URLs
-    const origin = c.req.header('origin') || 'http://localhost:3000'
+    // Hardcode allowed origins — never trust Origin header for payment redirects
+    const ALLOWED_ORIGINS = [
+      'https://app.vibestack.com',
+      'https://vibestack.com',
+      'https://www.vibestack.com',
+    ]
+    const rawOrigin = c.req.header('origin') ?? ''
+    const origin = ALLOWED_ORIGINS.includes(rawOrigin) ? rawOrigin : (
+      process.env.NODE_ENV !== 'production' ? (rawOrigin || 'http://localhost:3000') : ALLOWED_ORIGINS[0]
+    )
 
     // Create Checkout Session
     const session = await stripe.checkout.sessions.create({
@@ -88,7 +96,7 @@ stripeCheckoutRoutes.post('/', async (c) => {
     console.error('Stripe checkout error:', error)
     return c.json(
       {
-        error: error instanceof Error ? error.message : 'Failed to create checkout session',
+        error: 'Failed to create checkout session',
       },
       500,
     )

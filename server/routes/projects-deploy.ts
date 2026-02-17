@@ -8,6 +8,7 @@ import type { Deployment } from '@vercel/client'
 import { checkDeploymentStatus } from '@vercel/client'
 import { Hono } from 'hono'
 import { getProject, updateProject } from '../lib/db/queries'
+import { fetchWithTimeout } from '../lib/fetch'
 import { downloadDirectory, getDaytonaClient, runCommand } from '../lib/sandbox'
 import { buildAppSlug } from '../lib/slug'
 import type { DeployRequest } from '../lib/types'
@@ -179,7 +180,7 @@ projectDeployRoutes.post('/', async (c) => {
     return c.json(
       {
         error: 'Deployment failed',
-        message: error instanceof Error ? error.message : String(error),
+        message: 'An error occurred during deployment — please try again',
       },
       500,
     )
@@ -225,7 +226,7 @@ async function deployToVercel(
   }))
 
   // Create deployment
-  const deploymentResponse = await fetch(
+  const deploymentResponse = await fetchWithTimeout(
     `https://api.vercel.com/v13/deployments${finalTeamId ? `?teamId=${finalTeamId}` : ''}`,
     {
       method: 'POST',
@@ -293,7 +294,7 @@ async function deployFromGitHub(
 
   // Step 1: Get numeric GitHub repo ID (required by Vercel v13 API)
   const ghToken = process.env.GITHUB_TOKEN
-  const ghRes = await fetch(`https://api.github.com/repos/${repoFullName}`, {
+  const ghRes = await fetchWithTimeout(`https://api.github.com/repos/${repoFullName}`, {
     headers: {
       Accept: 'application/vnd.github+json',
       ...(ghToken ? { Authorization: `Bearer ${ghToken}` } : {}),
@@ -307,7 +308,7 @@ async function deployFromGitHub(
   console.log(`[deploy] GitHub repo ${repoFullName}: id=${repoId}, branch=${ghRepo.default_branch}`)
 
   // Step 2: Create Vercel project linked to GitHub repo
-  const projectResponse = await fetch(
+  const projectResponse = await fetchWithTimeout(
     `https://api.vercel.com/v10/projects${finalTeamId ? `?teamId=${finalTeamId}` : ''}`,
     {
       method: 'POST',
@@ -345,7 +346,7 @@ async function deployFromGitHub(
   }
 
   // Step 3: Create explicit deployment with gitSource (doesn't rely on Vercel GitHub App)
-  const deployResponse = await fetch(
+  const deployResponse = await fetchWithTimeout(
     `https://api.vercel.com/v13/deployments${finalTeamId ? `?teamId=${finalTeamId}` : ''}`,
     {
       method: 'POST',
@@ -402,7 +403,7 @@ async function setVercelEnvVars(
     type: 'encrypted',
   }))
 
-  const response = await fetch(
+  const response = await fetchWithTimeout(
     `https://api.vercel.com/v10/projects/${projectSlug}/env${teamId ? `?teamId=${teamId}` : ''}`,
     {
       method: 'POST',
@@ -482,7 +483,7 @@ async function assignCustomDomain(domain: string, vercelProjectSlug: string): Pr
 
   const teamId = process.env.VERCEL_TEAM_ID
 
-  const response = await fetch(
+  const response = await fetchWithTimeout(
     `https://api.vercel.com/v10/projects/${vercelProjectSlug}/domains${teamId ? `?teamId=${teamId}` : ''}`,
     {
       method: 'POST',

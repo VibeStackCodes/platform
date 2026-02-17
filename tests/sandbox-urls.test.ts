@@ -19,6 +19,11 @@ vi.mock('@server/lib/sandbox', () => ({
   getCodeServerLink: vi.fn(),
 }))
 
+// Mock DB queries for ownership check
+vi.mock('@server/lib/db/queries', () => ({
+  getProject: vi.fn(),
+}))
+
 import {
   findSandboxByProject,
   getCodeServerLink,
@@ -26,6 +31,7 @@ import {
   waitForCodeServer,
   waitForDevServer,
 } from '@server/lib/sandbox'
+import { getProject } from '@server/lib/db/queries'
 import { sandboxUrlRoutes } from '@server/routes/sandbox-urls'
 
 describe('Sandbox URLs Routes', () => {
@@ -35,6 +41,8 @@ describe('Sandbox URLs Routes', () => {
     vi.clearAllMocks()
     app = new Hono()
     app.route('/api/projects', sandboxUrlRoutes)
+    // Default: ownership check passes
+    vi.mocked(getProject).mockResolvedValue({ id: 'proj-1', userId: 'user-123' } as any)
   })
 
   describe('GET /api/projects/:id/sandbox-urls', () => {
@@ -233,6 +241,17 @@ describe('Sandbox URLs Routes', () => {
 
       // Allow 2 second tolerance for test execution time
       expect(Math.abs(expiresAt.getTime() - expectedExpiry.getTime())).toBeLessThan(2000)
+    })
+
+    it('returns 404 when user does not own the project', async () => {
+      vi.mocked(getProject).mockResolvedValue(null)
+
+      const res = await app.request('/api/projects/proj-not-mine/sandbox-urls', { method: 'GET' })
+
+      expect(res.status).toBe(404)
+      const data = await res.json()
+      expect(data.error).toBe('Project not found')
+      expect(findSandboxByProject).not.toHaveBeenCalled()
     })
 
     it('requires authentication', async () => {
