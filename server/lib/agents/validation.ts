@@ -89,7 +89,7 @@ export async function checkManifest(
  * - "your_supabase_project" (unconfigured Supabase)
  * - "__PLACEHOLDER__" (template markers)
  * - "TODO:" / "FIXME:" (incomplete code)
- * - "placeholder" (generic)
+ * - (Removed: "placeholder" — too many false positives in React/HTML code; __PLACEHOLDER__ covers template markers)
  * - "localhost:\d+" (hardcoded dev URLs)
  * - require() in .ts/.tsx files (must use ESM import)
  *
@@ -108,7 +108,7 @@ export function checkScaffold(files: FileContent[]): ValidationResult {
   // Source file extensions to check
   const sourceExtensions = ['.ts', '.tsx', '.css', '.html']
 
-  // Files to skip entirely (lock files, docs, etc.)
+  // Files to skip entirely (lock files, docs, pre-baked UI kit, etc.)
   const skipPatterns = [
     /package-lock\.json$/,
     /bun\.lockb$/,
@@ -117,6 +117,7 @@ export function checkScaffold(files: FileContent[]): ValidationResult {
     /README\.md$/i,
     /CHANGELOG\.md$/i,
     /LICENSE$/i,
+    /components\/ui\//,
   ]
 
   // Patterns to detect (order matters for error messages)
@@ -126,7 +127,6 @@ export function checkScaffold(files: FileContent[]): ValidationResult {
     { pattern: /__PLACEHOLDER__/i, description: 'template marker' },
     { pattern: /TODO:/i, description: 'incomplete code' },
     { pattern: /FIXME:/i, description: 'incomplete code' },
-    { pattern: /\bplaceholder\b/i, description: 'generic placeholder' },
     { pattern: /localhost:\d+/i, description: 'hardcoded dev URL' },
   ]
 

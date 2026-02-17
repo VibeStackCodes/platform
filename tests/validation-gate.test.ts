@@ -69,7 +69,7 @@ describe('validation gate', () => {
       expect(result.errors).toHaveLength(0)
     })
 
-    it('detects placeholder strings', () => {
+    it('detects scaffold/placeholder strings', () => {
       const files = [
         {
           path: 'src/App.tsx',
@@ -83,10 +83,6 @@ describe('validation gate', () => {
           path: 'src/lib/api.ts',
           content: `// TODO: implement API client\nexport function fetchData() {}`,
         },
-        {
-          path: 'src/components/Button.tsx',
-          content: `export const Button = ({ placeholder }: { placeholder: string }) => <button>{placeholder}</button>`,
-        },
       ]
 
       const result = checkScaffold(files)
@@ -96,7 +92,24 @@ describe('validation gate', () => {
       expect(result.errors.some((e) => e.includes('Building your app'))).toBe(true)
       expect(result.errors.some((e) => e.includes('your_supabase_project'))).toBe(true)
       expect(result.errors.some((e) => e.includes('TODO:'))).toBe(true)
-      expect(result.errors.some((e) => e.includes('placeholder'))).toBe(true)
+    })
+
+    it('skips components/ui/ files', () => {
+      const files = [
+        {
+          path: 'src/components/ui/input.tsx',
+          content: `export const Input = (props: { placeholder?: string }) => <input {...props} />`,
+        },
+        {
+          path: 'src/components/ui/command.tsx',
+          content: `// TODO: refactor this\nBuilding your app`,
+        },
+      ]
+
+      const result = checkScaffold(files)
+
+      expect(result.passed).toBe(true)
+      expect(result.errors).toHaveLength(0)
     })
 
     it('detects require() in ESM files', () => {

@@ -575,7 +575,9 @@ ${editFormFields}
           </CardContent>
         </Card>
       ) : (
+        <>
 ${sectionCards}
+        </>
       )}
     </div>
   )
