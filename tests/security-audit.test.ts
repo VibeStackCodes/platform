@@ -157,21 +157,23 @@ describe('SQL injection prevention - column names', () => {
 describe('SQL reserved words prevention', () => {
   const reservedWords = ['user', 'order', 'select', 'group', 'table']
 
+  // Reserved words are auto-renamed at parse time rather than rejected.
+  // LLMs reliably emit natural domain words like `type`, `order`, `role`.
   for (const reserved of reservedWords) {
-    it(`rejects reserved word "${reserved}" as table name`, () => {
+    it(`auto-renames reserved word "${reserved}" as table name`, () => {
       const result = SchemaContractSchema.safeParse({
         tables: [{
           name: reserved,
           columns: [{ name: 'id', type: 'uuid' as const, primaryKey: true }]
         }],
       })
-      expect(result.success).toBe(false)
-      if (!result.success) {
-        expect(result.error.issues[0].message).toContain('reserved word')
+      expect(result.success).toBe(true)
+      if (result.success) {
+        expect(result.data.tables[0].name).toBe(`${reserved}_record`)
       }
     })
 
-    it(`rejects reserved word "${reserved}" as column name`, () => {
+    it(`auto-renames reserved word "${reserved}" as column name`, () => {
       const result = SchemaContractSchema.safeParse({
         tables: [{
           name: 'items',
@@ -181,9 +183,9 @@ describe('SQL reserved words prevention', () => {
           ],
         }],
       })
-      expect(result.success).toBe(false)
-      if (!result.success) {
-        expect(result.error.issues[0].message).toContain('reserved word')
+      expect(result.success).toBe(true)
+      if (result.success) {
+        expect(result.data.tables[0].columns[1].name).toBe(`${reserved}_val`)
       }
     })
   }
@@ -191,14 +193,18 @@ describe('SQL reserved words prevention', () => {
   it('allows reserved word as part of longer identifier', () => {
     const result = SchemaContractSchema.safeParse({
       tables: [{
-        name: 'user_accounts', // 'user' is reserved but 'user_accounts' is fine
+        name: 'user_accounts',
         columns: [
           { name: 'id', type: 'uuid' as const, primaryKey: true },
-          { name: 'order_id', type: 'uuid' as const }, // 'order' is reserved but 'order_id' is fine
+          { name: 'order_id', type: 'uuid' as const },
         ],
       }],
     })
     expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data.tables[0].name).toBe('user_accounts')
+      expect(result.data.tables[0].columns[1].name).toBe('order_id')
+    }
   })
 })
 
