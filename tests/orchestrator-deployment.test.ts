@@ -665,7 +665,7 @@ describe('orchestrator - runDeployment', () => {
           sandboxId: 'sandbox-123',
           projectId: 'proj-123',
         }),
-      ).rejects.toThrow('Deployment timed out after 300s — last state: BUILDING')
+      ).rejects.toThrow('Deployment timed out after 300s -- last state: BUILDING')
 
       // Generation state IS persisted (before polling), but not deployment URL
       expect(updateProject).toHaveBeenCalledTimes(1)

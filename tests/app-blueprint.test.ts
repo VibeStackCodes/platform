@@ -45,22 +45,21 @@ describe('contractToBlueprint', () => {
     expect(bp.features.entities).toContain('tag')
   })
 
-  it('includes all layer 1 files (Drizzle schema, index.css, index.html)', () => {
+  it('includes all layer 1 files (supabase client, index.css, index.html)', () => {
     const bp = contractToBlueprint({ appName: 'Test', appDescription: '', contract, designPreferences })
     const paths = bp.fileTree.map((f) => f.path)
-    expect(paths).toContain('server/db/schema.ts')
+    expect(paths).toContain('src/lib/supabase.ts')
     expect(paths).toContain('src/index.css')
     expect(paths).toContain('index.html')
   })
 
-  it('includes all layer 2 files (tRPC routers, root router, .env, migration)', () => {
+  it('includes .env and migration (no tRPC routers)', () => {
     const bp = contractToBlueprint({ appName: 'Test', appDescription: '', contract, designPreferences })
     const paths = bp.fileTree.map((f) => f.path)
-    expect(paths).toContain('server/trpc/routers/bookmark.ts')
-    expect(paths).toContain('server/trpc/routers/tag.ts')
-    expect(paths).toContain('server/trpc/router.ts')
     expect(paths).toContain('.env')
-    expect(paths).toContain('drizzle/0001_initial.sql')
+    expect(paths).toContain('supabase/migrations/0001_initial.sql')
+    // No server-side files in PostgREST architecture
+    expect(paths.some((p) => p.startsWith('server/'))).toBe(false)
   })
 
   it('includes all layer 4 page skeletons', () => {
@@ -83,17 +82,17 @@ describe('contractToBlueprint', () => {
     const pageFile = bp.fileTree.find((f) => f.path === 'src/routes/_authenticated/bookmarks.tsx')
     expect(pageFile?.isLLMSlot).toBe(true)
 
-    const schemaFile = bp.fileTree.find((f) => f.path === 'server/db/schema.ts')
-    expect(schemaFile?.isLLMSlot).toBe(false)
+    const supabaseFile = bp.fileTree.find((f) => f.path === 'src/lib/supabase.ts')
+    expect(supabaseFile?.isLLMSlot).toBe(false)
   })
 
   it('assigns correct layers to files', () => {
     const bp = contractToBlueprint({ appName: 'Test', appDescription: '', contract, designPreferences })
-    const schemaFile = bp.fileTree.find((f) => f.path === 'server/db/schema.ts')
-    expect(schemaFile?.layer).toBe(1)
+    const supabaseFile = bp.fileTree.find((f) => f.path === 'src/lib/supabase.ts')
+    expect(supabaseFile?.layer).toBe(1)
 
-    const routerFile = bp.fileTree.find((f) => f.path === 'server/trpc/routers/bookmark.ts')
-    expect(routerFile?.layer).toBe(2)
+    const migrationFile = bp.fileTree.find((f) => f.path === 'supabase/migrations/0001_initial.sql')
+    expect(migrationFile?.layer).toBe(2)
 
     const pageFile = bp.fileTree.find((f) => f.path === 'src/routes/_authenticated/bookmarks.tsx')
     expect(pageFile?.layer).toBe(4)
@@ -110,11 +109,12 @@ describe('contractToBlueprint', () => {
     expect(cssFile?.content).toContain('--color-primary')
   })
 
-  it('generates .env with placeholder Supabase credentials', () => {
+  it('generates .env with VITE_ prefixed Supabase credentials', () => {
     const bp = contractToBlueprint({ appName: 'Test', appDescription: '', contract, designPreferences })
     const envFile = bp.fileTree.find((f) => f.path === '.env')
-    expect(envFile?.content).toContain('DATABASE_URL=')
-    expect(envFile?.content).toContain('SUPABASE_URL=')
-    expect(envFile?.content).toContain('SUPABASE_ANON_KEY=')
+    expect(envFile?.content).toContain('VITE_SUPABASE_URL=')
+    expect(envFile?.content).toContain('VITE_SUPABASE_ANON_KEY=')
+    // No DATABASE_URL in PostgREST architecture
+    expect(envFile?.content).not.toContain('DATABASE_URL=')
   })
 })

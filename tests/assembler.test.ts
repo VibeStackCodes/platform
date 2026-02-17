@@ -50,7 +50,8 @@ describe('assembleListPage', () => {
   it('returns a complete React component string', () => {
     const result = assembleListPage(taskSpec, testContract)
     expect(result).toContain("import { createFileRoute } from '@tanstack/react-router'")
-    expect(result).toContain("import { trpc } from '@/lib/trpc'")
+    expect(result).toContain("import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'")
+    expect(result).toContain("import { supabase } from '@/lib/supabase'")
   })
 
   it('does not contain SLOT markers', () => {
@@ -94,18 +95,19 @@ describe('assembleListPage', () => {
     expect(result).toContain("createFileRoute('/_authenticated/tasks')")
   })
 
-  it('includes tRPC hooks for list, create, delete', () => {
+  it('uses supabase.from() for list, create, and delete', () => {
     const result = assembleListPage(taskSpec, testContract)
-    expect(result).toContain('trpc.task.list.useInfiniteQuery')
-    expect(result).toContain('trpc.task.create.useMutation')
-    expect(result).toContain('trpc.task.delete.useMutation')
+    expect(result).toContain("supabase.from('task')")
+    expect(result).toContain('useQuery(')
+    expect(result).toContain('useMutation(')
   })
 
-  it('contains Load More button for pagination (E3)', () => {
+  it('contains page-based pagination with Previous/Next buttons (E3)', () => {
     const result = assembleListPage(taskSpec, testContract)
-    expect(result).toContain('Load More')
-    expect(result).toContain('fetchNextPage')
-    expect(result).toContain('hasNextPage')
+    expect(result).toContain('Previous')
+    expect(result).toContain('Next')
+    expect(result).toContain('setPage(')
+    expect(result).toContain('totalCount')
   })
 
   it('contains sort state and clickable headers (E5)', () => {
@@ -116,7 +118,29 @@ describe('assembleListPage', () => {
     expect(result).toContain("sortBy === '")
   })
 
-  it('skips FK select queries for columns with empty references (Bug 1 guard)', () => {
+  it('does not contain any tRPC references', () => {
+    const result = assembleListPage(taskSpec, testContract)
+    expect(result).not.toContain('trpc')
+    expect(result).not.toContain('tRPC')
+    expect(result).not.toContain('useInfiniteQuery')
+    expect(result).not.toContain('fetchNextPage')
+    expect(result).not.toContain('hasNextPage')
+  })
+
+  it('uses isPending instead of isLoading for TanStack Query v5', () => {
+    const result = assembleListPage(taskSpec, testContract)
+    expect(result).toContain('isPending')
+    expect(result).not.toContain('.isLoading')
+  })
+
+  it('delete mutation uses supabase.from().delete().eq() pattern', () => {
+    const result = assembleListPage(taskSpec, testContract)
+    expect(result).toContain(".delete().eq('id', id)")
+    // The delete mutate call should pass deleteTargetId directly, not { id: deleteTargetId }
+    expect(result).not.toContain('mutate({ id: deleteTargetId })')
+  })
+
+  it('skips FK dropdown for columns with empty references (Bug 1 guard)', () => {
     const contractWithEmptyRefs: SchemaContract = {
       tables: [
         {
@@ -153,9 +177,9 @@ describe('assembleListPage', () => {
       },
     }
     const result = assembleListPage(spec, contractWithEmptyRefs)
-    // Should NOT generate trpc..list (empty table name) or trpc queries for empty refs
-    expect(result).not.toContain('trpc..list')
-    expect(result).not.toContain('trpc..list.useQuery')
+    // Should NOT generate supabase.from('') (empty table name) for empty refs
+    expect(result).not.toContain("supabase.from('')")
+    expect(result).not.toContain("queryKey: ['', 'dropdown']")
     // Should still be valid-looking code (no parse errors)
     const opens = (result.match(/{/g) || []).length
     const closes = (result.match(/}/g) || []).length

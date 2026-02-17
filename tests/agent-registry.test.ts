@@ -9,7 +9,6 @@ vi.mock('@ai-sdk/openai', () => ({
 
 import {
   analystAgent,
-  backendAgent,
   frontendAgent,
   repairAgent,
 } from '@server/lib/agents/registry'
@@ -19,9 +18,8 @@ describe('Agent Registry (Reduced Roster: 3+1)', () => {
     vi.clearAllMocks()
   })
 
-  it('exports exactly 4 agents', () => {
+  it('exports exactly 3 agents (analyst, frontend, repair) + edit', () => {
     expect(analystAgent).toBeDefined()
-    expect(backendAgent).toBeDefined()
     expect(frontendAgent).toBeDefined()
     expect(repairAgent).toBeDefined()
   })
@@ -31,14 +29,6 @@ describe('Agent Registry (Reduced Roster: 3+1)', () => {
     expect(tools).toContain('searchDocs')
     expect(tools).toContain('askClarifyingQuestions')
     expect(tools).toContain('submitRequirements')
-  })
-
-  it('backend agent has 6 tools (no contractToHooks)', () => {
-    const tools = Object.keys(backendAgent.listTools())
-    expect(tools).toHaveLength(6)
-    expect(tools).toContain('writeFile')
-    expect(tools).toContain('readFile')
-    expect(tools).not.toContain('contractToHooks')
   })
 
   it('frontend agent has 6 tools (no contractToRoutes)', () => {
@@ -57,8 +47,7 @@ describe('Agent Registry (Reduced Roster: 3+1)', () => {
     expect(tools).toContain('runCommand')
   })
 
-  it('no supervisor, infra, dba, reviewer, qa, devops, or pm agents exported', async () => {
-    // These should no longer be exported from the registry
+  it('no supervisor, infra, dba, reviewer, qa, devops, pm, or backend agents exported', async () => {
     const registryExports = await import('@server/lib/agents/registry')
     expect(registryExports.supervisorAgent).toBeUndefined()
     expect(registryExports.infraAgent).toBeUndefined()
@@ -67,5 +56,7 @@ describe('Agent Registry (Reduced Roster: 3+1)', () => {
     expect(registryExports.qaAgent).toBeUndefined()
     expect(registryExports.devOpsAgent).toBeUndefined()
     expect(registryExports.pmAgent).toBeUndefined()
+    // backendAgent was removed in PostgREST migration
+    expect((registryExports as Record<string, unknown>).backendAgent).toBeUndefined()
   })
 })

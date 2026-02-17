@@ -61,23 +61,18 @@ vi.mock('@server/lib/agents/feature-schema', () => ({
   PageConfigSchema: {
     safeParse: vi.fn(),
   },
-  CustomProcedureSchema: {
-    safeParse: vi.fn(),
-  },
   derivePageFeatureSpec: vi.fn((config: any) => ({
     entityName: config.entityName,
     listPage: { columns: [], searchFields: [], sortDefault: 'id', sortDirection: 'desc', emptyStateMessage: '', createFormFields: [], filters: [] },
     detailPage: { headerField: 'id', sections: [], editFormFields: [] },
   })),
   validatePageConfig: vi.fn(),
-  validateFeatureSpec: vi.fn(),
 }))
 
 // Mock assembler
 vi.mock('@server/lib/agents/assembler', () => ({
   assembleListPage: vi.fn((spec) => `// List page for ${spec.entityName}`),
   assembleDetailPage: vi.fn((spec) => `// Detail page for ${spec.entityName}`),
-  assembleProcedures: vi.fn((content, _spec) => content),
 }))
 
 describe('runProvisioning', () => {
@@ -326,8 +321,8 @@ describe('runCodeGeneration', () => {
   })
 
   it('processes multiple entities in parallel with constrained decoding', async () => {
-    const { frontendAgent, backendAgent } = await import('@server/lib/agents/registry')
-    const { PageConfigSchema, CustomProcedureSchema, validatePageConfig } = await import(
+    const { frontendAgent } = await import('@server/lib/agents/registry')
+    const { PageConfigSchema, validatePageConfig } = await import(
       '@server/lib/agents/feature-schema'
     )
 
@@ -364,28 +359,17 @@ describe('runCodeGeneration', () => {
       headerField: 'title',
       enumFields: [],
       detailSections: [{ title: 'Details', fields: ['title'] }],
-
     }
 
-    // Agents return simplified PageConfig via constrained decoding
+    // Frontend agent returns PageConfig via constrained decoding (no backend agent — PostgREST)
     vi.mocked(frontendAgent.generate).mockResolvedValue({
       object: mockConfig,
       totalUsage: { totalTokens: 100 },
     } as any)
 
-    vi.mocked(backendAgent.generate).mockResolvedValue({
-      object: { procedures: [] },
-      totalUsage: { totalTokens: 50 },
-    } as any)
-
     vi.mocked(PageConfigSchema.safeParse).mockReturnValue({
       success: true,
       data: mockConfig,
-    } as any)
-
-    vi.mocked(CustomProcedureSchema.safeParse).mockReturnValue({
-      success: true,
-      data: { procedures: [] },
     } as any)
 
     vi.mocked(validatePageConfig).mockReturnValue({
@@ -402,9 +386,8 @@ describe('runCodeGeneration', () => {
       supabaseAnonKey: 'test-anon-key',
     })
 
-    // Both agents called once per entity with structuredOutput
+    // Only frontendAgent called once per entity (no backendAgent — PostgREST replaces tRPC)
     expect(frontendAgent.generate).toHaveBeenCalledTimes(2)
-    expect(backendAgent.generate).toHaveBeenCalledTimes(2)
 
     // Verify structuredOutput was passed with PageConfigSchema
     expect(frontendAgent.generate).toHaveBeenCalledWith(
@@ -420,8 +403,8 @@ describe('runCodeGeneration', () => {
   })
 
   it('handles partial failures gracefully', async () => {
-    const { frontendAgent, backendAgent } = await import('@server/lib/agents/registry')
-    const { PageConfigSchema, CustomProcedureSchema, validatePageConfig } = await import(
+    const { frontendAgent } = await import('@server/lib/agents/registry')
+    const { PageConfigSchema, validatePageConfig } = await import(
       '@server/lib/agents/feature-schema'
     )
 
@@ -458,7 +441,6 @@ describe('runCodeGeneration', () => {
       headerField: 'name',
       enumFields: [],
       detailSections: [{ title: 'Details', fields: ['name'] }],
-
     }
 
     // First entity's config fails, second succeeds
@@ -469,19 +451,9 @@ describe('runCodeGeneration', () => {
         totalUsage: { totalTokens: 100 },
       } as any)
 
-    vi.mocked(backendAgent.generate).mockResolvedValue({
-      object: { procedures: [] },
-      totalUsage: { totalTokens: 50 },
-    } as any)
-
     vi.mocked(PageConfigSchema.safeParse).mockReturnValue({
       success: true,
       data: mockConfig,
-    } as any)
-
-    vi.mocked(CustomProcedureSchema.safeParse).mockReturnValue({
-      success: true,
-      data: { procedures: [] },
     } as any)
 
     vi.mocked(validatePageConfig).mockReturnValue({
@@ -506,8 +478,8 @@ describe('runCodeGeneration', () => {
   })
 
   it('skips system tables starting with underscore', async () => {
-    const { frontendAgent, backendAgent } = await import('@server/lib/agents/registry')
-    const { PageConfigSchema, CustomProcedureSchema, validatePageConfig } = await import(
+    const { frontendAgent } = await import('@server/lib/agents/registry')
+    const { PageConfigSchema, validatePageConfig } = await import(
       '@server/lib/agents/feature-schema'
     )
 
@@ -538,28 +510,17 @@ describe('runCodeGeneration', () => {
       headerField: 'id',
       enumFields: [],
       detailSections: [{ title: 'Details', fields: ['id'] }],
-
     }
 
-    // Agents return simplified PageConfig via constrained decoding
+    // Frontend agent returns PageConfig via constrained decoding
     vi.mocked(frontendAgent.generate).mockResolvedValue({
       object: mockConfig,
       totalUsage: { totalTokens: 100 },
     } as any)
 
-    vi.mocked(backendAgent.generate).mockResolvedValue({
-      object: { procedures: [] },
-      totalUsage: { totalTokens: 50 },
-    } as any)
-
     vi.mocked(PageConfigSchema.safeParse).mockReturnValue({
       success: true,
       data: mockConfig,
-    } as any)
-
-    vi.mocked(CustomProcedureSchema.safeParse).mockReturnValue({
-      success: true,
-      data: { procedures: [] },
     } as any)
 
     vi.mocked(validatePageConfig).mockReturnValue({

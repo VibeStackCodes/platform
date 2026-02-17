@@ -3,7 +3,7 @@
 // Deterministic React component assembly from PageFeatureSpec.
 // Every output is a complete, valid React component string — no SLOT markers.
 
-import type { PageFeatureSpec, CustomProcedureSpec } from './feature-schema'
+import type { PageFeatureSpec } from './feature-schema'
 import type { SchemaContract } from '../schema-contract'
 import { snakeToPascal, snakeToCamel, snakeToKebab, pluralize } from '../naming-utils'
 
@@ -76,11 +76,17 @@ function formFieldRenderer(
     return `            <div>
               <label className="text-sm font-medium">${field.label}</label>
               {(() => {
-                const ${refTableCamel}Options = trpc.${refTableCamel}.list.useQuery()
+                const { data: ${refTableCamel}Options } = useQuery({
+                  queryKey: ['${fk.refTable}', 'dropdown'],
+                  queryFn: async () => {
+                    const { data } = await supabase.from('${fk.refTable}').select('id, name, title').limit(100)
+                    return data ?? []
+                  },
+                })
                 return (
                   <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={${valueExpr} ?? ''} onChange={(e) => ${changeExpr}}>
                     <option value="">Select ${refTablePascal}...</option>
-                    {${refTableCamel}Options.data?.items?.map((opt: any) => (
+                    {${refTableCamel}Options?.map((opt: any) => (
                       <option key={opt.id} value={opt.id}>{opt.name ?? opt.title ?? opt.id}</option>
                     ))}
                   </select>
@@ -159,7 +165,8 @@ export function assembleListPage(spec: PageFeatureSpec, contract: SchemaContract
   const imports = [
     "import { createFileRoute } from '@tanstack/react-router'",
     "import { useState } from 'react'",
-    "import { trpc } from '@/lib/trpc'",
+    "import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'",
+    "import { supabase } from '@/lib/supabase'",
     "import { Button } from '@/components/ui/button'",
     "import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'",
     "import { Input } from '@/components/ui/input'",
@@ -265,22 +272,46 @@ function ${pascal}ListPage() {
   const [sortBy, setSortBy] = useState('${spec.listPage.sortDefault}')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('${spec.listPage.sortDirection}')
   const [filters, setFilters] = useState<Record<string, string | boolean>>({})
+  const [page, setPage] = useState(0)
+  const pageSize = 20
+  const queryClient = useQueryClient()
 
-  const ${pluralCamel} = trpc.${camel}.list.useInfiniteQuery(
-    { limit: 20, sortBy: sortBy, sortOrder: sortOrder },
-    { getNextPageParam: (lastPage) => lastPage.nextCursor },
-  )
-  const create${pascal} = trpc.${camel}.create.useMutation({
-    onSuccess: () => ${pluralCamel}.refetch(),
+  const ${pluralCamel} = useQuery({
+    queryKey: ['${entity}', 'list', page, sortBy, sortOrder],
+    queryFn: async () => {
+      const from = page * pageSize
+      const to = from + pageSize - 1
+      const { data, error, count } = await supabase
+        .from('${entity}')
+        .select('*', { count: 'exact' })
+        .order(sortBy, { ascending: sortOrder === 'asc' })
+        .range(from, to)
+      if (error) throw error
+      return { items: data ?? [], totalCount: count ?? 0 }
+    },
   })
-  const delete${pascal} = trpc.${camel}.delete.useMutation({
-    onSuccess: () => ${pluralCamel}.refetch(),
+
+  const create${pascal} = useMutation({
+    mutationFn: async (values: Record<string, unknown>) => {
+      const { error } = await supabase.from('${entity}').insert(values)
+      if (error) throw error
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['${entity}'] }),
   })
+
+  const delete${pascal} = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('${entity}').delete().eq('id', id)
+      if (error) throw error
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['${entity}'] }),
+  })
+
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null)
   const [createForm, setCreateForm] = useState<Record<string, string | boolean>>(${formInitial})
 
-  if (${pluralCamel}.isLoading) {
+  if (${pluralCamel}.isPending) {
     return <div className="flex justify-center py-12"><p className="text-muted-foreground">Loading...</p></div>
   }
 
@@ -288,7 +319,7 @@ function ${pascal}ListPage() {
     return <div className="flex justify-center py-12"><p className="text-destructive">Error: {${pluralCamel}.error.message}</p></div>
   }
 
-  const data = ${pluralCamel}.data?.pages.flatMap((p) => p.items) ?? []
+  const data = ${pluralCamel}.data?.items ?? []
 
   return (
     <div className="space-y-6">
@@ -332,7 +363,7 @@ ${formFields}
               <Button
                 variant="destructive"
                 onClick={() => {
-                  delete${pascal}.mutate({ id: deleteTargetId })
+                  delete${pascal}.mutate(deleteTargetId)
                   setDeleteTargetId(null)
                 }}
               >
@@ -373,10 +404,16 @@ ${cells}
         </div>
       )}
 
-      {${pluralCamel}.hasNextPage && (
-        <div className="flex justify-center py-4">
-          <Button variant="outline" onClick={() => ${pluralCamel}.fetchNextPage()} disabled={${pluralCamel}.isFetchingNextPage}>
-            {${pluralCamel}.isFetchingNextPage ? 'Loading...' : 'Load More'}
+      {${pluralCamel}.data && ${pluralCamel}.data.totalCount > pageSize && (
+        <div className="flex justify-center gap-2 py-4">
+          <Button variant="outline" onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}>
+            Previous
+          </Button>
+          <span className="flex items-center text-sm text-muted-foreground">
+            Page {page + 1} of {Math.ceil(${pluralCamel}.data.totalCount / pageSize)}
+          </span>
+          <Button variant="outline" onClick={() => setPage(p => p + 1)} disabled={(page + 1) * pageSize >= ${pluralCamel}.data.totalCount}>
+            Next
           </Button>
         </div>
       )}
@@ -407,7 +444,8 @@ export function assembleDetailPage(spec: PageFeatureSpec, contract: SchemaContra
   const imports = [
     "import { createFileRoute, Link } from '@tanstack/react-router'",
     "import { useState } from 'react'",
-    "import { trpc } from '@/lib/trpc'",
+    "import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'",
+    "import { supabase } from '@/lib/supabase'",
     "import { Button } from '@/components/ui/button'",
     "import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'",
     "import { Input } from '@/components/ui/input'",
@@ -460,14 +498,26 @@ export const Route = createFileRoute('/_authenticated/${pluralKebab}/$id')({
 
 function ${pascal}DetailPage() {
   const { id } = Route.useParams()
-  const ${camel} = trpc.${camel}.getById.useQuery({ id })
-  const update${pascal} = trpc.${camel}.update.useMutation({
-    onSuccess: () => ${camel}.refetch(),
+  const queryClient = useQueryClient()
+  const ${camel} = useQuery({
+    queryKey: ['${entity}', id],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('${entity}').select('*').eq('id', id).single()
+      if (error) throw error
+      return data
+    },
+  })
+  const update${pascal} = useMutation({
+    mutationFn: async (values: Record<string, unknown>) => {
+      const { error } = await supabase.from('${entity}').update(values).eq('id', id)
+      if (error) throw error
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['${entity}'] }),
   })
   const [isEditing, setIsEditing] = useState(false)
   const [editForm, setEditForm] = useState<Record<string, string | boolean>>({})
 
-  if (${camel}.isLoading) {
+  if (${camel}.isPending) {
     return <div className="flex justify-center py-12"><p className="text-muted-foreground">Loading...</p></div>
   }
 
@@ -510,7 +560,7 @@ function ${pascal}DetailPage() {
               className="space-y-4"
               onSubmit={(e) => {
                 e.preventDefault()
-                update${pascal}.mutate({ id, ${mutationPayload} } as any)
+                update${pascal}.mutate({ ${mutationPayload} } as any)
                 setIsEditing(false)
               }}
             >
@@ -531,43 +581,4 @@ ${sectionCards}
   )
 }
 `
-}
-
-// ============================================================================
-// Backend Procedure Assembly
-// ============================================================================
-
-export function assembleProcedures(routerContent: string, spec: CustomProcedureSpec): string {
-  if (spec.procedures.length === 0) {
-    // Remove the SLOT line
-    return routerContent.replace(/\s*\/\/\s*\{\/\*\s*SLOT:.*?\*\/\}\s*/g, '\n')
-  }
-
-  const procedureStrings = spec.procedures
-    .map((proc) => {
-      const procedureType = proc.access === 'public' ? 'publicProcedure' : 'protectedProcedure'
-      const methodType = proc.type === 'query' ? 'query' : 'mutation'
-
-      // Build Zod input schema
-      const inputFields = proc.inputFields.map((f) => {
-        const zodType =
-          f.type === 'string'
-            ? 'z.string()'
-            : f.type === 'number'
-              ? 'z.number()'
-              : f.type === 'boolean'
-                ? 'z.boolean()'
-                : 'z.array(z.string())'
-        return `${f.name}: ${zodType}${f.optional ? '.optional()' : ''}`
-      })
-
-      const inputSchema = inputFields.length > 0 ? `.input(z.object({ ${inputFields.join(', ')} }))` : ''
-
-      return `  ${proc.name}: ${procedureType}${inputSchema}.${methodType}(async ({ ctx${inputFields.length ? ', input' : ''} }) => {
-    ${proc.implementation}
-  }),`
-    })
-    .join('\n\n')
-
-  return routerContent.replace(/\s*\/\/\s*\{\/\*\s*SLOT:.*?\*\/\}/, '\n\n' + procedureStrings)
 }

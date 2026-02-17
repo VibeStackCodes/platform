@@ -7,7 +7,22 @@ import { z } from 'zod'
 // ============================================================================
 
 export interface DeterministicIssue {
-  type: 'missing_route_export' | 'contract_mismatch' | 'hardcoded_secret' | 'missing_error_boundary' | 'missing_loading_state'
+  type:
+    | 'missing_route_export'
+    | 'contract_mismatch'
+    | 'hardcoded_secret'
+    | 'missing_error_boundary'
+    | 'missing_loading_state'
+    | 'stale_trpc_import'
+    | 'missing_supabase_import'
+    | 'missing_query_key'
+    | 'missing_mutation_invalidation'
+    | 'missing_single_modifier'
+    | 'unused_import'
+    | 'missing_form_validation'
+    | 'console_log_statement'
+    | 'hardcoded_localhost'
+    | 'missing_key_prop'
   file: string
   message: string
   severity: 'critical' | 'warning'
@@ -92,6 +107,184 @@ export function runDeterministicChecks(
           message: 'Component uses useQuery but has no loading state handling',
           severity: 'warning',
         })
+      }
+    }
+
+    const isRouteTsx = file.path.startsWith('src/routes/') && file.path.endsWith('.tsx')
+    const isTsx = file.path.endsWith('.tsx')
+
+    // 6. Stale tRPC imports — leftover from pre-PostgREST migration
+    if (isRouteTsx) {
+      const staleTrpcPatterns = [
+        /@trpc\//,
+        /from\s+['"]@\/lib\/trpc['"]/,
+        /trpc\.\w+\.\w+\./,
+      ]
+      for (const pattern of staleTrpcPatterns) {
+        if (pattern.test(file.content)) {
+          issues.push({
+            type: 'stale_trpc_import',
+            file: file.path,
+            message: `Stale tRPC import or usage detected — migrate to supabase-js + TanStack Query`,
+            severity: 'critical',
+          })
+          break // One issue per file for this check
+        }
+      }
+    }
+
+    // 7. Missing supabase import — file uses supabase client but doesn't import it
+    if (isTsx) {
+      const usesSupabaseClient =
+        file.content.includes('supabase.from(') || file.content.includes('supabase.rpc(')
+      const hasSupabaseImport = /from\s+['"]@\/lib\/supabase['"]/.test(file.content)
+      if (usesSupabaseClient && !hasSupabaseImport) {
+        issues.push({
+          type: 'missing_supabase_import',
+          file: file.path,
+          message: 'File uses supabase.from() or supabase.rpc() but does not import from @/lib/supabase',
+          severity: 'warning',
+        })
+      }
+    }
+
+    // 8. Missing queryKey in useQuery calls
+    if (isTsx && file.content.includes('useQuery({')) {
+      const lines = file.content.split('\n')
+      for (let i = 0; i < lines.length; i++) {
+        if (lines[i].includes('useQuery({')) {
+          // Look ahead up to 5 lines for queryKey:
+          const windowLines = lines.slice(i, i + 6).join('\n')
+          if (!windowLines.includes('queryKey:')) {
+            issues.push({
+              type: 'missing_query_key',
+              file: file.path,
+              message: `useQuery call at line ${i + 1} is missing a queryKey property — queries won't cache or invalidate correctly`,
+              severity: 'warning',
+            })
+          }
+        }
+      }
+    }
+
+    // 9. Missing invalidateQueries in useMutation calls
+    if (isTsx && file.content.includes('useMutation({')) {
+      if (!file.content.includes('invalidateQueries')) {
+        issues.push({
+          type: 'missing_mutation_invalidation',
+          file: file.path,
+          message: 'File uses useMutation but has no invalidateQueries call — mutations won\'t refresh query cache',
+          severity: 'warning',
+        })
+      }
+    }
+
+    // 10. Missing .single() on detail page .eq('id', ...) calls
+    const isDetailPage = isRouteTsx && (file.path.includes('.$id.tsx') || file.path.includes('$id'))
+    if (isDetailPage && file.content.includes(".eq('id',")) {
+      if (!file.content.includes('.single()')) {
+        issues.push({
+          type: 'missing_single_modifier',
+          file: file.path,
+          message: "Detail page uses .eq('id', ...) without .single() — query will return an array instead of a single record",
+          severity: 'warning',
+        })
+      }
+    }
+
+    // 11. Unused named imports
+    if (isTsx) {
+      const importBlockRegex = /^import\s*\{([^}]+)\}\s*from\s*['"][^'"]+['"]/gm
+      let match: RegExpExecArray | null
+      while ((match = importBlockRegex.exec(file.content)) !== null) {
+        const importLine = match[0]
+        const importedSymbols = match[1]
+          .split(',')
+          .map(s => s.trim())
+          .filter(s => s.length > 0)
+
+        // Everything after this import line
+        const importEndIndex = match.index + importLine.length
+        const fileBody = file.content.slice(importEndIndex)
+
+        for (const rawSymbol of importedSymbols) {
+          // Handle "Foo as Bar" — the used name in the body is "Bar"
+          const asMatch = /(\S+)\s+as\s+(\S+)/.exec(rawSymbol)
+          const symbolInBody = asMatch ? asMatch[2] : rawSymbol
+          const symbolToCheck = symbolInBody.trim()
+          if (!symbolToCheck) continue
+
+          const escapedSymbol = symbolToCheck.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+          const usageRegex = new RegExp(`\\b${escapedSymbol}\\b`)
+          if (!usageRegex.test(fileBody)) {
+            issues.push({
+              type: 'unused_import',
+              file: file.path,
+              message: `Imported symbol "${symbolToCheck}" is never used in this file`,
+              severity: 'warning',
+            })
+          }
+        }
+      }
+    }
+
+    // 12. Missing form validation — form with onSubmit but no validation checks
+    if (isTsx && file.content.includes('<form') && file.content.includes('onSubmit')) {
+      const hasValidation =
+        file.content.includes('.trim()') ||
+        file.content.includes('required') ||
+        /if\s*\(!/.test(file.content)
+      if (!hasValidation) {
+        issues.push({
+          type: 'missing_form_validation',
+          file: file.path,
+          message: 'Form with onSubmit has no validation checks (.trim(), required attribute, or if (!...) guards)',
+          severity: 'warning',
+        })
+      }
+    }
+
+    // 13. console.log statements in production code
+    if (isTsx && file.content.includes('console.log(')) {
+      issues.push({
+        type: 'console_log_statement',
+        file: file.path,
+        message: 'File contains console.log() — remove debug statements before production',
+        severity: 'warning',
+      })
+    }
+
+    // 14. Hardcoded localhost URLs or raw IP addresses
+    if (isTsx) {
+      const localhostPattern = /http:\/\/localhost/
+      const ipPattern = /\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/
+      if (localhostPattern.test(file.content) || ipPattern.test(file.content)) {
+        issues.push({
+          type: 'hardcoded_localhost',
+          file: file.path,
+          message: 'File contains hardcoded localhost URL or IP address — use environment variables instead',
+          severity: 'warning',
+        })
+      }
+    }
+
+    // 15. Missing key prop in .map() returning JSX
+    if (isTsx) {
+      const lines = file.content.split('\n')
+      for (let i = 0; i < lines.length; i++) {
+        if (lines[i].includes('.map(')) {
+          // Look in a window of the next 5 lines for an arrow pointing to JSX
+          const windowLines = lines.slice(i, i + 6).join('\n')
+          const hasArrowJsx = /=>\s*[(<]/.test(windowLines) || /=>\s*\{[\s\S]*?return\s*\(?\s*</.test(windowLines)
+          if (hasArrowJsx && !windowLines.includes('key=')) {
+            issues.push({
+              type: 'missing_key_prop',
+              file: file.path,
+              message: `Array .map() at line ${i + 1} renders JSX without a key= prop — React list reconciliation will fail`,
+              severity: 'warning',
+            })
+          }
+        }
       }
     }
   }
@@ -206,6 +399,18 @@ export async function runCodeReview(input: {
   if (hasCriticalDeterministic) {
     return {
       passed: false,
+      deterministicIssues,
+      llmIssues: [],
+      tokensUsed: 0,
+    }
+  }
+
+  // 2b. Also skip LLM if there are more than 3 warning-level issues — fix structural
+  //     problems first before spending tokens on higher-level review.
+  const warningCount = deterministicIssues.filter(i => i.severity === 'warning').length
+  if (warningCount > 3) {
+    return {
+      passed: true, // no critical issues
       deterministicIssues,
       llmIssues: [],
       tokensUsed: 0,

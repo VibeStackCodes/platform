@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   PageConfigSchema,
   PageFeatureSchema,
-  CustomProcedureSchema,
   derivePageFeatureSpec,
   validateFeatureSpec,
   validatePageConfig,
@@ -496,68 +495,8 @@ describe('PageFeatureSchema', () => {
   })
 })
 
-// ============================================================================
-// CustomProcedureSchema — coercion on LLM output
-// ============================================================================
-
-describe('CustomProcedureSchema', () => {
-  it('parses valid custom procedures', () => {
-    const input = {
-      procedures: [
-        {
-          name: 'search',
-          description: 'Search tasks by title',
-          type: 'query',
-          access: 'protected',
-          inputFields: [
-            { name: 'query', type: 'string', optional: false },
-          ],
-          implementation: 'return ctx.db.query.task.findMany({ where: ilike(task.title, `%${input.query}%`) })',
-        },
-      ],
-    }
-
-    const result = CustomProcedureSchema.safeParse(input)
-    expect(result.success).toBe(true)
-  })
-
-  it('coerces null procedures → empty array', () => {
-    const result = CustomProcedureSchema.safeParse({ procedures: null })
-    expect(result.success).toBe(true)
-    if (result.success) {
-      expect(result.data.procedures).toEqual([])
-    }
-  })
-
-  it('coerces undefined procedures → empty array', () => {
-    const result = CustomProcedureSchema.safeParse({ procedures: undefined })
-    expect(result.success).toBe(true)
-    if (result.success) {
-      expect(result.data.procedures).toEqual([])
-    }
-  })
-
-  it('coerces null inputFields → empty array', () => {
-    const input = {
-      procedures: [
-        {
-          name: 'getStats',
-          description: 'Get task statistics',
-          type: 'query',
-          access: 'protected',
-          inputFields: null,
-          implementation: 'return ctx.db.select().from(task)',
-        },
-      ],
-    }
-
-    const result = CustomProcedureSchema.safeParse(input)
-    expect(result.success).toBe(true)
-    if (result.success) {
-      expect(result.data.procedures[0].inputFields).toEqual([])
-    }
-  })
-})
+// CustomProcedureSchema was removed in the PostgREST migration —
+// generated apps use SQL Functions instead of tRPC procedures.
 
 // ============================================================================
 // validateFeatureSpec — post-derivation validation (defense-in-depth)

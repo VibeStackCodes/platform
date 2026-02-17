@@ -42,12 +42,6 @@ const noWorkspaceTools = {
   [WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: { enabled: false },
 } as const
 
-const backendWorkspace = new Workspace({
-  filesystem: new LocalFilesystem({ basePath: skillsRoot }),
-  skills: ['/supabase-js', '/tanstack-query', '/vite-app'],
-  tools: noWorkspaceTools,
-})
-
 const frontendWorkspace = new Workspace({
   filesystem: new LocalFilesystem({ basePath: skillsRoot }),
   skills: [
@@ -63,16 +57,16 @@ const frontendWorkspace = new Workspace({
 })
 
 // ============================================================================
-// Agent Definitions (4-agent hybrid architecture)
+// Agent Definitions (3-agent architecture)
 // ============================================================================
 //
 // Current workflow:
 // 1. analystAgent: Extracts requirements, produces SchemaContract
 // 2. Infrastructure provisioning (parallel): Sandbox + Supabase + GitHub repo
-// 3. AppBlueprint generation: contract → SQL + types + tRPC + routes + pages
+// 3. AppBlueprint generation: contract → SQL + supabase-js client + routes + pages
 // 4. Code generation:
-//    - backendAgent: Fills SLOT markers in tRPC router files
-//    - frontendAgent: Fills SLOT markers in page skeleton files
+//    - frontendAgent: Generates PageConfig via structuredOutput (UI layout decisions)
+//    - Deterministic assembler: PageConfig + contract → full React components
 // 5. repairAgent: Fixes validation errors (TypeScript, lint, build)
 // 6. Deployment: Push to GitHub + Vercel
 
@@ -111,69 +105,29 @@ When using askClarifyingQuestions:
   defaultOptions: { modelSettings: { temperature: 0.4 } },
 })
 
-export const backendAgent = new Agent({
-  id: 'backend-engineer',
-  name: 'Backend Engineer',
-  model: codegenModel,
-  description: 'Fills SLOT markers in tRPC router files with custom procedures',
-  instructions: `You are the backend engineer for VibeStack-generated applications.
-
-Your ONLY job is to fill SLOT markers in tRPC router files with custom procedures.
-
-Generated apps use tRPC + Drizzle. The router skeletons are pre-generated with standard CRUD.
-You fill the SLOT marked: // {/* SLOT: CUSTOM_PROCEDURES */}
-
-Custom procedures to add:
-- Full-text search across entity fields
-- Complex joins across related tables
-- Business logic (computed fields, aggregations, batch operations)
-
-Rules:
-- Only modify files you are given — do not create new files
-- Use the existing Drizzle schema imports
-- Use protectedProcedure for user-owned data, publicProcedure otherwise
-- Input validation with Zod
-- No TODO/FIXME/placeholder comments`,
-  tools: {
-    writeFile: writeFileTool,
-    writeFiles: writeFilesTool,
-    readFile: readFileTool,
-    listFiles: listFilesTool,
-    createDirectory: createDirectoryTool,
-    searchDocs: searchDocsTool,
-  },
-  workspace: backendWorkspace,
-  defaultOptions: { maxSteps: 25, modelSettings: { temperature: 0.2 } },
-})
-
 export const frontendAgent = new Agent({
   id: 'frontend-engineer',
   name: 'Frontend Engineer',
   model: codegenModel,
-  description: 'Fills SLOT markers in page skeletons with JSX component bodies',
+  description: 'Analyzes entity tables and generates PageConfig for UI layout decisions',
   instructions: `You are the frontend engineer for VibeStack-generated applications.
 
-Your ONLY job is to fill SLOT markers in page skeleton files with JSX component bodies.
+Your ONLY job is to analyze entity tables and decide how to present them in the UI.
+You will receive structured output requests — respond with the requested schema.
 
-The page skeletons have all imports, hooks, state, and route definitions pre-wired.
-You fill the SLOT marked: {/* SLOT: COMPONENT_BODY */}
+For each entity, decide:
+1. Which columns to show in the list table (3-6 most important)
+2. Which column to use as the page title on detail view
+3. Which columns have enum-like values (for dropdown inputs)
+4. How to group fields into sections on the detail page
 
-For list pages, build:
-- Data table/grid showing entity records from the list query
-- Create dialog/modal triggered by the isCreateOpen state
-- Delete confirmation using the deleteTargetId state
-- Loading and empty states
-
-For detail pages, build:
-- Entity detail view using the getById query
-- Edit form toggled by the isEditing state
-- Back navigation link
+Generated apps use supabase-js for data fetching (PostgREST), TanStack Query for caching,
+TanStack Router for routing, and shadcn/ui for components.
 
 Rules:
-- Only write JSX inside the SLOT markers — do not modify imports, hooks, or state
-- Use shadcn/ui components (Button, Card, Input, Dialog, Table)
-- Use Tailwind CSS classes for layout and styling
-- Handle loading, error, and empty states
+- Only pick columns that exist in the table schema
+- Prefer human-readable columns (name, title, email) over IDs or timestamps
+- Group related fields into logical sections
 - No TODO/FIXME/placeholder comments`,
   tools: {
     writeFile: writeFileTool,

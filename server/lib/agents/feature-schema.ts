@@ -337,40 +337,6 @@ export const PageFeatureSchema = z.object({
 })
 
 // ============================================================================
-// CustomProcedureSchema — kept as-is (procedures contain LLM-generated code)
-// ============================================================================
-
-export const CustomProcedureSchema = z.object({
-  procedures: z.preprocess(
-    coerceArray('procedures'),
-    z.array(z.object({
-      name: z.string()
-        .describe('tRPC procedure name in camelCase (e.g. "searchByTitle", "getStats")'),
-      description: z.string()
-        .describe('What this procedure does, in one sentence.'),
-      type: z.enum(['query', 'mutation'])
-        .describe('"query" for reads, "mutation" for writes'),
-      access: z.enum(['public', 'protected'])
-        .describe('"public" for unauthenticated, "protected" requires auth'),
-      inputFields: z.preprocess(
-        coerceArray('procedures.inputFields'),
-        z.array(z.object({
-          name: z.string().describe('Parameter name in camelCase'),
-          type: z.enum(['string', 'number', 'boolean', 'string[]'])
-            .describe('TypeScript type'),
-          optional: z.boolean()
-            .describe('Whether this parameter is optional'),
-        })).catch([]),
-      ),
-      implementation: z.string()
-        .describe('TypeScript function body using Drizzle ORM. Available: ctx.db, ctx.userId, input.{paramName}.'),
-    })).catch([]),
-  ),
-})
-
-export type CustomProcedureSpec = z.infer<typeof CustomProcedureSchema>
-
-// ============================================================================
 // Validation — ensure all field references exist in the contract
 // ============================================================================
 

@@ -157,13 +157,7 @@ const SANDBOX_CONTEXT = {
     "tailwind-merge": "^3.0.0",
     "class-variance-authority": "^0.7.1",
     "radix-ui": "^1.1.0",
-    "@trpc/client": "^11.0.0",
-    "@trpc/server": "^11.0.0",
-    "@trpc/react-query": "^11.0.0",
     "@tanstack/react-query": "^5.0.0",
-    "drizzle-orm": "^0.45.0",
-    "hono": "^4.0.0",
-    "@hono/node-server": "^1.0.0",
     "zod": "^4.0.0"
   }
 }`,
@@ -241,7 +235,7 @@ export function buildFeatureAnalysisPrompt(
       const mods: string[] = [c.type]
       if (c.primaryKey) mods.push('PK')
       if (c.nullable === false) mods.push('NOT NULL')
-      if (c.references) mods.push(`FK → ${c.references.table}.${c.references.column}`)
+      if (c.references) mods.push(`FK -> ${c.references.table}.${c.references.column}`)
       return `  - ${c.name}: ${mods.join(', ')}`
     })
     .join('\n')
@@ -271,7 +265,7 @@ Decide:
 Valid column names: ${table.columns.map((c) => c.name).join(', ')}`
 
   if (sandboxContext) {
-    prompt += `\n\n## Pre-loaded Context (DO NOT read these files — they are already provided)
+    prompt += `\n\n## Pre-loaded Context (DO NOT read these files -- they are already provided)
 
 ### Available Dependencies (from package.json)
 ${sandboxContext.packageJson ?? 'Not available'}
@@ -296,15 +290,13 @@ export async function runCodeGeneration(input: {
   supabaseAnonKey: string
 }): Promise<CodeGenResult> {
   // Dynamic imports to avoid circular deps and lazy-load assembler dependencies
-  const { frontendAgent, backendAgent } = await import('./registry')
+  const { frontendAgent } = await import('./registry')
   const {
     PageConfigSchema,
-    CustomProcedureSchema,
     derivePageFeatureSpec,
     validatePageConfig,
-    validateFeatureSpec,
   } = await import('./feature-schema')
-  const { assembleListPage, assembleDetailPage, assembleProcedures } = await import('./assembler')
+  const { assembleListPage, assembleDetailPage } = await import('./assembler')
   const { getSandbox, uploadFiles } = await import('../sandbox')
 
   // Step 1: Write ALL blueprint files to sandbox (scaffold)
@@ -330,9 +322,8 @@ export async function runCodeGeneration(input: {
     let content = file.content
     if (file.path === '.env') {
       content = content
-        .replace('DATABASE_URL=__PLACEHOLDER__', `DATABASE_URL=${input.supabaseUrl}`)
-        .replace('SUPABASE_URL=__PLACEHOLDER__', `SUPABASE_URL=${input.supabaseUrl}`)
-        .replace('SUPABASE_ANON_KEY=__PLACEHOLDER__', `SUPABASE_ANON_KEY=${input.supabaseAnonKey}`)
+        .replace('VITE_SUPABASE_URL=__PLACEHOLDER__', `VITE_SUPABASE_URL=${input.supabaseUrl}`)
+        .replace('VITE_SUPABASE_ANON_KEY=__PLACEHOLDER__', `VITE_SUPABASE_ANON_KEY=${input.supabaseAnonKey}`)
     }
     return { content, path: `/workspace/${file.path}` }
   })
@@ -357,7 +348,7 @@ export async function runCodeGeneration(input: {
   const { runMigration } = await import('../supabase-mgmt')
   const { contractToSeedSQL } = await import('../contract-to-seed')
 
-  const migrationFile = input.blueprint.fileTree.find((f) => f.path === 'drizzle/0001_initial.sql')
+  const migrationFile = input.blueprint.fileTree.find((f) => f.path === 'supabase/migrations/0001_initial.sql')
   if (migrationFile) {
     const migResult = await runMigration(input.supabaseProjectId, migrationFile.content)
     if (!migResult.success) {
@@ -372,7 +363,7 @@ export async function runCodeGeneration(input: {
     const seedResult = await runMigration(input.supabaseProjectId, seedSQL)
     if (!seedResult.success) {
       console.error(`[codegen] Seed failed: ${seedResult.error}`)
-      // Non-fatal — app works without seed data, just looks empty
+      // Non-fatal -- app works without seed data, just looks empty
     } else {
       console.log('[codegen] Seed data applied to Supabase')
     }
@@ -401,32 +392,25 @@ export async function runCodeGeneration(input: {
       // ================================================================
 
       const featurePrompt = buildFeatureAnalysisPrompt(table, input.contract, SANDBOX_CONTEXT)
-      const procedurePrompt = `Analyze the "${table.name}" entity and design custom tRPC procedures. Include search, filtering, and any business logic.\n\nThink step-by-step:\n1. What queries would a user need beyond basic CRUD?\n2. What filters make sense for this entity's columns?\n3. What aggregations or computed values would be useful?\n\nDescribe each procedure with: name, purpose, query/mutation, input parameters, and the Drizzle ORM implementation.`
 
-      // Feature config + procedures in parallel (constrained decoding)
-      // Temperature set via agent defaultOptions (frontend: 0.3, backend: 0.2)
-      const [configResult, procedureResult] = await Promise.allSettled([
-        frontendAgent.generate(featurePrompt, {
-          maxSteps: 1,
-          structuredOutput: { schema: PageConfigSchema },
-        }),
-        backendAgent.generate(procedurePrompt, {
-          maxSteps: 1,
-          structuredOutput: { schema: CustomProcedureSchema },
-        }),
-      ])
+      // Feature config via constrained decoding (structured output)
+      // Temperature set via agent defaultOptions (frontend: 0.3)
+      const configResult = await frontendAgent.generate(featurePrompt, {
+        maxSteps: 1,
+        structuredOutput: { schema: PageConfigSchema },
+      }).catch((error) => {
+        console.error(`[codegen] Feature config failed for ${table.name}:`, error)
+        return null
+      })
 
-      // Process feature config
-      if (configResult.status === 'rejected') {
-        console.error(`[codegen] Feature config failed for ${table.name}:`, configResult.reason)
-        skipped = true
-        return { files, tokens, warning, skipped, table: table.name }
+      if (!configResult) {
+        return { files, tokens, warning, skipped: true, table: table.name }
       }
 
-      tokens += configResult.value.totalUsage?.totalTokens ?? 0
+      tokens += configResult.totalUsage?.totalTokens ?? 0
 
       // Validate the LLM output
-      const configParsed = PageConfigSchema.safeParse(configResult.value.object)
+      const configParsed = PageConfigSchema.safeParse(configResult.object)
       if (!configParsed.success) {
         console.error(
           `[codegen] PageConfig validation failed for ${table.name}:`,
@@ -445,7 +429,7 @@ export async function runCodeGeneration(input: {
       // Derive full spec deterministically from config + contract
       const featureSpec = derivePageFeatureSpec(configParsed.data, input.contract)
 
-      // Assemble pages deterministically
+      // Assemble pages deterministically (supabase-js + TanStack Query — no tRPC)
       const listPageContent = assembleListPage(featureSpec, input.contract)
       const detailPageContent = assembleDetailPage(featureSpec, input.contract)
 
@@ -464,31 +448,6 @@ export async function runCodeGeneration(input: {
         { path: `src/routes/_authenticated/${entityPlural}.tsx`, content: listPageContent },
         { path: `src/routes/_authenticated/${entityPlural}.$id.tsx`, content: detailPageContent },
       )
-
-      // Process procedure result
-      if (procedureResult.status === 'fulfilled') {
-        tokens += procedureResult.value.totalUsage?.totalTokens ?? 0
-
-        // Default to empty procedures when LLM returns undefined (common with constrained decoding)
-        const procObj = procedureResult.value.object ?? { procedures: [] }
-        const procParsed = CustomProcedureSchema.safeParse(procObj)
-        if (!procParsed.success) {
-          console.warn(
-            `[codegen] Procedure schema validation failed for ${table.name}, using empty procedures:`,
-            procParsed.error.format(),
-          )
-        } else {
-          const procSpec = procParsed.data
-
-          const routerFile = input.blueprint.fileTree.find(
-            (f) => f.path === `server/trpc/routers/${table.name}.ts`,
-          )
-          if (routerFile) {
-            const patchedRouter = assembleProcedures(routerFile.content, procSpec)
-            files.push({ path: routerFile.path, content: patchedRouter })
-          }
-        }
-      }
 
       return { files, tokens, warning, skipped, table: table.name }
     }),
@@ -571,7 +530,7 @@ export async function runRepair(input: {
     return { tokensUsed: 0 }
   }
 
-  // Create sandbox-bound tools — sandboxId is deterministic, never in prompt
+  // Create sandbox-bound tools -- sandboxId is deterministic, never in prompt
   const boundTools = createBoundSandboxTools(input.sandboxId)
 
   // Create a per-call repair agent with sandbox-bound tools
@@ -585,12 +544,12 @@ export async function runRepair(input: {
 You receive specific validation errors (TypeScript, lint, build) and fix them with minimal changes.
 
 Rules:
-1. Only modify files that have errors — do not touch other files
+1. Only modify files that have errors -- do not touch other files
 2. Preserve the skeleton structure (imports, hooks, state declarations)
-3. Only fix the specific error — do not refactor or add features
+3. Only fix the specific error -- do not refactor or add features
 4. Use ESM imports (never require())
 5. No TODO/FIXME/placeholder comments
-6. If a type error is in generated code, fix the type — do not add \`as any\``,
+6. If a type error is in generated code, fix the type -- do not add \`as any\``,
     tools: boundTools,
     defaultOptions: { maxSteps: 15 },
   })
@@ -604,7 +563,7 @@ Rules:
 }
 
 // ============================================================================
-// Provisioning handler (bonus — for the provisioning state)
+// Provisioning handler (bonus -- for the provisioning state)
 // ============================================================================
 
 export async function runProvisioning(input: {
@@ -612,7 +571,7 @@ export async function runProvisioning(input: {
   projectId: string
   userId?: string
 }): Promise<ProvisioningResult> {
-  // Run all three infrastructure operations in parallel — they have ZERO dependencies on each other
+  // Run all three infrastructure operations in parallel -- they have ZERO dependencies on each other
   const [supabaseResult, sandboxResult, githubResult] = await Promise.allSettled([
     // 1. Try warm pool first, fall back to cold creation
     (async () => {
@@ -669,7 +628,7 @@ export async function runProvisioning(input: {
     })(),
   ])
 
-  // Handle failures — any infrastructure failure is fatal
+  // Handle failures -- any infrastructure failure is fatal
   if (supabaseResult.status === 'rejected') {
     throw new Error(`Supabase provisioning failed: ${supabaseResult.reason}`)
   }
@@ -697,7 +656,7 @@ export async function runProvisioning(input: {
 }
 
 // ============================================================================
-// Deployment handler (bonus — for the deploying state)
+// Deployment handler (bonus -- for the deploying state)
 // ============================================================================
 
 /**
@@ -891,7 +850,7 @@ export async function runDeployment(input: {
 
     if (lastState !== 'READY') {
       throw new Error(
-        `Deployment timed out after ${Math.ceil(POLL_TIMEOUT_MS / 1000)}s — last state: ${lastState}`,
+        `Deployment timed out after ${Math.ceil(POLL_TIMEOUT_MS / 1000)}s -- last state: ${lastState}`,
       )
     }
 

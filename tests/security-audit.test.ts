@@ -6,7 +6,6 @@
 import { describe, it, expect } from 'vitest'
 import { SchemaContractSchema, validateContract } from '@server/lib/schema-contract'
 import { contractToSQL } from '@server/lib/contract-to-sql'
-import { contractToTrpc } from '@server/lib/contract-to-trpc'
 import { contractToPages } from '@server/lib/contract-to-pages'
 
 // ============================================================================
@@ -414,11 +413,6 @@ describe('code injection prevention', () => {
     if (result.success) {
       const sql = contractToSQL(result.data)
       expect(sql).toContain('constructor TEXT')
-
-      // Verify tRPC generation doesn't create broken code
-      const routers = contractToTrpc(result.data)
-      expect(routers.length).toBe(1)
-      expect(routers[0].content).toBeTruthy()
     }
   })
 
@@ -432,10 +426,6 @@ describe('code injection prevention', () => {
     expect(result.success).toBe(true)
 
     if (result.success) {
-      const routers = contractToTrpc(result.data)
-      // Should generate camelCase router name
-      expect(routers[0].content).toContain('myTableRouter')
-
       const pages = contractToPages(result.data)
       expect(pages.length).toBeGreaterThan(0)
     }
@@ -806,14 +796,6 @@ describe('valid contracts pass all checks', () => {
       expect(sql).toContain('CREATE POLICY')
       expect(sql).toContain('CREATE INDEX')
       expect(sql).toContain('CREATE TRIGGER')
-
-      // Generate tRPC routers
-      const routers = contractToTrpc(result.data)
-      expect(routers.length).toBe(2)
-      expect(routers[0].fileName).toBe('posts.ts')
-      expect(routers[0].content).toContain('postsRouter')
-      expect(routers[0].content).toContain('protectedProcedure') // has user_id FK
-      expect(routers[1].fileName).toBe('comments.ts')
 
       // Generate pages
       const pages = contractToPages(result.data)

@@ -1,6 +1,7 @@
 // lib/contract-to-sql.ts
 import type { SchemaContract, TableDef } from './schema-contract'
 import { SQL_IDENTIFIER } from './schema-contract'
+import { contractToSQLFunctions } from './contract-to-sql-functions'
 
 const SQL_TYPE_MAP: Record<string, string> = {
   uuid: 'UUID',
@@ -86,6 +87,14 @@ $$;`,
         `CREATE TRIGGER trg_${table.name}_updated_at BEFORE UPDATE ON ${table.name} FOR EACH ROW EXECUTE FUNCTION update_updated_at();`,
       )
     }
+  }
+
+  // 4. Stats functions for tables with aggregatable columns
+  const functions = contractToSQLFunctions(contract)
+  for (const fn of functions) {
+    parts.push('')
+    parts.push(`-- Stats function for ${fn.tableName}`)
+    parts.push(fn.sql)
   }
 
   return parts.join('\n\n')

@@ -1,7 +1,7 @@
 // server/lib/naming-utils.ts
 //
 // Shared naming convention utilities for code generation.
-// Used by assembler, contract-to-trpc, and contract-to-pages.
+// Used by assembler and contract-to-pages.
 
 /**
  * Convert snake_case to PascalCase.
