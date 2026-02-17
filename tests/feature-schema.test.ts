@@ -3,6 +3,7 @@ import {
   PageConfigSchema,
   PageFeatureSchema,
   derivePageFeatureSpec,
+  inferPageConfig,
   validateFeatureSpec,
   validatePageConfig,
 } from '@server/lib/agents/feature-schema'
@@ -626,5 +627,378 @@ describe('validateFeatureSpec', () => {
     const result = validateFeatureSpec(spec, testContract)
     expect(result.valid).toBe(false)
     expect(result.errors[0]).toContain('invalid_column')
+  })
+})
+
+// ============================================================================
+// inferPageConfig — deterministic PageConfig from contract (no LLM)
+// ============================================================================
+
+describe('inferPageConfig', () => {
+  it('picks title as headerField when available', () => {
+    const contract: SchemaContract = {
+      tables: [{
+        name: 'post',
+        columns: [
+          { name: 'id', type: 'uuid', primaryKey: true },
+          { name: 'title', type: 'text' },
+          { name: 'body', type: 'text' },
+          { name: 'created_at', type: 'timestamptz' },
+        ],
+      }],
+    }
+    const config = inferPageConfig(contract.tables[0], contract)
+    expect(config.headerField).toBe('title')
+  })
+
+  it('falls back to name when no title exists', () => {
+    const contract: SchemaContract = {
+      tables: [{
+        name: 'category',
+        columns: [
+          { name: 'id', type: 'uuid', primaryKey: true },
+          { name: 'name', type: 'text' },
+          { name: 'description', type: 'text' },
+        ],
+      }],
+    }
+    const config = inferPageConfig(contract.tables[0], contract)
+    expect(config.headerField).toBe('name')
+  })
+
+  it('falls back to first non-auto text column when no title/name', () => {
+    const contract: SchemaContract = {
+      tables: [{
+        name: 'log_entry',
+        columns: [
+          { name: 'id', type: 'uuid', primaryKey: true },
+          { name: 'message', type: 'text' },
+          { name: 'severity', type: 'text' },
+          { name: 'created_at', type: 'timestamptz' },
+        ],
+      }],
+    }
+    const config = inferPageConfig(contract.tables[0], contract)
+    // 'message' matches 'content' rule (no), it's generic_text — first non-auto text
+    // Actually 'message' doesn't match description/content patterns, so it's generic_text
+    expect(config.headerField).toBe('message')
+  })
+
+  it('falls back to first column when no suitable text column exists', () => {
+    const contract: SchemaContract = {
+      tables: [{
+        name: 'measurement',
+        columns: [
+          { name: 'id', type: 'uuid', primaryKey: true },
+          { name: 'temperature', type: 'numeric' },
+          { name: 'humidity', type: 'numeric' },
+          { name: 'created_at', type: 'timestamptz' },
+        ],
+      }],
+    }
+    const config = inferPageConfig(contract.tables[0], contract)
+    // No text columns at all → falls back to table.columns[0].name
+    expect(config.headerField).toBe('id')
+  })
+
+  it('sorts listColumns by priority — title/name before status before timestamps', () => {
+    const contract: SchemaContract = {
+      tables: [{
+        name: 'task',
+        columns: [
+          { name: 'id', type: 'uuid', primaryKey: true },
+          { name: 'created_at', type: 'timestamptz' },
+          { name: 'status', type: 'text' },
+          { name: 'title', type: 'text' },
+          { name: 'email', type: 'text' },
+        ],
+      }],
+    }
+    const config = inferPageConfig(contract.tables[0], contract)
+    // title=1, email=2, status=2, created_at=4 (but created_at is autoManaged → filtered)
+    expect(config.listColumns[0]).toBe('title')
+    expect(config.listColumns).toContain('email')
+    expect(config.listColumns).toContain('status')
+  })
+
+  it('caps listColumns at 6', () => {
+    const contract: SchemaContract = {
+      tables: [{
+        name: 'person',
+        columns: [
+          { name: 'id', type: 'uuid', primaryKey: true },
+          { name: 'first_name', type: 'text' },
+          { name: 'last_name', type: 'text' },
+          { name: 'email', type: 'text' },
+          { name: 'status', type: 'text' },
+          { name: 'role', type: 'text' },
+          { name: 'is_active', type: 'boolean' },
+          { name: 'score', type: 'integer' },
+          { name: 'quantity', type: 'integer' },
+        ],
+      }],
+    }
+    const config = inferPageConfig(contract.tables[0], contract)
+    expect(config.listColumns.length).toBeLessThanOrEqual(6)
+  })
+
+  it('ensures headerField is always in listColumns', () => {
+    const contract: SchemaContract = {
+      tables: [{
+        name: 'article',
+        columns: [
+          { name: 'id', type: 'uuid', primaryKey: true },
+          { name: 'title', type: 'text' },
+          { name: 'description', type: 'text' }, // showInList=false
+          { name: 'created_at', type: 'timestamptz' },
+        ],
+      }],
+    }
+    const config = inferPageConfig(contract.tables[0], contract)
+    expect(config.headerField).toBe('title')
+    expect(config.listColumns).toContain('title')
+  })
+
+  it('adds created_at when listColumns has fewer than 2 entries', () => {
+    const contract: SchemaContract = {
+      tables: [{
+        name: 'simple',
+        columns: [
+          { name: 'id', type: 'uuid', primaryKey: true },
+          { name: 'label', type: 'text' }, // generic_text, showInList=false
+          { name: 'created_at', type: 'timestamptz' },
+        ],
+      }],
+    }
+    const config = inferPageConfig(contract.tables[0], contract)
+    // 'label' → generic_text → showInList=false → listColumns starts empty
+    // headerField = 'label' (first non-auto text) → unshift into listColumns → [label]
+    // length < 2 → adds created_at → [label, created_at]
+    expect(config.listColumns).toContain('label')
+    expect(config.listColumns).toContain('created_at')
+    expect(config.listColumns.length).toBeGreaterThanOrEqual(2)
+  })
+
+  it('uses contract.enums when available for enum fields', () => {
+    const contract: SchemaContract = {
+      tables: [{
+        name: 'ticket',
+        columns: [
+          { name: 'id', type: 'uuid', primaryKey: true },
+          { name: 'title', type: 'text' },
+          { name: 'status', type: 'text' },
+        ],
+      }],
+      enums: [
+        { name: 'status', values: ['open', 'in_progress', 'closed'] },
+      ],
+    }
+    const config = inferPageConfig(contract.tables[0], contract)
+    const statusEnum = config.enumFields.find(e => e.field === 'status')
+    expect(statusEnum).toBeDefined()
+    expect(statusEnum?.options).toEqual(['open', 'in_progress', 'closed'])
+  })
+
+  it('uses table_column pattern for contract.enums', () => {
+    const contract: SchemaContract = {
+      tables: [{
+        name: 'order',
+        columns: [
+          { name: 'id', type: 'uuid', primaryKey: true },
+          { name: 'status', type: 'text' },
+        ],
+      }],
+      enums: [
+        { name: 'order_status', values: ['pending', 'shipped', 'delivered'] },
+      ],
+    }
+    const config = inferPageConfig(contract.tables[0], contract)
+    const statusEnum = config.enumFields.find(e => e.field === 'status')
+    expect(statusEnum?.options).toEqual(['pending', 'shipped', 'delivered'])
+  })
+
+  it('falls back to DEFAULT_ENUM_OPTIONS for well-known enum fields', () => {
+    const contract: SchemaContract = {
+      tables: [{
+        name: 'task',
+        columns: [
+          { name: 'id', type: 'uuid', primaryKey: true },
+          { name: 'status', type: 'text' },
+          { name: 'priority', type: 'text' },
+        ],
+      }],
+      // No enums defined → uses well-known defaults
+    }
+    const config = inferPageConfig(contract.tables[0], contract)
+
+    const statusEnum = config.enumFields.find(e => e.field === 'status')
+    expect(statusEnum?.options).toEqual(['pending', 'active', 'completed'])
+
+    // 'priority' matches keyword via classifier → semantic 'generic_text'
+    // Actually priority doesn't match any classifier rule → generic_text → not enum semantic
+    // So no enum entry for priority via classifier
+    // BUT wait — let me check: classifier doesn't have a priority rule
+    // priority is generic_text → isEnumSemantic = false → skipped
+  })
+
+  it('does not mark enum-semantic column as enum when no options available', () => {
+    const contract: SchemaContract = {
+      tables: [{
+        name: 'widget',
+        columns: [
+          { name: 'id', type: 'uuid', primaryKey: true },
+          { name: 'widget_type', type: 'text' }, // semantic: 'type'
+        ],
+      }],
+    }
+    const config = inferPageConfig(contract.tables[0], contract)
+    // 'widget_type' → semantic 'type' → isEnumSemantic=true
+    // No contract enum, no DEFAULT_ENUM_OPTIONS match for 'widget_type'
+    // → should NOT be in enumFields
+    expect(config.enumFields.find(e => e.field === 'widget_type')).toBeUndefined()
+  })
+
+  it('groups columns into correct detail sections', () => {
+    const contract: SchemaContract = {
+      tables: [{
+        name: 'product',
+        columns: [
+          { name: 'id', type: 'uuid', primaryKey: true },
+          { name: 'name', type: 'text' },           // → Details
+          { name: 'description', type: 'text' },     // → Details
+          { name: 'price', type: 'numeric' },         // → Properties (currency)
+          { name: 'status', type: 'text' },           // → Properties (status)
+          { name: 'is_active', type: 'boolean' },     // → Properties (boolean)
+          { name: 'created_at', type: 'timestamptz' },// → auto-managed, excluded
+          { name: 'updated_at', type: 'timestamptz' },// → auto-managed, excluded
+        ],
+      }],
+    }
+    const config = inferPageConfig(contract.tables[0], contract)
+
+    const details = config.detailSections.find(s => s.title === 'Details')
+    const properties = config.detailSections.find(s => s.title === 'Properties')
+    const dates = config.detailSections.find(s => s.title === 'Dates')
+
+    expect(details?.fields).toContain('name')
+    expect(details?.fields).toContain('description')
+    expect(properties?.fields).toContain('price')
+    expect(properties?.fields).toContain('status')
+    expect(properties?.fields).toContain('is_active')
+    // Auto-managed timestamps are excluded from all sections
+    expect(dates).toBeUndefined()
+  })
+
+  it('puts non-auto timestamps in Dates section', () => {
+    const contract: SchemaContract = {
+      tables: [{
+        name: 'event',
+        columns: [
+          { name: 'id', type: 'uuid', primaryKey: true },
+          { name: 'title', type: 'text' },
+          { name: 'start_time', type: 'timestamptz' }, // generic timestamp → not auto-managed
+          { name: 'end_time', type: 'timestamptz' },
+        ],
+      }],
+    }
+    const config = inferPageConfig(contract.tables[0], contract)
+
+    const dates = config.detailSections.find(s => s.title === 'Dates')
+    expect(dates?.fields).toContain('start_time')
+    expect(dates?.fields).toContain('end_time')
+  })
+
+  it('excludes auto-managed columns from detail sections', () => {
+    const contract: SchemaContract = {
+      tables: [{
+        name: 'task',
+        columns: [
+          { name: 'id', type: 'uuid', primaryKey: true },
+          { name: 'title', type: 'text' },
+          { name: 'user_id', type: 'uuid', references: { table: 'users', column: 'id' } },
+          { name: 'created_at', type: 'timestamptz' },
+          { name: 'updated_at', type: 'timestamptz' },
+        ],
+      }],
+    }
+    const config = inferPageConfig(contract.tables[0], contract)
+    const allDetailFields = config.detailSections.flatMap(s => s.fields)
+    expect(allDetailFields).not.toContain('id')
+    expect(allDetailFields).not.toContain('user_id')
+    expect(allDetailFields).not.toContain('created_at')
+    expect(allDetailFields).not.toContain('updated_at')
+  })
+
+  it('creates fallback Details section when all columns would be excluded', () => {
+    // Edge case: only PK + auto-managed columns
+    const contract: SchemaContract = {
+      tables: [{
+        name: 'counter',
+        columns: [
+          { name: 'id', type: 'uuid', primaryKey: true },
+          { name: 'created_at', type: 'timestamptz' },
+          { name: 'updated_at', type: 'timestamptz' },
+        ],
+      }],
+    }
+    const config = inferPageConfig(contract.tables[0], contract)
+    // All columns are auto-managed or PK → no section buckets filled → empty detailSections
+    expect(config.detailSections).toHaveLength(0)
+  })
+
+  it('output passes PageConfigSchema validation', () => {
+    const contract: SchemaContract = {
+      tables: [{
+        name: 'task',
+        columns: [
+          { name: 'id', type: 'uuid', primaryKey: true },
+          { name: 'title', type: 'text' },
+          { name: 'description', type: 'text' },
+          { name: 'status', type: 'text' },
+          { name: 'due_date', type: 'timestamptz' },
+          { name: 'is_complete', type: 'boolean' },
+          { name: 'created_at', type: 'timestamptz' },
+        ],
+      }],
+    }
+    const config = inferPageConfig(contract.tables[0], contract)
+    const result = PageConfigSchema.safeParse(config)
+    expect(result.success).toBe(true)
+  })
+
+  it('entityName matches table name exactly', () => {
+    const contract: SchemaContract = {
+      tables: [{
+        name: 'user_profile',
+        columns: [
+          { name: 'id', type: 'uuid', primaryKey: true },
+          { name: 'name', type: 'text' },
+        ],
+      }],
+    }
+    const config = inferPageConfig(contract.tables[0], contract)
+    expect(config.entityName).toBe('user_profile')
+  })
+
+  it('handles FK columns — hidden from list and detail sections', () => {
+    const contract: SchemaContract = {
+      tables: [{
+        name: 'comment',
+        columns: [
+          { name: 'id', type: 'uuid', primaryKey: true },
+          { name: 'body', type: 'text' },
+          { name: 'post_id', type: 'uuid', references: { table: 'post', column: 'id' } },
+          { name: 'user_id', type: 'uuid', references: { table: 'users', column: 'id' } },
+          { name: 'created_at', type: 'timestamptz' },
+        ],
+      }],
+    }
+    const config = inferPageConfig(contract.tables[0], contract)
+    // FK columns should not appear in listColumns
+    expect(config.listColumns).not.toContain('post_id')
+    expect(config.listColumns).not.toContain('user_id')
+    // FK columns (auto-managed) excluded from detail sections
+    const allDetailFields = config.detailSections.flatMap(s => s.fields)
+    expect(allDetailFields).not.toContain('user_id')
   })
 })

@@ -37,7 +37,14 @@ export function snakeToKebab(str: string): string {
  *
  * Example: task → tasks, category → categories, status → statuses, box → boxes
  */
+// Words that are already plural or irregular — return as-is
+const ALREADY_PLURAL = new Set([
+  'users', 'people', 'children', 'data', 'media', 'metadata',
+  'criteria', 'analytics', 'settings', 'permissions', 'credentials',
+])
+
 export function pluralize(str: string): string {
+  if (ALREADY_PLURAL.has(str.toLowerCase())) return str
   // Handle 'y' ending (but not 'ey', 'oy', 'ay')
   if (str.endsWith('y') && !str.endsWith('ey') && !str.endsWith('oy') && !str.endsWith('ay')) {
     return str.slice(0, -1) + 'ies'

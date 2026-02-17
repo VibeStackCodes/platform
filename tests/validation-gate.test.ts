@@ -73,15 +73,11 @@ describe('validation gate', () => {
       const files = [
         {
           path: 'src/App.tsx',
-          content: `export function App() {\n  return <div>Building your app</div>\n}`,
+          content: `export function App() {\n  return <div>Building your app...</div>\n}`,
         },
         {
           path: 'src/config.ts',
           content: `export const SUPABASE_URL = 'https://your_supabase_project.supabase.co'`,
-        },
-        {
-          path: 'src/lib/api.ts',
-          content: `// TODO: implement API client\nexport function fetchData() {}`,
         },
       ]
 
@@ -89,9 +85,38 @@ describe('validation gate', () => {
 
       expect(result.passed).toBe(false)
       expect(result.errors.length).toBeGreaterThan(0)
-      expect(result.errors.some((e) => e.includes('Building your app'))).toBe(true)
+      // "Building your app..." (with ellipsis) is flagged as warmup scaffold leftover
+      expect(result.errors.some((e) => e.includes('Building your app...'))).toBe(true)
       expect(result.errors.some((e) => e.includes('your_supabase_project'))).toBe(true)
-      expect(result.errors.some((e) => e.includes('TODO:'))).toBe(true)
+    })
+
+    it('allows TODO/FIXME comments (style issue, not scaffold artifact)', () => {
+      const files = [
+        {
+          path: 'src/lib/api.ts',
+          content: `// TODO: implement API client\nexport function fetchData() {}`,
+        },
+        {
+          path: 'src/utils.ts',
+          content: `// FIXME: This function needs optimization\nexport function slowFunction() {}`,
+        },
+      ]
+
+      const result = checkScaffold(files)
+      expect(result.passed).toBe(true)
+      expect(result.errors).toHaveLength(0)
+    })
+
+    it('allows "Building your app" without ellipsis (legitimate UI copy)', () => {
+      const files = [
+        {
+          path: 'src/App.tsx',
+          content: `export function App() {\n  return <div>Building your app is easy!</div>\n}`,
+        },
+      ]
+
+      const result = checkScaffold(files)
+      expect(result.passed).toBe(true)
     })
 
     it('skips components/ui/ files', () => {
@@ -205,18 +230,29 @@ describe('validation gate', () => {
       expect(result.errors.some((e) => e.includes('__PLACEHOLDER__'))).toBe(true)
     })
 
-    it('detects FIXME comments', () => {
+    it('matches content only, not file paths', () => {
       const files = [
         {
-          path: 'src/utils.ts',
-          content: `// FIXME: This function needs optimization\nexport function slowFunction() {}`,
+          path: 'src/routes/localhost-config.tsx',
+          content: `export function Config() { return <div>Clean</div> }`,
         },
       ]
 
       const result = checkScaffold(files)
+      // File path contains "localhost" but content is clean — should pass
+      expect(result.passed).toBe(true)
+    })
 
-      expect(result.passed).toBe(false)
-      expect(result.errors.some((e) => e.includes('FIXME:'))).toBe(true)
+    it('skips vite.config.ts files', () => {
+      const files = [
+        {
+          path: 'vite.config.ts',
+          content: `export default { server: { host: '0.0.0.0', port: 3000 } }`,
+        },
+      ]
+
+      const result = checkScaffold(files)
+      expect(result.passed).toBe(true)
     })
   })
 })

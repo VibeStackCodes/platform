@@ -18,7 +18,6 @@ export type { AllowedModel, HeliconeContext } from './provider'
 // Agents + RequestContext
 export {
   analystAgent,
-  frontendAgent,
   repairAgent,
   RequestContext,
 } from './registry'

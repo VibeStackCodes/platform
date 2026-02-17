@@ -40,7 +40,6 @@ async function main() {
     .addLocalFile('snapshot/warmup-scaffold/vite.config.ts', '/workspace/vite.config.ts')
     .addLocalFile('snapshot/warmup-scaffold/tsconfig.json', '/workspace/tsconfig.json')
     .addLocalFile('snapshot/warmup-scaffold/tsconfig.app.json', '/workspace/tsconfig.app.json')
-    .addLocalFile('snapshot/warmup-scaffold/tsconfig.server.json', '/workspace/tsconfig.server.json')
     .addLocalFile('snapshot/warmup-scaffold/index.html', '/workspace/index.html')
     .addLocalFile('snapshot/warmup-scaffold/env.d.ts', '/workspace/env.d.ts')
     .addLocalFile('snapshot/warmup-scaffold/src/App.tsx', '/workspace/src/App.tsx')

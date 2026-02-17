@@ -39,6 +39,7 @@
     "@rive-app/react-webgl2": "^4.26.2",
     "@sentry/node": "10.38.0",
     "@sentry/react": "10.38.0",
+    "@snaplet/copycat": "^6.0.0",
     "@streamdown/cjk": "^1.0.2",
     "@streamdown/code": "^1.0.2",
     "@streamdown/math": "^1.0.2",
@@ -99,7 +100,6 @@
   "devDependencies": {
     "@biomejs/biome": "2.3.15",
     "@electric-sql/pglite": "^0.3.15",
-    "@faker-js/faker": "^10.3.0",
     "@mastra/deployer": "^1.4.0",
     "@playwright/test": "^1.58.2",
     "@statelyai/inspect": "^0.4.0",

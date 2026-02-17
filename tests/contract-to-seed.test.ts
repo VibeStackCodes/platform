@@ -27,6 +27,8 @@ describe('contractToSeedSQL', () => {
     expect(sql).toContain('title')
     // created_at has a default — should NOT appear in INSERT columns
     expect(sql).not.toMatch(/created_at/)
+    // No auth preamble when no auth.users references
+    expect(sql).not.toContain('INSERT INTO auth.users')
   })
 
   it('topologically sorts tables so parents are inserted first', () => {
@@ -76,7 +78,11 @@ describe('contractToSeedSQL', () => {
       ],
     }
     const sql = contractToSeedSQL(contract, 1)
-    expect(sql).toContain('00000000-seed-0000-0000-000000000001')
+    expect(sql).toContain('00000000-0000-4000-a000-0000000005ee')
+    // Auth preamble: seeds auth.users + auth.identities so FK constraints pass
+    expect(sql).toContain('INSERT INTO auth.users')
+    expect(sql).toContain('INSERT INTO auth.identities')
+    expect(sql).toContain("crypt('password123', gen_salt('bf'))")
   })
 
   it('references parent table IDs for inter-table FKs', () => {
@@ -132,19 +138,17 @@ describe('contractToSeedSQL', () => {
       ],
     }
     const sql = contractToSeedSQL(contract, 2)
-    // Integer values
-    expect(sql).toMatch(/\b10\b/)
-    expect(sql).toMatch(/\b20\b/)
-    // Numeric values
-    expect(sql).toContain('10.50')
+    // Integer values (copycat.int produces random ints in range)
+    expect(sql).toMatch(/count.*\b\d+\b/)
+    // Numeric values (copycat.float produces decimals)
+    expect(sql).toMatch(/score.*\d+\.\d{2}/)
     // Boolean values
-    expect(sql).toContain('true')
-    expect(sql).toContain('false')
+    expect(sql).toMatch(/\b(true|false)\b/)
     // JSONB
     expect(sql).toContain("'{}'::jsonb")
   })
 
-  it('infers realistic text values from column names using faker', () => {
+  it('infers realistic text values from column names using copycat', () => {
     const contract: SchemaContract = {
       tables: [
         {

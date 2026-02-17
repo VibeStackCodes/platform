@@ -108,7 +108,7 @@ export function checkScaffold(files: FileContent[]): ValidationResult {
   // Source file extensions to check
   const sourceExtensions = ['.ts', '.tsx', '.css', '.html']
 
-  // Files to skip entirely (lock files, docs, pre-baked UI kit, etc.)
+  // Files to skip entirely (lock files, docs, pre-baked UI kit, config files, etc.)
   const skipPatterns = [
     /package-lock\.json$/,
     /bun\.lockb$/,
@@ -118,16 +118,20 @@ export function checkScaffold(files: FileContent[]): ValidationResult {
     /CHANGELOG\.md$/i,
     /LICENSE$/i,
     /components\/ui\//,
+    /vite\.config\.[tj]s$/, // Vite config has legitimate localhost/port references
+    /\.d\.ts$/,             // TypeScript declaration files
+    /routeTree\.gen\.ts$/,  // Auto-generated route tree
   ]
 
-  // Patterns to detect (order matters for error messages)
+  // Patterns to detect — only true scaffold artifacts, not style issues.
+  // Removed: TODO:/FIXME: (style issue — LLMs emit these routinely; tsc/lint catches real problems)
+  // Tightened: "Building your app..." requires ellipsis to distinguish from legitimate UI copy
+  // Tightened: localhost check requires http:// prefix (avoids false positives on port: 3000 in config)
   const scaffoldPatterns = [
-    { pattern: /Building your app/i, description: 'warmup scaffold leftover' },
+    { pattern: /Building your app\.\.\./i, description: 'warmup scaffold leftover' },
     { pattern: /your_supabase_project/i, description: 'unconfigured Supabase URL' },
     { pattern: /__PLACEHOLDER__/i, description: 'template marker' },
-    { pattern: /TODO:/i, description: 'incomplete code' },
-    { pattern: /FIXME:/i, description: 'incomplete code' },
-    { pattern: /localhost:\d+/i, description: 'hardcoded dev URL' },
+    { pattern: /http:\/\/localhost:\d+/i, description: 'hardcoded dev URL' },
   ]
 
   // ESM require() pattern (only for .ts/.tsx files)
@@ -150,9 +154,9 @@ export function checkScaffold(files: FileContent[]): ValidationResult {
       continue
     }
 
-    // Check for scaffold patterns
+    // Check for scaffold patterns (content only — never match against file paths)
     for (const { pattern, description } of scaffoldPatterns) {
-      const match = file.path.match(pattern) || file.content.match(pattern)
+      const match = file.content.match(pattern)
       if (match) {
         errors.push(`${file.path}: Detected ${description}: "${match[0]}"`)
       }
@@ -179,7 +183,7 @@ export function checkScaffold(files: FileContent[]): ValidationResult {
  * 1. Manifest: all blueprint files exist
  * 2. Scaffold: no placeholder strings
  * 3. TypeCheck: tsc --noEmit passes
- * 4. Lint: biome check --write passes
+ * 4. Lint: oxlint passes
  * 5. Build: bun run build passes
  *
  * @param blueprint - Blueprint with fileTree
@@ -270,10 +274,10 @@ export async function runValidationGate(
     }
   }
 
-  // 4. Lint check
+  // 4. Lint check (OxLint on src/ only — Biome is for formatting only)
   try {
     const result = await sandbox.process.executeCommand(
-      'bunx biome check --write .',
+      'bunx oxlint src/',
       '/workspace',
       undefined,
       60,

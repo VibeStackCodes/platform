@@ -600,7 +600,7 @@ function ErrorBoundary({ error }: { error: Error }) { return <div>{error.message
     const issue = issues.find(i => i.type === 'missing_mutation_invalidation')
     expect(issue).toBeDefined()
     expect(issue?.severity).toBe('warning')
-    expect(issue?.message).toContain('invalidateQueries')
+    expect(issue?.message).toContain('cache management')
   })
 
   it('does not flag mutation with invalidateQueries', () => {
@@ -991,7 +991,31 @@ function ErrorBoundary({ error }: { error: Error }) { return <div>{error.message
     expect(issue?.message).toContain('localhost')
   })
 
-  it('detects hardcoded IP address', () => {
+  it('detects hardcoded loopback IP address', () => {
+    const blueprint = createMockBlueprint([
+      {
+        path: 'src/routes/_authenticated/tasks.tsx',
+        content: `
+export const Route = createFileRoute('/_authenticated/tasks')({
+  component: Tasks,
+  errorComponent: ErrorBoundary,
+})
+
+const API_URL = 'http://127.0.0.1:3001/api'
+
+function Tasks() { return <div>Tasks</div> }
+function ErrorBoundary({ error }: { error: Error }) { return <div>{error.message}</div> }
+`,
+      },
+    ])
+
+    const issues = runDeterministicChecks(blueprint, createMockContract())
+    const issue = issues.find(i => i.type === 'hardcoded_localhost')
+    expect(issue).toBeDefined()
+    expect(issue?.severity).toBe('warning')
+  })
+
+  it('does not flag non-loopback IP addresses', () => {
     const blueprint = createMockBlueprint([
       {
         path: 'src/routes/_authenticated/tasks.tsx',
@@ -1011,8 +1035,7 @@ function ErrorBoundary({ error }: { error: Error }) { return <div>{error.message
 
     const issues = runDeterministicChecks(blueprint, createMockContract())
     const issue = issues.find(i => i.type === 'hardcoded_localhost')
-    expect(issue).toBeDefined()
-    expect(issue?.severity).toBe('warning')
+    expect(issue).toBeUndefined()
   })
 
   it('does not flag files without hardcoded localhost or IPs', () => {

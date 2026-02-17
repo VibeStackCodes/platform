@@ -86,9 +86,11 @@ export function runDeterministicChecks(
       }
     }
 
-    // 3. Missing error boundaries in route files
+    // 3. Missing error boundaries in route files (skip layout-only routes)
     if (file.path.startsWith('src/routes/') && file.path.endsWith('.tsx')) {
-      if (!file.content.includes('ErrorComponent') && !file.content.includes('errorComponent')) {
+      const isLayoutRoute = file.path.includes('__root.tsx') ||
+        (file.path.includes('_authenticated') && file.path.endsWith('route.tsx'))
+      if (!isLayoutRoute && !file.content.includes('ErrorComponent') && !file.content.includes('errorComponent')) {
         issues.push({
           type: 'missing_error_boundary',
           file: file.path,
@@ -153,8 +155,8 @@ export function runDeterministicChecks(
       const lines = file.content.split('\n')
       for (let i = 0; i < lines.length; i++) {
         if (lines[i].includes('useQuery({')) {
-          // Look ahead up to 5 lines for queryKey:
-          const windowLines = lines.slice(i, i + 6).join('\n')
+          // Look ahead up to 12 lines — LLMs often put many options before queryKey
+          const windowLines = lines.slice(i, i + 12).join('\n')
           if (!windowLines.includes('queryKey:')) {
             issues.push({
               type: 'missing_query_key',
@@ -167,13 +169,18 @@ export function runDeterministicChecks(
       }
     }
 
-    // 9. Missing invalidateQueries in useMutation calls
+    // 9. Missing cache management in useMutation calls
     if (isTsx && file.content.includes('useMutation({')) {
-      if (!file.content.includes('invalidateQueries')) {
+      const hasCacheManagement =
+        file.content.includes('invalidateQueries') ||
+        file.content.includes('removeQueries') ||
+        file.content.includes('resetQueries') ||
+        file.content.includes('setQueryData')
+      if (!hasCacheManagement) {
         issues.push({
           type: 'missing_mutation_invalidation',
           file: file.path,
-          message: 'File uses useMutation but has no invalidateQueries call — mutations won\'t refresh query cache',
+          message: 'File uses useMutation but has no cache management — mutations won\'t refresh query data',
           severity: 'warning',
         })
       }
@@ -208,9 +215,11 @@ export function runDeterministicChecks(
         const fileBody = file.content.slice(importEndIndex)
 
         for (const rawSymbol of importedSymbols) {
+          // Strip leading "type " from inline type imports: import { type Foo } → "Foo"
+          const withoutTypePrefix = rawSymbol.replace(/^type\s+/, '')
           // Handle "Foo as Bar" — the used name in the body is "Bar"
-          const asMatch = /(\S+)\s+as\s+(\S+)/.exec(rawSymbol)
-          const symbolInBody = asMatch ? asMatch[2] : rawSymbol
+          const asMatch = /(\S+)\s+as\s+(\S+)/.exec(withoutTypePrefix)
+          const symbolInBody = asMatch ? asMatch[2] : withoutTypePrefix
           const symbolToCheck = symbolInBody.trim()
           if (!symbolToCheck) continue
 
@@ -254,15 +263,16 @@ export function runDeterministicChecks(
       })
     }
 
-    // 14. Hardcoded localhost URLs or raw IP addresses
+    // 14. Hardcoded localhost URLs — only flag actual http:// URLs, not bare IPs
+    //     (bare IP addresses are valid domain data in networking/admin apps)
     if (isTsx) {
-      const localhostPattern = /http:\/\/localhost/
-      const ipPattern = /\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/
-      if (localhostPattern.test(file.content) || ipPattern.test(file.content)) {
+      const localhostPattern = /https?:\/\/localhost/
+      const loopbackPattern = /https?:\/\/127\.0\.0\.1/
+      if (localhostPattern.test(file.content) || loopbackPattern.test(file.content)) {
         issues.push({
           type: 'hardcoded_localhost',
           file: file.path,
-          message: 'File contains hardcoded localhost URL or IP address — use environment variables instead',
+          message: 'File contains hardcoded localhost URL — use environment variables instead',
           severity: 'warning',
         })
       }
@@ -273,9 +283,10 @@ export function runDeterministicChecks(
       const lines = file.content.split('\n')
       for (let i = 0; i < lines.length; i++) {
         if (lines[i].includes('.map(')) {
-          // Look in a window of the next 5 lines for an arrow pointing to JSX
-          const windowLines = lines.slice(i, i + 6).join('\n')
-          const hasArrowJsx = /=>\s*[(<]/.test(windowLines) || /=>\s*\{[\s\S]*?return\s*\(?\s*</.test(windowLines)
+          // Look in a window of the next 8 lines for an arrow returning JSX elements
+          const windowLines = lines.slice(i, i + 8).join('\n')
+          // Require arrow to point at a JSX tag (<Component or <div etc.), not just parenthesized expressions
+          const hasArrowJsx = /=>\s*\(\s*<[a-zA-Z]/.test(windowLines) || /=>\s*<[a-zA-Z]/.test(windowLines) || /=>\s*\{[\s\S]*?return\s*\(\s*</.test(windowLines)
           if (hasArrowJsx && !windowLines.includes('key=')) {
             issues.push({
               type: 'missing_key_prop',

@@ -20,10 +20,45 @@ import { writeFileSync, appendFileSync } from 'node:fs'
 // Config
 // ============================================================================
 
-const TEST_PROMPT = `Build a personal bookmarks manager. Users can save URLs with a title, description,
-and tags. They can search bookmarks by title or tag, and star their favorites.`
+const TEST_PROMPTS = [
+  {
+    id: 1,
+    name: 'Simple CRUD — Bookmarks Manager',
+    prompt: `Build a personal bookmarks manager. Users can save URLs with a title, description,
+and tags. They can search bookmarks by title or tag, and star their favorites.`,
+  },
+  {
+    id: 2,
+    name: 'Multi-Role App — Team Task Board',
+    prompt: `Build a team task board with 2 roles: Admin and Member. Admins can create projects,
+invite members, and see all tasks across projects. Members can only see tasks in
+projects they belong to. Tasks have status (todo, in-progress, done), priority
+(low, medium, high), and assignee. Include a real-time activity feed that shows
+when tasks are moved between columns.`,
+  },
+  {
+    id: 3,
+    name: 'Complex App — Personal Finance Tracker',
+    prompt: `Build a personal finance tracker. Users log income and expenses with category, amount,
+date, and notes. Categories include: Food, Transport, Entertainment, Bills, Shopping,
+Income, and Other.
 
-const LEARNINGS_PATH = 'docs/e2e-pipeline-learnings.md'
+The dashboard shows:
+- Monthly spending breakdown as a pie chart
+- Income vs expenses trend as a line chart (last 6 months)
+- Top 5 spending categories this month
+- Running balance
+
+Users can filter transactions by date range and category, and export to CSV.`,
+  },
+]
+
+const promptArg = process.argv.find((a) => a.startsWith('--prompt='))
+const promptIndex = promptArg ? parseInt(promptArg.split('=')[1], 10) - 1 : 0
+const TEST_CONFIG = TEST_PROMPTS[promptIndex] ?? TEST_PROMPTS[0]
+const TEST_PROMPT = TEST_CONFIG.prompt
+
+const LEARNINGS_PATH = `docs/e2e-pipeline-learnings-test${TEST_CONFIG.id}.md`
 
 // ============================================================================
 // Logging & Timing
@@ -156,7 +191,7 @@ async function phase3_provisioning(appName: string) {
   const result = await runProvisioning({
     appName,
     projectId: 'e2e-test-' + Date.now(),
-    userId: 'e2e-test-user',
+    userId: '00000000-0000-4000-8000-000000000e2e',
   })
 
   log(`Sandbox ID: ${result.sandboxId}`)
@@ -482,8 +517,8 @@ function writeLearnings(results: {
 
   const content = `# E2E Pipeline Run — Learnings & Observations
 
-**Date**: 2026-02-17
-**Test Prompt**: Test 1 (Simple CRUD — Bookmarks Manager)
+**Date**: ${new Date().toISOString().split('T')[0]}
+**Test Prompt**: Test ${TEST_CONFIG.id} (${TEST_CONFIG.name})
 **Model**: gpt-5.2 via Helicone proxy
 **Total Duration**: ${(totalDuration / 1000).toFixed(1)}s
 **Total Tokens**: ${totalTokens}
@@ -566,8 +601,8 @@ ${results.notes.filter(n => n.startsWith('[REC]')).map(n => `- ${n.replace('[REC
 // ============================================================================
 
 async function main() {
-  log('=== VibeStack E2E Pipeline Test ===')
-  log(`Test Prompt: "${TEST_PROMPT.slice(0, 60)}..."`)
+  log(`=== VibeStack E2E Pipeline Test ${TEST_CONFIG.id}/3: ${TEST_CONFIG.name} ===`)
+  log(`Prompt: "${TEST_PROMPT.slice(0, 80)}..."`)
   log(`Model: gpt-5.2 via Helicone`)
   log('')
 
@@ -575,7 +610,7 @@ async function main() {
   const sessionId = `e2e-${Date.now()}`
   const { setGlobalHeliconeContext } = await import('../server/lib/agents/provider')
   setGlobalHeliconeContext({
-    userId: 'e2e-test',
+    userId: '00000000-0000-4000-8000-000000000e2e',
     projectId: sessionId,
     sessionId,
     environment: 'e2e-test',
@@ -662,23 +697,10 @@ async function main() {
       `manifest=${validationResult.validation.manifest.passed} scaffold=${validationResult.validation.scaffold.passed} tsc=${validationResult.validation.typecheck.passed} build=${validationResult.validation.build.passed}`)
     results.validation = validationResult
 
-    // --- Phase 6: Repair (up to 2 attempts) ---
-    let repairAttempt = 0
-    while (!validationResult.allPassed && repairAttempt < 2) {
-      repairAttempt++
-      const phaseStart8 = Date.now()
-      const repairResult = await phase8_repair(blueprint, validationResult, sandboxId, repairAttempt)
-      const duration8 = Date.now() - phaseStart8
-      trackPhase(`6. Repair #${repairAttempt}`, duration8, repairResult.tokensUsed, 'DONE', `${repairResult.tokensUsed} tokens`)
-      results.repair = repairResult
-
-      // Re-validate
-      const revalStart = Date.now()
-      validationResult = await phase7_validation(blueprint, sandboxId)
-      const revalDuration = Date.now() - revalStart
-      trackPhase(`5b. Re-Validation #${repairAttempt}`, revalDuration, 0, validationResult.allPassed ? 'PASS' : 'FAIL',
-        `tsc=${validationResult.validation.typecheck.passed} build=${validationResult.validation.build.passed}`)
-      results.validation = validationResult
+    // --- Phase 6: Repair (DISABLED — stop on validation failure to debug deterministically) ---
+    if (!validationResult.allPassed) {
+      console.error('\n[STOP] Validation failed — repair disabled. Fix deterministic generators instead.')
+      console.error('[STOP] Validation details:', JSON.stringify(validationResult.validation, null, 2))
     }
 
     // --- Phase 7: Code Review ---

@@ -117,4 +117,15 @@ describe('contractToBlueprint', () => {
     // No DATABASE_URL in PostgREST architecture
     expect(envFile?.content).not.toContain('DATABASE_URL=')
   })
+
+  it('does not emit AuthProvider import in main.tsx (C4 fix)', () => {
+    // Contract has auth.users FK → features.auth=true, but AuthProvider should not be emitted
+    const bp = contractToBlueprint({ appName: 'Test', appDescription: '', contract, designPreferences })
+    const mainFile = bp.fileTree.find((f) => f.path === 'src/main.tsx')
+    expect(mainFile?.content).not.toContain('AuthProvider')
+    expect(mainFile?.content).not.toContain("from '@/lib/auth'")
+    // Still has the standard providers
+    expect(mainFile?.content).toContain('QueryClientProvider')
+    expect(mainFile?.content).toContain('RouterProvider')
+  })
 })

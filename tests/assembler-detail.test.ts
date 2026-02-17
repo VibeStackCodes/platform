@@ -123,4 +123,67 @@ describe('assembleDetailPage', () => {
     expect(result).not.toContain('mutate({ id,')
     expect(result).not.toContain('update.mutate({ id')
   })
+
+  it('uses editForm directly for mutation payload, not bare variables (C2 fix)', () => {
+    const result = assembleDetailPage(taskSpec, testContract)
+    expect(result).toContain('.mutate(editForm)')
+    // Should NOT contain bare variables like { title, status }
+    expect(result).not.toMatch(/mutate\(\{[^.}]*\b(title|status)\b/)
+  })
+
+  describe('FK-aware edit form (C3+C5 fixes)', () => {
+    const fkContract: SchemaContract = {
+      tables: [
+        {
+          name: 'product',
+          columns: [
+            { name: 'id', type: 'uuid', primaryKey: true },
+            { name: 'title', type: 'text', nullable: false },
+            { name: 'category_id', type: 'uuid', references: { table: 'category', column: 'id' } },
+          ],
+        },
+        {
+          name: 'category',
+          columns: [
+            { name: 'id', type: 'uuid', primaryKey: true },
+            { name: 'name', type: 'text', nullable: false },
+          ],
+        },
+      ],
+    }
+
+    const fkSpec: PageFeatureSpec = {
+      entityName: 'product',
+      listPage: {
+        columns: [],
+        searchFields: [],
+        sortDefault: 'id',
+        sortDirection: 'asc',
+        createFormFields: [],
+        emptyStateMessage: 'Empty',
+      },
+      detailPage: {
+        headerField: 'title',
+        sections: [
+          { title: 'Info', fields: [{ field: 'title', label: 'Title', format: 'text' }] },
+        ],
+        editFormFields: [
+          { field: 'title', label: 'Title', inputType: 'text' },
+          { field: 'category_id', label: 'Category', inputType: 'text' },
+        ],
+      },
+    }
+
+    it('hoists FK useQuery to top level in detail page (C3 fix)', () => {
+      const result = assembleDetailPage(fkSpec, fkContract)
+      expect(result).toContain('const categoryOptions = useQuery(')
+      expect(result).not.toContain('{(() => {')
+    })
+
+    it('uses contract-derived display column (C5 fix)', () => {
+      const result = assembleDetailPage(fkSpec, fkContract)
+      expect(result).toContain("select('id, name')")
+      expect(result).not.toContain("select('id, name, title')")
+    })
+  })
 })

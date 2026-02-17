@@ -2,7 +2,6 @@ import { describe, expect, it, vi, beforeEach } from 'vitest'
 import {
   runProvisioning,
   runCodeGeneration,
-  buildFeatureAnalysisPrompt,
 } from '@server/lib/agents/orchestrator'
 import type { SchemaContract } from '@server/lib/schema-contract'
 import type { AppBlueprint } from '@server/lib/app-blueprint'
@@ -32,15 +31,8 @@ vi.mock('@server/lib/supabase-mgmt', () => ({
   runMigration: vi.fn().mockResolvedValue({ success: true, error: null, executedAt: new Date().toISOString() }),
 }))
 
-// Mock agent registry
-vi.mock('@server/lib/agents/registry', () => ({
-  frontendAgent: {
-    generate: vi.fn(),
-  },
-  backendAgent: {
-    generate: vi.fn(),
-  },
-}))
+// Mock agent registry (no frontendAgent — code generation is fully deterministic)
+vi.mock('@server/lib/agents/registry', () => ({}))
 
 // Mock provider module (for per-agent model resolution)
 vi.mock('@server/lib/agents/provider', () => ({
@@ -56,17 +48,20 @@ vi.mock('@server/lib/agents/provider', () => ({
   },
 }))
 
-// Mock feature schema
+// Mock feature schema — inferPageConfig returns deterministic PageConfig, derivePageFeatureSpec derives full spec
 vi.mock('@server/lib/agents/feature-schema', () => ({
-  PageConfigSchema: {
-    safeParse: vi.fn(),
-  },
+  inferPageConfig: vi.fn((table: any) => ({
+    entityName: table.name,
+    listColumns: table.columns.filter((c: any) => !c.primaryKey).map((c: any) => c.name).slice(0, 4),
+    headerField: table.columns.find((c: any) => !c.primaryKey)?.name ?? table.columns[0].name,
+    enumFields: [],
+    detailSections: [{ title: 'Details', fields: table.columns.filter((c: any) => !c.primaryKey).map((c: any) => c.name) }],
+  })),
   derivePageFeatureSpec: vi.fn((config: any) => ({
     entityName: config.entityName,
     listPage: { columns: [], searchFields: [], sortDefault: 'id', sortDirection: 'desc', emptyStateMessage: '', createFormFields: [], filters: [] },
     detailPage: { headerField: 'id', sections: [], editFormFields: [] },
   })),
-  validatePageConfig: vi.fn(),
 }))
 
 // Mock assembler
@@ -320,11 +315,8 @@ describe('runCodeGeneration', () => {
     vi.clearAllMocks()
   })
 
-  it('processes multiple entities in parallel with constrained decoding', async () => {
-    const { frontendAgent } = await import('@server/lib/agents/registry')
-    const { PageConfigSchema, validatePageConfig } = await import(
-      '@server/lib/agents/feature-schema'
-    )
+  it('processes multiple entities in parallel with deterministic inference', async () => {
+    const { inferPageConfig } = await import('@server/lib/agents/feature-schema')
 
     const contract: SchemaContract = {
       tables: [
@@ -353,30 +345,6 @@ describe('runCodeGeneration', () => {
       envVars: [],
     }
 
-    const mockConfig = {
-      entityName: 'task',
-      listColumns: ['title'],
-      headerField: 'title',
-      enumFields: [],
-      detailSections: [{ title: 'Details', fields: ['title'] }],
-    }
-
-    // Frontend agent returns PageConfig via constrained decoding (no backend agent — PostgREST)
-    vi.mocked(frontendAgent.generate).mockResolvedValue({
-      object: mockConfig,
-      totalUsage: { totalTokens: 100 },
-    } as any)
-
-    vi.mocked(PageConfigSchema.safeParse).mockReturnValue({
-      success: true,
-      data: mockConfig,
-    } as any)
-
-    vi.mocked(validatePageConfig).mockReturnValue({
-      valid: true,
-      errors: [],
-    } as any)
-
     const result = await runCodeGeneration({
       blueprint,
       contract,
@@ -386,102 +354,18 @@ describe('runCodeGeneration', () => {
       supabaseAnonKey: 'test-anon-key',
     })
 
-    // Only frontendAgent called once per entity (no backendAgent — PostgREST replaces tRPC)
-    expect(frontendAgent.generate).toHaveBeenCalledTimes(2)
+    // inferPageConfig called once per entity (fully deterministic — no LLM)
+    expect(inferPageConfig).toHaveBeenCalledTimes(2)
 
-    // Verify structuredOutput was passed with PageConfigSchema
-    expect(frontendAgent.generate).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.objectContaining({ structuredOutput: expect.any(Object) }),
-    )
+    // Should return assembled files for both entities (2 pages per entity)
+    expect(result.assembledFiles.length).toBeGreaterThanOrEqual(4)
 
-    // Should return assembled files for both entities
-    expect(result.assembledFiles.length).toBeGreaterThanOrEqual(4) // 2 pages per entity
-
-    // Token count should include agent usage
-    expect(result.tokensUsed).toBeGreaterThan(0)
-  })
-
-  it('handles partial failures gracefully', async () => {
-    const { frontendAgent } = await import('@server/lib/agents/registry')
-    const { PageConfigSchema, validatePageConfig } = await import(
-      '@server/lib/agents/feature-schema'
-    )
-
-    const contract: SchemaContract = {
-      tables: [
-        {
-          name: 'task',
-          columns: [
-            { name: 'id', type: 'uuid', primaryKey: true },
-            { name: 'title', type: 'text' },
-          ],
-        },
-        {
-          name: 'user',
-          columns: [
-            { name: 'id', type: 'uuid', primaryKey: true },
-            { name: 'name', type: 'text' },
-          ],
-        },
-      ],
-    }
-
-    const blueprint: AppBlueprint = {
-      appName: 'test-app',
-      fileTree: [],
-      dependencies: {},
-      devDependencies: {},
-      envVars: [],
-    }
-
-    const mockConfig = {
-      entityName: 'user',
-      listColumns: ['name'],
-      headerField: 'name',
-      enumFields: [],
-      detailSections: [{ title: 'Details', fields: ['name'] }],
-    }
-
-    // First entity's config fails, second succeeds
-    vi.mocked(frontendAgent.generate)
-      .mockRejectedValueOnce(new Error('LLM timeout'))
-      .mockResolvedValueOnce({
-        object: mockConfig,
-        totalUsage: { totalTokens: 100 },
-      } as any)
-
-    vi.mocked(PageConfigSchema.safeParse).mockReturnValue({
-      success: true,
-      data: mockConfig,
-    } as any)
-
-    vi.mocked(validatePageConfig).mockReturnValue({
-      valid: true,
-      errors: [],
-    } as any)
-
-    const result = await runCodeGeneration({
-      blueprint,
-      contract,
-      sandboxId: 'sandbox-123',
-      supabaseProjectId: 'sbp-123',
-      supabaseUrl: 'https://test.supabase.co',
-      supabaseAnonKey: 'test-anon-key',
-    })
-
-    // Should have skipped one entity
-    expect(result.skippedEntities).toContain('task')
-
-    // Should have assembled files for the successful entity
-    expect(result.assembledFiles.length).toBeGreaterThanOrEqual(2) // 2 pages for 'user'
+    // No tokens used — no LLM calls in code generation
+    expect(result.tokensUsed).toBe(0)
   })
 
   it('skips system tables starting with underscore', async () => {
-    const { frontendAgent } = await import('@server/lib/agents/registry')
-    const { PageConfigSchema, validatePageConfig } = await import(
-      '@server/lib/agents/feature-schema'
-    )
+    const { inferPageConfig } = await import('@server/lib/agents/feature-schema')
 
     const contract: SchemaContract = {
       tables: [
@@ -504,30 +388,6 @@ describe('runCodeGeneration', () => {
       envVars: [],
     }
 
-    const mockConfig = {
-      entityName: 'task',
-      listColumns: ['id'],
-      headerField: 'id',
-      enumFields: [],
-      detailSections: [{ title: 'Details', fields: ['id'] }],
-    }
-
-    // Frontend agent returns PageConfig via constrained decoding
-    vi.mocked(frontendAgent.generate).mockResolvedValue({
-      object: mockConfig,
-      totalUsage: { totalTokens: 100 },
-    } as any)
-
-    vi.mocked(PageConfigSchema.safeParse).mockReturnValue({
-      success: true,
-      data: mockConfig,
-    } as any)
-
-    vi.mocked(validatePageConfig).mockReturnValue({
-      valid: true,
-      errors: [],
-    } as any)
-
     await runCodeGeneration({
       blueprint,
       contract,
@@ -538,85 +398,6 @@ describe('runCodeGeneration', () => {
     })
 
     // Should only process 'task', not '_migrations'
-    expect(frontendAgent.generate).toHaveBeenCalledTimes(1)
-  })
-})
-
-describe('buildFeatureAnalysisPrompt', () => {
-  it('includes sandbox context when provided', () => {
-    const contract: SchemaContract = {
-      tables: [
-        {
-          name: 'task',
-          columns: [
-            { name: 'id', type: 'uuid', primaryKey: true },
-            { name: 'title', type: 'text' },
-          ],
-        },
-      ],
-    }
-
-    const sandboxContext = {
-      packageJson: '{"dependencies": {"react": "^19.0.0"}}',
-      tsConfig: '{"compilerOptions": {"strict": true}}',
-      componentList: ['Button', 'Card', 'Input'],
-    }
-
-    const prompt = buildFeatureAnalysisPrompt(contract.tables[0], contract, sandboxContext)
-
-    // Should include all context sections
-    expect(prompt).toContain('Pre-loaded Context')
-    expect(prompt).toContain('Available Dependencies')
-    expect(prompt).toContain('react')
-    expect(prompt).toContain('TypeScript Config')
-    expect(prompt).toContain('strict')
-    expect(prompt).toContain('Available UI Components')
-    expect(prompt).toContain('Button, Card, Input')
-  })
-
-  it('works without sandbox context (backward compatible)', () => {
-    const contract: SchemaContract = {
-      tables: [
-        {
-          name: 'task',
-          columns: [
-            { name: 'id', type: 'uuid', primaryKey: true },
-            { name: 'title', type: 'text' },
-          ],
-        },
-      ],
-    }
-
-    const prompt = buildFeatureAnalysisPrompt(contract.tables[0], contract)
-
-    // Should NOT include context sections
-    expect(prompt).not.toContain('Pre-loaded Context')
-    expect(prompt).not.toContain('Available Dependencies')
-
-    // Should still include table info
-    expect(prompt).toContain('task')
-    expect(prompt).toContain('title')
-  })
-
-  it('handles missing context fields gracefully', () => {
-    const contract: SchemaContract = {
-      tables: [
-        {
-          name: 'task',
-          columns: [{ name: 'id', type: 'uuid', primaryKey: true }],
-        },
-      ],
-    }
-
-    const partialContext = {
-      componentList: ['Button'],
-      // packageJson and tsConfig omitted
-    }
-
-    const prompt = buildFeatureAnalysisPrompt(contract.tables[0], contract, partialContext)
-
-    expect(prompt).toContain('Pre-loaded Context')
-    expect(prompt).toContain('Not available') // fallback for missing fields
-    expect(prompt).toContain('Button') // componentList is present
+    expect(inferPageConfig).toHaveBeenCalledTimes(1)
   })
 })

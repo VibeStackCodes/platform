@@ -1,5 +1,7 @@
 import { z } from 'zod'
-import type { SchemaContract } from '../schema-contract'
+import type { SchemaContract, TableDef, EnumDef } from '../schema-contract'
+import { classifyColumn } from '../column-classifier'
+import type { ColumnClassification } from '../column-classifier'
 import { pluralize } from '../naming-utils'
 
 // ============================================================================
@@ -63,6 +65,158 @@ export const PageConfigSchema = z.object({
 export type PageConfig = z.infer<typeof PageConfigSchema>
 
 // ============================================================================
+// Deterministic PageConfig inference — replaces LLM frontendAgent call
+//
+// Uses ColumnSemanticClassifier to pick list columns, header field,
+// enum fields, and detail sections. Zero LLM involvement.
+// ============================================================================
+
+/** Well-known enum option defaults by semantic type */
+const DEFAULT_ENUM_OPTIONS: Record<string, string[]> = {
+  status: ['pending', 'active', 'completed'],
+  priority: ['low', 'medium', 'high'],
+  role: ['admin', 'member', 'viewer'],
+}
+
+/** Section assignment based on semantic type */
+type SectionBucket = 'details' | 'properties' | 'dates'
+
+function sectionBucket(cls: ColumnClassification): SectionBucket {
+  const s = cls.semantic
+  // Date/timestamp columns → Dates section
+  if (
+    s === 'created_at' || s === 'updated_at' || s === 'timestamp' ||
+    s === 'date' || s === 'birthdate'
+  ) return 'dates'
+  // Enum-like, boolean, numeric, json → Properties section
+  if (
+    s === 'status' || s === 'type' || s === 'category' || s === 'role' || s === 'enum' ||
+    s === 'boolean' || s === 'json' || s === 'currency' || s === 'price' ||
+    s === 'quantity' || s === 'score' || s === 'rating' ||
+    s === 'generic_number' || s === 'color'
+  ) return 'properties'
+  // Everything else → Details section
+  return 'details'
+}
+
+/**
+ * Infer a PageConfig deterministically from a table definition + contract.
+ * No LLM call — uses the column classifier for all decisions.
+ */
+export function inferPageConfig(
+  table: TableDef,
+  contract: SchemaContract,
+): PageConfig {
+  // Classify all columns
+  const classifications = table.columns.map((col) => ({
+    col,
+    cls: classifyColumn({
+      name: col.name,
+      type: col.type,
+      references: col.references ?? undefined,
+    }),
+  }))
+
+  // Build enum name → values map from contract.enums
+  const contractEnums = new Map<string, string[]>()
+  if (contract.enums) {
+    for (const e of contract.enums) {
+      contractEnums.set(e.name, e.values)
+    }
+  }
+
+  // ── headerField: first title/name column, fallback to first non-auto text ──
+  const headerField =
+    classifications.find((c) => c.cls.semantic === 'title')?.col.name ??
+    classifications.find((c) => c.cls.semantic === 'name')?.col.name ??
+    classifications.find((c) => c.cls.semantic === 'full_name')?.col.name ??
+    classifications.find((c) => c.cls.semantic === 'first_name')?.col.name ??
+    classifications.find((c) =>
+      !c.cls.isAutoManaged && c.col.type === 'text' && c.cls.semantic !== 'description' && c.cls.semantic !== 'content',
+    )?.col.name ??
+    table.columns[0].name
+
+  // ── listColumns: sort by priority, pick top 6 visible columns ──
+  const listColumns = classifications
+    .filter((c) => c.cls.showInList && !c.cls.isAutoManaged)
+    .sort((a, b) => a.cls.listPriority - b.cls.listPriority)
+    .slice(0, 6)
+    .map((c) => c.col.name)
+
+  // Ensure we have at least 2 columns (add created_at if needed)
+  if (listColumns.length < 2) {
+    const createdAt = table.columns.find((c) => c.name === 'created_at')
+    if (createdAt && !listColumns.includes('created_at')) {
+      listColumns.push('created_at')
+    }
+  }
+  // Ensure headerField is always in listColumns
+  if (!listColumns.includes(headerField)) {
+    listColumns.unshift(headerField)
+    if (listColumns.length > 6) listColumns.pop()
+  }
+
+  // ── enumFields: columns with enum-like semantics ──
+  const enumFields: Array<{ field: string; options: string[] }> = []
+  for (const { col, cls } of classifications) {
+    if (cls.isAutoManaged) continue
+    const isEnumSemantic = ['status', 'type', 'category', 'role', 'enum'].includes(cls.semantic)
+    if (!isEnumSemantic) continue
+
+    // Try contract.enums first (match by column name or table_column pattern)
+    const enumFromContract =
+      contractEnums.get(col.name) ??
+      contractEnums.get(`${table.name}_${col.name}`)
+    if (enumFromContract) {
+      enumFields.push({ field: col.name, options: enumFromContract })
+      continue
+    }
+
+    // Fallback to well-known defaults by keyword match
+    const matchedKey = Object.keys(DEFAULT_ENUM_OPTIONS).find((key) =>
+      col.name.includes(key),
+    )
+    if (matchedKey) {
+      enumFields.push({ field: col.name, options: DEFAULT_ENUM_OPTIONS[matchedKey] })
+    }
+    // No match = don't mark as enum (text input instead of broken select)
+  }
+
+  // ── detailSections: group non-PK/non-auto columns by type ──
+  const buckets: Record<SectionBucket, string[]> = {
+    details: [],
+    properties: [],
+    dates: [],
+  }
+
+  for (const { col, cls } of classifications) {
+    if (col.primaryKey || cls.isAutoManaged) continue
+    buckets[sectionBucket(cls)].push(col.name)
+  }
+
+  const detailSections: Array<{ title: string; fields: string[] }> = []
+  if (buckets.details.length > 0) detailSections.push({ title: 'Details', fields: buckets.details })
+  if (buckets.properties.length > 0) detailSections.push({ title: 'Properties', fields: buckets.properties })
+  if (buckets.dates.length > 0) detailSections.push({ title: 'Dates', fields: buckets.dates })
+
+  // If all columns ended up in one section, just call it "Details"
+  if (detailSections.length === 0) {
+    const allNonAuto = classifications
+      .filter((c) => !c.col.primaryKey && !c.cls.isAutoManaged)
+      .map((c) => c.col.name)
+    if (allNonAuto.length > 0) detailSections.push({ title: 'Details', fields: allNonAuto })
+  }
+
+  return {
+    entityName: table.name,
+    listColumns,
+    headerField,
+    enumFields,
+    detailSections,
+  }
+}
+
+// ============================================================================
 // Deterministic derivation — PageConfig + Contract → PageFeatureSpec
 //
 // All formats, labels, input types, filters, and form fields are derived
@@ -85,6 +239,7 @@ function deriveColumnFormat(type: string, name: string): ColumnFormat {
   if (type === 'timestamptz' || type.includes('timestamp')) return 'date'
   if (type === 'boolean') return 'boolean'
   if (name.endsWith('_url') || name.endsWith('_link') || name === 'url') return 'link'
+  if ((type === 'numeric' || type === 'decimal') && /amount|price|cost|total|fee|budget|balance|salary|rate|limit/.test(name)) return 'currency'
   return 'text'
 }
 

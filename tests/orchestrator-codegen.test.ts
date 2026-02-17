@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { buildFeatureAnalysisPrompt, runCodeGeneration } from '@server/lib/agents/orchestrator'
+import { runCodeGeneration } from '@server/lib/agents/orchestrator'
+import { inferPageConfig } from '@server/lib/agents/feature-schema'
 import type { SchemaContract } from '@server/lib/schema-contract'
 
-describe('buildFeatureAnalysisPrompt', () => {
-  it('includes table name and column list', () => {
+describe('inferPageConfig (deterministic — no LLM)', () => {
+  it('picks title as headerField and includes it in listColumns', () => {
     const contract: SchemaContract = {
       tables: [
         {
@@ -12,22 +13,63 @@ describe('buildFeatureAnalysisPrompt', () => {
             { name: 'id', type: 'uuid', primaryKey: true },
             { name: 'title', type: 'text' },
             { name: 'status', type: 'text' },
+            { name: 'created_at', type: 'timestamptz' },
           ],
         },
       ],
     }
-    const prompt = buildFeatureAnalysisPrompt(contract.tables[0], contract)
-    expect(prompt).toContain('task')
-    expect(prompt).toContain('title')
-    expect(prompt).toContain('status')
-    expect(prompt).toContain('text') // column type
+    const config = inferPageConfig(contract.tables[0], contract)
+    expect(config.entityName).toBe('task')
+    expect(config.headerField).toBe('title')
+    expect(config.listColumns).toContain('title')
+    expect(config.listColumns).toContain('status')
+  })
+
+  it('detects enum fields from semantic types', () => {
+    const contract: SchemaContract = {
+      tables: [
+        {
+          name: 'task',
+          columns: [
+            { name: 'id', type: 'uuid', primaryKey: true },
+            { name: 'title', type: 'text' },
+            { name: 'status', type: 'text' },
+            { name: 'priority', type: 'text' },
+          ],
+        },
+      ],
+    }
+    const config = inferPageConfig(contract.tables[0], contract)
+    const fieldNames = config.enumFields.map((e) => e.field)
+    expect(fieldNames).toContain('status')
+    // status gets well-known defaults
+    const statusEnum = config.enumFields.find((e) => e.field === 'status')
+    expect(statusEnum?.options).toEqual(['pending', 'active', 'completed'])
+  })
+
+  it('uses contract.enums when available', () => {
+    const contract: SchemaContract = {
+      tables: [
+        {
+          name: 'task',
+          columns: [
+            { name: 'id', type: 'uuid', primaryKey: true },
+            { name: 'status', type: 'text' },
+          ],
+        },
+      ],
+      enums: [
+        { name: 'status', values: ['draft', 'published', 'archived'] },
+      ],
+    }
+    const config = inferPageConfig(contract.tables[0], contract)
+    const statusEnum = config.enumFields.find((e) => e.field === 'status')
+    expect(statusEnum?.options).toEqual(['draft', 'published', 'archived'])
   })
 })
 
 describe('runCodeGeneration', () => {
   it('is a function', () => {
-    // This test is integration-level and requires mocking the sandbox + agents.
-    // Verify the function signature exists and accepts the expected inputs.
     expect(typeof runCodeGeneration).toBe('function')
   })
 })

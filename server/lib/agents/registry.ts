@@ -1,18 +1,13 @@
-import path from 'node:path'
 import { Agent } from '@mastra/core/agent'
 import { RequestContext } from '@mastra/core/di'
-import { Workspace, LocalFilesystem, WORKSPACE_TOOLS } from '@mastra/core/workspace'
 import { createAgentModelResolver } from './provider'
 import {
   askClarifyingQuestionsTool,
   submitRequirementsTool,
-  createDirectoryTool,
-  listFilesTool,
   readFileTool,
   runCommandTool,
   searchDocsTool,
   writeFileTool,
-  writeFilesTool,
 } from './tools'
 
 // Re-export RequestContext for route usage
@@ -21,51 +16,19 @@ export { RequestContext }
 // Per-agent model resolvers — each agent uses the optimal model for its role.
 // All paths route through Helicone when HELICONE_API_KEY is set.
 const orchestratorModel = createAgentModelResolver('orchestrator') // gpt-5.2
-const codegenModel = createAgentModelResolver('codegen')           // gpt-5.2-codex
 const repairModel = createAgentModelResolver('repair')             // gpt-5.2-codex
 const editModel = createAgentModelResolver('edit')                 // gpt-5.2-codex
 
-// --- Workspace Skills (domain knowledge for code-gen agents) ---
-
-const skillsRoot = path.resolve(import.meta.dirname, 'skills')
-
-// Disable ALL workspace filesystem/sandbox tools — we only want skills (domain knowledge)
-// injected into agent context. File operations go through our custom Daytona sandbox tools.
-const noWorkspaceTools = {
-  [WORKSPACE_TOOLS.FILESYSTEM.READ_FILE]: { enabled: false },
-  [WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]: { enabled: false },
-  [WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE]: { enabled: false },
-  [WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES]: { enabled: false },
-  [WORKSPACE_TOOLS.FILESYSTEM.DELETE]: { enabled: false },
-  [WORKSPACE_TOOLS.FILESYSTEM.MKDIR]: { enabled: false },
-  [WORKSPACE_TOOLS.FILESYSTEM.FILE_STAT]: { enabled: false },
-  [WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: { enabled: false },
-} as const
-
-const frontendWorkspace = new Workspace({
-  filesystem: new LocalFilesystem({ basePath: skillsRoot }),
-  skills: [
-    '/supabase-js',
-    '/tanstack-router',
-    '/tanstack-query',
-    '/shadcn-ui',
-    '/tailwind-v4',
-    '/react-19',
-    '/vite-app',
-  ],
-  tools: noWorkspaceTools,
-})
-
 // ============================================================================
-// Agent Definitions (3-agent architecture)
+// Agent Definitions (2-agent architecture)
 // ============================================================================
 //
 // Current workflow:
 // 1. analystAgent: Extracts requirements, produces SchemaContract
 // 2. Infrastructure provisioning (parallel): Sandbox + Supabase + GitHub repo
 // 3. AppBlueprint generation: contract → SQL + supabase-js client + routes + pages
-// 4. Code generation:
-//    - frontendAgent: Generates PageConfig via structuredOutput (UI layout decisions)
+// 4. Code generation: Fully deterministic
+//    - inferPageConfig(): ColumnClassifier → PageConfig (no LLM)
 //    - Deterministic assembler: PageConfig + contract → full React components
 // 5. repairAgent: Fixes validation errors (TypeScript, lint, build)
 // 6. Deployment: Push to GitHub + Vercel
@@ -103,42 +66,6 @@ When using askClarifyingQuestions:
     submitRequirements: submitRequirementsTool,
   },
   defaultOptions: { modelSettings: { temperature: 0.4 } },
-})
-
-export const frontendAgent = new Agent({
-  id: 'frontend-engineer',
-  name: 'Frontend Engineer',
-  model: codegenModel,
-  description: 'Analyzes entity tables and generates PageConfig for UI layout decisions',
-  instructions: `You are the frontend engineer for VibeStack-generated applications.
-
-Your ONLY job is to analyze entity tables and decide how to present them in the UI.
-You will receive structured output requests — respond with the requested schema.
-
-For each entity, decide:
-1. Which columns to show in the list table (3-6 most important)
-2. Which column to use as the page title on detail view
-3. Which columns have enum-like values (for dropdown inputs)
-4. How to group fields into sections on the detail page
-
-Generated apps use supabase-js for data fetching (PostgREST), TanStack Query for caching,
-TanStack Router for routing, and shadcn/ui for components.
-
-Rules:
-- Only pick columns that exist in the table schema
-- Prefer human-readable columns (name, title, email) over IDs or timestamps
-- Group related fields into logical sections
-- No TODO/FIXME/placeholder comments`,
-  tools: {
-    writeFile: writeFileTool,
-    writeFiles: writeFilesTool,
-    readFile: readFileTool,
-    listFiles: listFilesTool,
-    createDirectory: createDirectoryTool,
-    searchDocs: searchDocsTool,
-  },
-  workspace: frontendWorkspace,
-  defaultOptions: { maxSteps: 30, modelSettings: { temperature: 0.3 } },
 })
 
 export const repairAgent = new Agent({

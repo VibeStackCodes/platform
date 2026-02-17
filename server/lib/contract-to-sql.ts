@@ -132,9 +132,27 @@ function generatePolicy(
   tableName: string,
   policy: { name: string; operation: string; using?: string; withCheck?: string },
 ): string {
+  const op = policy.operation.toUpperCase()
   let sql = `CREATE POLICY "${policy.name}" ON ${tableName} FOR ${policy.operation} TO authenticated`
-  if (policy.using) sql += ` USING (${cacheAuthCalls(policy.using)})`
-  if (policy.withCheck) sql += ` WITH CHECK (${cacheAuthCalls(policy.withCheck)})`
+  // PostgreSQL RLS clause rules:
+  //   SELECT  → USING only
+  //   INSERT  → WITH CHECK only (USING is rejected!)
+  //   UPDATE  → USING + WITH CHECK
+  //   DELETE  → USING only
+  //   ALL     → USING + WITH CHECK
+  const allowUsing = op !== 'INSERT'
+  const allowWithCheck = op === 'INSERT' || op === 'UPDATE' || op === 'ALL'
+
+  if (policy.using && allowUsing) {
+    sql += ` USING (${cacheAuthCalls(policy.using)})`
+  }
+  if (policy.withCheck && allowWithCheck) {
+    sql += ` WITH CHECK (${cacheAuthCalls(policy.withCheck)})`
+  }
+  // If INSERT policy only had USING (common LLM mistake), promote it to WITH CHECK
+  if (op === 'INSERT' && !policy.withCheck && policy.using) {
+    sql += ` WITH CHECK (${cacheAuthCalls(policy.using)})`
+  }
   return sql + ';'
 }
 

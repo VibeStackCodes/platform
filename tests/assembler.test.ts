@@ -185,4 +185,90 @@ describe('assembleListPage', () => {
     const closes = (result.match(/}/g) || []).length
     expect(opens).toBe(closes)
   })
+
+  it('creates mutation with form state object, not bare variables (C2 fix)', () => {
+    const result = assembleListPage(taskSpec, testContract)
+    // Must pass createForm directly — not generate bare variable names like { title, status }
+    expect(result).toContain('.mutate(createForm)')
+    expect(result).not.toMatch(/mutate\(\{[^.}]*\b(title|status|due_date)\b/)
+  })
+
+  describe('FK-aware dropdown rendering (C3+C5 fixes)', () => {
+    const fkContract: SchemaContract = {
+      tables: [
+        {
+          name: 'product',
+          columns: [
+            { name: 'id', type: 'uuid', primaryKey: true },
+            { name: 'title', type: 'text', nullable: false },
+            { name: 'price', type: 'numeric' },
+            { name: 'category_id', type: 'uuid', references: { table: 'category', column: 'id' } },
+            { name: 'user_id', type: 'uuid', references: { table: 'auth.users', column: 'id' } },
+            { name: 'created_at', type: 'timestamptz', default: 'now()' },
+          ],
+        },
+        {
+          name: 'category',
+          columns: [
+            { name: 'id', type: 'uuid', primaryKey: true },
+            { name: 'name', type: 'text', nullable: false },
+            { name: 'created_at', type: 'timestamptz', default: 'now()' },
+          ],
+        },
+      ],
+    }
+
+    const fkSpec: PageFeatureSpec = {
+      entityName: 'product',
+      listPage: {
+        columns: [
+          { field: 'title', label: 'Title', format: 'text' },
+          { field: 'price', label: 'Price', format: 'currency' },
+        ],
+        searchFields: ['title'],
+        sortDefault: 'created_at',
+        sortDirection: 'desc',
+        createFormFields: [
+          { field: 'title', label: 'Title', inputType: 'text' },
+          { field: 'price', label: 'Price', inputType: 'number' },
+          { field: 'category_id', label: 'Category', inputType: 'text' },
+        ],
+        emptyStateMessage: 'No products yet.',
+      },
+      detailPage: {
+        headerField: 'title',
+        sections: [],
+        editFormFields: [],
+      },
+    }
+
+    it('hoists FK useQuery to top level — no IIFE wrapping (C3 fix)', () => {
+      const result = assembleListPage(fkSpec, fkContract)
+      // Must have top-level hook declaration
+      expect(result).toContain('const categoryOptions = useQuery(')
+      // Must NOT have IIFE-wrapped useQuery (Rules of Hooks violation)
+      expect(result).not.toContain('{(() => {')
+      expect(result).not.toContain('(() => {')
+    })
+
+    it('uses contract-derived display column instead of hardcoded name/title (C5 fix)', () => {
+      const result = assembleListPage(fkSpec, fkContract)
+      // Category table has a "name" column → should select "id, name"
+      expect(result).toContain("select('id, name')")
+      // Must NOT hardcode 'id, name, title' (the old bug)
+      expect(result).not.toContain("select('id, name, title')")
+    })
+
+    it('renders FK select dropdown referencing hoisted options data', () => {
+      const result = assembleListPage(fkSpec, fkContract)
+      expect(result).toContain('categoryOptions.data?.map')
+      expect(result).toContain('Select Category...')
+    })
+
+    it('skips auth.users FK (not a user-facing dropdown)', () => {
+      const result = assembleListPage(fkSpec, fkContract)
+      // auth.users should NOT get a dropdown hook
+      expect(result).not.toContain("supabase.from('auth.users')")
+    })
+  })
 })

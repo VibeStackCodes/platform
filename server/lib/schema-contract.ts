@@ -62,13 +62,19 @@ const FKReferenceSchema = z
 const nullish = (val: unknown) => (val === null ? undefined : val)
 
 export const ColumnDefSchema = z.object({
-  name: z.string()
-    .max(63, 'Identifier exceeds PostgreSQL 63-character limit')
-    .regex(SQL_IDENTIFIER, 'Invalid column name: must be lowercase snake_case')
-    .refine((name) => !SQL_RESERVED_WORDS.has(name), {
-      message: 'Column name is a PostgreSQL reserved word',
-    })
-    .describe('Column name (snake_case)'),
+  name: z.preprocess(
+    // Auto-rename reserved words: LLMs reliably emit natural domain words like
+    // `type`, `order`, `role` that conflict with PostgreSQL keywords.
+    // Appending `_val` is deterministic; downstream code reads from the contract.
+    (val) => {
+      if (typeof val === 'string' && SQL_RESERVED_WORDS.has(val)) return `${val}_val`
+      return val
+    },
+    z.string()
+      .max(63, 'Identifier exceeds PostgreSQL 63-character limit')
+      .regex(SQL_IDENTIFIER, 'Invalid column name: must be lowercase snake_case')
+      .describe('Column name (snake_case)'),
+  ),
   type: SQLTypeSchema.describe('PostgreSQL data type'),
   nullable: z.preprocess(nullish, z.boolean().optional()).describe('Whether column is nullable'),
   // Accept any primitive, coerce to string (LLMs emit numbers/booleans for defaults)
@@ -100,13 +106,16 @@ export const RLSPolicySchema = z.object({
 })
 
 export const TableDefSchema = z.object({
-  name: z.string()
-    .max(63, 'Identifier exceeds PostgreSQL 63-character limit')
-    .regex(SQL_IDENTIFIER, 'Invalid table name: must be lowercase snake_case')
-    .refine((name) => !SQL_RESERVED_WORDS.has(name), {
-      message: 'Table name is a PostgreSQL reserved word',
-    })
-    .describe('Table name (snake_case, singular)'),
+  name: z.preprocess(
+    (val) => {
+      if (typeof val === 'string' && SQL_RESERVED_WORDS.has(val)) return `${val}_record`
+      return val
+    },
+    z.string()
+      .max(63, 'Identifier exceeds PostgreSQL 63-character limit')
+      .regex(SQL_IDENTIFIER, 'Invalid table name: must be lowercase snake_case')
+      .describe('Table name (snake_case, singular)'),
+  ),
   columns: z.array(ColumnDefSchema).describe('Table columns'),
   // Accept string or array — LLMs sometimes emit "enable RLS" as a string
   rlsPolicies: z.preprocess(

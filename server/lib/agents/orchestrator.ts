@@ -3,7 +3,7 @@
 // XState invoke handlers — each function maps to one machine state.
 // The machine calls these via fromPromise actors.
 
-import type { SchemaContract, DesignPreferences, TableDef } from '../schema-contract'
+import type { SchemaContract, DesignPreferences } from '../schema-contract'
 import { SchemaContractSchema, DesignPreferencesSchema } from '../schema-contract'
 import type { AppBlueprint } from '../app-blueprint'
 import { contractToBlueprint } from '../app-blueprint'
@@ -141,146 +141,6 @@ export function runBlueprint(input: {
 // Code Generation handler (Task 8 + E1 jsonrepair)
 // ============================================================================
 
-// Pre-loaded sandbox context to eliminate agent readFile calls
-// These come from the warmup-scaffold and don't change between runs
-const SANDBOX_CONTEXT = {
-  packageJson: `{
-  "dependencies": {
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "@tanstack/react-router": "^1.0.0",
-    "@supabase/supabase-js": "^2.95.0",
-    "valibot": "^1.0.0",
-    "@sentry/react": "^9.0.0",
-    "lucide-react": "^0.460.0",
-    "clsx": "^2.1.1",
-    "tailwind-merge": "^3.0.0",
-    "class-variance-authority": "^0.7.1",
-    "radix-ui": "^1.1.0",
-    "@tanstack/react-query": "^5.0.0",
-    "zod": "^4.0.0"
-  }
-}`,
-  tsConfig: `{
-  "compilerOptions": {
-    "target": "ES2020",
-    "useDefineForClassFields": true,
-    "lib": ["ES2020", "DOM", "DOM.Iterable"],
-    "module": "ESNext",
-    "skipLibCheck": true,
-    "moduleResolution": "bundler",
-    "allowImportingTsExtensions": true,
-    "resolveJsonModule": true,
-    "isolatedModules": true,
-    "noEmit": true,
-    "jsx": "react-jsx",
-    "strict": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
-    "noFallthroughCasesInSwitch": true
-  }
-}`,
-  componentList: [
-    'Button',
-    'Card',
-    'CardHeader',
-    'CardTitle',
-    'CardContent',
-    'CardFooter',
-    'Input',
-    'Label',
-    'Select',
-    'SelectContent',
-    'SelectItem',
-    'SelectTrigger',
-    'SelectValue',
-    'Badge',
-    'Dialog',
-    'DialogContent',
-    'DialogHeader',
-    'DialogTitle',
-    'DialogTrigger',
-    'Table',
-    'TableBody',
-    'TableCell',
-    'TableHead',
-    'TableHeader',
-    'TableRow',
-    'Tabs',
-    'TabsContent',
-    'TabsList',
-    'TabsTrigger',
-    'DropdownMenu',
-    'DropdownMenuContent',
-    'DropdownMenuItem',
-    'DropdownMenuTrigger',
-    'AlertDialog',
-    'Checkbox',
-    'Switch',
-    'Textarea',
-    'Separator',
-    'Skeleton',
-    'Toast',
-    'Sonner',
-  ],
-}
-
-export function buildFeatureAnalysisPrompt(
-  table: TableDef,
-  contract: SchemaContract,
-  sandboxContext?: { packageJson?: string; tsConfig?: string; componentList?: string[] },
-): string {
-  const columns = table.columns
-    .map((c) => {
-      const mods: string[] = [c.type]
-      if (c.primaryKey) mods.push('PK')
-      if (c.nullable === false) mods.push('NOT NULL')
-      if (c.references) mods.push(`FK -> ${c.references.table}.${c.references.column}`)
-      return `  - ${c.name}: ${mods.join(', ')}`
-    })
-    .join('\n')
-
-  const related = contract.tables
-    .filter((t) => t.name !== table.name)
-    .filter(
-      (t) =>
-        t.columns.some((c) => c.references?.table === table.name) ||
-        table.columns.some((c) => c.references?.table === t.name),
-    )
-    .map((t) => t.name)
-
-  let prompt = `Analyze the "${table.name}" entity and decide how to present it.
-
-Table columns:
-${columns}
-
-${related.length > 0 ? `Related tables: ${related.join(', ')}` : ''}
-
-Decide:
-1. listColumns: Pick 3-6 most important columns to show in the data table (column names only)
-2. headerField: Which column is the page title on the detail view (e.g. "title", "name")
-3. enumFields: Which text columns have known enum values? List each with its options array
-4. detailSections: Group ALL visible columns into 1-3 named sections (e.g. "Details", "Dates")
-
-Valid column names: ${table.columns.map((c) => c.name).join(', ')}`
-
-  if (sandboxContext) {
-    prompt += `\n\n## Pre-loaded Context (DO NOT read these files -- they are already provided)
-
-### Available Dependencies (from package.json)
-${sandboxContext.packageJson ?? 'Not available'}
-
-### TypeScript Config
-${sandboxContext.tsConfig ?? 'Not available'}
-
-### Available UI Components
-${sandboxContext.componentList?.join(', ') ?? 'Standard shadcn/ui components'}
-`
-  }
-
-  return prompt
-}
-
 export async function runCodeGeneration(input: {
   blueprint: AppBlueprint
   contract: SchemaContract
@@ -290,11 +150,9 @@ export async function runCodeGeneration(input: {
   supabaseAnonKey: string
 }): Promise<CodeGenResult> {
   // Dynamic imports to avoid circular deps and lazy-load assembler dependencies
-  const { frontendAgent } = await import('./registry')
   const {
-    PageConfigSchema,
+    inferPageConfig,
     derivePageFeatureSpec,
-    validatePageConfig,
   } = await import('./feature-schema')
   const { assembleListPage, assembleDetailPage } = await import('./assembler')
   const { getSandbox, uploadFiles } = await import('../sandbox')
@@ -385,49 +243,16 @@ export async function runCodeGeneration(input: {
       let skipped = false
 
       // ================================================================
-      // Simplified structured output + deterministic derivation
+      // Fully deterministic page config + spec derivation
       //
-      // LLM decides: which columns to show, enum values, section grouping.
-      // Everything else (formats, labels, types) derived from contract.
+      // No LLM call — inferPageConfig() uses ColumnSemanticClassifier
+      // to pick list columns, header, enums, and sections.
       // ================================================================
 
-      const featurePrompt = buildFeatureAnalysisPrompt(table, input.contract, SANDBOX_CONTEXT)
-
-      // Feature config via constrained decoding (structured output)
-      // Temperature set via agent defaultOptions (frontend: 0.3)
-      const configResult = await frontendAgent.generate(featurePrompt, {
-        maxSteps: 1,
-        structuredOutput: { schema: PageConfigSchema },
-      }).catch((error) => {
-        console.error(`[codegen] Feature config failed for ${table.name}:`, error)
-        return null
-      })
-
-      if (!configResult) {
-        return { files, tokens, warning, skipped: true, table: table.name }
-      }
-
-      tokens += configResult.totalUsage?.totalTokens ?? 0
-
-      // Validate the LLM output
-      const configParsed = PageConfigSchema.safeParse(configResult.object)
-      if (!configParsed.success) {
-        console.error(
-          `[codegen] PageConfig validation failed for ${table.name}:`,
-          configParsed.error.format(),
-        )
-        skipped = true
-        return { files, tokens, warning, skipped, table: table.name }
-      }
-
-      // Validate field references before derivation
-      const configValidation = validatePageConfig(configParsed.data, input.contract)
-      if (!configValidation.valid) {
-        warning = { table: table.name, errors: configValidation.errors }
-      }
+      const pageConfig = inferPageConfig(table, input.contract)
 
       // Derive full spec deterministically from config + contract
-      const featureSpec = derivePageFeatureSpec(configParsed.data, input.contract)
+      const featureSpec = derivePageFeatureSpec(pageConfig, input.contract)
 
       // Assemble pages deterministically (supabase-js + TanStack Query — no tRPC)
       const listPageContent = assembleListPage(featureSpec, input.contract)

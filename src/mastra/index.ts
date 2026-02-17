@@ -9,14 +9,12 @@ import { Mastra } from '@mastra/core'
 import { PinoLogger } from '@mastra/loggers'
 import {
   analystAgent,
-  frontendAgent,
   repairAgent,
 } from '../../server/lib/agents/registry'
 
 export const mastra = new Mastra({
   agents: {
     analyst: analystAgent,
-    frontendEngineer: frontendAgent,
     repair: repairAgent,
   },
   logger: new PinoLogger({

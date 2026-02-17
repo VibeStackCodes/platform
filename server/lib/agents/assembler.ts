@@ -29,6 +29,61 @@ function detectForeignKeys(entityName: string, contract: SchemaContract): Foreig
     }))
 }
 
+/**
+ * Find the best "display" column for a referenced table.
+ * Used to build FK dropdown labels (e.g., show category.name instead of category.id).
+ */
+function findDisplayColumn(refTable: string, contract: SchemaContract): string {
+  const table = contract.tables.find((t) => t.name === refTable)
+  if (!table) return 'id'
+
+  // Priority order for human-readable display columns
+  const displayCandidates = ['name', 'title', 'label', 'display_name', 'email', 'username']
+  for (const candidate of displayCandidates) {
+    if (table.columns.some((c) => c.name === candidate && c.type === 'text')) {
+      return candidate
+    }
+  }
+
+  // Fall back to first non-auto-managed text column
+  const autoManaged = new Set(['id', 'created_at', 'updated_at', 'user_id'])
+  const firstText = table.columns.find((c) => c.type === 'text' && !autoManaged.has(c.name))
+  if (firstText) return firstText.name
+
+  return 'id'
+}
+
+/**
+ * Generate top-level useQuery hook declarations for FK dropdown data.
+ * These must be at the component top level (React Rules of Hooks).
+ * Deduplicates by refTable (multiple FKs may reference the same table).
+ */
+function generateFKHooks(foreignKeys: ForeignKeyInfo[], contract: SchemaContract): string {
+  if (foreignKeys.length === 0) return ''
+
+  const seen = new Set<string>()
+  const hooks: string[] = []
+
+  for (const fk of foreignKeys) {
+    if (seen.has(fk.refTable)) continue
+    seen.add(fk.refTable)
+
+    const refTableCamel = snakeToCamel(fk.refTable)
+    const displayCol = findDisplayColumn(fk.refTable, contract)
+    const selectCols = displayCol === 'id' ? 'id' : `id, ${displayCol}`
+
+    hooks.push(`  const ${refTableCamel}Options = useQuery({
+    queryKey: ['${fk.refTable}', 'dropdown'],
+    queryFn: async () => {
+      const { data } = await supabase.from('${fk.refTable}').select('${selectCols}').limit(100)
+      return data ?? []
+    },
+  })`)
+  }
+
+  return '\n' + hooks.join('\n\n') + '\n'
+}
+
 // ============================================================================
 // Cell renderers — deterministic JSX for each column format
 // ============================================================================
@@ -62,85 +117,80 @@ function formFieldRenderer(
   formVar: string,
   setFormVar: string,
   foreignKeys: ForeignKeyInfo[],
+  contract: SchemaContract,
 ): string {
   const camelField = snakeToCamel(field.field)
+  const fieldId = `field-${field.field}`
   const valueExpr = `${formVar}.${camelField}`
+  // String() narrows Record<string, string | boolean> to string for value props
+  const stringValueExpr = `String(${valueExpr} ?? '')`
   const changeExpr = `${setFormVar}(prev => ({ ...prev, ${camelField}: e.target.value }))`
   const placeholder = field.placeholder ? ` placeholder="${field.placeholder}"` : ''
 
-  // Check if this field is a FK (E7)
+  // Check if this field is a FK (E7) — references hoisted useQuery hook (not inline IIFE)
   const fk = foreignKeys.find((f) => f.column === field.field)
   if (fk) {
     const refTableCamel = snakeToCamel(fk.refTable)
     const refTablePascal = snakeToPascal(fk.refTable)
+    const displayCol = findDisplayColumn(fk.refTable, contract)
+    const displayExpr = displayCol === 'id' ? 'opt.id' : `opt.${snakeToCamel(displayCol)} ?? opt.id`
     return `            <div>
-              <label className="text-sm font-medium">${field.label}</label>
-              {(() => {
-                const { data: ${refTableCamel}Options } = useQuery({
-                  queryKey: ['${fk.refTable}', 'dropdown'],
-                  queryFn: async () => {
-                    const { data } = await supabase.from('${fk.refTable}').select('id, name, title').limit(100)
-                    return data ?? []
-                  },
-                })
-                return (
-                  <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={${valueExpr} ?? ''} onChange={(e) => ${changeExpr}}>
-                    <option value="">Select ${refTablePascal}...</option>
-                    {${refTableCamel}Options?.map((opt: any) => (
-                      <option key={opt.id} value={opt.id}>{opt.name ?? opt.title ?? opt.id}</option>
-                    ))}
-                  </select>
-                )
-              })()}
+              <label htmlFor="${fieldId}" className="text-sm font-medium">${field.label}</label>
+              <select id="${fieldId}" className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={${stringValueExpr}} onChange={(e) => ${changeExpr}}>
+                <option value="">Select ${refTablePascal}...</option>
+                {${refTableCamel}Options.data?.map((opt) => (
+                  <option key={opt.id} value={opt.id}>{${displayExpr}}</option>
+                ))}
+              </select>
             </div>`
   }
 
   switch (field.inputType) {
     case 'textarea':
       return `            <div>
-              <label className="text-sm font-medium">${field.label}</label>
-              <Textarea value={${valueExpr} ?? ''} onChange={(e) => ${changeExpr}}${placeholder} />
+              <label htmlFor="${fieldId}" className="text-sm font-medium">${field.label}</label>
+              <Textarea id="${fieldId}" value={${stringValueExpr}} onChange={(e) => ${changeExpr}}${placeholder} />
             </div>`
     case 'number':
       return `            <div>
-              <label className="text-sm font-medium">${field.label}</label>
-              <Input type="number" value={${valueExpr} ?? ''} onChange={(e) => ${changeExpr}}${placeholder} />
+              <label htmlFor="${fieldId}" className="text-sm font-medium">${field.label}</label>
+              <Input id="${fieldId}" type="number" value={${stringValueExpr}} onChange={(e) => ${changeExpr}}${placeholder} />
             </div>`
     case 'select':
       const options = (field.options ?? [])
         .map((opt) => `                  <option value="${opt}">${snakeToPascal(opt)}</option>`)
         .join('\n')
       return `            <div>
-              <label className="text-sm font-medium">${field.label}</label>
-              <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={${valueExpr} ?? ''} onChange={(e) => ${changeExpr}}>
+              <label htmlFor="${fieldId}" className="text-sm font-medium">${field.label}</label>
+              <select id="${fieldId}" className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={${stringValueExpr}} onChange={(e) => ${changeExpr}}>
                 <option value="">Select...</option>
 ${options}
               </select>
             </div>`
     case 'date':
       return `            <div>
-              <label className="text-sm font-medium">${field.label}</label>
-              <Input type="date" value={${valueExpr} ?? ''} onChange={(e) => ${changeExpr}} />
+              <label htmlFor="${fieldId}" className="text-sm font-medium">${field.label}</label>
+              <Input id="${fieldId}" type="date" value={${stringValueExpr}} onChange={(e) => ${changeExpr}} />
             </div>`
     case 'email':
       return `            <div>
-              <label className="text-sm font-medium">${field.label}</label>
-              <Input type="email" value={${valueExpr} ?? ''} onChange={(e) => ${changeExpr}}${placeholder} />
+              <label htmlFor="${fieldId}" className="text-sm font-medium">${field.label}</label>
+              <Input id="${fieldId}" type="email" value={${stringValueExpr}} onChange={(e) => ${changeExpr}}${placeholder} />
             </div>`
     case 'url':
       return `            <div>
-              <label className="text-sm font-medium">${field.label}</label>
-              <Input type="url" value={${valueExpr} ?? ''} onChange={(e) => ${changeExpr}}${placeholder} />
+              <label htmlFor="${fieldId}" className="text-sm font-medium">${field.label}</label>
+              <Input id="${fieldId}" type="url" value={${stringValueExpr}} onChange={(e) => ${changeExpr}}${placeholder} />
             </div>`
     case 'checkbox':
       return `            <div className="flex items-center gap-2">
-              <input type="checkbox" checked={!!${valueExpr}} onChange={(e) => ${setFormVar}(prev => ({ ...prev, ${camelField}: e.target.checked }))} />
-              <label className="text-sm font-medium">${field.label}</label>
+              <input id="${fieldId}" type="checkbox" checked={!!${valueExpr}} onChange={(e) => ${setFormVar}(prev => ({ ...prev, ${camelField}: e.target.checked }))} />
+              <label htmlFor="${fieldId}" className="text-sm font-medium">${field.label}</label>
             </div>`
     default: // text
       return `            <div>
-              <label className="text-sm font-medium">${field.label}</label>
-              <Input type="text" value={${valueExpr} ?? ''} onChange={(e) => ${changeExpr}}${placeholder} />
+              <label htmlFor="${fieldId}" className="text-sm font-medium">${field.label}</label>
+              <Input id="${fieldId}" type="text" value={${stringValueExpr}} onChange={(e) => ${changeExpr}}${placeholder} />
             </div>`
   }
 }
@@ -159,7 +209,21 @@ export function assembleListPage(spec: PageFeatureSpec, contract: SchemaContract
 
   const needsBadge = spec.listPage.columns.some((c) => c.format === 'badge' || c.format === 'boolean')
   const needsTextarea = spec.listPage.createFormFields.some((f) => f.inputType === 'textarea')
-  const foreignKeys = detectForeignKeys(entity, contract)
+  const allForeignKeys = detectForeignKeys(entity, contract)
+
+  // Only include FK hooks for columns that actually appear in createFormFields
+  const createFieldNames = new Set(spec.listPage.createFormFields.map((f) => f.field))
+  const foreignKeys = allForeignKeys.filter((fk) => createFieldNames.has(fk.column))
+
+  const hasFilters = (spec.listPage.filters?.length ?? 0) > 0
+
+  // Determine if Input is actually used (filters or non-FK/non-textarea/non-checkbox/non-select form fields)
+  const needsInput =
+    hasFilters ||
+    spec.listPage.createFormFields.some((f) => {
+      const isFk = foreignKeys.some((fk) => fk.column === f.field)
+      return !isFk && f.inputType !== 'textarea' && f.inputType !== 'checkbox' && f.inputType !== 'select'
+    })
 
   // Build imports
   const imports = [
@@ -169,19 +233,27 @@ export function assembleListPage(spec: PageFeatureSpec, contract: SchemaContract
     "import { supabase } from '@/lib/supabase'",
     "import { Button } from '@/components/ui/button'",
     "import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'",
-    "import { Input } from '@/components/ui/input'",
   ]
+  if (needsInput) imports.push("import { Input } from '@/components/ui/input'")
   if (needsBadge) imports.push("import { Badge } from '@/components/ui/badge'")
   if (needsTextarea) imports.push("import { Textarea } from '@/components/ui/textarea'")
 
-  // Build table headers (E5: sortable)
+  // Build table headers (E5: sortable, a11y: onKeyDown for keyboard nav)
   const headers = spec.listPage.columns
     .map(
       (c) =>
-        `              <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground cursor-pointer hover:text-foreground"
+        `              <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground cursor-pointer hover:text-foreground select-none"
+                  tabIndex={0}
                   onClick={() => {
                     if (sortBy === '${c.field}') setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')
                     else { setSortBy('${c.field}'); setSortOrder('asc') }
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      if (sortBy === '${c.field}') setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')
+                      else { setSortBy('${c.field}'); setSortOrder('asc') }
+                    }
                   }}>
                 ${c.label} {sortBy === '${c.field}' ? (sortOrder === 'asc' ? '↑' : '↓') : ''}
               </th>`,
@@ -193,19 +265,19 @@ export function assembleListPage(spec: PageFeatureSpec, contract: SchemaContract
     .map((c) => `              <td className="px-4 py-3 text-sm">${cellRenderer(c.field, c.format, 'item')}</td>`)
     .join('\n')
 
-  // Build create form fields (E7: FK-aware)
+  // Build create form fields (E7: FK-aware, hooks hoisted to top level)
   const formFields = spec.listPage.createFormFields
-    .map((f) => formFieldRenderer(f, 'createForm', 'setCreateForm', foreignKeys))
+    .map((f) => formFieldRenderer(f, 'createForm', 'setCreateForm', foreignKeys, contract))
     .join('\n')
 
-  // Build initial form state
+  // Build initial form state (booleans get false, everything else gets '')
   const formInitFields = spec.listPage.createFormFields
-    .map((f) => `${snakeToCamel(f.field)}: ''`)
+    .map((f) => `${snakeToCamel(f.field)}: ${f.inputType === 'checkbox' ? 'false' : "''"}`)
     .join(', ')
   const formInitial = `{ ${formInitFields} }`
 
-  // Build mutation payload
-  const mutationPayload = spec.listPage.createFormFields.map((f) => snakeToCamel(f.field)).join(', ')
+  // FK dropdown hooks — must be at component top level (Rules of Hooks)
+  const fkHooks = generateFKHooks(foreignKeys, contract)
 
   // Build filter bar (E4)
   let filterBar = ''
@@ -213,36 +285,37 @@ export function assembleListPage(spec: PageFeatureSpec, contract: SchemaContract
     const filterFields = spec.listPage.filters
       .map((filter) => {
         const camelField = snakeToCamel(filter.field)
+        const filterId = `filter-${filter.field}`
         switch (filter.type) {
           case 'search':
             return `          <div>
-            <label className="text-sm font-medium">${filter.label}</label>
-            <Input placeholder="Search..." value={filters.${camelField} ?? ''} onChange={(e) => setFilters(prev => ({ ...prev, ${camelField}: e.target.value }))} />
+            <label htmlFor="${filterId}" className="text-sm font-medium">${filter.label}</label>
+            <Input id="${filterId}" placeholder="Search..." value={String(filters.${camelField} ?? '')} onChange={(e) => setFilters(prev => ({ ...prev, ${camelField}: e.target.value }))} />
           </div>`
           case 'select':
             const opts = (filter.options ?? [])
               .map((opt) => `              <option value="${opt}">${snakeToPascal(opt)}</option>`)
               .join('\n')
             return `          <div>
-            <label className="text-sm font-medium">${filter.label}</label>
-            <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={filters.${camelField} ?? ''} onChange={(e) => setFilters(prev => ({ ...prev, ${camelField}: e.target.value }))}>
+            <label htmlFor="${filterId}" className="text-sm font-medium">${filter.label}</label>
+            <select id="${filterId}" className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={String(filters.${camelField} ?? '')} onChange={(e) => setFilters(prev => ({ ...prev, ${camelField}: e.target.value }))}>
               <option value="">All</option>
 ${opts}
             </select>
           </div>`
           case 'boolean':
             return `          <div className="flex items-center gap-2">
-            <input type="checkbox" checked={!!filters.${camelField}} onChange={(e) => setFilters(prev => ({ ...prev, ${camelField}: e.target.checked }))} />
-            <label className="text-sm font-medium">${filter.label}</label>
+            <input id="${filterId}" type="checkbox" checked={!!filters.${camelField}} onChange={(e) => setFilters(prev => ({ ...prev, ${camelField}: e.target.checked }))} />
+            <label htmlFor="${filterId}" className="text-sm font-medium">${filter.label}</label>
           </div>`
           case 'dateRange':
             return `          <div>
-            <label className="text-sm font-medium">${filter.label} From</label>
-            <Input type="date" value={filters.${camelField}From ?? ''} onChange={(e) => setFilters(prev => ({ ...prev, ${camelField}From: e.target.value }))} />
+            <label htmlFor="${filterId}-from" className="text-sm font-medium">${filter.label} From</label>
+            <Input id="${filterId}-from" type="date" value={String(filters.${camelField}From ?? '')} onChange={(e) => setFilters(prev => ({ ...prev, ${camelField}From: e.target.value }))} />
           </div>
           <div>
-            <label className="text-sm font-medium">${filter.label} To</label>
-            <Input type="date" value={filters.${camelField}To ?? ''} onChange={(e) => setFilters(prev => ({ ...prev, ${camelField}To: e.target.value }))} />
+            <label htmlFor="${filterId}-to" className="text-sm font-medium">${filter.label} To</label>
+            <Input id="${filterId}-to" type="date" value={String(filters.${camelField}To ?? '')} onChange={(e) => setFilters(prev => ({ ...prev, ${camelField}To: e.target.value }))} />
           </div>`
           default:
             return ''
@@ -270,8 +343,7 @@ export const Route = createFileRoute('/_authenticated/${pluralKebab}')({
 
 function ${pascal}ListPage() {
   const [sortBy, setSortBy] = useState('${spec.listPage.sortDefault}')
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('${spec.listPage.sortDirection}')
-  const [filters, setFilters] = useState<Record<string, string | boolean>>({})
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('${spec.listPage.sortDirection}')${hasFilters ? `\n  const [filters, setFilters] = useState<Record<string, string | boolean>>({})` : ''}
   const [page, setPage] = useState(0)
   const pageSize = 20
   const queryClient = useQueryClient()
@@ -306,7 +378,7 @@ function ${pascal}ListPage() {
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['${entity}'] }),
   })
-
+${fkHooks}
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null)
   const [createForm, setCreateForm] = useState<Record<string, string | boolean>>(${formInitial})
@@ -338,7 +410,7 @@ ${filterBar}
               className="space-y-4"
               onSubmit={(e) => {
                 e.preventDefault()
-                create${pascal}.mutate({ ${mutationPayload} } as any)
+                create${pascal}.mutate(createForm)
                 setCreateForm(${formInitial})
                 setIsCreateOpen(false)
               }}
@@ -391,7 +463,7 @@ ${headers}
               </tr>
             </thead>
             <tbody className="divide-y">
-              {data.map((item: any) => (
+              {data.map((item) => (
                 <tr key={item.id} className="hover:bg-muted/50">
 ${cells}
                   <td className="px-4 py-3 text-right text-sm">
@@ -438,7 +510,17 @@ export function assembleDetailPage(spec: PageFeatureSpec, contract: SchemaContra
     spec.detailPage.sections.some((s) => s.fields.some((f) => f.format === 'badge' || f.format === 'boolean')) ||
     spec.detailPage.sections.some((s) => s.fields.some((f) => f.format === 'json'))
   const needsTextarea = spec.detailPage.editFormFields.some((f) => f.inputType === 'textarea')
-  const foreignKeys = detectForeignKeys(entity, contract)
+  const allForeignKeys = detectForeignKeys(entity, contract)
+
+  // Only include FK hooks for columns that actually appear in editFormFields
+  const editFieldNames = new Set(spec.detailPage.editFormFields.map((f) => f.field))
+  const foreignKeys = allForeignKeys.filter((fk) => editFieldNames.has(fk.column))
+
+  // Only import Input if edit form uses text/number/email/url/date inputs (not just FK selects or textareas)
+  const needsInput = spec.detailPage.editFormFields.some((f) => {
+    const isFk = foreignKeys.some((fk) => fk.column === f.field)
+    return !isFk && f.inputType !== 'textarea' && f.inputType !== 'checkbox' && f.inputType !== 'select'
+  })
 
   // Build imports
   const imports = [
@@ -448,8 +530,8 @@ export function assembleDetailPage(spec: PageFeatureSpec, contract: SchemaContra
     "import { supabase } from '@/lib/supabase'",
     "import { Button } from '@/components/ui/button'",
     "import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'",
-    "import { Input } from '@/components/ui/input'",
   ]
+  if (needsInput) imports.push("import { Input } from '@/components/ui/input'")
   if (needsBadge) imports.push("import { Badge } from '@/components/ui/badge'")
   if (needsTextarea) imports.push("import { Textarea } from '@/components/ui/textarea'")
 
@@ -476,9 +558,9 @@ ${fields}
     })
     .join('\n')
 
-  // Build edit form fields (E7: FK-aware)
+  // Build edit form fields (E7: FK-aware, hooks hoisted to top level)
   const editFormFields = spec.detailPage.editFormFields
-    .map((f) => formFieldRenderer(f, 'editForm', 'setEditForm', foreignKeys))
+    .map((f) => formFieldRenderer(f, 'editForm', 'setEditForm', foreignKeys, contract))
     .join('\n')
 
   // Build initial edit form state
@@ -486,8 +568,8 @@ ${fields}
     .map((f) => `${snakeToCamel(f.field)}: data.${snakeToCamel(f.field)} ?? ''`)
     .join(', ')
 
-  // Build mutation payload
-  const mutationPayload = spec.detailPage.editFormFields.map((f) => snakeToCamel(f.field)).join(', ')
+  // FK dropdown hooks — must be at component top level (Rules of Hooks)
+  const fkHooks = generateFKHooks(foreignKeys, contract)
 
   return `// Auto-generated by VibeStack — deterministic assembly from PageFeatureSpec
 ${imports.join('\n')}
@@ -514,6 +596,7 @@ function ${pascal}DetailPage() {
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['${entity}'] }),
   })
+${fkHooks}
   const [isEditing, setIsEditing] = useState(false)
   const [editForm, setEditForm] = useState<Record<string, string | boolean>>({})
 
@@ -560,7 +643,7 @@ function ${pascal}DetailPage() {
               className="space-y-4"
               onSubmit={(e) => {
                 e.preventDefault()
-                update${pascal}.mutate({ ${mutationPayload} } as any)
+                update${pascal}.mutate(editForm)
                 setIsEditing(false)
               }}
             >
