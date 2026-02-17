@@ -112,11 +112,12 @@ Important:
     `Return the COMPLETE modified file content. Do NOT use markdown code fences. Just raw TypeScript/TSX code.`,
   )
 
-  // Call the LLM using the AI SDK's generateText
+  // Call the LLM using the AI SDK's generateText (gpt-5-mini for focused edits)
+  const { PIPELINE_MODELS } = await import('./provider')
   const model = createHeliconeProvider({
     userId: 'edit-agent',
     agentName: 'edit',
-  })('gpt-4o')
+  })(PIPELINE_MODELS.edit)
 
   const result = await generateText({
     model,

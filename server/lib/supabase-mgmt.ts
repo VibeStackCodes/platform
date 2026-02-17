@@ -389,7 +389,7 @@ export async function setupSchema(
   for (const table of schema.tables) {
     // Validate table name to prevent SQL injection
     if (!SAFE_IDENTIFIER.test(table.name)) {
-      results.push({ success: false, error: `Invalid table name: ${table.name}` })
+      results.push({ success: false, error: `Invalid table name: ${table.name}`, executedAt: new Date().toISOString() })
       continue
     }
 

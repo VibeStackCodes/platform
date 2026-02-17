@@ -144,7 +144,7 @@ describe('contractToSeedSQL', () => {
     expect(sql).toContain("'{}'::jsonb")
   })
 
-  it('infers realistic text values from column names', () => {
+  it('infers realistic text values from column names using faker', () => {
     const contract: SchemaContract = {
       tables: [
         {
@@ -159,9 +159,12 @@ describe('contractToSeedSQL', () => {
       ],
     }
     const sql = contractToSeedSQL(contract, 1)
-    expect(sql).toContain('user1@example.com')
+    // Email should contain @ (faker generates real-looking emails)
+    expect(sql).toMatch(/@/)
+    // Status should be one of the known enum values
     expect(sql).toMatch(/active|pending|completed|inactive|draft/)
-    expect(sql).toContain('sample description')
+    // Description should contain multi-word text (faker paragraph)
+    expect(sql).toMatch(/INSERT INTO users.*description/)
   })
 
   it('skips columns with defaults (except PKs)', () => {

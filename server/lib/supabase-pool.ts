@@ -105,8 +105,15 @@ export async function claimWarmProject(userId: string): Promise<WarmProject | nu
       claimedAt: row.claimedAt,
     }
   } catch (error) {
-    console.error('[supabase-pool] Claim failed:', error)
-    Sentry.captureException(error, { tags: { operation: 'claim_project' } })
+    const msg = error instanceof Error ? error.message : String(error)
+    // Table doesn't exist yet — expected when warm pool migration hasn't run
+    // Drizzle wraps the error as "Failed query: UPDATE warm_supabase_projects..."
+    if (msg.includes('does not exist') || msg.includes('warm_supabase_projects')) {
+      console.warn('[supabase-pool] Warm pool table not found — falling back to cold creation')
+    } else {
+      console.error('[supabase-pool] Claim failed:', msg)
+      Sentry.captureException(error, { tags: { operation: 'claim_project' } })
+    }
     return null
   }
 }

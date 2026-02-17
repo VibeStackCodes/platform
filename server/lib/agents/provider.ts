@@ -16,6 +16,7 @@
  * @see https://docs.helicone.ai/helicone-headers/header-directory
  */
 import { createOpenAI } from '@ai-sdk/openai'
+import type { MastraModelConfig } from '@mastra/core/llm'
 
 const HELICONE_GATEWAY = 'https://oai.helicone.ai/v1'
 
@@ -117,10 +118,56 @@ export function createHeliconeProvider(ctx: HeliconeContext | string) {
 }
 
 // ---------------------------------------------------------------------------
-// Model allowlist
+// Per-agent model allocation
 // ---------------------------------------------------------------------------
 
-/** Allowed models — only gpt-5.2 is enabled for now */
+/**
+ * Role-based model routing — each pipeline stage uses the optimal model.
+ *
+ * - orchestrator (analyst, PM): gpt-5.2 — best reasoning for requirement extraction
+ * - codegen (frontend, backend): gpt-5.2-codex — agentic coding, context compaction
+ * - review: gpt-5.1 — configurable reasoning, sufficient for code review
+ * - repair: gpt-5-mini — well-defined error fixing, cost-efficient
+ * - edit: gpt-5-mini — small focused single-file edits
+ * - format: gpt-5-nano — two-stage structured output conversion (trivial task)
+ */
+export const PIPELINE_MODELS = {
+  orchestrator: 'gpt-5.2',
+  codegen: 'gpt-5.2-codex',
+  review: 'gpt-5.1',
+  repair: 'gpt-5-mini',
+  edit: 'gpt-5-mini',
+  format: 'gpt-5-nano',
+} as const
+
+export type PipelineRole = keyof typeof PIPELINE_MODELS
+
+/**
+ * Creates a Mastra-compatible model resolver for a specific pipeline role.
+ * Reads Helicone context from RequestContext for per-user observability.
+ * Falls back to a 'studio' context for Mastra Studio / tests.
+ */
+export function createAgentModelResolver(role: PipelineRole) {
+  const modelId = PIPELINE_MODELS[role]
+  return function resolveModel({
+    requestContext,
+  }: {
+    requestContext: { has: (key: string) => boolean; get: (key: string) => unknown }
+  }): MastraModelConfig {
+    if (requestContext?.has('heliconeContext')) {
+      const ctx = requestContext.get('heliconeContext') as HeliconeContext
+      return createHeliconeProvider({ ...ctx, agentName: role })(modelId)
+    }
+    // Fallback: Mastra Studio / direct tests — still route through Helicone
+    return createHeliconeProvider('studio')(modelId)
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Model allowlist (client-facing — validates the "tier" the user selects)
+// ---------------------------------------------------------------------------
+
+/** Allowed models the client can request */
 export const ALLOWED_MODELS = ['gpt-5.2'] as const
 export type AllowedModel = (typeof ALLOWED_MODELS)[number]
 

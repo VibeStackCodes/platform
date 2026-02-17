@@ -1,4 +1,5 @@
 import { Daytona, Image } from '@daytonaio/sdk'
+import { readdirSync } from 'node:fs'
 
 const SNAPSHOT_NAME = 'vibestack-workspace'
 
@@ -39,15 +40,28 @@ async function main() {
     .addLocalFile('snapshot/warmup-scaffold/vite.config.ts', '/workspace/vite.config.ts')
     .addLocalFile('snapshot/warmup-scaffold/tsconfig.json', '/workspace/tsconfig.json')
     .addLocalFile('snapshot/warmup-scaffold/tsconfig.app.json', '/workspace/tsconfig.app.json')
+    .addLocalFile('snapshot/warmup-scaffold/tsconfig.server.json', '/workspace/tsconfig.server.json')
     .addLocalFile('snapshot/warmup-scaffold/index.html', '/workspace/index.html')
     .addLocalFile('snapshot/warmup-scaffold/env.d.ts', '/workspace/env.d.ts')
     .addLocalFile('snapshot/warmup-scaffold/src/App.tsx', '/workspace/src/App.tsx')
     .addLocalFile('snapshot/warmup-scaffold/src/main.tsx', '/workspace/src/main.tsx')
     .addLocalFile('snapshot/warmup-scaffold/src/index.css', '/workspace/src/index.css')
     .addLocalFile('snapshot/warmup-scaffold/src/lib/utils.ts', '/workspace/src/lib/utils.ts')
-    // Run dev server briefly to pre-bundle Vite deps, then verify cache was created
+
+  // Bake shadcn/ui components into snapshot — LLM-generated pages import from @/components/ui/*
+  // Having them pre-installed means: zero upload cost, zero import errors, warm Vite cache
+  const uiKitFiles = readdirSync('snapshot/ui-kit')
+  for (const file of uiKitFiles) {
+    const dest = file === 'utils.ts'
+      ? '/workspace/src/lib/utils.ts'
+      : `/workspace/src/components/ui/${file}`
+    image.addLocalFile(`snapshot/ui-kit/${file}`, dest)
+  }
+
+  image
+    // Run dev server briefly to pre-bundle Vite deps (incl. radix-ui, lucide-react, cva)
     .runCommands(
-      'bun run dev & DEV_PID=$! && sleep 8 && kill $DEV_PID 2>/dev/null; test -d node_modules/.vite || (echo "FATAL: Vite dep pre-bundle failed" && exit 1)',
+      'bun run dev & DEV_PID=$! && sleep 12 && kill $DEV_PID 2>/dev/null; test -d node_modules/.vite || (echo "FATAL: Vite dep pre-bundle failed" && exit 1)',
     )
     // Warm TypeScript cache (tsbuildinfo) — must compile cleanly
     .runCommands('tsc --noEmit')

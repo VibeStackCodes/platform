@@ -14,6 +14,12 @@ vi.mock('@server/lib/supabase-pool', () => ({
 
 vi.mock('@server/lib/sandbox', () => ({
   createSandbox: vi.fn(),
+  getSandbox: vi.fn().mockResolvedValue({
+    process: { executeCommand: vi.fn().mockResolvedValue({ exitCode: 0, result: '' }) },
+    fs: { uploadFile: vi.fn().mockResolvedValue(undefined) },
+  }),
+  uploadFile: vi.fn().mockResolvedValue(undefined),
+  uploadFiles: vi.fn().mockResolvedValue(undefined),
 }))
 
 vi.mock('@server/lib/github', () => ({
@@ -23,6 +29,7 @@ vi.mock('@server/lib/github', () => ({
 
 vi.mock('@server/lib/supabase-mgmt', () => ({
   createSupabaseProject: vi.fn(),
+  runMigration: vi.fn().mockResolvedValue({ success: true, error: null, executedAt: new Date().toISOString() }),
 }))
 
 // Mock agent registry
@@ -35,14 +42,34 @@ vi.mock('@server/lib/agents/registry', () => ({
   },
 }))
 
+// Mock provider module (for per-agent model resolution)
+vi.mock('@server/lib/agents/provider', () => ({
+  createHeliconeProvider: vi.fn(() => vi.fn(() => 'mock-model')),
+  createAgentModelResolver: vi.fn(() => () => 'mock-model'),
+  PIPELINE_MODELS: {
+    orchestrator: 'gpt-5.2',
+    codegen: 'gpt-5.2-codex',
+    review: 'gpt-5.1',
+    repair: 'gpt-5-mini',
+    edit: 'gpt-5-mini',
+    format: 'gpt-5-nano',
+  },
+}))
+
 // Mock feature schema
 vi.mock('@server/lib/agents/feature-schema', () => ({
-  PageFeatureSchema: {
+  PageConfigSchema: {
     safeParse: vi.fn(),
   },
   CustomProcedureSchema: {
     safeParse: vi.fn(),
   },
+  derivePageFeatureSpec: vi.fn((config: any) => ({
+    entityName: config.entityName,
+    listPage: { columns: [], searchFields: [], sortDefault: 'id', sortDirection: 'desc', emptyStateMessage: '', createFormFields: [], filters: [] },
+    detailPage: { headerField: 'id', sections: [], editFormFields: [] },
+  })),
+  validatePageConfig: vi.fn(),
   validateFeatureSpec: vi.fn(),
 }))
 
@@ -152,8 +179,8 @@ describe('runProvisioning', () => {
     // Should try warm pool first
     expect(claimWarmProject).toHaveBeenCalledWith('user-123')
 
-    // Should fall back to cold creation
-    expect(createSupabaseProject).toHaveBeenCalledWith('test-app')
+    // Should fall back to cold creation (name has timestamp suffix)
+    expect(createSupabaseProject).toHaveBeenCalledWith(expect.stringContaining('test-app'))
 
     // Result should use cold-created project
     expect(result.supabaseProjectId).toBe('sbp-cold-123')
@@ -194,8 +221,8 @@ describe('runProvisioning', () => {
     // Should NOT try warm pool
     expect(claimWarmProject).not.toHaveBeenCalled()
 
-    // Should go directly to cold creation
-    expect(createSupabaseProject).toHaveBeenCalledWith('test-app')
+    // Should go directly to cold creation (name has timestamp suffix)
+    expect(createSupabaseProject).toHaveBeenCalledWith(expect.stringContaining('test-app'))
   })
 
   it('throws when Supabase provisioning fails', async () => {
@@ -298,9 +325,9 @@ describe('runCodeGeneration', () => {
     vi.clearAllMocks()
   })
 
-  it('processes multiple entities in parallel', async () => {
+  it('processes multiple entities in parallel with constrained decoding', async () => {
     const { frontendAgent, backendAgent } = await import('@server/lib/agents/registry')
-    const { PageFeatureSchema, CustomProcedureSchema, validateFeatureSpec } = await import(
+    const { PageConfigSchema, CustomProcedureSchema, validatePageConfig } = await import(
       '@server/lib/agents/feature-schema'
     )
 
@@ -331,15 +358,18 @@ describe('runCodeGeneration', () => {
       envVars: [],
     }
 
-    // Mock successful agent responses
-    const mockFeatureSpec = {
+    const mockConfig = {
       entityName: 'task',
-      fields: [],
-      operations: [],
+      listColumns: ['title'],
+      headerField: 'title',
+      enumFields: [],
+      detailSections: [{ title: 'Details', fields: ['title'] }],
+
     }
 
+    // Agents return simplified PageConfig via constrained decoding
     vi.mocked(frontendAgent.generate).mockResolvedValue({
-      object: mockFeatureSpec,
+      object: mockConfig,
       totalUsage: { totalTokens: 100 },
     } as any)
 
@@ -348,9 +378,9 @@ describe('runCodeGeneration', () => {
       totalUsage: { totalTokens: 50 },
     } as any)
 
-    vi.mocked(PageFeatureSchema.safeParse).mockReturnValue({
+    vi.mocked(PageConfigSchema.safeParse).mockReturnValue({
       success: true,
-      data: mockFeatureSpec,
+      data: mockConfig,
     } as any)
 
     vi.mocked(CustomProcedureSchema.safeParse).mockReturnValue({
@@ -358,7 +388,7 @@ describe('runCodeGeneration', () => {
       data: { procedures: [] },
     } as any)
 
-    vi.mocked(validateFeatureSpec).mockReturnValue({
+    vi.mocked(validatePageConfig).mockReturnValue({
       valid: true,
       errors: [],
     } as any)
@@ -367,22 +397,31 @@ describe('runCodeGeneration', () => {
       blueprint,
       contract,
       sandboxId: 'sandbox-123',
+      supabaseProjectId: 'sbp-123',
+      supabaseUrl: 'https://test.supabase.co',
+      supabaseAnonKey: 'test-anon-key',
     })
 
-    // Both entities should be processed
+    // Both agents called once per entity with structuredOutput
     expect(frontendAgent.generate).toHaveBeenCalledTimes(2)
     expect(backendAgent.generate).toHaveBeenCalledTimes(2)
+
+    // Verify structuredOutput was passed with PageConfigSchema
+    expect(frontendAgent.generate).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ structuredOutput: expect.any(Object) }),
+    )
 
     // Should return assembled files for both entities
     expect(result.assembledFiles.length).toBeGreaterThanOrEqual(4) // 2 pages per entity
 
-    // Token count should be aggregate
+    // Token count should include agent usage
     expect(result.tokensUsed).toBeGreaterThan(0)
   })
 
   it('handles partial failures gracefully', async () => {
     const { frontendAgent, backendAgent } = await import('@server/lib/agents/registry')
-    const { PageFeatureSchema, validateFeatureSpec } = await import(
+    const { PageConfigSchema, CustomProcedureSchema, validatePageConfig } = await import(
       '@server/lib/agents/feature-schema'
     )
 
@@ -413,17 +452,20 @@ describe('runCodeGeneration', () => {
       envVars: [],
     }
 
-    const mockFeatureSpec = {
+    const mockConfig = {
       entityName: 'user',
-      fields: [],
-      operations: [],
+      listColumns: ['name'],
+      headerField: 'name',
+      enumFields: [],
+      detailSections: [{ title: 'Details', fields: ['name'] }],
+
     }
 
-    // First entity fails, second succeeds
+    // First entity's config fails, second succeeds
     vi.mocked(frontendAgent.generate)
       .mockRejectedValueOnce(new Error('LLM timeout'))
       .mockResolvedValueOnce({
-        object: mockFeatureSpec,
+        object: mockConfig,
         totalUsage: { totalTokens: 100 },
       } as any)
 
@@ -432,12 +474,17 @@ describe('runCodeGeneration', () => {
       totalUsage: { totalTokens: 50 },
     } as any)
 
-    vi.mocked(PageFeatureSchema.safeParse).mockReturnValue({
+    vi.mocked(PageConfigSchema.safeParse).mockReturnValue({
       success: true,
-      data: mockFeatureSpec,
+      data: mockConfig,
     } as any)
 
-    vi.mocked(validateFeatureSpec).mockReturnValue({
+    vi.mocked(CustomProcedureSchema.safeParse).mockReturnValue({
+      success: true,
+      data: { procedures: [] },
+    } as any)
+
+    vi.mocked(validatePageConfig).mockReturnValue({
       valid: true,
       errors: [],
     } as any)
@@ -446,6 +493,9 @@ describe('runCodeGeneration', () => {
       blueprint,
       contract,
       sandboxId: 'sandbox-123',
+      supabaseProjectId: 'sbp-123',
+      supabaseUrl: 'https://test.supabase.co',
+      supabaseAnonKey: 'test-anon-key',
     })
 
     // Should have skipped one entity
@@ -456,7 +506,10 @@ describe('runCodeGeneration', () => {
   })
 
   it('skips system tables starting with underscore', async () => {
-    const { frontendAgent } = await import('@server/lib/agents/registry')
+    const { frontendAgent, backendAgent } = await import('@server/lib/agents/registry')
+    const { PageConfigSchema, CustomProcedureSchema, validatePageConfig } = await import(
+      '@server/lib/agents/feature-schema'
+    )
 
     const contract: SchemaContract = {
       tables: [
@@ -479,15 +532,48 @@ describe('runCodeGeneration', () => {
       envVars: [],
     }
 
+    const mockConfig = {
+      entityName: 'task',
+      listColumns: ['id'],
+      headerField: 'id',
+      enumFields: [],
+      detailSections: [{ title: 'Details', fields: ['id'] }],
+
+    }
+
+    // Agents return simplified PageConfig via constrained decoding
     vi.mocked(frontendAgent.generate).mockResolvedValue({
-      object: { entityName: 'task', fields: [], operations: [] },
+      object: mockConfig,
       totalUsage: { totalTokens: 100 },
+    } as any)
+
+    vi.mocked(backendAgent.generate).mockResolvedValue({
+      object: { procedures: [] },
+      totalUsage: { totalTokens: 50 },
+    } as any)
+
+    vi.mocked(PageConfigSchema.safeParse).mockReturnValue({
+      success: true,
+      data: mockConfig,
+    } as any)
+
+    vi.mocked(CustomProcedureSchema.safeParse).mockReturnValue({
+      success: true,
+      data: { procedures: [] },
+    } as any)
+
+    vi.mocked(validatePageConfig).mockReturnValue({
+      valid: true,
+      errors: [],
     } as any)
 
     await runCodeGeneration({
       blueprint,
       contract,
       sandboxId: 'sandbox-123',
+      supabaseProjectId: 'sbp-123',
+      supabaseUrl: 'https://test.supabase.co',
+      supabaseAnonKey: 'test-anon-key',
     })
 
     // Should only process 'task', not '_migrations'

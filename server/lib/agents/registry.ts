@@ -1,9 +1,8 @@
 import path from 'node:path'
 import { Agent } from '@mastra/core/agent'
 import { RequestContext } from '@mastra/core/di'
-import type { MastraModelConfig } from '@mastra/core/llm'
 import { Workspace, LocalFilesystem, WORKSPACE_TOOLS } from '@mastra/core/workspace'
-import { createHeliconeProvider } from './provider'
+import { createAgentModelResolver } from './provider'
 import {
   askClarifyingQuestionsTool,
   submitRequirementsTool,
@@ -19,18 +18,12 @@ import {
 // Re-export RequestContext for route usage
 export { RequestContext }
 
-/**
- * Dynamic model resolver — reads the Helicone-proxied LLM from RequestContext.
- * Returns LanguageModelV1 (from Helicone provider) or string (Mastra model router format).
- * ALL paths route through Helicone when HELICONE_API_KEY is set.
- */
-function dynamicModel({ requestContext }: { requestContext: RequestContext }): MastraModelConfig {
-  if (requestContext?.has('llm')) {
-    return requestContext.get('llm') as MastraModelConfig
-  }
-  // Fallback for Mastra Studio / Cloud / tests — still route through Helicone
-  return createHeliconeProvider('studio')('gpt-5.2')
-}
+// Per-agent model resolvers — each agent uses the optimal model for its role.
+// All paths route through Helicone when HELICONE_API_KEY is set.
+const orchestratorModel = createAgentModelResolver('orchestrator') // gpt-5.2
+const codegenModel = createAgentModelResolver('codegen')           // gpt-5.2-codex
+const repairModel = createAgentModelResolver('repair')             // gpt-5-mini
+const editModel = createAgentModelResolver('edit')                 // gpt-5-mini
 
 // --- Workspace Skills (domain knowledge for code-gen agents) ---
 
@@ -86,7 +79,7 @@ const frontendWorkspace = new Workspace({
 export const analystAgent = new Agent({
   id: 'analyst',
   name: 'Analyst',
-  model: dynamicModel,
+  model: orchestratorModel,
   description: 'Converses with users to extract and clarify app requirements',
   instructions: `You are a requirements analyst for VibeStack, an AI app builder that generates Vite + React + Supabase applications.
 
@@ -120,7 +113,7 @@ When using askClarifyingQuestions:
 export const backendAgent = new Agent({
   id: 'backend-engineer',
   name: 'Backend Engineer',
-  model: dynamicModel,
+  model: codegenModel,
   description: 'Fills SLOT markers in tRPC router files with custom procedures',
   instructions: `You are the backend engineer for VibeStack-generated applications.
 
@@ -155,7 +148,7 @@ Rules:
 export const frontendAgent = new Agent({
   id: 'frontend-engineer',
   name: 'Frontend Engineer',
-  model: dynamicModel,
+  model: codegenModel,
   description: 'Fills SLOT markers in page skeletons with JSX component bodies',
   instructions: `You are the frontend engineer for VibeStack-generated applications.
 
@@ -196,7 +189,7 @@ Rules:
 export const repairAgent = new Agent({
   id: 'repair',
   name: 'Repair Agent',
-  model: dynamicModel,
+  model: repairModel,
   description: 'Fixes validation errors in generated code with targeted, minimal changes',
   instructions: `You are the repair agent for VibeStack-generated applications.
 
@@ -220,7 +213,7 @@ Rules:
 export const editAgent = new Agent({
   id: 'edit',
   name: 'Edit Agent',
-  model: dynamicModel,
+  model: editModel,
   description: 'Makes targeted single-file edits to an existing generated application',
   instructions: `You are the edit agent for VibeStack-generated applications.
 

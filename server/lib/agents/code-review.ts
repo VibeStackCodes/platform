@@ -118,7 +118,7 @@ export function runDeterministicChecks(
 }
 
 // ============================================================================
-// LLM Review (gpt-5.2)
+// LLM Review (gpt-5.1 — sufficient for code review, 28% cheaper than gpt-5.2)
 // ============================================================================
 
 // Zod schema for structured output
@@ -139,19 +139,14 @@ export async function runLLMReview(
 ): Promise<{ issues: LLMReviewIssue[]; tokensUsed: number }> {
   // Dynamic imports to avoid circular deps
   const { Agent } = await import('@mastra/core/agent')
-  const { createHeliconeProvider } = await import('./provider')
+  const { createAgentModelResolver } = await import('./provider')
 
   // Create a lightweight review agent
   const reviewAgent = new Agent({
     id: 'code-reviewer',
     name: 'code-reviewer',
     instructions: 'You are a code review expert. Review generated application code for functional, UX, security, and accessibility issues. Only report real, actionable issues.',
-    model: createHeliconeProvider({
-      userId: 'system',
-      projectId: 'review',
-      sessionId: `review:${Date.now()}`,
-      agentName: 'code-reviewer',
-    })('gpt-5.2'),
+    model: createAgentModelResolver('review'),
   })
 
   // Build review prompt with relevant code files (not ALL files)

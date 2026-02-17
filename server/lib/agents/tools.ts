@@ -799,6 +799,79 @@ export const getGitHubTokenTool = createTool({
 })
 
 // ============================================================================
+// Sandbox-Bound Tool Factories
+// ============================================================================
+
+/**
+ * Create sandbox tools with sandboxId pre-bound in closures.
+ * The LLM never sees or passes the sandboxId — it's deterministic.
+ */
+export function createBoundSandboxTools(sandboxId: string) {
+  return {
+    writeFile: createTool({
+      id: 'write-file',
+      description: 'Write a file to the sandbox workspace',
+      inputSchema: z.object({
+        path: z.string().describe('File path relative to /workspace'),
+        content: z.string().describe('File content to write'),
+      }),
+      outputSchema: z.object({
+        success: z.boolean(),
+        path: z.string(),
+        bytesWritten: z.number(),
+        error: z.string().optional(),
+      }),
+      execute: async (inputData) => {
+        try {
+          if (inputData.content.length > MAX_FILE_SIZE) {
+            return { success: false, path: inputData.path, bytesWritten: 0, error: `File exceeds ${MAX_FILE_SIZE / 1024 / 1024}MB limit` }
+          }
+          const sandbox = await getSandbox(sandboxId)
+          const fullPath = sanitizeSandboxPath(inputData.path)
+          await sandbox.fs.uploadFile(Buffer.from(inputData.content), fullPath)
+          return { success: true, path: inputData.path, bytesWritten: inputData.content.length }
+        } catch (e) {
+          return { success: false, path: inputData.path, bytesWritten: 0, error: e instanceof Error ? e.message : String(e) }
+        }
+      },
+    }),
+    readFile: createTool({
+      id: 'read-file',
+      description: 'Read a file from the sandbox workspace',
+      inputSchema: z.object({
+        path: z.string().describe('File path relative to /workspace'),
+      }),
+      outputSchema: z.object({ content: z.string(), exists: z.boolean(), error: z.string().optional() }),
+      execute: async (inputData) => {
+        try {
+          const sandbox = await getSandbox(sandboxId)
+          const fullPath = sanitizeSandboxPath(inputData.path)
+          const buffer = await sandbox.fs.downloadFile(fullPath)
+          return { content: buffer.toString('utf-8'), exists: true }
+        } catch (e) {
+          return { content: '', exists: false, error: e instanceof Error ? e.message : String(e) }
+        }
+      },
+    }),
+    runCommand: createTool({
+      id: 'run-command',
+      description: 'Execute a command in the sandbox',
+      inputSchema: z.object({
+        command: z.string().describe('Command to execute'),
+        cwd: z.string().optional().describe('Working directory (defaults to /workspace)'),
+      }),
+      outputSchema: z.object({ exitCode: z.number(), stdout: z.string(), stderr: z.string() }),
+      execute: async (inputData) => {
+        const sandbox = await getSandbox(sandboxId)
+        const workDir = inputData.cwd || '/workspace'
+        const result = await sandbox.process.executeCommand(inputData.command, workDir, undefined, 120)
+        return { exitCode: result.exitCode, stdout: result.result, stderr: result.exitCode !== 0 ? result.result : '' }
+      },
+    }),
+  }
+}
+
+// ============================================================================
 // Documentation Search
 // ============================================================================
 

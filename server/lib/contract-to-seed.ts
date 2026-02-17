@@ -1,4 +1,5 @@
 // lib/contract-to-seed.ts
+import { faker } from '@faker-js/faker'
 import type { ColumnDef, SchemaContract, TableDef } from './schema-contract'
 
 /**
@@ -64,7 +65,7 @@ export function contractToSeedSQL(contract: SchemaContract, rowsPerTable: number
           continue
         }
 
-        const value = generateValue(col, row)
+        const value = generateValue(col, row, tableIdx)
         if (value !== null) {
           cols.push(col.name)
           vals.push(value)
@@ -98,13 +99,13 @@ function makeId(tableIdx: number, rowIdx: number): string {
 /**
  * Generate a column value based on type and name heuristics.
  */
-function generateValue(col: ColumnDef, rowIdx: number): string | null {
+function generateValue(col: ColumnDef, rowIdx: number, tableIdx: number): string | null {
   const n = rowIdx + 1
   const name = col.name.toLowerCase()
 
   switch (col.type) {
     case 'text':
-      return `'${escapeSQL(inferTextValue(name, n))}'`
+      return `'${escapeSQL(inferTextValue(name, n, tableIdx))}'`
 
     case 'integer':
     case 'bigint':
@@ -133,34 +134,45 @@ function generateValue(col: ColumnDef, rowIdx: number): string | null {
 }
 
 /**
- * Infer a realistic text value from the column name.
+ * Infer a realistic text value from the column name using FakerJS.
+ * Deterministic: faker.seed() is set from tableIdx + rowIdx.
  */
-function inferTextValue(name: string, n: number): string {
-  if (name.includes('email')) return `user${n}@example.com`
-  if (name.includes('phone')) return `+1555000${n.toString().padStart(4, '0')}`
-  if (name.includes('url') || name.includes('link') || name.includes('website'))
-    return `https://example.com/${n}`
+function inferTextValue(name: string, n: number, tableIdx: number): string {
+  faker.seed(tableIdx * 10000 + n)
+
+  if (name.includes('email')) return faker.internet.email()
+  if (name.includes('phone')) return faker.phone.number()
+  if (name.endsWith('_url') || name === 'url' || name.includes('link') || name.includes('website'))
+    return faker.internet.url()
   if (name.includes('avatar') || name.includes('image') || name.includes('photo'))
-    return `https://api.dicebear.com/7.x/initials/svg?seed=User${n}`
-  if (name === 'name' || name.includes('_name') || name.includes('title'))
-    return `Sample ${name.replace(/_/g, ' ')} ${n}`
+    return faker.image.avatar()
+  if (name === 'name' || name === 'full_name') return faker.person.fullName()
+  if (name === 'first_name') return faker.person.firstName()
+  if (name === 'last_name') return faker.person.lastName()
+  if (name.includes('_name') || name.includes('title')) return faker.lorem.words(3)
   if (
     name.includes('description') ||
     name.includes('content') ||
-    name.includes('body') ||
-    name.includes('note')
+    name.includes('body')
   )
-    return `This is sample ${name.replace(/_/g, ' ')} for row ${n}.`
-  if (name.includes('status')) return ['active', 'pending', 'completed', 'inactive', 'draft'][n % 5]
+    return faker.lorem.paragraph(1)
+  if (name.includes('note') || name.includes('comment')) return faker.lorem.sentence()
+  if (name.includes('status'))
+    return faker.helpers.arrayElement(['active', 'pending', 'completed', 'inactive', 'draft'])
   if (name.includes('type') || name.includes('category') || name.includes('role'))
-    return `type_${n}`
-  if (name.includes('address')) return `${n * 100} Main Street`
-  if (name.includes('city'))
-    return ['New York', 'San Francisco', 'Chicago', 'Austin', 'Seattle'][n % 5]
-  if (name.includes('color')) return ['red', 'blue', 'green', 'purple', 'orange'][n % 5]
+    return faker.helpers.arrayElement(['standard', 'premium', 'basic', 'enterprise', 'custom'])
+  if (name.includes('address') || name.includes('street')) return faker.location.streetAddress()
+  if (name.includes('city')) return faker.location.city()
+  if (name.includes('state') || name.includes('province')) return faker.location.state()
+  if (name.includes('country')) return faker.location.country()
+  if (name.includes('zip') || name.includes('postal')) return faker.location.zipCode()
+  if (name.includes('color')) return faker.color.human()
+  if (name.includes('company') || name.includes('organization')) return faker.company.name()
+  if (name.includes('tag') || name.includes('label')) return faker.word.noun()
+  if (name.includes('slug')) return faker.helpers.slugify(faker.lorem.words(2))
 
   // Generic fallback
-  return `Sample ${n}`
+  return faker.lorem.words(2)
 }
 
 function escapeSQL(value: string): string {

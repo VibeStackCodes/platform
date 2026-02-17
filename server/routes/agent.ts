@@ -264,16 +264,19 @@ agentRoutes.post('/', async (c) => {
     )
   }
 
-  // Inject per-request Helicone-proxied model via RequestContext
+  // Inject per-request Helicone context via RequestContext.
+  // Each agent resolves its own model from PIPELINE_MODELS using this context.
+  const heliconeContext = {
+    userId: user.id,
+    projectId,
+    sessionId: `${projectId}:${Date.now()}`,
+  }
   const requestContext = new RequestContext()
+  requestContext.set('heliconeContext', heliconeContext)
+  // Legacy 'llm' key — kept for backward compat with any code reading it directly
   requestContext.set(
     'llm',
-    createHeliconeProvider({
-      userId: user.id,
-      projectId,
-      sessionId: `${projectId}:${Date.now()}`,
-      agentName: 'app-generation',
-    })(model),
+    createHeliconeProvider({ ...heliconeContext, agentName: 'app-generation' })(model),
   )
   requestContext.set('userId', user.id)
 

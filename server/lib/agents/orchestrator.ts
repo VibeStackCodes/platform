@@ -3,7 +3,6 @@
 // XState invoke handlers — each function maps to one machine state.
 // The machine calls these via fromPromise actors.
 
-import { jsonrepair } from 'jsonrepair'
 import type { SchemaContract, DesignPreferences, TableDef } from '../schema-contract'
 import type { AppBlueprint } from '../app-blueprint'
 import { contractToBlueprint } from '../app-blueprint'
@@ -246,20 +245,20 @@ export function buildFeatureAnalysisPrompt(
     )
     .map((t) => t.name)
 
-  let prompt = `Analyze the "${table.name}" entity and produce a PageFeatureSpec.
+  let prompt = `Analyze the "${table.name}" entity and decide how to present it.
 
 Table columns:
 ${columns}
 
 ${related.length > 0 ? `Related tables: ${related.join(', ')}` : ''}
 
-Rules:
-- Every field/searchField/sortDefault MUST be one of: ${table.columns.map((c) => c.name).join(', ')}
-- Use 'badge' format for status/enum fields, 'date' for timestamps, 'boolean' for booleans
-- Skip auto-managed fields (id, created_at, updated_at, user_id) from create/edit forms
-- Use 'select' inputType for enum-like text fields with known values
-- Provide a friendly emptyStateMessage
-- For filters, use 'search' for text fields, 'select' for enum-like fields, 'boolean' for boolean columns`
+Decide:
+1. listColumns: Pick 3-6 most important columns to show in the data table (column names only)
+2. headerField: Which column is the page title on the detail view (e.g. "title", "name")
+3. enumFields: Which text columns have known enum values? List each with its options array
+4. detailSections: Group ALL visible columns into 1-3 named sections (e.g. "Details", "Dates")
+
+Valid column names: ${table.columns.map((c) => c.name).join(', ')}`
 
   if (sandboxContext) {
     prompt += `\n\n## Pre-loaded Context (DO NOT read these files — they are already provided)
@@ -282,13 +281,92 @@ export async function runCodeGeneration(input: {
   blueprint: AppBlueprint
   contract: SchemaContract
   sandboxId: string
+  supabaseProjectId: string
+  supabaseUrl: string
+  supabaseAnonKey: string
 }): Promise<CodeGenResult> {
   // Dynamic imports to avoid circular deps and lazy-load assembler dependencies
   const { frontendAgent, backendAgent } = await import('./registry')
-  const { PageFeatureSchema, CustomProcedureSchema, validateFeatureSpec } = await import(
-    './feature-schema'
-  )
+  const {
+    PageConfigSchema,
+    CustomProcedureSchema,
+    derivePageFeatureSpec,
+    validatePageConfig,
+    validateFeatureSpec,
+  } = await import('./feature-schema')
   const { assembleListPage, assembleDetailPage, assembleProcedures } = await import('./assembler')
+  const { getSandbox, uploadFiles } = await import('../sandbox')
+
+  // Step 1: Write ALL blueprint files to sandbox (scaffold)
+  const sandbox = await getSandbox(input.sandboxId)
+  console.log(`[codegen] Writing ${input.blueprint.fileTree.length} blueprint files to sandbox...`)
+
+  // Create all needed directories first
+  const dirs = new Set<string>()
+  for (const file of input.blueprint.fileTree) {
+    const dir = `/workspace/${file.path}`.split('/').slice(0, -1).join('/')
+    dirs.add(dir)
+  }
+  for (const dir of dirs) {
+    try {
+      await sandbox.process.executeCommand(`mkdir -p ${dir}`, '/workspace', undefined, 5)
+    } catch {
+      // ignore if exists
+    }
+  }
+
+  // Write blueprint files, replacing .env placeholders with real credentials
+  const blueprintUploads = input.blueprint.fileTree.map((file) => {
+    let content = file.content
+    if (file.path === '.env') {
+      content = content
+        .replace('DATABASE_URL=__PLACEHOLDER__', `DATABASE_URL=${input.supabaseUrl}`)
+        .replace('SUPABASE_URL=__PLACEHOLDER__', `SUPABASE_URL=${input.supabaseUrl}`)
+        .replace('SUPABASE_ANON_KEY=__PLACEHOLDER__', `SUPABASE_ANON_KEY=${input.supabaseAnonKey}`)
+    }
+    return { content, path: `/workspace/${file.path}` }
+  })
+  await uploadFiles(sandbox, blueprintUploads)
+  console.log(`[codegen] Scaffold complete: ${blueprintUploads.length} files written`)
+
+  // Install dependencies
+  console.log('[codegen] Installing dependencies...')
+  const installResult = await sandbox.process.executeCommand(
+    'bun install --frozen-lockfile 2>&1 || bun install 2>&1',
+    '/workspace',
+    undefined,
+    120,
+  )
+  if (installResult.exitCode !== 0) {
+    console.warn(`[codegen] bun install exit code: ${installResult.exitCode}`)
+  }
+
+  // Apply migration + seed SQL to the real Supabase database
+  // so the generated app launches with data already populated.
+  // Seed SQL is generated in-memory (not shipped in the user's file tree).
+  const { runMigration } = await import('../supabase-mgmt')
+  const { contractToSeedSQL } = await import('../contract-to-seed')
+
+  const migrationFile = input.blueprint.fileTree.find((f) => f.path === 'drizzle/0001_initial.sql')
+  if (migrationFile) {
+    const migResult = await runMigration(input.supabaseProjectId, migrationFile.content)
+    if (!migResult.success) {
+      console.error(`[codegen] Migration failed: ${migResult.error}`)
+    } else {
+      console.log('[codegen] Migration applied to Supabase')
+    }
+  }
+
+  const seedSQL = contractToSeedSQL(input.contract)
+  if (seedSQL) {
+    const seedResult = await runMigration(input.supabaseProjectId, seedSQL)
+    if (!seedResult.success) {
+      console.error(`[codegen] Seed failed: ${seedResult.error}`)
+      // Non-fatal — app works without seed data, just looks empty
+    } else {
+      console.log('[codegen] Seed data applied to Supabase')
+    }
+  }
 
   const assembledFiles: Array<{ path: string; content: string }> = []
   const validationWarnings: Array<{ table: string; errors: string[] }> = []
@@ -305,55 +383,58 @@ export async function runCodeGeneration(input: {
       let warning: { table: string; errors: string[] } | undefined
       let skipped = false
 
-      // 1. Feature analysis — LLM returns PageFeatureSpec via structured output
-      const featurePrompt = buildFeatureAnalysisPrompt(table, input.contract, SANDBOX_CONTEXT)
+      // ================================================================
+      // Simplified structured output + deterministic derivation
+      //
+      // LLM decides: which columns to show, enum values, section grouping.
+      // Everything else (formats, labels, types) derived from contract.
+      // ================================================================
 
-      const [featureResult, procedureResult] = await Promise.allSettled([
+      const featurePrompt = buildFeatureAnalysisPrompt(table, input.contract, SANDBOX_CONTEXT)
+      const procedurePrompt = `Analyze the "${table.name}" entity and design custom tRPC procedures. Include search, filtering, and any business logic.\n\nThink step-by-step:\n1. What queries would a user need beyond basic CRUD?\n2. What filters make sense for this entity's columns?\n3. What aggregations or computed values would be useful?\n\nDescribe each procedure with: name, purpose, query/mutation, input parameters, and the Drizzle ORM implementation.`
+
+      // Feature config + procedures in parallel (codex with constrained decoding)
+      const [configResult, procedureResult] = await Promise.allSettled([
         frontendAgent.generate(featurePrompt, {
-          structuredOutput: { schema: PageFeatureSchema },
           maxSteps: 1,
+          structuredOutput: { schema: PageConfigSchema },
         }),
-        backendAgent.generate(
-          `Generate custom tRPC procedures for the "${table.name}" entity. Include search, filtering, and any business logic.`,
-          {
-            structuredOutput: { schema: CustomProcedureSchema },
-            maxSteps: 1,
-          },
-        ),
+        backendAgent.generate(procedurePrompt, {
+          maxSteps: 1,
+          structuredOutput: { schema: CustomProcedureSchema },
+        }),
       ])
 
-      // 2. Parse feature spec with jsonrepair (E1)
-      if (featureResult.status === 'rejected') {
-        console.error(`Feature analysis failed for ${table.name}:`, featureResult.reason)
+      // Process feature config
+      if (configResult.status === 'rejected') {
+        console.error(`[codegen] Feature config failed for ${table.name}:`, configResult.reason)
         skipped = true
         return { files, tokens, warning, skipped, table: table.name }
       }
 
-      tokens += featureResult.value.totalUsage?.totalTokens ?? 0
+      tokens += configResult.value.totalUsage?.totalTokens ?? 0
 
-      // Validate the feature spec with Zod
-      const featureParsed = PageFeatureSchema.safeParse(
-        featureResult.value.object ?? featureResult.value,
-      )
-      if (!featureParsed.success) {
+      // Validate the LLM output
+      const configParsed = PageConfigSchema.safeParse(configResult.value.object)
+      if (!configParsed.success) {
         console.error(
-          `Feature spec validation failed for ${table.name}:`,
-          featureParsed.error.format(),
+          `[codegen] PageConfig validation failed for ${table.name}:`,
+          configParsed.error.format(),
         )
         skipped = true
         return { files, tokens, warning, skipped, table: table.name }
       }
 
-      const featureSpec = featureParsed.data
-
-      // Validate against contract
-      const validation = validateFeatureSpec(featureSpec, input.contract)
-      if (!validation.valid) {
-        warning = { table: table.name, errors: validation.errors }
-        // Continue with what we have — the assembler handles missing fields gracefully
+      // Validate field references before derivation
+      const configValidation = validatePageConfig(configParsed.data, input.contract)
+      if (!configValidation.valid) {
+        warning = { table: table.name, errors: configValidation.errors }
       }
 
-      // 3. Assemble pages deterministically
+      // Derive full spec deterministically from config + contract
+      const featureSpec = derivePageFeatureSpec(configParsed.data, input.contract)
+
+      // Assemble pages deterministically
       const listPageContent = assembleListPage(featureSpec, input.contract)
       const detailPageContent = assembleDetailPage(featureSpec, input.contract)
 
@@ -373,24 +454,19 @@ export async function runCodeGeneration(input: {
         { path: `src/routes/_authenticated/${entityPlural}.$id.tsx`, content: detailPageContent },
       )
 
-      // 4. Assemble custom procedures
+      // Process procedure result
       if (procedureResult.status === 'fulfilled') {
         tokens += procedureResult.value.totalUsage?.totalTokens ?? 0
 
-        // Validate the procedure spec with Zod
-        const procParsed = CustomProcedureSchema.safeParse(
-          procedureResult.value.object ?? procedureResult.value,
-        )
+        const procParsed = CustomProcedureSchema.safeParse(procedureResult.value.object)
         if (!procParsed.success) {
           console.error(
-            `Procedure spec validation failed for ${table.name}:`,
+            `[codegen] Procedure schema validation failed for ${table.name}:`,
             procParsed.error.format(),
           )
-          // Skip custom procedures but keep the base router
         } else {
           const procSpec = procParsed.data
 
-          // Find the tRPC router in the blueprint
           const routerFile = input.blueprint.fileTree.find(
             (f) => f.path === `server/trpc/routers/${table.name}.ts`,
           )
@@ -414,9 +490,19 @@ export async function runCodeGeneration(input: {
       if (result.value.warning) validationWarnings.push(result.value.warning)
       if (result.value.skipped) skippedEntities.push(result.value.table)
     } else {
-      // Log but don't fail — other entities may succeed
       console.error('Entity processing failed:', result.reason)
     }
+  }
+
+  // Step 3: Write assembled files back to sandbox (overwriting skeleton SLOT files)
+  if (assembledFiles.length > 0) {
+    console.log(`[codegen] Writing ${assembledFiles.length} assembled files to sandbox...`)
+    const assemblyUploads = assembledFiles.map((f) => ({
+      content: f.content,
+      path: `/workspace/${f.path}`,
+    }))
+    await uploadFiles(sandbox, assemblyUploads)
+    console.log(`[codegen] Assembly complete: ${assembledFiles.length} files overwritten`)
   }
 
   return {
@@ -458,7 +544,9 @@ export async function runRepair(input: {
   validation: ValidationGateResult
   sandboxId: string
 }): Promise<RepairResult> {
-  const { repairAgent } = await import('./registry')
+  const { Agent } = await import('@mastra/core/agent')
+  const { createBoundSandboxTools } = await import('./tools')
+  const { createAgentModelResolver } = await import('./provider')
 
   // Build repair prompt from validation errors
   const skeletons = input.blueprint.fileTree
@@ -470,7 +558,31 @@ export async function runRepair(input: {
     return { tokensUsed: 0 }
   }
 
-  const result = await repairAgent.generate(repairPrompt, {
+  // Create sandbox-bound tools — sandboxId is deterministic, never in prompt
+  const boundTools = createBoundSandboxTools(input.sandboxId)
+
+  // Create a per-call repair agent with sandbox-bound tools
+  const boundRepairAgent = new Agent({
+    id: 'repair',
+    name: 'Repair Agent',
+    model: createAgentModelResolver('repair'),
+    description: 'Fixes validation errors in generated code with targeted, minimal changes',
+    instructions: `You are the repair agent for VibeStack-generated applications.
+
+You receive specific validation errors (TypeScript, lint, build) and fix them with minimal changes.
+
+Rules:
+1. Only modify files that have errors — do not touch other files
+2. Preserve the skeleton structure (imports, hooks, state declarations)
+3. Only fix the specific error — do not refactor or add features
+4. Use ESM imports (never require())
+5. No TODO/FIXME/placeholder comments
+6. If a type error is in generated code, fix the type — do not add \`as any\``,
+    tools: boundTools,
+    defaultOptions: { maxSteps: 15 },
+  })
+
+  const result = await boundRepairAgent.generate(repairPrompt, {
     maxSteps: 5,
   })
 
@@ -516,8 +628,9 @@ export async function runProvisioning(input: {
       }
 
       // Fallback: cold creation (60-120s)
+      // Add timestamp suffix to avoid name collisions across runs
       const { createSupabaseProject } = await import('../supabase-mgmt')
-      const project = await createSupabaseProject(input.appName)
+      const project = await createSupabaseProject(`${input.appName}-${Date.now()}`)
       return {
         supabaseProjectId: project.id,
         supabaseUrl: project.url,

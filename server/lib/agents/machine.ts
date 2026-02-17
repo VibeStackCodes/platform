@@ -129,7 +129,7 @@ export const appGenerationMachine = setup({
       return runProvisioning(input)
     }),
     runCodeGenerationActor: fromPromise(
-      async ({ input }: { input: { blueprint: AppBlueprint; contract: SchemaContract; sandboxId: string } }) => {
+      async ({ input }: { input: { blueprint: AppBlueprint; contract: SchemaContract; sandboxId: string; supabaseProjectId: string; supabaseUrl: string; supabaseAnonKey: string } }) => {
         const { runCodeGeneration } = await import('./orchestrator')
         return runCodeGeneration(input)
       },
@@ -422,6 +422,9 @@ export const appGenerationMachine = setup({
           blueprint: context.blueprint!,
           contract: context.contract!,
           sandboxId: context.sandboxId!,
+          supabaseProjectId: context.supabaseProjectId!,
+          supabaseUrl: context.supabaseUrl!,
+          supabaseAnonKey: context.supabaseAnonKey!,
         }),
         onDone: {
           target: 'validating',
