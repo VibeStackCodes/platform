@@ -425,11 +425,11 @@ describe('Dry-Run Pipeline Integration', () => {
     })
 
     it('SQL migration is valid', () => {
-      expect(result.sql).toContain('CREATE TABLE IF NOT EXISTS bookmark')
-      expect(result.sql).toContain('CREATE TABLE IF NOT EXISTS tag')
-      expect(result.sql).toContain('CREATE TABLE IF NOT EXISTS bookmark_tag')
-      // FK references auth.users
-      expect(result.sql).toContain('REFERENCES auth.users(id)')
+      expect(result.sql).toContain('CREATE TABLE IF NOT EXISTS "bookmark"')
+      expect(result.sql).toContain('CREATE TABLE IF NOT EXISTS "tag"')
+      expect(result.sql).toContain('CREATE TABLE IF NOT EXISTS "bookmark_tag"')
+      // FK references auth.users (schema-qualified, each part quoted)
+      expect(result.sql).toContain('REFERENCES "auth"."users"("id")')
     })
 
     it('assembles all entity pages', () => {

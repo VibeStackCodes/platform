@@ -39,17 +39,33 @@ const SQL_TYPES = [
 
 export const SQLTypeSchema = z.enum(SQL_TYPES)
 
+/**
+ * Apply the same reserved-word renaming rules as TableDefSchema/ColumnDefSchema to FK refs.
+ * The analyst may generate `references: { table: 'order', column: 'id' }` while the
+ * TableDefSchema renames the actual table to 'order_record'. This keeps them in sync.
+ */
+function applyFKRenames(ref: { table?: unknown; column?: unknown }): { table: string; column: string } {
+  let table = typeof ref.table === 'string' ? ref.table.trim() : String(ref.table ?? '')
+  let column = typeof ref.column === 'string' ? ref.column.trim() : String(ref.column ?? 'id')
+  if (SQL_RESERVED_WORDS.has(table)) table = `${table}_record`
+  if (SQL_RESERVED_WORDS.has(column)) column = `${column}_val`
+  return { table, column }
+}
+
 // FK reference schema — accepts both object `{ table, column }` and string "table.column"
 const FKReferenceSchema = z
   .preprocess((val) => {
     if (typeof val === 'string') {
       // Parse "table.column" or "table(column)" format
       const dotMatch = val.match(/^([^.(]+)\.([^.(]+)$/)
-      if (dotMatch) return { table: dotMatch[1], column: dotMatch[2] }
+      if (dotMatch) return applyFKRenames({ table: dotMatch[1], column: dotMatch[2] })
       const parenMatch = val.match(/^([^(]+)\(([^)]+)\)$/)
-      if (parenMatch) return { table: parenMatch[1], column: parenMatch[2] }
+      if (parenMatch) return applyFKRenames({ table: parenMatch[1], column: parenMatch[2] })
       // Assume it's a table name referencing "id"
-      return { table: val, column: 'id' }
+      return applyFKRenames({ table: val, column: 'id' })
+    }
+    if (val && typeof val === 'object' && !Array.isArray(val)) {
+      return applyFKRenames(val as { table?: unknown; column?: unknown })
     }
     return val
   }, z.object({
@@ -126,6 +142,31 @@ export const TableDefSchema = z.object({
     },
     z.array(RLSPolicySchema).optional(),
   ).describe('Row-Level Security policies'),
+}).transform((table) => {
+  // After ColumnDefSchema renames reserved words (e.g. `role` → `role_val`), RLS policy
+  // strings remain unchanged. Rebuild them using the column rename map so policies stay
+  // consistent with the actual column names in the generated SQL.
+  const colRenames = new Map<string, string>()
+  for (const col of table.columns) {
+    if (col.name.endsWith('_val')) {
+      const original = col.name.slice(0, -4) // strip '_val'
+      if (SQL_RESERVED_WORDS.has(original)) colRenames.set(original, col.name)
+    }
+  }
+  if (colRenames.size === 0 || !table.rlsPolicies?.length) return table
+
+  const updatedPolicies = table.rlsPolicies.map((policy) => {
+    let using = policy.using
+    let withCheck = policy.withCheck
+    for (const [original, renamed] of colRenames) {
+      // Word-boundary replacement: replace bare column references, not SQL keywords
+      const re = new RegExp(`\\b${original}\\b`, 'g')
+      if (using) using = using.replace(re, renamed)
+      if (withCheck) withCheck = withCheck.replace(re, renamed)
+    }
+    return { ...policy, using, withCheck }
+  })
+  return { ...table, rlsPolicies: updatedPolicies }
 })
 
 export const EnumDefSchema = z.object({

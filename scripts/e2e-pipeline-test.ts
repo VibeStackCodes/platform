@@ -436,35 +436,48 @@ async function phase9_vercelDeploy(
   log(`Downloaded ${distFiles.length} dist files`)
 
   // Step 4: Encode files for Vercel Files API
-  const vercelFiles: Array<{ file: string; data: string; encoding?: string }> = distFiles.map((f) => {
-    const relativePath = f.path.replace(/^\/workspace\/dist\//, '')
-    const isText = /\.(html|js|css|txt|json|svg|map|ico|xml|woff|woff2)$/.test(relativePath)
-    if (isText) {
-      return { file: relativePath, data: f.content.toString('utf-8') }
-    }
-    return { file: relativePath, data: f.content.toString('base64'), encoding: 'base64' }
+  // Add vercel.json with SPA rewrites so client-side routing works
+  const vercelJsonContent = JSON.stringify({
+    rewrites: [{ source: '/(.*)', destination: '/index.html' }],
+    headers: [
+      {
+        source: '/assets/(.*)',
+        headers: [{ key: 'Cache-Control', value: 'public, max-age=31536000, immutable' }],
+      },
+    ],
   })
 
-  // Step 5: Deploy to Vercel
+  const vercelFiles: Array<{ file: string; data: string; encoding?: string }> = [
+    { file: 'vercel.json', data: vercelJsonContent },
+    ...distFiles.map((f) => {
+      const relativePath = f.path.replace(/^\/workspace\/dist\//, '')
+      const isText = /\.(html|js|css|txt|json|svg|map|ico|xml|woff|woff2)$/.test(relativePath)
+      if (isText) {
+        return { file: relativePath, data: f.content.toString('utf-8') }
+      }
+      return { file: relativePath, data: f.content.toString('base64'), encoding: 'base64' }
+    }),
+  ]
+
+  // Step 5: Deploy to Vercel — static SPA upload (no build step)
   log(`Deploying ${vercelFiles.length} files to Vercel...`)
   const teamQuery = VERCEL_TEAM_ID ? `?teamId=${VERCEL_TEAM_ID}` : ''
 
-  // Build a slug from app name
+  // Build a slug from app name (fresh project per app, no wildcard project)
   const slug = appName.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 30) + '-' + Date.now().toString(36)
 
   for (let attempt = 0; attempt < 2; attempt++) {
     const deployPayload: Record<string, unknown> = {
       name: slug,
       files: vercelFiles,
+      // Tell Vercel: no build needed, just serve the files
       projectSettings: {
         framework: null,
-        buildCommand: null,
-        outputDirectory: null,
+        buildCommand: '',
+        outputDirectory: '',
+        installCommand: '',
       },
-      target: 'production',
-    }
-    if (VERCEL_WILDCARD_PROJECT_ID) {
-      deployPayload.project = VERCEL_WILDCARD_PROJECT_ID
+      // No `project` field — create a new project each time for clean deploys
     }
 
     const res = await fetch(`https://api.vercel.com/v13/deployments${teamQuery}`, {
@@ -488,24 +501,32 @@ async function phase9_vercelDeploy(
     const deploymentId = data.id!
     log(`Deployment created: ${deploymentId}`)
 
-    // Wait for ready
-    for (let i = 0; i < 30; i++) {
-      await new Promise((r) => setTimeout(r, 4000))
+    // Wait for ready — poll every 5s, up to 3 minutes
+    for (let i = 0; i < 36; i++) {
+      await new Promise((r) => setTimeout(r, 5000))
       const pollRes = await fetch(`https://api.vercel.com/v13/deployments/${deploymentId}${teamQuery}`, {
         headers: { Authorization: `Bearer ${VERCEL_TOKEN}` },
       })
-      const pollData = (await pollRes.json()) as { readyState?: string; url?: string }
+      const pollData = (await pollRes.json()) as { readyState?: string; url?: string; errorMessage?: string }
       if (pollData.readyState === 'READY') {
         const url = `https://${pollData.url}`
         log(`✓ Deployed: ${url}`)
         return url
       }
       if (pollData.readyState === 'ERROR' || pollData.readyState === 'CANCELED') {
-        throw new Error(`Deployment ${deploymentId} failed: ${pollData.readyState}`)
+        // Fetch build logs to diagnose
+        const logsRes = await fetch(
+          `https://api.vercel.com/v2/deployments/${deploymentId}/events${teamQuery}`,
+          { headers: { Authorization: `Bearer ${VERCEL_TOKEN}` } }
+        )
+        const logsText = logsRes.ok ? await logsRes.text() : '(no logs)'
+        const lastLines = logsText.split('\n').slice(-20).join('\n')
+        log(`Build logs (last 20 lines):\n${lastLines}`)
+        throw new Error(`Vercel deploy failed: ${pollData.readyState}${pollData.errorMessage ? `: ${pollData.errorMessage}` : ''}`)
       }
-      process.stdout.write(`  ${pollData.readyState ?? 'pending'}...\r`)
+      process.stdout.write(`  ${i * 5}s: ${pollData.readyState ?? 'pending'}...\r`)
     }
-    throw new Error(`Deployment ${deploymentId} timed out after 120s`)
+    throw new Error(`Deployment ${deploymentId} timed out after 3 minutes`)
   }
 
   throw new Error('Vercel deployment failed after retries')

@@ -74,14 +74,14 @@ $$;`,
     // FK indexes
     for (const col of table.columns) {
       if (col.references?.table && col.references?.column) {
-        parts.push(`CREATE INDEX idx_${table.name}_${col.name} ON ${table.name} (${col.name});`)
+        parts.push(`CREATE INDEX idx_${table.name}_${col.name} ON ${qi(table.name)} (${qi(col.name)});`)
       }
     }
 
     // updated_at trigger
     if (table.columns.some((c) => c.name === 'updated_at')) {
       parts.push(
-        `CREATE TRIGGER trg_${table.name}_updated_at BEFORE UPDATE ON ${table.name} FOR EACH ROW EXECUTE FUNCTION update_updated_at();`,
+        `CREATE TRIGGER trg_${table.name}_updated_at BEFORE UPDATE ON ${qi(table.name)} FOR EACH ROW EXECUTE FUNCTION update_updated_at();`,
       )
     }
   }
@@ -91,9 +91,9 @@ $$;`,
   if (features.auth) {
     for (const table of sorted) {
       if (table.rlsPolicies && table.rlsPolicies.length > 0) {
-        parts.push(`ALTER TABLE ${table.name} ENABLE ROW LEVEL SECURITY;`)
+        parts.push(`ALTER TABLE ${qi(table.name)} ENABLE ROW LEVEL SECURITY;`)
         for (const policy of table.rlsPolicies) {
-          parts.push(generatePolicy(table.name, policy))
+          parts.push(generatePolicy(qi(table.name), policy))
         }
       }
     }
@@ -110,23 +110,34 @@ $$;`,
   return parts.join('\n\n')
 }
 
+/**
+ * Quote a SQL identifier to handle reserved words (e.g. "order", "user").
+ * Schema-qualified names like "auth.users" are quoted per-part: "auth"."users".
+ */
+function qi(name: string): string {
+  if (name.includes('.')) {
+    return name.split('.').map((part) => `"${part.replace(/"/g, '""')}"`).join('.')
+  }
+  return `"${name.replace(/"/g, '""')}"`
+}
+
 function generateCreateTable(table: TableDef): string {
   const colDefs = table.columns.map((col) => {
     const sqlType = SQL_TYPE_MAP[col.type] ?? col.type.toUpperCase()
-    const parts: string[] = [`  ${col.name} ${sqlType}`]
+    const parts: string[] = [`  ${qi(col.name)} ${sqlType}`]
 
     if (col.nullable === false && !col.primaryKey) parts.push('NOT NULL')
     if (col.default) parts.push(`DEFAULT ${col.default}`)
     if (col.primaryKey) parts.push('PRIMARY KEY')
     if (col.unique) parts.push('UNIQUE')
     if (col.references?.table && col.references?.column) {
-      parts.push(`REFERENCES ${col.references.table}(${col.references.column}) ON DELETE CASCADE`)
+      parts.push(`REFERENCES ${qi(col.references.table)}(${qi(col.references.column)}) ON DELETE CASCADE`)
     }
 
     return parts.join(' ')
   })
 
-  return `CREATE TABLE IF NOT EXISTS ${table.name} (\n${colDefs.join(',\n')}\n);`
+  return `CREATE TABLE IF NOT EXISTS ${qi(table.name)} (\n${colDefs.join(',\n')}\n);`
 }
 
 /**

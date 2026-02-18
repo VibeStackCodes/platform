@@ -276,7 +276,7 @@ describe('contractToSQL — stats function integration', () => {
 
   it('stats functions appear after table DDL in output', () => {
     const sql = contractToSQL(ordersContract)
-    const tableIdx = sql.indexOf('CREATE TABLE IF NOT EXISTS orders')
+    const tableIdx = sql.indexOf('CREATE TABLE IF NOT EXISTS "orders"')
     const fnIdx = sql.indexOf('get_orders_stats')
     expect(tableIdx).toBeGreaterThan(-1)
     expect(fnIdx).toBeGreaterThan(tableIdx)

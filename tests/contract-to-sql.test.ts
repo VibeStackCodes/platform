@@ -21,12 +21,12 @@ describe('contractToSQL', () => {
       ],
     }
     const sql = contractToSQL(contract)
-    expect(sql).toContain('CREATE TABLE IF NOT EXISTS items')
-    expect(sql).toContain('id UUID DEFAULT gen_random_uuid() PRIMARY KEY')
-    expect(sql).toContain('title TEXT NOT NULL')
-    expect(sql).toContain('count NUMERIC')
-    expect(sql).toContain('active BOOLEAN DEFAULT false')
-    expect(sql).toContain('created_at TIMESTAMPTZ NOT NULL DEFAULT now()')
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS "items"')
+    expect(sql).toContain('"id" UUID DEFAULT gen_random_uuid() PRIMARY KEY')
+    expect(sql).toContain('"title" TEXT NOT NULL')
+    expect(sql).toContain('"count" NUMERIC')
+    expect(sql).toContain('"active" BOOLEAN DEFAULT false')
+    expect(sql).toContain('"created_at" TIMESTAMPTZ NOT NULL DEFAULT now()')
   })
 
   it('topologically sorts tables by FK dependencies', () => {
@@ -49,8 +49,8 @@ describe('contractToSQL', () => {
       ],
     }
     const sql = contractToSQL(contract)
-    const postsIdx = sql.indexOf('CREATE TABLE IF NOT EXISTS posts')
-    const commentsIdx = sql.indexOf('CREATE TABLE IF NOT EXISTS comments')
+    const postsIdx = sql.indexOf('CREATE TABLE IF NOT EXISTS "posts"')
+    const commentsIdx = sql.indexOf('CREATE TABLE IF NOT EXISTS "comments"')
     expect(postsIdx).toBeLessThan(commentsIdx)
   })
 
@@ -75,12 +75,12 @@ describe('contractToSQL', () => {
       ],
     }
     const sql = contractToSQL(contract)
-    expect(sql).toContain('ALTER TABLE items ENABLE ROW LEVEL SECURITY')
+    expect(sql).toContain('ALTER TABLE "items" ENABLE ROW LEVEL SECURITY')
     expect(sql).toContain(
-      'CREATE POLICY "Users can view own" ON items FOR SELECT TO authenticated USING ((select auth.uid()) = user_id)',
+      'CREATE POLICY "Users can view own" ON "items" FOR SELECT TO authenticated USING ((select auth.uid()) = user_id)',
     )
     expect(sql).toContain(
-      'CREATE POLICY "Users can insert own" ON items FOR INSERT TO authenticated WITH CHECK ((select auth.uid()) = user_id)',
+      'CREATE POLICY "Users can insert own" ON "items" FOR INSERT TO authenticated WITH CHECK ((select auth.uid()) = user_id)',
     )
   })
 
@@ -120,7 +120,7 @@ describe('contractToSQL', () => {
       ],
     }
     const sql = contractToSQL(contract)
-    expect(sql).toContain('post_id UUID REFERENCES posts(id) ON DELETE CASCADE')
+    expect(sql).toContain('"post_id" UUID REFERENCES "posts"("id") ON DELETE CASCADE')
   })
 
   it('generates FK indexes for columns with references', () => {
@@ -141,8 +141,8 @@ describe('contractToSQL', () => {
       ],
     }
     const sql = contractToSQL(contract)
-    expect(sql).toContain('CREATE INDEX idx_comments_post_id ON comments (post_id)')
-    expect(sql).toContain('CREATE INDEX idx_comments_user_id ON comments (user_id)')
+    expect(sql).toContain('CREATE INDEX idx_comments_post_id ON "comments" ("post_id")')
+    expect(sql).toContain('CREATE INDEX idx_comments_user_id ON "comments" ("user_id")')
   })
 
   it('silently skips columns with empty FK references', () => {
@@ -165,8 +165,8 @@ describe('contractToSQL', () => {
     // Should NOT produce FK indexes for empty references
     expect(sql).not.toContain('CREATE INDEX')
     // But columns themselves should still be generated
-    expect(sql).toContain('display_name TEXT')
-    expect(sql).toContain('email TEXT')
+    expect(sql).toContain('"display_name" TEXT')
+    expect(sql).toContain('"email" TEXT')
   })
 
   it('generates updated_at trigger function and per-table triggers', () => {
@@ -186,7 +186,7 @@ describe('contractToSQL', () => {
     expect(sql).toContain('CREATE OR REPLACE FUNCTION update_updated_at()')
     expect(sql).toContain('SECURITY INVOKER')
     expect(sql).toContain("SET search_path = ''")
-    expect(sql).toContain('CREATE TRIGGER trg_items_updated_at BEFORE UPDATE ON items')
+    expect(sql).toContain('CREATE TRIGGER trg_items_updated_at BEFORE UPDATE ON "items"')
     expect(sql).toContain('EXECUTE FUNCTION update_updated_at()')
   })
 })

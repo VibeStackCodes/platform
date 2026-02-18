@@ -415,10 +415,10 @@ describe('code injection prevention', () => {
       }],
     })
 
-    // If schema allows it, verify SQL generation is safe
+    // If schema allows it, verify SQL generation is safe (identifiers are quoted)
     if (result.success) {
       const sql = contractToSQL(result.data)
-      expect(sql).toContain('constructor TEXT')
+      expect(sql).toContain('"constructor" TEXT')
     }
   })
 
@@ -553,8 +553,8 @@ describe('foreign key reference safety', () => {
       const sql = contractToSQL(result.data)
       // KNOWN ISSUE: preprocessor parses 'auth.users' as { table: 'auth', column: 'users' }
       // instead of { table: 'auth.users', column: 'id' }
-      // This generates: REFERENCES auth(users) instead of REFERENCES auth.users(id)
-      expect(sql).toContain('REFERENCES auth(users)')
+      // This generates: REFERENCES "auth"("users") instead of REFERENCES auth.users(id)
+      expect(sql).toContain('REFERENCES "auth"("users")')
     }
   })
 
@@ -877,9 +877,9 @@ describe('valid contracts pass all checks', () => {
     if (result.success) {
       const sql = contractToSQL(result.data)
       // Verify correct creation order: categories → posts → comments
-      const categoryIdx = sql.indexOf('CREATE TABLE IF NOT EXISTS categories')
-      const postIdx = sql.indexOf('CREATE TABLE IF NOT EXISTS posts')
-      const commentIdx = sql.indexOf('CREATE TABLE IF NOT EXISTS comments')
+      const categoryIdx = sql.indexOf('CREATE TABLE IF NOT EXISTS "categories"')
+      const postIdx = sql.indexOf('CREATE TABLE IF NOT EXISTS "posts"')
+      const commentIdx = sql.indexOf('CREATE TABLE IF NOT EXISTS "comments"')
 
       expect(categoryIdx).toBeLessThan(postIdx)
       expect(postIdx).toBeLessThan(commentIdx)

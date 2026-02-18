@@ -4,7 +4,7 @@
 // The machine calls these via fromPromise actors.
 
 import type { SchemaContract, DesignPreferences } from '../schema-contract'
-import { SchemaContractSchema, DesignPreferencesSchema } from '../schema-contract'
+import { SchemaContractSchema, DesignPreferencesSchema, validateContract } from '../schema-contract'
 import type { AppBlueprint } from '../app-blueprint'
 import { contractToBlueprint } from '../app-blueprint'
 import type { ValidationGateResult } from './validation'
@@ -98,6 +98,14 @@ export async function runAnalysis(input: {
           console.error('[analysis] Contract schema validation failed:', contractParsed.error.format())
           throw new Error(`Analyst produced invalid contract: ${contractParsed.error.issues.map(i => i.message).join(', ')}`)
         }
+
+        // Semantic validation: FK references must point to existing tables
+        const contractValidation = validateContract(contractParsed.data)
+        if (!contractValidation.valid) {
+          console.error('[analysis] Contract semantic validation failed:', contractValidation.errors)
+          throw new Error(`Analyst produced invalid contract: ${contractValidation.errors.join('; ')}`)
+        }
+
         const designParsed = DesignPreferencesSchema.safeParse(part.input.designPreferences)
 
         return {
