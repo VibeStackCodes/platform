@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { deriveDesignSpec, designSpecToFontCSS } from '@server/lib/design-spec'
-import type { SchemaContract } from '@server/lib/schema-contract'
-import type { DesignPreferences } from '@server/lib/schema-contract'
+import type { SchemaContract, DesignPreferences } from '@server/lib/schema-contract'
 
 const BASE_PREFS: DesignPreferences = {
   style: 'modern',
