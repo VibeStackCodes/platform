@@ -201,9 +201,9 @@ describe.skipIf(!SHOULD_RUN)('Structured output integration (real OpenAI API)', 
       if (!parsed.success) return
 
       // status and/or priority should be identified as enum fields
-      const enumFieldNames = parsed.data.enumFields.map((e) => e.field)
+      const enumFieldNames = new Set(parsed.data.enumFields.map((e) => e.field))
       const hasStatusOrPriority =
-        enumFieldNames.includes('status') || enumFieldNames.includes('priority')
+        enumFieldNames.has('status') || enumFieldNames.has('priority')
       expect(hasStatusOrPriority).toBe(true)
 
       // Each enum field should have options
@@ -245,9 +245,9 @@ describe.skipIf(!SHOULD_RUN)('Structured output integration (real OpenAI API)', 
       expect(createFieldNames).not.toContain('user_id')
 
       // Enum fields get badge format in columns
-      const enumFieldNames = parsed.data.enumFields.map((e) => e.field)
+      const enumFieldNames = new Set(parsed.data.enumFields.map((e) => e.field))
       for (const col of spec.listPage.columns) {
-        if (enumFieldNames.includes(col.field)) {
+        if (enumFieldNames.has(col.field)) {
           expect(col.format).toBe('badge')
         }
       }

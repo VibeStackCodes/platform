@@ -2,9 +2,9 @@
 
 **Date**: 2026-02-18
 **Prompt Complexity**: Medium
-**Vercel URL**: [Live](https://la-piazza-manager-mlrh0t0g-p7fnvjqo9-vibe-stack-team.vercel.app)
-**Total Duration**: 104.2s
-**Total Tokens**: 9507 (~$0.0238)
+**Vercel URL**: [Live](https://la-piazza-manager-mlrx9o01-4q19qpxqn-vibe-stack-team.vercel.app)
+**Total Duration**: 95.6s
+**Total Tokens**: 9828 (~$0.0246)
 
 ---
 
@@ -27,22 +27,22 @@ Staff sign in to manage reservations and orders. The reservation list defaults t
 
 | # | Phase | Status | Duration | Tokens | Notes |
 |---|-------|--------|----------|--------|-------|
-| 1 | 1. Analysis | PASS | 52.6s | 9507 | 6 tables | #C2410C | Nunito |
+| 1 | 1. Analysis | PASS | 50.5s | 9828 | 6 tables | #C2410C | Nunito |
 | 2 | 2. Blueprint | PASS | 0.0s | 0 | 60 files (deterministic) |
 | 3 | 3. Provisioning | PASS | 1.7s | 0 | sandbox + supabase + github |
-| 4 | 4. Code Generation | PASS | 8.1s | 0 | 12 files |
-| 5 | 5. Validation | PASS | 19.0s | 0 | manifest=true tsc=true build=true |
+| 4 | 4. Code Generation | PASS | 5.3s | 0 | 12 files |
+| 5 | 5. Validation | PASS | 16.4s | 0 | manifest=true tsc=true build=true |
 | 6 | 7. Code Review | PASS | 0.0s | 0 | 13 det + 0 LLM issues |
-| 7 | 8. GitHub Push | PASS | 5.3s | 0 | https://github.com/VibeStackCodes-Generated/vibestack-e2e-test-1771385178653 |
-| 8 | 9. Vercel Deploy | PASS | 17.6s | 0 | https://la-piazza-manager-mlrh0t0g-p7fnvjqo9-vibe-stack-team.vercel.app |
+| 7 | 8. GitHub Push | PASS | 5.4s | 0 | https://github.com/VibeStackCodes-Generated/vibestack-e2e-test-1771412472453 |
+| 8 | 9. Vercel Deploy | PASS | 16.3s | 0 | https://la-piazza-manager-mlrx9o01-4q19qpxqn-vibe-stack-team.vercel.app |
 
 ## Design Choices (from analyst)
 
 - **App Name**: La Piazza Manager
-- **Description**: Restaurant management system for La Piazza to manage menu, tables, reservations, and orders with staff sign-in.
+- **Description**: Back-office restaurant management system for La Piazza to manage menu, tables, reservations, and orders with staff sign-in.
 - **Primary Color**: #C2410C
 - **Font**: Nunito
-- **Style**: Warm, modern trattoria aesthetic with clean admin UI: card-based layouts, subtle paper texture backgrounds, rounded corners, and clear status chips for tables/reservations/orders.
+- **Style**: Warm, modern trattoria dashboard with subtle paper texture, rounded cards, and rich food photography accents.
 - **Tables**: menu_categories, menu_items, restaurant_tables, reservations, orders, order_items
 
 ## Blueprint
@@ -72,8 +72,8 @@ Staff sign in to manage reservations and orders. The reservation list defaults t
 
 ## Provisioning
 
-- **GitHub**: https://github.com/VibeStackCodes-Generated/vibestack-e2e-test-1771385178653
-- **Supabase**: https://tcnwmpjszfavjqkjdlmd.supabase.co
+- **GitHub**: https://github.com/VibeStackCodes-Generated/vibestack-e2e-test-1771412472453
+- **Supabase**: https://flqlosfupjbqnufyumtd.supabase.co
 
 ## Learnings
 

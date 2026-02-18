@@ -306,7 +306,7 @@ export async function runMigration(projectId: string, sql: string): Promise<Migr
     migrationFailureCount++
     if (migrationFailureCount >= MAX_CONSECUTIVE_MIGRATION_FAILURES) {
       throw new Error(
-        `Circuit breaker: ${migrationFailureCount} consecutive migration failures. Last error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        `Circuit breaker: ${migrationFailureCount} consecutive migration failures. Last error: ${error instanceof Error ? error.message : 'Unknown error'}`, { cause: error },
       )
     }
 
