@@ -1,11 +1,28 @@
 // tests/contract-to-seed.test.ts
+// Tests for LLM-based seed generation.
+// Since LLM content values are non-deterministic, tests focus on:
+//   - SQL structure (correct tables, correct row counts)
+//   - Deterministic IDs (PKs, FK references)
+//   - Auth stubs (auth.users preamble)
+//   - Column type handling (fallback values for unlisted columns)
 
 import { contractToSeedSQL } from '@server/lib/contract-to-seed'
 import type { SchemaContract } from '@server/lib/schema-contract'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi, beforeEach } from 'vitest'
+
+// Mock the 'ai' package so tests don't hit the real OpenAI API
+vi.mock('ai', () => ({
+  generateObject: vi.fn().mockResolvedValue({
+    object: { tables: [] }, // empty → triggers fallback value path
+  }),
+}))
 
 describe('contractToSeedSQL', () => {
-  it('generates INSERT statements for a simple table', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('generates INSERT statements for a simple table', async () => {
     const contract: SchemaContract = {
       tables: [
         {
@@ -18,12 +35,12 @@ describe('contractToSeedSQL', () => {
         },
       ],
     }
-    const sql = contractToSeedSQL(contract, 3)
+    const sql = await contractToSeedSQL(contract, 3)
     expect(sql).toContain('INSERT INTO "items"')
     // 3 rows requested
     const insertCount = (sql.match(/INSERT INTO "items"/g) || []).length
     expect(insertCount).toBe(3)
-    // title should have generated text values
+    // title should appear in columns
     expect(sql).toContain('title')
     // created_at has a default — should NOT appear in INSERT columns
     expect(sql).not.toMatch(/created_at/)
@@ -31,7 +48,7 @@ describe('contractToSeedSQL', () => {
     expect(sql).not.toContain('INSERT INTO auth.users')
   })
 
-  it('topologically sorts tables so parents are inserted first', () => {
+  it('topologically sorts tables so parents are inserted first', async () => {
     const contract: SchemaContract = {
       tables: [
         {
@@ -51,7 +68,7 @@ describe('contractToSeedSQL', () => {
         },
       ],
     }
-    const sql = contractToSeedSQL(contract, 2)
+    const sql = await contractToSeedSQL(contract, 2)
     const postsIdx = sql.indexOf('INSERT INTO "posts"')
     const commentsIdx = sql.indexOf('INSERT INTO "comments"')
     expect(postsIdx).toBeGreaterThan(-1)
@@ -59,7 +76,7 @@ describe('contractToSeedSQL', () => {
     expect(postsIdx).toBeLessThan(commentsIdx)
   })
 
-  it('uses seed user UUID for auth.users FK references', () => {
+  it('uses seed user UUID for auth.users FK references', async () => {
     const contract: SchemaContract = {
       tables: [
         {
@@ -77,7 +94,7 @@ describe('contractToSeedSQL', () => {
         },
       ],
     }
-    const sql = contractToSeedSQL(contract, 1)
+    const sql = await contractToSeedSQL(contract, 1)
     expect(sql).toContain('00000000-0000-4000-a000-0000000005ee')
     // Auth preamble: seeds auth.users + auth.identities so FK constraints pass
     expect(sql).toContain('INSERT INTO auth.users')
@@ -85,7 +102,7 @@ describe('contractToSeedSQL', () => {
     expect(sql).toContain("crypt('password123', gen_salt('bf'))")
   })
 
-  it('references parent table IDs for inter-table FKs', () => {
+  it('references parent table IDs for inter-table FKs', async () => {
     const contract: SchemaContract = {
       tables: [
         {
@@ -109,7 +126,7 @@ describe('contractToSeedSQL', () => {
         },
       ],
     }
-    const sql = contractToSeedSQL(contract, 2)
+    const sql = await contractToSeedSQL(contract, 2)
     // Products should reference the category IDs generated for the categories table
     // Category IDs (table 0): 00000000-0000-4000-8000-000000000001, 00000000-0000-4000-8000-000000000002
     expect(sql).toContain("'00000000-0000-4000-8000-000000000001'")
@@ -121,7 +138,45 @@ describe('contractToSeedSQL', () => {
     }
   })
 
-  it('generates appropriate values for different column types', () => {
+  it('uses SELECT...WHERE EXISTS form for FK-dependent rows to guard against missing parents', async () => {
+    const contract: SchemaContract = {
+      tables: [
+        {
+          name: 'posts',
+          columns: [
+            { name: 'id', type: 'uuid', primaryKey: true, default: 'gen_random_uuid()' },
+            { name: 'title', type: 'text', nullable: false },
+          ],
+        },
+        {
+          name: 'comments',
+          columns: [
+            { name: 'id', type: 'uuid', primaryKey: true, default: 'gen_random_uuid()' },
+            { name: 'post_id', type: 'uuid', references: { table: 'posts', column: 'id' } },
+            { name: 'body', type: 'text', nullable: false },
+          ],
+        },
+      ],
+    }
+    const sql = await contractToSeedSQL(contract, 2)
+    // posts have no inter-table FKs → plain VALUES form
+    const postLines = sql.split('\n').filter((l) => l.includes('INSERT INTO "posts"'))
+    for (const line of postLines) {
+      expect(line).toContain('VALUES')
+      expect(line).not.toContain('WHERE EXISTS')
+    }
+    // comments have FK to posts → SELECT...WHERE EXISTS form
+    const commentLines = sql.split('\n').filter((l) => l.includes('INSERT INTO "comments"'))
+    expect(commentLines.length).toBe(2)
+    for (const line of commentLines) {
+      expect(line).toContain('SELECT')
+      expect(line).toContain('WHERE EXISTS')
+      expect(line).toContain('"posts"')
+      expect(line).toContain('ON CONFLICT DO NOTHING')
+    }
+  })
+
+  it('generates appropriate fallback values for different column types when LLM returns empty', async () => {
     const contract: SchemaContract = {
       tables: [
         {
@@ -137,41 +192,54 @@ describe('contractToSeedSQL', () => {
         },
       ],
     }
-    const sql = contractToSeedSQL(contract, 2)
-    // Integer values (faker.number.int produces random ints in range)
-    expect(sql).toMatch(/count.*\b\d+\b/)
-    // Numeric values (faker.number.float produces decimals)
-    expect(sql).toMatch(/score.*\d+\.\d{2}/)
-    // Boolean values
+    // LLM mock returns empty tables → all columns use fallback values
+    const sql = await contractToSeedSQL(contract, 2)
+    // Integer fallback: row index
+    expect(sql).toMatch(/\b\d+\b/)
+    // Numeric fallback: decimal
+    expect(sql).toMatch(/\d+\.\d{2}/)
+    // Boolean fallback
     expect(sql).toMatch(/\b(true|false)\b/)
-    // JSONB
+    // JSONB fallback
     expect(sql).toContain("'{}'::jsonb")
   })
 
-  it('infers realistic text values from column names using faker', () => {
+  it('uses LLM-provided values when the LLM returns data', async () => {
+    const { generateObject } = await import('ai')
+    vi.mocked(generateObject).mockResolvedValueOnce({
+      object: {
+        tables: [
+          {
+            name: 'watches',
+            rows: [
+              { name: 'Rolex Submariner', brand: 'Rolex', price_cents: 1250000 },
+              { name: 'Omega Seamaster', brand: 'Omega', price_cents: 750000 },
+            ],
+          },
+        ],
+      },
+    } as any)
+
     const contract: SchemaContract = {
       tables: [
         {
-          name: 'users',
+          name: 'watches',
           columns: [
             { name: 'id', type: 'uuid', primaryKey: true, default: 'gen_random_uuid()' },
-            { name: 'email', type: 'text', nullable: false },
-            { name: 'status', type: 'text', nullable: false },
-            { name: 'description', type: 'text', nullable: false },
+            { name: 'name', type: 'text', nullable: false },
+            { name: 'brand', type: 'text', nullable: false },
+            { name: 'price_cents', type: 'integer', nullable: false },
           ],
         },
       ],
     }
-    const sql = contractToSeedSQL(contract, 1)
-    // Email should contain @ (faker generates real-looking emails)
-    expect(sql).toMatch(/@/)
-    // Status should be one of the known enum values
-    expect(sql).toMatch(/active|pending|completed|inactive|draft/)
-    // Description should contain multi-word text (faker paragraph)
-    expect(sql).toMatch(/INSERT INTO "users".*description/)
+    const sql = await contractToSeedSQL(contract, 2)
+    expect(sql).toContain('Rolex Submariner')
+    expect(sql).toContain('Omega Seamaster')
+    expect(sql).toContain('1250000')
   })
 
-  it('skips columns with defaults (except PKs)', () => {
+  it('skips columns with defaults (except PKs)', async () => {
     const contract: SchemaContract = {
       tables: [
         {
@@ -186,7 +254,7 @@ describe('contractToSeedSQL', () => {
         },
       ],
     }
-    const sql = contractToSeedSQL(contract, 1)
+    const sql = await contractToSeedSQL(contract, 1)
     // PK should be present (explicit ID for FK referencing)
     expect(sql).toContain('id')
     // title has no default — should be present
@@ -197,14 +265,15 @@ describe('contractToSeedSQL', () => {
     expect(sql).not.toMatch(/created_at/)
   })
 
-  it('returns empty-ish SQL for empty contract', () => {
+  it('returns comment-only SQL for empty contract', async () => {
     const contract: SchemaContract = { tables: [] }
-    const sql = contractToSeedSQL(contract, 5)
+    const sql = await contractToSeedSQL(contract, 5)
     expect(sql).toContain('Auto-generated seed data')
     expect(sql).not.toContain('INSERT INTO')
   })
 
-  it('generates deterministic UUIDs', () => {
+  it('generates deterministic PKs regardless of LLM output', async () => {
+    // The LLM may return different content each time, but PKs are always deterministic
     const contract: SchemaContract = {
       tables: [
         {
@@ -216,8 +285,14 @@ describe('contractToSeedSQL', () => {
         },
       ],
     }
-    const sql1 = contractToSeedSQL(contract, 3)
-    const sql2 = contractToSeedSQL(contract, 3)
-    expect(sql1).toBe(sql2)
+    const sql1 = await contractToSeedSQL(contract, 3)
+    const sql2 = await contractToSeedSQL(contract, 3)
+    // Extract just the UUID values from both runs
+    const uuidPattern = /00000000-0000-4000-[0-9a-f]{4}-[0-9a-f]{12}/g
+    const uuids1 = sql1.match(uuidPattern) ?? []
+    const uuids2 = sql2.match(uuidPattern) ?? []
+    expect(uuids1).toEqual(uuids2)
+    // Should have 3 deterministic PKs
+    expect(uuids1.filter(u => u.startsWith('00000000-0000-4000-8')).length).toBe(3)
   })
 })

@@ -490,3 +490,80 @@ describe('assembleAppointmentCardPage', () => {
     expect(code).toContain('CardContent')
   })
 })
+
+// ============================================================================
+// FK dropdown rendering in detail assemblers
+// ============================================================================
+
+function makeFKDetailProps(
+  entityName: string,
+  fkColumn: string,
+  refTableName: string,
+): SkillProps {
+  const contract: SchemaContract = {
+    tables: [
+      {
+        name: entityName,
+        columns: [
+          { name: 'id', type: 'uuid', primaryKey: true, default: 'gen_random_uuid()' },
+          { name: 'name', type: 'text', nullable: false },
+          { name: fkColumn, type: 'uuid', nullable: true, references: { table: refTableName, column: 'id' } },
+          { name: 'created_at', type: 'timestamptz', default: 'now()' },
+        ],
+      },
+      {
+        name: refTableName,
+        columns: [
+          { name: 'id', type: 'uuid', primaryKey: true },
+          { name: 'name', type: 'text', nullable: false },
+        ],
+      },
+    ],
+  }
+  const table = contract.tables[0]
+  const pageConfig = inferPageConfig(table, contract)
+  const spec = derivePageFeatureSpec(pageConfig, contract)
+  return {
+    entity: entityName,
+    contract,
+    spec,
+    layout: { listSkill: 'CardGrid', detailSkill: 'ProductDetail', hasDashboard: false },
+    primaryColor: '#3b82f6',
+    fontFamily: 'Inter',
+    heroImages: [],
+  }
+}
+
+describe('FK dropdown rendering in detail assemblers', () => {
+  it('ProductDetail: renders FK edit field as select dropdown with useQuery hook', () => {
+    const props = makeFKDetailProps('product', 'category_id', 'category')
+    const code = assembleProductDetailPage(props)
+
+    // Edit form should have a select for the FK field
+    expect(code).toContain('Select Category...')
+    // Should have useQuery hook for the referenced table (using EditData suffix to avoid collision)
+    expect(code).toContain('categoryEditData')
+    expect(code).toContain("queryKey: ['category', 'fk-options']")
+  })
+
+  it('ArticleReader: renders FK edit field as select dropdown', () => {
+    const props = makeFKDetailProps('article', 'author_id', 'author')
+    const code = assembleArticleReaderPage(props)
+    expect(code).toContain('Select Author...')
+    expect(code).toContain('authorEditData')
+  })
+
+  it('ProfileCard: renders FK edit field as select dropdown', () => {
+    const props = makeFKDetailProps('member', 'team_id', 'team')
+    const code = assembleProfileCardPage(props)
+    expect(code).toContain('Select Team...')
+    expect(code).toContain('teamEditData')
+  })
+
+  it('AppointmentCard: renders FK edit field as select dropdown', () => {
+    const props = makeFKDetailProps('appointment', 'client_id', 'client')
+    const code = assembleAppointmentCardPage(props)
+    expect(code).toContain('Select Client...')
+    expect(code).toContain('clientEditData')
+  })
+})

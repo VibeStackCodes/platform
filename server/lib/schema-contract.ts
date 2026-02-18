@@ -303,12 +303,104 @@ export const EnumDefSchema = z.object({
   ).describe('Enum values'),
 })
 
+/**
+ * Infer the referenced table from an `_id` suffix column stem.
+ * Used by SchemaContractSchema.transform() to normalize implicit FK references.
+ *
+ * Matching strategy (in order):
+ * 1. Exact match of stem or plural variants (simple + es + y→ies)
+ * 2. Substring match (e.g. 'categories' found within 'menu_categories')
+ * 3. Reserved-word rename match (e.g. 'table' → 'table_record')
+ *
+ * Exported for use in tests.
+ */
+export function inferRefTableFromStem(stem: string, tableNames: string[]): string | undefined {
+  const variants: string[] = [
+    stem,
+    stem + 's',
+    stem + 'es',
+    stem.endsWith('y') ? stem.slice(0, -1) + 'ies' : '',
+  ].filter(Boolean)
+
+  // 1. Exact match
+  for (const v of variants) {
+    const match = tableNames.find((t) => t === v)
+    if (match) return match
+  }
+
+  // 2. Substring match (e.g. 'categories' in 'menu_categories')
+  for (const v of variants) {
+    const match = tableNames.find((t) => t.includes(v))
+    if (match) return match
+  }
+
+  // 3. Reserved-word rename (table → table_record, order → order_record)
+  const recordMatch = tableNames.find(
+    (t) => t.endsWith('_record') && t.replace(/_record$/, '') === stem,
+  )
+  if (recordMatch) return recordMatch
+
+  return undefined
+}
+
 export const SchemaContractSchema = z.object({
   tables: z.array(TableDefSchema).describe('Database tables'),
   enums: z.preprocess(
     (val) => (val === null ? undefined : val),
     z.array(EnumDefSchema).optional(),
   ).describe('PostgreSQL enum types'),
+}).transform((contract) => {
+  // Two normalizations applied at parse time so all downstream code gets a clean contract:
+  //
+  // 1. id uuid → PRIMARY KEY: The analyst sometimes omits `primaryKey: true` on the `id`
+  //    column (common when generating many tables at once). Without PRIMARY KEY, any
+  //    REFERENCES to that table fail with PostgreSQL 42830 "no unique constraint".
+  //
+  // 2. Implicit FK references: The analyst sometimes omits `references` on FK columns
+  //    (e.g. `category_id` without `references: { table: 'menu_categories', column: 'id' }`).
+  //    We infer them from column naming conventions (_id suffix → stem → table name match).
+  const tableNames = contract.tables.map((t) => t.name)
+  return {
+    ...contract,
+    tables: contract.tables.map((table) => ({
+      ...table,
+      columns: table.columns.map((col) => {
+        // Normalization 1: auto-set PRIMARY KEY + default on id uuid columns.
+        // Every generated table uses `id uuid PRIMARY KEY DEFAULT gen_random_uuid()` by
+        // convention. If the analyst forgets primaryKey: true, the SQL generator emits
+        // a column with no unique constraint — breaking any REFERENCES to this table.
+        let normalized = col
+        if (col.name === 'id' && col.type === 'uuid' && !col.primaryKey) {
+          normalized = {
+            ...col,
+            primaryKey: true,
+            default: col.default ?? 'gen_random_uuid()',
+          }
+        }
+
+        // Normalization 2: infer missing FK references from _id suffix columns.
+        if (normalized.references) {
+          // Drop explicit self-referential FKs — LLMs sometimes wire junction table
+          // columns back to the same table (e.g. recipe_category_links.category_id
+          // referencing recipe_category_links). These cause circular FK cycles.
+          if (normalized.references.table === table.name) {
+            return { ...normalized, references: undefined }
+          }
+          return normalized
+        }
+        if (!normalized.name.endsWith('_id')) return normalized
+        const stem = normalized.name.slice(0, -3)
+        const refTable = inferRefTableFromStem(stem, tableNames)
+        if (!refTable) return normalized
+        // Never infer self-referential FKs — these must be explicit in the contract
+        // (e.g. tree structures). The substring match in inferRefTableFromStem can
+        // false-positive on junction tables, e.g. `category_id` in `recipe_category_links`
+        // matches `recipe_category_links` because it contains the word "category".
+        if (refTable === table.name) return normalized
+        return { ...normalized, references: { table: refTable, column: 'id' } }
+      }),
+    })),
+  }
 })
 
 export const DesignPreferencesSchema = z.object({
@@ -439,9 +531,35 @@ export interface InferredFeatures {
 }
 
 /**
+ * A junction table is a pure many-to-many bridge with no meaningful own columns.
+ * Detection: all non-auto-managed, non-PK columns reference other tables (are FKs).
+ * Must have at least 2 FK columns to qualify as a junction.
+ *
+ * Handles both explicit FK references AND implicit FKs (column ends in `_id`
+ * with a stem matching a known table name) — the analyst LLM sometimes omits
+ * explicit `references` fields on junction table FK columns.
+ */
+function isJunctionTable(table: TableDef, allTables: TableDef[]): boolean {
+  const autoManaged = new Set(['id', 'created_at', 'updated_at', 'user_id', 'order', 'position', 'sort_order'])
+  const tableNames = new Set(allTables.map((t) => t.name))
+  const nonAutoNonPk = table.columns.filter((c) => !c.primaryKey && !autoManaged.has(c.name))
+  // Need at least 2 columns to be a junction table
+  if (nonAutoNonPk.length < 2) return false
+  // All such columns must be FKs (explicit or implicit via `_id` naming)
+  return nonAutoNonPk.every((c) => {
+    if (c.references) return true
+    if (c.name.endsWith('_id')) {
+      const stem = c.name.slice(0, -3) // 'article' from 'article_id'
+      return tableNames.has(stem) || tableNames.has(stem + 's') || tableNames.has(stem + 'es')
+    }
+    return false
+  })
+}
+
+/**
  * Infer app features from the schema contract.
  * - auth: true if any table has a user_id column referencing auth.users
- * - entities: list of all table names
+ * - entities: list of all non-junction table names
  */
 export function inferFeatures(contract: SchemaContract): InferredFeatures {
   const hasAuth = contract.tables.some((table) =>
@@ -454,6 +572,6 @@ export function inferFeatures(contract: SchemaContract): InferredFeatures {
 
   return {
     auth: hasAuth,
-    entities: contract.tables.map((t) => t.name),
+    entities: contract.tables.filter((t) => !isJunctionTable(t, contract.tables)).map((t) => t.name),
   }
 }

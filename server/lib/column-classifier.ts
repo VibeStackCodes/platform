@@ -215,7 +215,7 @@ export function classifyColumn(col: ClassificationInput): ColumnClassification {
   }
 
   // ─── Rule 12: description ──────────────────────────────────────────────────
-  if (/description|summary|abstract/.test(n) && isTextType(type)) {
+  if (/description|summary|abstract|^bio$|^about$/.test(n) && isTextType(type)) {
     return {
       ...base,
       semantic: 'description',
@@ -547,4 +547,30 @@ export function classifyColumn(col: ClassificationInput): ColumnClassification {
     listPriority: 99,
     isAutoManaged: isUserId,
   }
+}
+
+/**
+ * Find the best display column in a table for FK dropdown labels.
+ * Uses classifyColumn to pick semantically meaningful columns.
+ * Returns the column name to use (e.g. 'name', 'title', 'email') or 'id' as fallback.
+ */
+export function findDisplayColumn(
+  columns: Array<{ name: string; type: string; primaryKey?: boolean }>,
+): string {
+  // Priority: name-class semantics first (title, name, full_name, first_name), then email
+  const prioritySemantics: SemanticType[] = ['title', 'name', 'full_name', 'first_name', 'email']
+  for (const semantic of prioritySemantics) {
+    const col = columns.find(
+      (c) => !c.primaryKey && classifyColumn({ name: c.name, type: c.type }).semantic === semantic,
+    )
+    if (col) return col.name
+  }
+
+  // Any non-pk text column as fallback
+  const textCol = columns.find(
+    (c) => !c.primaryKey && (c.type === 'text' || c.type === 'varchar'),
+  )
+  if (textCol) return textCol.name
+
+  return 'id'
 }

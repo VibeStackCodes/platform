@@ -136,6 +136,7 @@ export const PIPELINE_MODELS = {
   review: 'gpt-5.2',
   repair: 'gpt-5.2-codex',
   edit: 'gpt-5.2-codex',
+  seed: 'gpt-5-mini',
 } as const
 
 export type PipelineRole = keyof typeof PIPELINE_MODELS

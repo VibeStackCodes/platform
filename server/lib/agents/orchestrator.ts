@@ -226,7 +226,7 @@ export async function runCodeGeneration(input: {
     console.log('[codegen] Migration applied to Supabase')
   }
 
-  const seedSQL = contractToSeedSQL(input.contract)
+  const seedSQL = await contractToSeedSQL(input.contract)
   if (seedSQL) {
     const seedResult = await runMigration(input.supabaseProjectId, seedSQL)
     if (!seedResult.success) {

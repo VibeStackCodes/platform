@@ -7,6 +7,7 @@ import {
   validateFeatureSpec,
   validatePageConfig,
 } from '@server/lib/agents/feature-schema'
+import { SchemaContractSchema } from '@server/lib/schema-contract'
 import type { SchemaContract } from '@server/lib/schema-contract'
 
 const testContract: SchemaContract = {
@@ -230,6 +231,139 @@ describe('derivePageFeatureSpec', () => {
     expect(formFieldNames).toContain('title')
     expect(formFieldNames).toContain('status')
     expect(formFieldNames).toContain('description')
+  })
+
+  it('populates refTable for FK columns and omits it for non-FK columns', () => {
+    const contract: SchemaContract = {
+      tables: [{
+        name: 'order_item',
+        columns: [
+          { name: 'id', type: 'uuid', primaryKey: true },
+          { name: 'product_id', type: 'uuid', references: { table: 'product', column: 'id' } },
+          { name: 'quantity', type: 'integer' },
+          { name: 'user_id', type: 'uuid', references: { table: 'auth.users', column: 'id' } },
+          { name: 'created_at', type: 'timestamptz' },
+        ],
+      }],
+    }
+    const config = inferPageConfig(contract.tables[0], contract)
+    const spec = derivePageFeatureSpec(config, contract)
+
+    // product_id should have refTable set (non-auth FK)
+    const productField = spec.listPage.createFormFields.find(f => f.field === 'product_id')
+    expect(productField).toBeDefined()
+    expect(productField?.refTable).toBe('product')
+
+    // quantity should not have refTable
+    const qtyField = spec.listPage.createFormFields.find(f => f.field === 'quantity')
+    expect(qtyField?.refTable).toBeUndefined()
+
+    // user_id is auto-managed and should be excluded from the form entirely
+    const userIdField = spec.listPage.createFormFields.find(f => f.field === 'user_id')
+    expect(userIdField).toBeUndefined()
+  })
+
+  it('excludes auth.users FK columns from create and edit forms', () => {
+    const contract: SchemaContract = {
+      tables: [{
+        name: 'post',
+        columns: [
+          { name: 'id', type: 'uuid', primaryKey: true },
+          { name: 'title', type: 'text' },
+          { name: 'author_id', type: 'uuid', references: { table: 'auth.users', column: 'id' } },
+          { name: 'created_at', type: 'timestamptz' },
+        ],
+      }],
+    }
+    const config = inferPageConfig(contract.tables[0], contract)
+    const spec = derivePageFeatureSpec(config, contract)
+
+    const createFields = spec.listPage.createFormFields.map(f => f.field)
+    const editFields = spec.detailPage.editFormFields.map(f => f.field)
+
+    // auth.users FK columns should be excluded from both forms
+    expect(createFields).not.toContain('author_id')
+    expect(editFields).not.toContain('author_id')
+  })
+
+  it('populates refTable in editFormFields for non-auth FK columns', () => {
+    const contract: SchemaContract = {
+      tables: [
+        {
+          name: 'task',
+          columns: [
+            { name: 'id', type: 'uuid', primaryKey: true },
+            { name: 'title', type: 'text' },
+            { name: 'project_id', type: 'uuid', references: { table: 'project', column: 'id' } },
+            { name: 'created_at', type: 'timestamptz' },
+          ],
+        },
+        { name: 'project', columns: [{ name: 'id', type: 'uuid', primaryKey: true }, { name: 'name', type: 'text' }] },
+      ],
+    }
+    const config = inferPageConfig(contract.tables[0], contract)
+    const spec = derivePageFeatureSpec(config, contract)
+
+    const projectEditField = spec.detailPage.editFormFields.find(f => f.field === 'project_id')
+    expect(projectEditField).toBeDefined()
+    expect(projectEditField?.refTable).toBe('project')
+  })
+
+  it('infers refTable from _id column name when references field is absent', () => {
+    // Simulates analyst output that omits `references` on FK columns.
+    // Contract is parsed through SchemaContractSchema so the .transform() runs
+    // and populates `col.references` for all detectable FK columns.
+    const contract = SchemaContractSchema.parse({
+      tables: [
+        {
+          name: 'menu_item',
+          columns: [
+            { name: 'id', type: 'uuid', primaryKey: true },
+            { name: 'name', type: 'text' },
+            { name: 'category_id', type: 'uuid' },          // no explicit references
+            { name: 'table_id', type: 'uuid' },             // no explicit references (reserved-word table)
+            { name: 'price', type: 'numeric' },
+            { name: 'created_at', type: 'timestamptz' },
+          ],
+        },
+        { name: 'menu_categories', columns: [{ name: 'id', type: 'uuid', primaryKey: true }, { name: 'name', type: 'text' }] },
+        { name: 'table_record', columns: [{ name: 'id', type: 'uuid', primaryKey: true }, { name: 'name', type: 'text' }] },
+      ],
+    })
+    const config = inferPageConfig(contract.tables[0], contract)
+    const spec = derivePageFeatureSpec(config, contract)
+
+    // category_id → stem 'category' → found in 'menu_categories' (substring match)
+    const catField = spec.listPage.createFormFields.find(f => f.field === 'category_id')
+    expect(catField?.refTable).toBe('menu_categories')
+
+    // table_id → stem 'table' → found in 'table_record' (reserved-word rename)
+    const tableField = spec.listPage.createFormFields.find(f => f.field === 'table_id')
+    expect(tableField?.refTable).toBe('table_record')
+
+    // price has no _id suffix → no refTable
+    const priceField = spec.listPage.createFormFields.find(f => f.field === 'price')
+    expect(priceField?.refTable).toBeUndefined()
+  })
+
+  it('does not infer refTable for _id columns with no matching contract table', () => {
+    const contract = SchemaContractSchema.parse({
+      tables: [{
+        name: 'event',
+        columns: [
+          { name: 'id', type: 'uuid', primaryKey: true },
+          { name: 'name', type: 'text' },
+          { name: 'external_service_id', type: 'uuid' }, // _id but no matching table
+          { name: 'created_at', type: 'timestamptz' },
+        ],
+      }],
+    })
+    const config = inferPageConfig(contract.tables[0], contract)
+    const spec = derivePageFeatureSpec(config, contract)
+
+    // external_service_id → no matching table in contract → text input
+    const extField = spec.listPage.createFormFields.find(f => f.field === 'external_service_id')
+    expect(extField?.refTable).toBeUndefined()
   })
 
   it('derives correct input types for form fields', () => {

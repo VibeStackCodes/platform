@@ -226,6 +226,19 @@ export function inferPageConfig(
 /** Auto-managed columns excluded from create/edit forms */
 const AUTO_COLUMNS = new Set(['id', 'created_at', 'updated_at', 'user_id'])
 
+/**
+ * Returns the FK ref table for a dropdown, or undefined if not applicable.
+ * By the time this runs the contract has been normalized via SchemaContractSchema.transform(),
+ * so `col.references` is already populated for all inferable FK columns.
+ */
+function fkRefTable(
+  col: { name: string; references?: { table: string; column: string } },
+): string | undefined {
+  // auth.users FKs are structural — never a user-facing dropdown
+  if (col.references?.table === 'auth.users') return undefined
+  return col.references?.table
+}
+
 /** snake_case → Title Case */
 function snakeToLabel(name: string): string {
   return name
@@ -303,6 +316,7 @@ export interface PageFeatureSpec {
       inputType: InputType
       placeholder: string
       options: string[]
+      refTable?: string
     }>
     filters: Array<{
       field: string
@@ -321,6 +335,7 @@ export interface PageFeatureSpec {
       field: string
       label: string
       inputType: InputType
+      refTable?: string
     }>
   }
 }
@@ -365,8 +380,10 @@ export function derivePageFeatureSpec(
     ?? table.columns[0].name
   const sortDirection: 'asc' | 'desc' = timestamps.some((c) => c.name === sortDefault) ? 'desc' : 'asc'
 
-  // Create form: non-auto columns
-  const formColumns = table.columns.filter((c) => !AUTO_COLUMNS.has(c.name) && !c.primaryKey)
+  // Create form: non-auto columns, excluding auth.users FK columns (structural — not user-editable)
+  const formColumns = table.columns.filter(
+    (c) => !AUTO_COLUMNS.has(c.name) && !c.primaryKey && c.references?.table !== 'auth.users',
+  )
   const createFormFields = formColumns.map((col) => {
     const isEnum = enumMap.has(col.name)
     return {
@@ -375,6 +392,7 @@ export function derivePageFeatureSpec(
       inputType: deriveInputType(col.type, col.name, isEnum),
       placeholder: deriveFormPlaceholder(col.name, col.type, isEnum),
       options: enumMap.get(col.name) ?? [],
+      refTable: fkRefTable(col),
     }
   })
 
@@ -415,6 +433,7 @@ export function derivePageFeatureSpec(
     field: col.name,
     label: snakeToLabel(col.name),
     inputType: deriveInputType(col.type, col.name, enumMap.has(col.name)),
+    refTable: fkRefTable(col),
   }))
 
   return {
@@ -465,6 +484,7 @@ export const PageFeatureSchema = z.object({
       inputType: InputTypeSchema,
       placeholder: z.string(),
       options: z.array(z.string()),
+      refTable: z.string().optional(),
     })),
     filters: z.array(z.object({
       field: z.string(),
@@ -487,6 +507,7 @@ export const PageFeatureSchema = z.object({
       field: z.string(),
       label: z.string(),
       inputType: InputTypeSchema,
+      refTable: z.string().optional(),
     })),
   }),
 })

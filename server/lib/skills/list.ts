@@ -4,7 +4,7 @@
 // Each function returns a complete React component as a TypeScript string.
 // These are code generators — NOT JSX, but strings that will be written to files.
 
-import { snakeToPascal, snakeToKebab, snakeToTitle, pluralize } from '../naming-utils'
+import { snakeToPascal, snakeToCamel, snakeToKebab, snakeToTitle, pluralize, singularize } from '../naming-utils'
 import type { SkillProps } from './index'
 
 // ── Card Grid ─────────────────────────────────────────────────────────────────
@@ -20,7 +20,7 @@ export function assembleCardGridPage(props: SkillProps): string {
   const pluralKebab = snakeToKebab(pluralize(entity))
   const plural = pluralize(entity)
   const pluralTitle = snakeToTitle(plural)
-  const singularTitle = snakeToTitle(entity)
+  const singularTitle = snakeToTitle(singularize(entity))
 
   // Detect image field
   const allColumns = props.contract.tables.find(t => t.name === entity)?.columns ?? []
@@ -28,17 +28,35 @@ export function assembleCardGridPage(props: SkillProps): string {
     c.name.includes('image') || c.name.includes('photo') || c.name.includes('thumbnail') || c.name.includes('avatar')
   )?.name
 
-  // Non-auto-managed display fields (excluding id, created_at, updated_at, user_id, imageField)
+  const headerFieldRef = spec.detailPage.headerField ?? spec.listPage.columns[0]?.field ?? 'id'
+
+  // Non-auto-managed display fields (excluding id, created_at, updated_at, user_id, imageField, headerFieldRef)
   const autoManaged = new Set(['id', 'created_at', 'updated_at', 'user_id'])
   const cardFields = spec.listPage.columns
-    .filter(c => !autoManaged.has(c.field) && c.field !== imageField)
+    .filter(c => !autoManaged.has(c.field) && c.field !== imageField && c.field !== headerFieldRef)
     .slice(0, 3)
 
   // Form fields for create dialog
   const formFields = spec.listPage.createFormFields
 
+  // Collect unique FK tables for useQuery hooks
+  const fkFields = formFields.filter(f => f.refTable)
+  const uniqueFKTables = [...new Set(fkFields.map(f => f.refTable!))]
+
   // Build the form field JSX strings
   const formFieldsJSX = formFields.map(f => {
+    if (f.refTable) {
+      const queryVar = `${snakeToCamel(f.refTable)}Data`
+      return `          <div>
+            <label className="text-sm font-medium">${f.label}</label>
+            <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={String(form.${f.field} ?? '')} onChange={e => setForm(p => ({ ...p, ${f.field}: e.target.value }))}>
+              <option value="">Select ${snakeToTitle(singularize(f.refTable))}...</option>
+              {(${queryVar}?.data ?? []).map((row: Record<string, unknown>) => (
+                <option key={String(row.id)} value={String(row.id)}>{String(row.name ?? row.title ?? row.id)}</option>
+              ))}
+            </select>
+          </div>`
+    }
     if (f.inputType === 'textarea') {
       return `          <div>
             <label className="text-sm font-medium">${f.label}</label>
@@ -61,6 +79,18 @@ ${opts}
           </div>`
   }).join('\n')
 
+  // Build useQuery hooks for FK reference tables
+  const fkQueryHooks = uniqueFKTables.map(table => {
+    const queryVar = `${snakeToCamel(table)}Data`
+    return `  const ${queryVar} = useQuery({
+    queryKey: ['${table}', 'fk-options'],
+    queryFn: async () => {
+      const { data } = await supabase.from('${table}').select('id, name, title').order('name').limit(200)
+      return data ?? []
+    },
+  })`
+  }).join('\n')
+
   const cardBodyFields = cardFields.map(col => {
     if (col.format === 'currency') {
       return `              <p className="text-sm text-muted-foreground">${col.label}: {'$' + Number(item.${col.field} ?? 0).toFixed(2)}</p>`
@@ -72,7 +102,7 @@ ${opts}
   }).join('\n')
 
   const needsTextarea = formFields.some(f => f.inputType === 'textarea')
-  const headerFieldRef = spec.detailPage.headerField ?? cardFields[0]?.field ?? 'id'
+  const needsInput = formFields.some(f => !f.refTable && f.inputType !== 'textarea' && f.inputType !== 'select')
 
   const imports = [
     `import { useState } from 'react'`,
@@ -81,8 +111,8 @@ ${opts}
     `import { supabase } from '@/lib/supabase'`,
     `import { Button } from '@/components/ui/button'`,
     `import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'`,
-    `import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'`,
-    `import { Input } from '@/components/ui/input'`,
+    `import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'`,
+    needsInput ? `import { Input } from '@/components/ui/input'` : null,
     needsTextarea ? `import { Textarea } from '@/components/ui/textarea'` : null,
     `import { Plus, Trash2 } from 'lucide-react'`,
   ].filter(Boolean).join('\n')
@@ -137,6 +167,8 @@ function ${pascal}ListPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['${entity}'] }),
   })
 
+${fkQueryHooks}
+
   if (isPending) return <div className="flex justify-center py-20"><p className="text-muted-foreground">Loading ${pluralTitle.toLowerCase()}...</p></div>
   if (error) return <div className="flex justify-center py-20"><p className="text-destructive">Error: {error.message}</p></div>
 
@@ -151,6 +183,7 @@ function ${pascal}ListPage() {
           <DialogContent className="sm:max-w-[500px]">
             <DialogHeader>
               <DialogTitle>New ${singularTitle}</DialogTitle>
+              <DialogDescription className="sr-only">Create a new ${singularTitle}</DialogDescription>
             </DialogHeader>
             <form className="space-y-4" onSubmit={e => { e.preventDefault(); create${pascal}.mutate(form) }}>
 ${formFieldsJSX}
@@ -213,7 +246,7 @@ export function assembleMenuGridPage(props: SkillProps): string {
   const pascal = snakeToPascal(entity)
   const pluralKebab = snakeToKebab(pluralize(entity))
   const pluralTitle = snakeToTitle(pluralize(entity))
-  const singularTitle = snakeToTitle(entity)
+  const singularTitle = snakeToTitle(singularize(entity))
 
   const allColumns = props.contract.tables.find(t => t.name === entity)?.columns ?? []
   const priceField = allColumns.find(c => c.name.includes('price') || c.name.includes('cost'))?.name
@@ -221,12 +254,31 @@ export function assembleMenuGridPage(props: SkillProps): string {
   const headerField = spec.detailPage.headerField
   const formFields = spec.listPage.createFormFields
   const needsTextarea = formFields.some(f => f.inputType === 'textarea')
+  const needsInput = formFields.some(f => !f.refTable && f.inputType !== 'textarea' && f.inputType !== 'select')
+
+  const menuFKFields = formFields.filter(f => f.refTable)
+  const menuUniqueFKTables = [...new Set(menuFKFields.map(f => f.refTable!))]
 
   const formFieldsJSX = formFields.map(f => {
+    if (f.refTable) {
+      const queryVar = `${snakeToCamel(f.refTable)}Data`
+      return `          <div><label className="text-sm font-medium">${f.label}</label><select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={String(form.${f.field} ?? '')} onChange={e => setForm(p => ({ ...p, ${f.field}: e.target.value }))}><option value="">Select ${snakeToTitle(singularize(f.refTable))}...</option>{(${queryVar}?.data ?? []).map((row: Record<string, unknown>) => (<option key={String(row.id)} value={String(row.id)}>{String(row.name ?? row.title ?? row.id)}</option>))}</select></div>`
+    }
     if (f.inputType === 'textarea') {
       return `          <div><label className="text-sm font-medium">${f.label}</label><Textarea value={String(form.${f.field} ?? '')} onChange={e => setForm(p => ({ ...p, ${f.field}: e.target.value }))} placeholder="${f.placeholder}" /></div>`
     }
     return `          <div><label className="text-sm font-medium">${f.label}</label><Input type="${f.inputType === 'number' ? 'number' : 'text'}" value={String(form.${f.field} ?? '')} onChange={e => setForm(p => ({ ...p, ${f.field}: e.target.value }))} placeholder="${f.placeholder}" /></div>`
+  }).join('\n')
+
+  const menuFKQueryHooks = menuUniqueFKTables.map(table => {
+    const queryVar = `${snakeToCamel(table)}Data`
+    return `  const ${queryVar} = useQuery({
+    queryKey: ['${table}', 'fk-options'],
+    queryFn: async () => {
+      const { data } = await supabase.from('${table}').select('id, name, title').order('name').limit(200)
+      return data ?? []
+    },
+  })`
   }).join('\n')
 
   const imports = [
@@ -235,8 +287,8 @@ export function assembleMenuGridPage(props: SkillProps): string {
     `import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'`,
     `import { supabase } from '@/lib/supabase'`,
     `import { Button } from '@/components/ui/button'`,
-    `import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'`,
-    `import { Input } from '@/components/ui/input'`,
+    `import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'`,
+    needsInput ? `import { Input } from '@/components/ui/input'` : null,
     needsTextarea ? `import { Textarea } from '@/components/ui/textarea'` : null,
     `import { Plus, Trash2 } from 'lucide-react'`,
   ].filter(Boolean).join('\n')
@@ -278,6 +330,8 @@ function ${pascal}MenuPage() {
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['${entity}'] }); setOpen(false); setForm({}) },
   })
 
+${menuFKQueryHooks}
+
   const delete${pascal} = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase.from('${entity}').delete().eq('id', id)
@@ -298,7 +352,7 @@ function ${pascal}MenuPage() {
             <Button><Plus className="mr-2 h-4 w-4" />Add Item</Button>
           </DialogTrigger>
           <DialogContent>
-            <DialogHeader><DialogTitle>New ${singularTitle}</DialogTitle></DialogHeader>
+            <DialogHeader><DialogTitle>New ${singularTitle}</DialogTitle><DialogDescription className="sr-only">Create a new ${singularTitle}</DialogDescription></DialogHeader>
             <form className="space-y-4" onSubmit={e => { e.preventDefault(); create${pascal}.mutate(form) }}>
 ${formFieldsJSX}
               <Button type="submit" disabled={create${pascal}.isPending} className="w-full">
@@ -351,7 +405,7 @@ export function assembleMagazineGridPage(props: SkillProps): string {
   const pascal = snakeToPascal(entity)
   const pluralKebab = snakeToKebab(pluralize(entity))
   const pluralTitle = snakeToTitle(pluralize(entity))
-  const singularTitle = snakeToTitle(entity)
+  const singularTitle = snakeToTitle(singularize(entity))
   const headerField = spec.detailPage.headerField
 
   const allColumns = props.contract.tables.find(t => t.name === entity)?.columns ?? []
@@ -360,12 +414,31 @@ export function assembleMagazineGridPage(props: SkillProps): string {
   const dateField = allColumns.find(c => c.name.includes('published') || c.name.includes('created'))?.name ?? 'created_at'
   const formFields = spec.listPage.createFormFields
   const needsTextarea = formFields.some(f => f.inputType === 'textarea')
+  const needsInput = formFields.some(f => !f.refTable && f.inputType !== 'textarea' && f.inputType !== 'select')
+
+  const magFKFields = formFields.filter(f => f.refTable)
+  const magUniqueFKTables = [...new Set(magFKFields.map(f => f.refTable!))]
 
   const formFieldsJSX = formFields.map(f => {
+    if (f.refTable) {
+      const queryVar = `${snakeToCamel(f.refTable)}Data`
+      return `          <div><label className="text-sm font-medium">${f.label}</label><select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={String(form.${f.field} ?? '')} onChange={e => setForm(p => ({ ...p, ${f.field}: e.target.value }))}><option value="">Select ${snakeToTitle(singularize(f.refTable))}...</option>{(${queryVar}?.data ?? []).map((row: Record<string, unknown>) => (<option key={String(row.id)} value={String(row.id)}>{String(row.name ?? row.title ?? row.id)}</option>))}</select></div>`
+    }
     if (f.inputType === 'textarea') {
       return `          <div><label className="text-sm font-medium">${f.label}</label><Textarea value={String(form.${f.field} ?? '')} onChange={e => setForm(p => ({ ...p, ${f.field}: e.target.value }))} /></div>`
     }
     return `          <div><label className="text-sm font-medium">${f.label}</label><Input value={String(form.${f.field} ?? '')} onChange={e => setForm(p => ({ ...p, ${f.field}: e.target.value }))} placeholder="${f.placeholder}" /></div>`
+  }).join('\n')
+
+  const magFKQueryHooks = magUniqueFKTables.map(table => {
+    const queryVar = `${snakeToCamel(table)}Data`
+    return `  const ${queryVar} = useQuery({
+    queryKey: ['${table}', 'fk-options'],
+    queryFn: async () => {
+      const { data } = await supabase.from('${table}').select('id, name, title').order('name').limit(200)
+      return data ?? []
+    },
+  })`
   }).join('\n')
 
   const imports = [
@@ -374,8 +447,8 @@ export function assembleMagazineGridPage(props: SkillProps): string {
     `import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'`,
     `import { supabase } from '@/lib/supabase'`,
     `import { Button } from '@/components/ui/button'`,
-    `import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'`,
-    `import { Input } from '@/components/ui/input'`,
+    `import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'`,
+    needsInput ? `import { Input } from '@/components/ui/input'` : null,
     needsTextarea ? `import { Textarea } from '@/components/ui/textarea'` : null,
     `import { Plus } from 'lucide-react'`,
   ].filter(Boolean).join('\n')
@@ -428,6 +501,8 @@ function ${pascal}MagazinePage() {
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['${entity}'] }); setOpen(false); setForm({}) },
   })
 
+${magFKQueryHooks}
+
   if (isPending) return <div className="flex justify-center py-20"><p className="text-muted-foreground">Loading...</p></div>
   if (error) return <div className="flex justify-center py-20"><p className="text-destructive">Error: {error.message}</p></div>
 
@@ -443,7 +518,7 @@ function ${pascal}MagazinePage() {
             <Button><Plus className="mr-2 h-4 w-4" />New ${singularTitle}</Button>
           </DialogTrigger>
           <DialogContent className="sm:max-w-[500px]">
-            <DialogHeader><DialogTitle>New ${singularTitle}</DialogTitle></DialogHeader>
+            <DialogHeader><DialogTitle>New ${singularTitle}</DialogTitle><DialogDescription className="sr-only">Create a new ${singularTitle}</DialogDescription></DialogHeader>
             <form className="space-y-4" onSubmit={e => { e.preventDefault(); create${pascal}.mutate(form) }}>
 ${formFieldsJSX}
               <Button type="submit" disabled={create${pascal}.isPending} className="w-full">
@@ -509,7 +584,7 @@ export function assembleTransactionFeedPage(props: SkillProps): string {
   const pascal = snakeToPascal(entity)
   const pluralKebab = snakeToKebab(pluralize(entity))
   const pluralTitle = snakeToTitle(pluralize(entity))
-  const singularTitle = snakeToTitle(entity)
+  const singularTitle = snakeToTitle(singularize(entity))
   const headerField = spec.detailPage.headerField
 
   const allColumns = props.contract.tables.find(t => t.name === entity)?.columns ?? []
@@ -518,7 +593,15 @@ export function assembleTransactionFeedPage(props: SkillProps): string {
   const dateField = allColumns.find(c => c.name.includes('date') || c.name.includes('created'))?.name ?? 'created_at'
   const formFields = spec.listPage.createFormFields
 
+  const txFKFields = formFields.filter(f => f.refTable)
+  const txUniqueFKTables = [...new Set(txFKFields.map(f => f.refTable!))]
+  const needsInput = formFields.some(f => !f.refTable && f.inputType !== 'textarea' && f.inputType !== 'select')
+
   const formFieldsJSX = formFields.map(f => {
+    if (f.refTable) {
+      const queryVar = `${snakeToCamel(f.refTable)}Data`
+      return `          <div><label className="text-sm font-medium">${f.label}</label><select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={String(form.${f.field} ?? '')} onChange={e => setForm(p => ({ ...p, ${f.field}: e.target.value }))}><option value="">Select ${snakeToTitle(singularize(f.refTable))}...</option>{(${queryVar}?.data ?? []).map((row: Record<string, unknown>) => (<option key={String(row.id)} value={String(row.id)}>{String(row.name ?? row.title ?? row.id)}</option>))}</select></div>`
+    }
     if (f.inputType === 'select' && f.options.length > 0) {
       const opts = f.options.map(o => `              <option value="${o}">${o}</option>`).join('\n')
       return `          <div><label className="text-sm font-medium">${f.label}</label><select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={String(form.${f.field} ?? '')} onChange={e => setForm(p => ({ ...p, ${f.field}: e.target.value }))}><option value="">Select...</option>
@@ -526,6 +609,17 @@ ${opts}
 </select></div>`
     }
     return `          <div><label className="text-sm font-medium">${f.label}</label><Input type="${f.inputType === 'number' ? 'number' : 'text'}" value={String(form.${f.field} ?? '')} onChange={e => setForm(p => ({ ...p, ${f.field}: e.target.value }))} placeholder="${f.placeholder}" /></div>`
+  }).join('\n')
+
+  const txFKQueryHooks = txUniqueFKTables.map(table => {
+    const queryVar = `${snakeToCamel(table)}Data`
+    return `  const ${queryVar} = useQuery({
+    queryKey: ['${table}', 'fk-options'],
+    queryFn: async () => {
+      const { data } = await supabase.from('${table}').select('id, name, title').order('name').limit(200)
+      return data ?? []
+    },
+  })`
   }).join('\n')
 
   const imports = [
@@ -536,8 +630,8 @@ ${opts}
     `import { Button } from '@/components/ui/button'`,
     `import { Badge } from '@/components/ui/badge'`,
     `import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'`,
-    `import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'`,
-    `import { Input } from '@/components/ui/input'`,
+    `import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'`,
+    needsInput ? `import { Input } from '@/components/ui/input'` : null,
     `import { Plus, Trash2 } from 'lucide-react'`,
   ].filter(Boolean).join('\n')
 
@@ -604,6 +698,8 @@ function ${pascal}FeedPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['${entity}'] }),
   })
 
+${txFKQueryHooks}
+
   ${totalLine}
 
   if (isPending) return <div className="flex justify-center py-20"><p className="text-muted-foreground">Loading...</p></div>
@@ -618,7 +714,7 @@ function ${pascal}FeedPage() {
             <Button><Plus className="mr-2 h-4 w-4" />New ${singularTitle}</Button>
           </DialogTrigger>
           <DialogContent className="sm:max-w-[500px]">
-            <DialogHeader><DialogTitle>New ${singularTitle}</DialogTitle></DialogHeader>
+            <DialogHeader><DialogTitle>New ${singularTitle}</DialogTitle><DialogDescription className="sr-only">Create a new ${singularTitle}</DialogDescription></DialogHeader>
             <form className="space-y-4" onSubmit={e => { e.preventDefault(); create${pascal}.mutate(form) }}>
 ${formFieldsJSX}
               <Button type="submit" disabled={create${pascal}.isPending} className="w-full">
@@ -678,7 +774,7 @@ export function assembleAuthorProfilesPage(props: SkillProps): string {
   const pascal = snakeToPascal(entity)
   const pluralKebab = snakeToKebab(pluralize(entity))
   const pluralTitle = snakeToTitle(pluralize(entity))
-  const singularTitle = snakeToTitle(entity)
+  const singularTitle = snakeToTitle(singularize(entity))
   const headerField = spec.detailPage.headerField
 
   const allColumns = props.contract.tables.find(t => t.name === entity)?.columns ?? []
@@ -687,12 +783,31 @@ export function assembleAuthorProfilesPage(props: SkillProps): string {
   const roleField = allColumns.find(c => c.name === 'role' || c.name === 'title' || c.name === 'position')?.name
   const formFields = spec.listPage.createFormFields
   const needsTextarea = formFields.some(f => f.inputType === 'textarea')
+  const needsInput = formFields.some(f => !f.refTable && f.inputType !== 'textarea' && f.inputType !== 'select')
+
+  const apFKFields = formFields.filter(f => f.refTable)
+  const apUniqueFKTables = [...new Set(apFKFields.map(f => f.refTable!))]
 
   const formFieldsJSX = formFields.map(f => {
+    if (f.refTable) {
+      const queryVar = `${snakeToCamel(f.refTable)}Data`
+      return `          <div><label className="text-sm font-medium">${f.label}</label><select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={String(form.${f.field} ?? '')} onChange={e => setForm(p => ({ ...p, ${f.field}: e.target.value }))}><option value="">Select ${snakeToTitle(singularize(f.refTable))}...</option>{(${queryVar}?.data ?? []).map((row: Record<string, unknown>) => (<option key={String(row.id)} value={String(row.id)}>{String(row.name ?? row.title ?? row.id)}</option>))}</select></div>`
+    }
     if (f.inputType === 'textarea') {
       return `          <div><label className="text-sm font-medium">${f.label}</label><Textarea value={String(form.${f.field} ?? '')} onChange={e => setForm(p => ({ ...p, ${f.field}: e.target.value }))} /></div>`
     }
     return `          <div><label className="text-sm font-medium">${f.label}</label><Input value={String(form.${f.field} ?? '')} onChange={e => setForm(p => ({ ...p, ${f.field}: e.target.value }))} placeholder="${f.placeholder}" /></div>`
+  }).join('\n')
+
+  const apFKQueryHooks = apUniqueFKTables.map(table => {
+    const queryVar = `${snakeToCamel(table)}Data`
+    return `  const ${queryVar} = useQuery({
+    queryKey: ['${table}', 'fk-options'],
+    queryFn: async () => {
+      const { data } = await supabase.from('${table}').select('id, name, title').order('name').limit(200)
+      return data ?? []
+    },
+  })`
   }).join('\n')
 
   const imports = [
@@ -702,8 +817,8 @@ export function assembleAuthorProfilesPage(props: SkillProps): string {
     `import { supabase } from '@/lib/supabase'`,
     `import { Button } from '@/components/ui/button'`,
     `import { Card, CardContent } from '@/components/ui/card'`,
-    `import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'`,
-    `import { Input } from '@/components/ui/input'`,
+    `import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'`,
+    needsInput ? `import { Input } from '@/components/ui/input'` : null,
     needsTextarea ? `import { Textarea } from '@/components/ui/textarea'` : null,
     `import { Plus } from 'lucide-react'`,
   ].filter(Boolean).join('\n')
@@ -753,6 +868,8 @@ function ${pascal}ProfilesPage() {
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['${entity}'] }); setOpen(false); setForm({}) },
   })
 
+${apFKQueryHooks}
+
   if (isPending) return <div className="flex justify-center py-20"><p className="text-muted-foreground">Loading...</p></div>
   if (error) return <div className="flex justify-center py-20"><p className="text-destructive">Error: {error.message}</p></div>
 
@@ -765,7 +882,7 @@ function ${pascal}ProfilesPage() {
             <Button><Plus className="mr-2 h-4 w-4" />Add ${singularTitle}</Button>
           </DialogTrigger>
           <DialogContent className="sm:max-w-[500px]">
-            <DialogHeader><DialogTitle>New ${singularTitle}</DialogTitle></DialogHeader>
+            <DialogHeader><DialogTitle>New ${singularTitle}</DialogTitle><DialogDescription className="sr-only">Create a new ${singularTitle}</DialogDescription></DialogHeader>
             <form className="space-y-4" onSubmit={e => { e.preventDefault(); create${pascal}.mutate(form) }}>
 ${formFieldsJSX}
               <Button type="submit" disabled={create${pascal}.isPending} className="w-full">

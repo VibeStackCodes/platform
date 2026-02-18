@@ -1,223 +1,196 @@
 // lib/contract-to-seed.ts
-// Domain-aware seed data generation using @faker-js/faker.
+// LLM-based seed data generation for generated app databases.
 // Tables are topologically sorted so parents are inserted before children.
-// Faker is deterministically seeded per-value so the same contract always
-// produces identical SQL — safe to rerun (ON CONFLICT DO NOTHING).
+// The LLM generates contextually rich, domain-appropriate values; the structural
+// logic (PKs, FKs, auth seeding) is fully deterministic.
+// Idempotent via ON CONFLICT DO NOTHING — safe to re-run.
 
-import { faker } from '@faker-js/faker'
+import { generateObject } from 'ai'
+import { z } from 'zod'
 import type { ColumnDef, SchemaContract, TableDef } from './schema-contract'
+import { createHeliconeProvider, PIPELINE_MODELS } from './agents/provider'
 
 // Fixed UUID for seed data — clearly distinguishable as synthetic
-// Uses '5eed' (valid hex that reads as "seed") to avoid invalid UUID parse errors
+// Uses '5ee' (valid hex that reads as "see") to avoid invalid UUID parse errors
 const SEED_USER_ID = '00000000-0000-4000-a000-0000000005ee'
 const SEED_USER_EMAIL = 'seed@vibestack.test'
 
-/**
- * FNV-1a hash — fast, well-distributed, deterministic.
- * Used to convert a string key into a numeric faker seed.
- */
-function stableHash(str: string): number {
-  let hash = 2166136261
-  for (let i = 0; i < str.length; i++) {
-    hash ^= str.charCodeAt(i)
-    hash = Math.imul(hash, 16777619) >>> 0
-  }
-  return hash
-}
+// Columns that are always structural — never passed to the LLM for content generation
+const STRUCTURAL_COLUMNS = new Set(['created_at', 'updated_at', 'user_id', 'id'])
 
-type TableDomain = 'food' | 'medical' | 'commerce' | 'professional' | 'content' | 'travel' | 'fitness' | 'generic'
+// Column types that are considered "semantic content" even when they have a .default
+// (e.g. status = 'active', type = 'standard' — we want the LLM to vary these across rows)
+const SEMANTIC_CONTENT_COLUMN_PATTERNS = /^(status|type_val|stage|state|category|priority|level|kind)$/
 
-/**
- * Detect the semantic domain of a table from its name.
- * Drives contextual faker method selection for `name`/`title` columns.
- */
-function detectTableDomain(tableName: string): TableDomain {
-  const n = tableName.toLowerCase()
-  if (/menu|food|dish|recipe|ingredient|restaurant|meal|cuisine|drink|beverage/.test(n)) return 'food'
-  if (/patient|doctor|physician|clinic|appointment|medical|health|prescription|diagnosis/.test(n)) return 'medical'
-  if (/product|order|cart|invoice|customer|shop|store|catalog|item|purchase|payment/.test(n)) return 'commerce'
-  if (/employee|staff|department|job|salary|project|task|client|company|contract|member/.test(n)) return 'professional'
-  if (/post|article|blog|comment|tag|author|content|story|entry|journal|book/.test(n)) return 'content'
-  if (/destination|trip|travel|journey|booking|hotel|flight|itinerary|route/.test(n)) return 'travel'
-  if (/workout|exercise|fitness|training|gym|class|schedule|session/.test(n)) return 'fitness'
-  return 'generic'
-}
+type Row = Record<string, unknown>
+
+// ============================================================================
+// LLM seed value generation
+// ============================================================================
+
+const outputSchema = z.object({
+  tables: z.array(
+    z.object({
+      name: z.string(),
+      rows: z.array(z.object({}).catchall(z.union([z.string(), z.number(), z.boolean(), z.null()]))),
+    }),
+  ),
+})
 
 /**
- * Select a domain-appropriate fake entity name.
- * Caller must seed faker before calling this.
+ * Identify content columns for a table: columns that are NOT structural, NOT FK refs,
+ * and NOT auto-managed defaults (unless they are semantic content columns).
  */
-function inferNameByDomain(domain: TableDomain, tableName: string): string {
-  const n = tableName.toLowerCase()
-
-  switch (domain) {
-    case 'food':
-      if (n.includes('ingredient')) return faker.food.ingredient()
-      if (n.includes('category') || n.includes('categorie')) return faker.food.ethnicCategory()
-      return faker.food.dish()
-
-    case 'medical':
-      // Most medical tables with a "name" are about people
-      if (n.includes('department') || n.includes('specialty')) return faker.commerce.department()
-      return faker.person.fullName()
-
-    case 'commerce':
-      if (n.includes('category') || n.includes('department')) return faker.commerce.department()
-      if (n.includes('brand') || n.includes('company') || n.includes('vendor') || n.includes('supplier')) return faker.company.name()
-      return faker.commerce.productName()
-
-    case 'professional':
-      if (n.includes('company') || n.includes('client') || n.includes('vendor') || n.includes('organization')) return faker.company.name()
-      if (n.includes('department') || n.includes('team') || n.includes('division')) return faker.commerce.department()
-      if (n.includes('project') || n.includes('task')) return faker.lorem.words(3)
-      return faker.person.fullName()
-
-    case 'content':
-      if (n.includes('tag') || n.includes('label') || n.includes('category')) return faker.word.noun()
-      if (n.includes('book')) return faker.lorem.words(3)
-      return faker.lorem.words(3)
-
-    case 'travel':
-      if (n.includes('destination') || n.includes('city') || n.includes('location')) return faker.location.city()
-      if (n.includes('hotel') || n.includes('accommodation') || n.includes('property')) return `${faker.location.city()} ${faker.helpers.arrayElement(['Hotel', 'Resort', 'Inn', 'Lodge'])}`
-      return faker.location.country()
-
-    case 'fitness':
-      return faker.helpers.arrayElement(['Yoga Flow', 'HIIT Cardio', 'Power Lifting', 'Pilates Core', 'Spin Class', 'Aqua Aerobics', 'Boxing Basics', 'Zumba Dance', 'Stretch & Tone', 'CrossFit'])
-
-    default:
-      return faker.lorem.words(2)
-  }
+function getContentColumns(table: TableDef): ColumnDef[] {
+  return table.columns.filter((col) => {
+    if (col.primaryKey) return false
+    if (col.references) return false
+    if (STRUCTURAL_COLUMNS.has(col.name)) return false
+    // Implicit auth FK columns — skip
+    if (
+      col.type === 'uuid' &&
+      col.nullable === false &&
+      /^(user_id|owner_id|created_by|author_id|member_id|assigned_to)$/.test(col.name)
+    ) return false
+    // Skip columns with defaults UNLESS they are semantic content columns (status, type, etc.)
+    if (col.default && !SEMANTIC_CONTENT_COLUMN_PATTERNS.test(col.name)) return false
+    return true
+  })
 }
 
 /**
- * Infer a domain-aware text value from column name + table context.
- * Seeds faker with stableHash(key) before each call for determinism.
+ * Build a human-readable schema description for the LLM prompt.
  */
-function inferTextValue(colName: string, tableName: string, key: string): string {
-  faker.seed(stableHash(key))
-
-  const name = colName.toLowerCase()
-  const domain = detectTableDomain(tableName)
-
-  if (name.includes('email')) return faker.internet.email()
-  if (name.includes('phone')) return faker.phone.number()
-  if (name.endsWith('_url') || name === 'url' || name.includes('link') || name.includes('website'))
-    return faker.internet.url()
-  if (name.includes('avatar') || name.includes('image') || name.includes('photo'))
-    return faker.image.url()
-
-  if (name === 'name' || name === 'full_name') return inferNameByDomain(domain, tableName)
-
-  if (name === 'first_name') return faker.person.firstName()
-  if (name === 'last_name') return faker.person.lastName()
-
-  if (name.endsWith('_name') || name.startsWith('name_')) return inferNameByDomain(domain, tableName)
-
-  if (name.includes('title')) {
-    if (domain === 'content') return faker.lorem.words(4)
-    if (domain === 'commerce') return faker.commerce.productName()
-    if (domain === 'food') return faker.food.dish()
-    if (domain === 'travel') return faker.location.city()
-    return faker.lorem.words(3)
+function buildSchemaDescription(contract: SchemaContract): string {
+  const enumMap = new Map<string, string[]>()
+  for (const e of contract.enums ?? []) {
+    enumMap.set(e.name, e.values)
   }
 
-  if (name.includes('description') || name.includes('content') || name.includes('body') || name.includes('summary'))
-    return faker.lorem.paragraph()
+  return contract.tables
+    .map((table) => {
+      const contentCols = getContentColumns(table)
+      if (contentCols.length === 0) return null
 
-  if (name.includes('note') || name.includes('comment') || name.includes('remark'))
-    return faker.lorem.sentence()
+      const colDescriptions = contentCols.map((col) => {
+        // Check if this column is likely backed by an enum from its name
+        const possibleEnumName = col.name.replace(/_val$/, '')
+        const enumValues =
+          enumMap.get(possibleEnumName) ??
+          enumMap.get(`${table.name}_${possibleEnumName}`) ??
+          null
 
-  if (name === 'bio' || name === 'about') return faker.lorem.sentences(2)
+        let desc = `  - ${col.name} (${col.type})`
+        if (enumValues) desc += ` [enumValues: ${enumValues.join(', ')}]`
+        return desc
+      })
 
-  if (name.includes('status')) {
-    if (domain === 'medical') return faker.helpers.arrayElement(['scheduled', 'completed', 'cancelled', 'no-show', 'pending'])
-    if (domain === 'commerce') return faker.helpers.arrayElement(['active', 'pending', 'shipped', 'delivered', 'cancelled'])
-    return faker.helpers.arrayElement(['active', 'pending', 'completed', 'inactive', 'draft'])
-  }
-
-  if (name.includes('type')) {
-    if (domain === 'medical') return faker.helpers.arrayElement(['routine', 'urgent', 'follow-up', 'emergency', 'consultation'])
-    if (domain === 'food') return faker.helpers.arrayElement(['appetizer', 'main', 'dessert', 'beverage', 'side'])
-    if (domain === 'professional') return faker.helpers.arrayElement(['full-time', 'part-time', 'contract', 'intern', 'freelance'])
-    return faker.helpers.arrayElement(['standard', 'premium', 'basic', 'enterprise', 'custom'])
-  }
-
-  if (name.includes('category')) {
-    if (domain === 'food') return faker.food.ethnicCategory()
-    if (domain === 'commerce') return faker.commerce.department()
-    if (domain === 'content') return faker.word.noun()
-    return faker.lorem.word()
-  }
-
-  if (name.includes('role')) return faker.helpers.arrayElement(['admin', 'member', 'viewer', 'editor', 'owner'])
-  if (name.includes('gender')) return faker.helpers.arrayElement(['male', 'female', 'non-binary', 'prefer not to say'])
-  if (name.includes('language')) return faker.helpers.arrayElement(['English', 'Spanish', 'French', 'German', 'Portuguese'])
-
-  if (name.includes('address') || name.includes('street')) return faker.location.streetAddress()
-  if (name === 'city') return faker.location.city()
-  if (name === 'state' || name.includes('province')) return faker.location.state()
-  if (name === 'country') return faker.location.country()
-  if (name.includes('zip') || name.includes('postal')) return faker.location.zipCode()
-
-  if (name.includes('company') || name.includes('organization')) return faker.company.name()
-  if (name.includes('tag') || name.includes('label')) return faker.word.noun()
-  if (name.includes('slug')) return faker.lorem.words(2).replace(/\s+/g, '-').toLowerCase()
-  if (name.includes('color') || name.includes('colour')) return faker.color.human()
-  if (name.includes('currency')) return faker.finance.currencyCode()
-  if (name.includes('isbn') || name.includes('barcode')) return faker.commerce.isbn()
-  if (name.includes('sku') || name.includes('code')) return faker.string.alphanumeric(8).toUpperCase()
-
-  // Generic fallback
-  return faker.lorem.words(2)
+      return `Table: ${table.name}\n${colDescriptions.join('\n')}`
+    })
+    .filter(Boolean)
+    .join('\n\n')
 }
 
 /**
- * Generate a column value based on type and name heuristics.
- * Seeds faker deterministically so the same contract always produces the same SQL.
+ * Call the LLM to generate contextually rich seed values for all content columns.
+ * Returns a Map<tableName, Row[]> — each row contains ONLY content column values.
+ * On error: logs and returns an empty Map (caller falls back to simple defaults).
  */
-function generateValue(col: ColumnDef, rowIdx: number, tableName: string, enforceUnique = false): string | null {
-  const n = rowIdx + 1
-  const key = `${tableName}.${col.name}.${n}`
+async function llmGenerateSeedValues(
+  contract: SchemaContract,
+  rowsPerTable: number,
+): Promise<Map<string, Row[]>> {
+  const schemaDescription = buildSchemaDescription(contract)
 
-  switch (col.type) {
-    case 'text': {
-      let textVal = inferTextValue(col.name.toLowerCase(), tableName, key)
-      // For unique columns, suffix the row index to guarantee no collisions
-      if (enforceUnique) textVal = `${textVal}-${n}`
-      return `'${escapeSQL(textVal)}'`
+  // If there are no content columns across any table, skip the LLM call entirely
+  if (!schemaDescription.trim()) {
+    return new Map()
+  }
+
+  const openai = createHeliconeProvider({ userId: 'seed', agentName: 'seed' })
+
+  const prompt = `You are generating realistic seed data for a web application database.
+
+App schema:
+${schemaDescription}
+
+Generate exactly ${rowsPerTable} rows per table with contextually appropriate, realistic values.
+
+Rules:
+- Use table/column names to infer the domain (e.g., "watches" → watch brand names like "Rolex Submariner")
+- Text values must be realistic and domain-specific — NO Latin lorem ipsum
+- For columns ending in _url, _image, _photo, _avatar, _cover, _thumbnail: use "https://picsum.photos/seed/{descriptive-topic}/800/600" (e.g., "https://picsum.photos/seed/rolex-submariner/800/600")
+- For enum columns (enumValues listed): only use those exact enum values, vary them across rows
+- For boolean columns: use true/false appropriately for the domain
+- For numeric columns: realistic values (price_cents in cents like 125000, rating 1-5, etc.)
+- For slug columns: url-safe lowercase version of the name field
+- For status/stage columns: vary values across rows to show diversity
+- Make data tell a coherent story (e.g., a CRM might have leads → qualified → closed)
+- Each table's rows should have different, plausible values — no repeats`
+
+  try {
+    const result = await generateObject({
+      model: openai(PIPELINE_MODELS.seed),
+      schema: outputSchema,
+      prompt,
+    })
+
+    const map = new Map<string, Row[]>()
+    for (const tableData of result.object.tables) {
+      map.set(tableData.name, tableData.rows as Row[])
     }
+    return map
+  } catch (err) {
+    console.error('[seed] LLM seed generation failed:', err)
+    return new Map()
+  }
+}
 
+// ============================================================================
+// SQL value formatting helpers
+// ============================================================================
+
+/**
+ * Format an LLM-provided value as a SQL literal.
+ * Returns null if the value is not usable.
+ */
+function formatLLMValue(value: unknown): string | null {
+  if (value === null || value === undefined) return null
+  if (typeof value === 'boolean') return value ? 'true' : 'false'
+  if (typeof value === 'number') return String(value)
+  if (typeof value === 'string') return `'${escapeSQL(value)}'`
+  return null
+}
+
+/**
+ * Fallback value for a column when the LLM did not provide one.
+ * Based solely on the SQL type — intentionally simple.
+ */
+function fallbackValue(col: ColumnDef, tableName: string, rowIdx: number): string | null {
+  switch (col.type) {
+    case 'text':
+      return `'Sample ${escapeSQL(tableName)}'`
     case 'integer':
     case 'bigint':
-      if (enforceUnique) return String(n * 1000 + n)
-      faker.seed(stableHash(key))
-      return String(faker.number.int({ min: 1, max: 1000 }))
-
+      return String(rowIdx + 1)
     case 'numeric':
-      if (enforceUnique) return (n * 100.0).toFixed(2)
-      faker.seed(stableHash(key))
-      return faker.number.float({ min: 0.01, max: 9999.99, fractionDigits: 2 }).toFixed(2)
-
+      return `${(rowIdx + 1) * 10}.00`
     case 'boolean':
-      faker.seed(stableHash(key))
-      return faker.datatype.boolean() ? 'true' : 'false'
-
+      return 'true'
     case 'timestamptz':
-      // Spread seed dates across the last 30 days
-      return `now() - interval '${30 - n} days'`
-
+      return `now() - interval '${30 - rowIdx} days'`
     case 'jsonb':
       return `'{}'::jsonb`
-
     case 'uuid':
-      // Non-PK, non-FK uuid — generate a fresh one
       return 'gen_random_uuid()'
-
     default:
       return null
   }
 }
+
+// ============================================================================
+// Auth seed helpers
+// ============================================================================
 
 /**
  * Check if any table has FK references to auth.users (directly or via a profile table).
@@ -253,7 +226,11 @@ function generateAuthSeed(): string[] {
   ]
 }
 
-export function contractToSeedSQL(contract: SchemaContract, rowsPerTable: number = 5): string {
+// ============================================================================
+// Main export
+// ============================================================================
+
+export async function contractToSeedSQL(contract: SchemaContract, rowsPerTable: number = 5): Promise<string> {
   const sorted = topologicalSort(contract.tables)
   const tableIds = new Map<string, string[]>()
   const lines: string[] = []
@@ -265,6 +242,9 @@ export function contractToSeedSQL(contract: SchemaContract, rowsPerTable: number
     lines.push(...generateAuthSeed())
   }
 
+  // Fetch LLM-generated content values for all tables in one shot
+  const llmRows = await llmGenerateSeedValues(contract, rowsPerTable)
+
   for (let tableIdx = 0; tableIdx < sorted.length; tableIdx++) {
     const table = sorted[tableIdx]
 
@@ -273,9 +253,13 @@ export function contractToSeedSQL(contract: SchemaContract, rowsPerTable: number
     const pkCol = table.columns.find((c) => c.primaryKey)
     if (pkCol?.references?.table === 'auth.users') {
       tableIds.set(table.name, [SEED_USER_ID])
-      // Build a minimal INSERT with id = SEED_USER_ID + required columns filled
+
       const profileCols: string[] = [pkCol.name]
       const profileVals: string[] = [`'${SEED_USER_ID}'`]
+      const tableContentCols = getContentColumns(table)
+      const llmTableRows = llmRows.get(table.name) ?? []
+      const llmRow = llmTableRows[0] ?? {}
+
       for (const col of table.columns) {
         if (col.primaryKey) continue
         if (col.default && !col.references) continue
@@ -284,14 +268,43 @@ export function contractToSeedSQL(contract: SchemaContract, rowsPerTable: number
           profileVals.push(`'${SEED_USER_ID}'`)
           continue
         }
+        // FK to another table — resolve parent IDs
+        if (col.references) {
+          const parentIds = tableIds.get(col.references.table)
+          if (parentIds && parentIds.length > 0) {
+            profileCols.push(col.name)
+            profileVals.push(`'${parentIds[0]}'`)
+          }
+          continue
+        }
+        // Implicit auth FK
+        if (
+          col.type === 'uuid' &&
+          col.nullable === false &&
+          /^(user_id|owner_id|created_by|author_id|member_id|assigned_to)$/.test(col.name)
+        ) {
+          profileCols.push(col.name)
+          profileVals.push(`'${SEED_USER_ID}'`)
+          continue
+        }
+
         if (col.nullable === false || col.type === 'text') {
-          const val = generateValue(col, 0, table.name, col.unique === true)
+          const isContentCol = tableContentCols.some((c) => c.name === col.name)
+          let val: string | null = null
+
+          if (isContentCol) {
+            val = formatLLMValue(llmRow[col.name]) ?? fallbackValue(col, table.name, 0)
+          } else {
+            val = fallbackValue(col, table.name, 0)
+          }
+
           if (val !== null) {
             profileCols.push(col.name)
             profileVals.push(val)
           }
         }
       }
+
       lines.push(
         `INSERT INTO "${table.name}" (${profileCols.join(', ')}) VALUES (${profileVals.join(', ')}) ON CONFLICT DO NOTHING;`,
       )
@@ -299,6 +312,8 @@ export function contractToSeedSQL(contract: SchemaContract, rowsPerTable: number
     }
 
     const ids: string[] = []
+    const tableContentCols = getContentColumns(table)
+    const llmTableRows = llmRows.get(table.name) ?? []
 
     for (let row = 0; row < rowsPerTable; row++) {
       const id = makeId(tableIdx, row)
@@ -306,6 +321,11 @@ export function contractToSeedSQL(contract: SchemaContract, rowsPerTable: number
 
       const cols: string[] = []
       const vals: string[] = []
+      // Existence guards for FK-dependent inserts: if a parent row wasn't actually
+      // inserted (e.g. due to LLM data type mismatch), skip rather than violate FK.
+      const fkExistsConds: string[] = []
+
+      const llmRow = llmTableRows[row] ?? {}
 
       for (const col of table.columns) {
         // PK with default — insert explicit ID so FKs can reference it
@@ -315,8 +335,8 @@ export function contractToSeedSQL(contract: SchemaContract, rowsPerTable: number
           continue
         }
 
-        // Non-PK columns with defaults — let DB handle them
-        if (col.default && !col.references) continue
+        // Non-PK columns with defaults — let DB handle them (unless content col)
+        if (col.default && !col.references && !SEMANTIC_CONTENT_COLUMN_PATTERNS.test(col.name)) continue
 
         // FK columns
         if (col.references) {
@@ -326,8 +346,13 @@ export function contractToSeedSQL(contract: SchemaContract, rowsPerTable: number
           } else {
             const parentIds = tableIds.get(col.references.table)
             if (parentIds && parentIds.length > 0) {
+              const parentId = parentIds[row % parentIds.length]
               cols.push(col.name)
-              vals.push(`'${parentIds[row % parentIds.length]}'`)
+              vals.push(`'${parentId}'`)
+              // Guard: skip this row if the parent row wasn't actually inserted
+              fkExistsConds.push(
+                `EXISTS (SELECT 1 FROM "${col.references.table}" WHERE "${col.references.column}" = '${parentId}')`,
+              )
             }
             // If parent table has no IDs (shouldn't happen with topo sort), skip
           }
@@ -348,13 +373,28 @@ export function contractToSeedSQL(contract: SchemaContract, rowsPerTable: number
           continue
         }
 
-        // Regular columns — generate value from type + name
+        // Regular content/non-nullable columns
         if (col.nullable !== false && col.type !== 'text') {
           // Skip nullable non-text columns to keep seed minimal
           continue
         }
 
-        const value = generateValue(col, row, table.name, col.unique === true)
+        const isContentCol = tableContentCols.some((c) => c.name === col.name)
+
+        let value: string | null = null
+        if (isContentCol) {
+          const llmValue = formatLLMValue(llmRow[col.name])
+          if (llmValue !== null) {
+            value = llmValue
+          } else if (!col.default) {
+            // No LLM value and no DB default — must provide a value
+            value = fallbackValue(col, table.name, row)
+          }
+          // else: has a DB default, LLM gave nothing → let DB use the default
+        } else {
+          value = fallbackValue(col, table.name, row)
+        }
+
         if (value !== null) {
           cols.push(col.name)
           vals.push(value)
@@ -362,8 +402,17 @@ export function contractToSeedSQL(contract: SchemaContract, rowsPerTable: number
       }
 
       if (cols.length > 0) {
-        // ON CONFLICT DO NOTHING makes seed idempotent across re-runs of the pipeline
-        lines.push(`INSERT INTO "${table.name}" (${cols.join(', ')}) VALUES (${vals.join(', ')}) ON CONFLICT DO NOTHING;`)
+        if (fkExistsConds.length > 0) {
+          // SELECT form: row is silently skipped if any parent wasn't inserted
+          lines.push(
+            `INSERT INTO "${table.name}" (${cols.join(', ')}) SELECT ${vals.join(', ')} WHERE ${fkExistsConds.join(' AND ')} ON CONFLICT DO NOTHING;`,
+          )
+        } else {
+          // No inter-table FKs — plain VALUES form
+          lines.push(
+            `INSERT INTO "${table.name}" (${cols.join(', ')}) VALUES (${vals.join(', ')}) ON CONFLICT DO NOTHING;`,
+          )
+        }
       }
     }
 
@@ -372,6 +421,10 @@ export function contractToSeedSQL(contract: SchemaContract, rowsPerTable: number
 
   return lines.join('\n')
 }
+
+// ============================================================================
+// Utilities (kept unchanged from original)
+// ============================================================================
 
 /**
  * Generate a deterministic UUID for seed rows.

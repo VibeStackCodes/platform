@@ -347,3 +347,172 @@ describe('assembleAuthorProfilesPage', () => {
     expect(code).toContain('CardContent')
   })
 })
+
+// ── FK dropdown rendering ──────────────────────────────────────────────────────
+
+/**
+ * Creates SkillProps with a multi-table contract where the entity has an
+ * explicit FK reference to another table.
+ */
+function makeFKProps(
+  entityName: string,
+  fkColumn: string,
+  refTableName: string,
+): SkillProps {
+  const contract: SchemaContract = {
+    tables: [
+      {
+        name: entityName,
+        columns: [
+          { name: 'id', type: 'uuid', primaryKey: true, default: 'gen_random_uuid()' },
+          { name: 'name', type: 'text', nullable: false },
+          { name: fkColumn, type: 'uuid', nullable: true, references: { table: refTableName, column: 'id' } },
+          { name: 'created_at', type: 'timestamptz', default: 'now()' },
+        ],
+      },
+      {
+        name: refTableName,
+        columns: [
+          { name: 'id', type: 'uuid', primaryKey: true },
+          { name: 'name', type: 'text', nullable: false },
+        ],
+      },
+    ],
+  }
+  const table = contract.tables[0]
+  const pageConfig = inferPageConfig(table, contract)
+  const spec = derivePageFeatureSpec(pageConfig, contract)
+  return {
+    entity: entityName,
+    contract,
+    spec,
+    layout: { listSkill: 'CardGrid', detailSkill: 'ProductDetail', hasDashboard: false },
+    primaryColor: '#3b82f6',
+    fontFamily: 'Inter',
+    heroImages: [],
+  }
+}
+
+describe('FK dropdown rendering in list assemblers', () => {
+  it('CardGrid: renders FK field as select dropdown with useQuery hook', () => {
+    const props = makeFKProps('menu_item', 'category_id', 'menu_category')
+    const code = assembleCardGridPage(props)
+
+    // Should render a <select> for the FK field (not a plain <Input>)
+    expect(code).toContain('Select Menu Category...')
+    // Should have useQuery hook for the referenced table
+    expect(code).toContain("queryKey: ['menu_category', 'fk-options']")
+    expect(code).toContain("supabase.from('menu_category').select('id, name, title')")
+    // FK field uses dynamic data from the query
+    expect(code).toContain('menuCategoryData')
+  })
+
+  it('CardGrid: does not render Input for FK field', () => {
+    const props = makeFKProps('task', 'project_id', 'project')
+    const code = assembleCardGridPage(props)
+
+    // project_id should be a select, not a text input
+    expect(code).toContain('Select Project...')
+    // The generated code should not have a plain Input for project_id
+    expect(code).not.toMatch(/Input[^>]*project_id/)
+  })
+
+  it('CardGrid: multiple FK tables each get their own useQuery hook', () => {
+    const contract: SchemaContract = {
+      tables: [
+        {
+          name: 'order_item',
+          columns: [
+            { name: 'id', type: 'uuid', primaryKey: true },
+            { name: 'name', type: 'text' },
+            { name: 'product_id', type: 'uuid', references: { table: 'product', column: 'id' } },
+            { name: 'supplier_id', type: 'uuid', references: { table: 'supplier', column: 'id' } },
+            { name: 'created_at', type: 'timestamptz' },
+          ],
+        },
+        { name: 'product', columns: [{ name: 'id', type: 'uuid', primaryKey: true }, { name: 'name', type: 'text' }] },
+        { name: 'supplier', columns: [{ name: 'id', type: 'uuid', primaryKey: true }, { name: 'name', type: 'text' }] },
+      ],
+    }
+    const table = contract.tables[0]
+    const pageConfig = inferPageConfig(table, contract)
+    const spec = derivePageFeatureSpec(pageConfig, contract)
+    const props: SkillProps = {
+      entity: 'order_item',
+      contract,
+      spec,
+      layout: { listSkill: 'CardGrid', detailSkill: 'ProductDetail', hasDashboard: false },
+      primaryColor: '#3b82f6',
+      fontFamily: 'Inter',
+      heroImages: [],
+    }
+
+    const code = assembleCardGridPage(props)
+    expect(code).toContain("queryKey: ['product', 'fk-options']")
+    expect(code).toContain("queryKey: ['supplier', 'fk-options']")
+    expect(code).toContain('productData')
+    expect(code).toContain('supplierData')
+  })
+
+  it('MenuGrid: renders FK field as select dropdown', () => {
+    const props = makeFKProps('dish', 'category_id', 'dish_category')
+    const code = assembleMenuGridPage(props)
+    expect(code).toContain('Select Dish Category...')
+    expect(code).toContain("queryKey: ['dish_category', 'fk-options']")
+  })
+
+  it('AuthorProfiles: renders FK field as select dropdown', () => {
+    const props = makeFKProps('author', 'department_id', 'department')
+    const code = assembleAuthorProfilesPage(props)
+    expect(code).toContain('Select Department...')
+    expect(code).toContain("queryKey: ['department', 'fk-options']")
+  })
+
+  it('TransactionFeed: renders FK field as select dropdown', () => {
+    const props = makeFKProps('expense', 'account_id', 'account')
+    const code = assembleTransactionFeedPage(props)
+    expect(code).toContain('Select Account...')
+    expect(code).toContain("queryKey: ['account', 'fk-options']")
+  })
+
+  it('MagazineGrid: renders FK field as select dropdown', () => {
+    const props = makeFKProps('article', 'category_id', 'category')
+    const code = assembleMagazineGridPage(props)
+    expect(code).toContain('Select Category...')
+    expect(code).toContain("queryKey: ['category', 'fk-options']")
+  })
+
+  it('auth.users FK columns are excluded from create form entirely', () => {
+    const contract: SchemaContract = {
+      tables: [
+        {
+          name: 'post',
+          columns: [
+            { name: 'id', type: 'uuid', primaryKey: true },
+            { name: 'title', type: 'text', nullable: false },
+            { name: 'author_id', type: 'uuid', references: { table: 'auth.users', column: 'id' } },
+            { name: 'created_at', type: 'timestamptz' },
+          ],
+        },
+      ],
+    }
+    const table = contract.tables[0]
+    const pageConfig = inferPageConfig(table, contract)
+    const spec = derivePageFeatureSpec(pageConfig, contract)
+    const props: SkillProps = {
+      entity: 'post',
+      contract,
+      spec,
+      layout: { listSkill: 'CardGrid', detailSkill: 'ProductDetail', hasDashboard: false },
+      primaryColor: '#3b82f6',
+      fontFamily: 'Inter',
+      heroImages: [],
+    }
+
+    const code = assembleCardGridPage(props)
+    // author_id references auth.users so it should not appear in the form at all
+    expect(code).not.toContain('author_id')
+    // No spurious useQuery for auth.users
+    expect(code).not.toContain("from('auth.users')")
+  })
+})

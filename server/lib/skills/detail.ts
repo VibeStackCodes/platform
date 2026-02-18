@@ -3,8 +3,36 @@
 // Detail skill assembler — Design Engine v2.
 // Each function returns a complete React component as a TypeScript string.
 
-import { snakeToPascal, snakeToCamel, snakeToKebab, snakeToTitle, pluralize } from '../naming-utils'
+import { snakeToPascal, snakeToCamel, snakeToKebab, snakeToTitle, pluralize, singularize } from '../naming-utils'
 import type { SkillProps } from './index'
+import type { ColumnDef } from '../schema-contract'
+
+/**
+ * Given a list of columns, returns FK columns with explicit `references` to non-auth tables.
+ * Only uses explicit references (not implicit _id naming) to avoid building Supabase joins
+ * for columns that lack actual DB-level FK constraints.
+ */
+function detectFKColumnsForDetail(
+  columns: ColumnDef[],
+  _allTableNames: Set<string>,
+): Array<{ field: string; alias: string; refTable: string }> {
+  return columns
+    .filter((c) => !c.primaryKey)
+    .flatMap((c) => {
+      // Only explicit FK references (skip auth.users — no join needed)
+      if (c.references && c.references.table !== 'auth.users' && c.name.endsWith('_id')) {
+        return [{ field: c.name, alias: c.name.replace(/_id$/, ''), refTable: c.references.table }]
+      }
+      return []
+    })
+}
+
+/** Build Supabase select string that embeds FK display names */
+function buildFKSelectStr(fkCols: Array<{ field: string; alias: string; refTable: string }>): string {
+  if (fkCols.length === 0) return '*'
+  const joins = fkCols.map((fk) => `${fk.alias}:${fk.refTable}!${fk.field}(id, name, title)`).join(', ')
+  return `*, ${joins}`
+}
 
 // ============================================================================
 // Shared helpers
@@ -12,11 +40,15 @@ import type { SkillProps } from './index'
 
 /** Build edit field JSX for any inputType */
 function buildEditFieldJSX(
-  editFormFields: Array<{ field: string; label: string; inputType: string }>,
+  editFormFields: Array<{ field: string; label: string; inputType: string; refTable?: string }>,
   indent: string,
 ): string {
   return editFormFields
     .map((f) => {
+      if (f.refTable) {
+        const queryVar = `${snakeToCamel(f.refTable)}EditData`
+        return `${indent}<div><label className="text-sm font-medium">${f.label}</label><select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={String(editForm.${f.field} ?? '')} onChange={e => setEditForm(p => ({ ...p, ${f.field}: e.target.value }))}><option value="">Select ${snakeToTitle(singularize(f.refTable))}...</option>{(${queryVar}?.data ?? []).map((row: Record<string, unknown>) => (<option key={String(row.id)} value={String(row.id)}>{String(row.name ?? row.title ?? row.id)}</option>))}</select></div>`
+      }
       if (f.inputType === 'textarea') {
         return `${indent}<div><label className="text-sm font-medium">${f.label}</label><Textarea value={String(editForm.${f.field} ?? '')} onChange={e => setEditForm(p => ({ ...p, ${f.field}: e.target.value }))} /></div>`
       }
@@ -28,17 +60,40 @@ function buildEditFieldJSX(
     .join('\n')
 }
 
+/** Build useQuery hooks for FK reference tables in edit forms */
+function buildEditFKQueryHooks(
+  editFormFields: Array<{ field: string; refTable?: string }>,
+): string {
+  const fkFields = editFormFields.filter(f => f.refTable)
+  const uniqueTables = [...new Set(fkFields.map(f => f.refTable!))]
+  return uniqueTables.map(table => {
+    const queryVar = `${snakeToCamel(table)}EditData`
+    return `  const ${queryVar} = useQuery({
+    queryKey: ['${table}', 'fk-options'],
+    queryFn: async () => {
+      const { data } = await supabase.from('${table}').select('id, name, title').order('name').limit(200)
+      return data ?? []
+    },
+  })`
+  }).join('\n')
+}
+
 /** Build detail section cards from spec */
 function buildSectionCards(
   sections: Array<{ title: string; fields: Array<{ field: string; label: string; format: string }> }>,
   indent: string,
+  fkFields: Set<string> = new Set(),
 ): string {
   return sections
     .map((section) => {
       const fields = section.fields
         .map((f) => {
           let value: string
-          if (f.format === 'currency') {
+          if (fkFields.has(f.field)) {
+            // FK field — use embedded join alias (alias = field without _id suffix)
+            const alias = f.field.replace(/_id$/, '')
+            value = `{String((data.${alias} as Record<string, unknown>)?.name ?? (data.${alias} as Record<string, unknown>)?.title ?? data.${f.field} ?? '\u2014')}`
+          } else if (f.format === 'currency') {
             value = `{'$' + Number(data.${f.field} ?? 0).toFixed(2)}`
           } else if (f.format === 'date') {
             value = `{data.${f.field} ? new Date(String(data.${f.field})).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : '\u2014'}`
@@ -81,7 +136,7 @@ export function assembleProductDetailPage(props: SkillProps): string {
   const pascal = snakeToPascal(entity)
   const camel = snakeToCamel(entity)
   const pluralKebab = snakeToKebab(pluralize(entity))
-  const singularTitle = snakeToTitle(entity)
+  const singularTitle = snakeToTitle(singularize(entity))
   const pluralTitle = snakeToTitle(pluralize(entity))
   const headerField = spec.detailPage.headerField
 
@@ -96,15 +151,21 @@ export function assembleProductDetailPage(props: SkillProps): string {
     (c) => c.name === 'description' || c.name === 'details' || c.name === 'notes',
   )?.name
 
+  const allTableNames = new Set(props.contract.tables.map((t) => t.name))
+  const fkCols = detectFKColumnsForDetail(allColumns, allTableNames)
+  const fkFields = new Set(fkCols.map((fk) => fk.field))
+  const selectStr = buildFKSelectStr(fkCols)
+
   const editFormFields = spec.detailPage.editFormFields
   const needsTextarea = editFormFields.some((f) => f.inputType === 'textarea')
   const needsInput = editFormFields.some((f) =>
-    ['text', 'number', 'email', 'url', 'date', 'select'].includes(f.inputType),
+    !f.refTable && ['text', 'number', 'email', 'url', 'date', 'select'].includes(f.inputType),
   )
 
   const editFieldsJSX = buildEditFieldJSX(editFormFields, '              ')
   const editInitFields = buildEditInitFields(editFormFields)
-  const sectionCards = buildSectionCards(spec.detailPage.sections, '        ')
+  const editFKHooks = buildEditFKQueryHooks(editFormFields)
+  const sectionCards = buildSectionCards(spec.detailPage.sections, '        ', fkFields)
 
   const imports = [
     `import { useState } from 'react'`,
@@ -154,7 +215,7 @@ function ${pascal}DetailPage() {
   const ${camel} = useQuery({
     queryKey: ['${entity}', id],
     queryFn: async () => {
-      const { data, error } = await supabase.from('${entity}').select('*').eq('id', id).single()
+      const { data, error } = await supabase.from('${entity}').select('${selectStr}').eq('id', id).single()
       if (error) throw error
       return data as Record<string, unknown>
     },
@@ -167,6 +228,8 @@ function ${pascal}DetailPage() {
     },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['${entity}'] }); setIsEditing(false) },
   })
+
+${editFKHooks}
 
   if (${camel}.isPending) return <div className="flex justify-center py-20"><p className="text-muted-foreground">Loading...</p></div>
   if (${camel}.error) return <div className="flex justify-center py-20"><p className="text-destructive">Error: {${camel}.error.message}</p></div>
@@ -237,7 +300,7 @@ export function assembleArticleReaderPage(props: SkillProps): string {
   const pascal = snakeToPascal(entity)
   const camel = snakeToCamel(entity)
   const pluralKebab = snakeToKebab(pluralize(entity))
-  const singularTitle = snakeToTitle(entity)
+  const singularTitle = snakeToTitle(singularize(entity))
   const pluralTitle = snakeToTitle(pluralize(entity))
   const headerField = spec.detailPage.headerField
 
@@ -257,11 +320,17 @@ export function assembleArticleReaderPage(props: SkillProps): string {
       c.name.includes('image') || c.name.includes('cover') || c.name.includes('thumbnail'),
   )?.name
 
+  const allTableNames = new Set(props.contract.tables.map((t) => t.name))
+  const fkCols = detectFKColumnsForDetail(allColumns, allTableNames)
+  const fkFields = new Set(fkCols.map((fk) => fk.field))
+  const selectStr = buildFKSelectStr(fkCols)
+
   const editFormFields = spec.detailPage.editFormFields
   const needsTextarea = editFormFields.some((f) => f.inputType === 'textarea')
 
   const editFieldsJSX = buildEditFieldJSX(editFormFields, '              ')
   const editInitFields = buildEditInitFields(editFormFields)
+  const editFKHooksArticle = buildEditFKQueryHooks(editFormFields)
 
   // Build static metadata section from spec (avoid JSON.stringify in generated file)
   const metaFields = spec.detailPage.sections
@@ -269,13 +338,24 @@ export function assembleArticleReaderPage(props: SkillProps): string {
     .filter((f) => f.field !== headerField && (!bodyField || f.field !== bodyField))
 
   const metaFieldsJSX = metaFields
-    .map(
-      (f) => `              <div>
+    .map((f) => {
+      let valueExpr: string
+      if (fkFields.has(f.field)) {
+        const alias = f.field.replace(/_id$/, '')
+        valueExpr = `{String((data.${alias} as Record<string, unknown>)?.name ?? (data.${alias} as Record<string, unknown>)?.title ?? data.${f.field} ?? '\u2014')}`
+      } else {
+        valueExpr = `{String(data.${f.field} ?? '\u2014')}`
+      }
+      return `              <div>
                 <p className="text-sm text-muted-foreground">${f.label}</p>
-                <p className="font-medium">{String(data.${f.field} ?? '\u2014')}</p>
-              </div>`,
-    )
+                <p className="font-medium">${valueExpr}</p>
+              </div>`
+    })
     .join('\n')
+
+  const needsInputArticle = editFormFields.some((f) =>
+    !f.refTable && ['text', 'number', 'email', 'url', 'date', 'select'].includes(f.inputType),
+  )
 
   const imports = [
     `import { useState } from 'react'`,
@@ -284,7 +364,7 @@ export function assembleArticleReaderPage(props: SkillProps): string {
     `import { supabase } from '@/lib/supabase'`,
     `import { Button } from '@/components/ui/button'`,
     `import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'`,
-    `import { Input } from '@/components/ui/input'`,
+    needsInputArticle ? `import { Input } from '@/components/ui/input'` : null,
     needsTextarea ? `import { Textarea } from '@/components/ui/textarea'` : null,
     `import { ArrowLeft, Edit2, X } from 'lucide-react'`,
   ]
@@ -335,7 +415,7 @@ function ${pascal}ReaderPage() {
   const ${camel} = useQuery({
     queryKey: ['${entity}', id],
     queryFn: async () => {
-      const { data, error } = await supabase.from('${entity}').select('*').eq('id', id).single()
+      const { data, error } = await supabase.from('${entity}').select('${selectStr}').eq('id', id).single()
       if (error) throw error
       return data as Record<string, unknown>
     },
@@ -348,6 +428,8 @@ function ${pascal}ReaderPage() {
     },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['${entity}'] }); setIsEditing(false) },
   })
+
+  ${editFKHooksArticle}
 
   if (${camel}.isPending) return <div className="flex justify-center py-20"><p className="text-muted-foreground">Loading...</p></div>
   if (${camel}.error) return <div className="flex justify-center py-20"><p className="text-destructive">Error: {${camel}.error.message}</p></div>
@@ -416,7 +498,7 @@ export function assembleProfileCardPage(props: SkillProps): string {
   const pascal = snakeToPascal(entity)
   const camel = snakeToCamel(entity)
   const pluralKebab = snakeToKebab(pluralize(entity))
-  const singularTitle = snakeToTitle(entity)
+  const singularTitle = snakeToTitle(singularize(entity))
   const pluralTitle = snakeToTitle(pluralize(entity))
   const headerField = spec.detailPage.headerField
 
@@ -438,9 +520,13 @@ export function assembleProfileCardPage(props: SkillProps): string {
 
   const editFormFields = spec.detailPage.editFormFields
   const needsTextarea = editFormFields.some((f) => f.inputType === 'textarea')
+  const needsInputProfile = editFormFields.some((f) =>
+    !f.refTable && ['text', 'number', 'email', 'url', 'date', 'select'].includes(f.inputType),
+  )
 
   const editFieldsJSX = buildEditFieldJSX(editFormFields, '              ')
   const editInitFields = buildEditInitFields(editFormFields)
+  const editFKHooksProfile = buildEditFKQueryHooks(editFormFields)
 
   const imports = [
     `import { useState } from 'react'`,
@@ -449,7 +535,7 @@ export function assembleProfileCardPage(props: SkillProps): string {
     `import { supabase } from '@/lib/supabase'`,
     `import { Button } from '@/components/ui/button'`,
     `import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'`,
-    `import { Input } from '@/components/ui/input'`,
+    needsInputProfile ? `import { Input } from '@/components/ui/input'` : null,
     needsTextarea ? `import { Textarea } from '@/components/ui/textarea'` : null,
     `import { ArrowLeft, Edit2, Mail, Globe } from 'lucide-react'`,
   ]
@@ -509,6 +595,8 @@ function ${pascal}ProfilePage() {
     },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['${entity}'] }); setIsEditing(false) },
   })
+
+  ${editFKHooksProfile}
 
   if (${camel}.isPending) return <div className="flex justify-center py-20"><p className="text-muted-foreground">Loading...</p></div>
   if (${camel}.error) return <div className="flex justify-center py-20"><p className="text-destructive">Error: {${camel}.error.message}</p></div>
@@ -576,7 +664,7 @@ export function assembleAppointmentCardPage(props: SkillProps): string {
   const pascal = snakeToPascal(entity)
   const camel = snakeToCamel(entity)
   const pluralKebab = snakeToKebab(pluralize(entity))
-  const singularTitle = snakeToTitle(entity)
+  const singularTitle = snakeToTitle(singularize(entity))
   const pluralTitle = snakeToTitle(pluralize(entity))
   const headerField = spec.detailPage.headerField
 
@@ -595,9 +683,13 @@ export function assembleAppointmentCardPage(props: SkillProps): string {
 
   const editFormFields = spec.detailPage.editFormFields
   const needsTextarea = editFormFields.some((f) => f.inputType === 'textarea')
+  const needsInputAppt = editFormFields.some((f) =>
+    !f.refTable && ['text', 'number', 'email', 'url', 'date', 'select'].includes(f.inputType),
+  )
 
   const editFieldsJSX = buildEditFieldJSX(editFormFields, '              ')
   const editInitFields = buildEditInitFields(editFormFields)
+  const editFKHooksAppt = buildEditFKQueryHooks(editFormFields)
 
   const imports = [
     `import { useState } from 'react'`,
@@ -606,7 +698,7 @@ export function assembleAppointmentCardPage(props: SkillProps): string {
     `import { supabase } from '@/lib/supabase'`,
     `import { Button } from '@/components/ui/button'`,
     `import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'`,
-    `import { Input } from '@/components/ui/input'`,
+    needsInputAppt ? `import { Input } from '@/components/ui/input'` : null,
     needsTextarea ? `import { Textarea } from '@/components/ui/textarea'` : null,
     `import { ArrowLeft, Calendar, Edit2 } from 'lucide-react'`,
   ]
@@ -678,6 +770,8 @@ function ${pascal}AppointmentPage() {
 
   if (${camel}.isPending) return <div className="flex justify-center py-20"><p className="text-muted-foreground">Loading...</p></div>
   if (${camel}.error) return <div className="flex justify-center py-20"><p className="text-destructive">Error: {${camel}.error.message}</p></div>
+  ${editFKHooksAppt}
+
   if (!${camel}.data) return <div className="flex justify-center py-20"><p className="text-muted-foreground">Not found</p></div>
 
   const data = ${camel}.data

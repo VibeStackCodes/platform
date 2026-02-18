@@ -2,9 +2,9 @@
 
 **Date**: 2026-02-18
 **Prompt Complexity**: Medium
-**Vercel URL**: [Live](https://wanderlust-journal-mlrx9p4i-ekvkwjz0s-vibe-stack-team.vercel.app)
-**Total Duration**: 216.1s
-**Total Tokens**: 9000 (~$0.0225)
+**Vercel URL**: [Live](https://wanderlust-journal-mls94y7k-4ywojr8cz-vibe-stack-team.vercel.app)
+**Total Duration**: 116.9s
+**Total Tokens**: 8157 (~$0.0204)
 
 ---
 
@@ -26,21 +26,21 @@ Writers sign in to create and edit articles. Published articles are visible to a
 
 | # | Phase | Status | Duration | Tokens | Notes |
 |---|-------|--------|----------|--------|-------|
-| 1 | 1. Analysis | PASS | 45.7s | 9000 | 5 tables | #0284c7 | Poppins |
+| 1 | 1. Analysis | PASS | 57.7s | 8157 | 5 tables | #F97316 | Poppins |
 | 2 | 2. Blueprint | PASS | 0.0s | 0 | 58 files (deterministic) |
 | 3 | 3. Provisioning | PASS | 1.8s | 0 | sandbox + supabase + github |
-| 4 | 4. Code Generation | PASS | 6.1s | 0 | 10 files |
-| 5 | 5. Validation | PASS | 16.7s | 0 | manifest=true tsc=true build=true |
+| 4 | 4. Code Generation | PASS | 6.8s | 0 | 10 files |
+| 5 | 5. Validation | PASS | 16.4s | 0 | manifest=true tsc=true build=true |
 | 6 | 7. Code Review | PASS | 0.0s | 0 | 11 det + 0 LLM issues |
-| 7 | 9. Vercel Deploy | PASS | 21.7s | 0 | https://wanderlust-journal-mlrx9p4i-ekvkwjz0s-vibe-stack-team.vercel.app |
+| 7 | 9. Vercel Deploy | PASS | 18.5s | 0 | https://wanderlust-journal-mls94y7k-4ywojr8cz-vibe-stack-team.vercel.app |
 
 ## Design Choices (from analyst)
 
 - **App Name**: Wanderlust Journal
-- **Description**: A travel blog CMS where writers manage destinations, tags, and articles, and the public can browse published stories.
-- **Primary Color**: #0284c7
+- **Description**: A travel blog CMS where writers manage destinations, authors, tags, and articles, with published stories visible to everyone.
+- **Primary Color**: #F97316
 - **Font**: Poppins
-- **Style**: Editorial travel vibe: airy layouts, large cover imagery, card-based grids, subtle paper texture, generous whitespace, and elegant typography with bold section headers.
+- **Style**: Editorial travel magazine vibe: airy layouts, large cover imagery, generous whitespace, rounded cards, subtle map/compass motifs, and warm accent highlights.
 - **Tables**: authors, destinations, tags, articles, article_tags
 
 ## Blueprint
@@ -70,8 +70,8 @@ Writers sign in to create and edit articles. Published articles are visible to a
 
 ## Provisioning
 
-- **GitHub**: https://github.com/VibeStackCodes-Generated/vibestack-e2e-test-1771412353594
-- **Supabase**: https://lrcmviyykrbutrkatdki.supabase.co
+- **GitHub**: https://github.com/VibeStackCodes-Generated/vibestack-e2e-test-1771432394770
+- **Supabase**: https://kminchdkuszcdsmsmwyq.supabase.co
 
 ## Learnings
 
@@ -79,7 +79,7 @@ Writers sign in to create and edit articles. Published articles are visible to a
 - Blueprint generates 58 files across 6 layers
 
 ### Bugs Found
-- GitHub push failed: Command execution failed: Operation timed out
+- GitHub push failed: Git Repository is empty. - https://docs.github.com/rest/git/trees#create-a-tree
 
 ### Performance Notes
 - Provisioning: 1.8s

@@ -2,9 +2,9 @@
 
 **Date**: 2026-02-18
 **Prompt Complexity**: Complex
-**Vercel URL**: [Live](https://agencyflow-pm-mlrx6p51-mnexe92cb-vibe-stack-team.vercel.app)
-**Total Duration**: 69.8s
-**Total Tokens**: 6548 (~$0.0164)
+**Vercel URL**: [Live](https://studiosprint-mlsa3u61-1h6fog8ie-vibe-stack-team.vercel.app)
+**Total Duration**: 142.2s
+**Total Tokens**: 7782 (~$0.0195)
 
 ---
 
@@ -28,22 +28,22 @@ Dashboard defaults to showing active projects sorted by deadline (soonest first)
 
 | # | Phase | Status | Duration | Tokens | Notes |
 |---|-------|--------|----------|--------|-------|
-| 1 | 1. Analysis | PASS | 20.8s | 6548 | 4 tables | #7C3AED | Sora |
+| 1 | 1. Analysis | PASS | 39.6s | 7782 | 4 tables | #7C3AED | DM Sans |
 | 2 | 2. Blueprint | PASS | 0.0s | 0 | 56 files (deterministic) |
-| 3 | 3. Provisioning | PASS | 1.8s | 0 | sandbox + supabase + github |
-| 4 | 4. Code Generation | PASS | 9.3s | 0 | 8 files |
-| 5 | 5. Validation | PASS | 17.7s | 0 | manifest=true tsc=true build=true |
+| 3 | 3. Provisioning | PASS | 1.9s | 0 | sandbox + supabase + github |
+| 4 | 4. Code Generation | PASS | 62.8s | 0 | 8 files |
+| 5 | 5. Validation | PASS | 18.8s | 0 | manifest=true tsc=true build=true |
 | 6 | 7. Code Review | PASS | 0.0s | 0 | 9 det + 0 LLM issues |
-| 7 | 8. GitHub Push | PASS | 4.6s | 0 | https://github.com/VibeStackCodes-Generated/vibestack-e2e-test-1771412329375 |
-| 8 | 9. Vercel Deploy | PASS | 15.6s | 0 | https://agencyflow-pm-mlrx6p51-mnexe92cb-vibe-stack-team.vercel.app |
+| 7 | 8. GitHub Push | PASS | 2.8s | 0 | https://github.com/VibeStackCodes-Generated/vibestack-e2e-test-1771433977411 |
+| 8 | 9. Vercel Deploy | PASS | 16.4s | 0 | https://studiosprint-mlsa3u61-1h6fog8ie-vibe-stack-team.vercel.app |
 
 ## Design Choices (from analyst)
 
-- **App Name**: AgencyFlow PM
-- **Description**: A project management tool for creative agencies to track clients, projects, deliverables, and time entries with status-driven dashboards.
+- **App Name**: StudioSprint
+- **Description**: Project management and delivery tracking for creative agencies—clients, projects, deliverables, and time entries with deadline-focused dashboards.
 - **Primary Color**: #7C3AED
-- **Font**: Sora
-- **Style**: Modern editorial SaaS for creative agencies—clean cards, subtle grain/gradient accents, strong typography, and status color chips.
+- **Font**: DM Sans
+- **Style**: Modern editorial SaaS for creative studios: roomy layouts, subtle grain/gradient accents, rounded cards, clear typography, and strong status chips.
 - **Tables**: clients, projects, deliverables, time_entries
 
 ## Blueprint
@@ -73,8 +73,8 @@ Dashboard defaults to showing active projects sorted by deadline (soonest first)
 
 ## Provisioning
 
-- **GitHub**: https://github.com/VibeStackCodes-Generated/vibestack-e2e-test-1771412329375
-- **Supabase**: https://bkihehbeaxgcvwaxqupv.supabase.co
+- **GitHub**: https://github.com/VibeStackCodes-Generated/vibestack-e2e-test-1771433977411
+- **Supabase**: https://medrpdfavzndyqgwvuqg.supabase.co
 
 ## Learnings
 
@@ -85,4 +85,4 @@ Dashboard defaults to showing active projects sorted by deadline (soonest first)
 (none)
 
 ### Performance Notes
-- Provisioning: 1.8s
+- Provisioning: 1.9s

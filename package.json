@@ -26,7 +26,6 @@
     "@ai-sdk/react": "^3.0.84",
     "@anthropic-ai/sdk": "^0.74.0",
     "@daytonaio/sdk": "^0.141.0",
-    "@faker-js/faker": "^9.4.0",
     "@hono/node-server": "1.19.9",
     "@hono/sentry": "1.2.2",
     "@hookform/resolvers": "^5.2.2",
@@ -101,6 +100,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.3.15",
+    "fast-check": "^3.22.0",
     "@electric-sql/pglite": "^0.3.15",
     "@mastra/deployer": "^1.4.0",
     "@playwright/test": "^1.58.2",

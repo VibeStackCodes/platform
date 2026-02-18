@@ -20,13 +20,15 @@ interface ForeignKeyInfo {
 function detectForeignKeys(entityName: string, contract: SchemaContract): ForeignKeyInfo[] {
   const table = contract.tables.find((t) => t.name === entityName)
   if (!table) return []
-  return table.columns
-    .filter((c) => c.references?.table && c.references?.column && c.references.table !== 'auth.users')
-    .map((c) => ({
-      column: c.name,
-      refTable: c.references!.table,
-      refColumn: c.references!.column,
-    }))
+  const result: ForeignKeyInfo[] = []
+  for (const c of table.columns) {
+    // Skip auth.users FKs — structural, handled by auth, not a user-facing dropdown
+    if (c.references?.table === 'auth.users') continue
+    if (c.references?.table && c.references?.column) {
+      result.push({ column: c.name, refTable: c.references.table, refColumn: c.references.column })
+    }
+  }
+  return result
 }
 
 /**
@@ -78,6 +80,45 @@ function generateFKHooks(foreignKeys: ForeignKeyInfo[], contract: SchemaContract
       const { data } = await supabase.from('${fk.refTable}').select('${selectCols}').limit(100)
       return data ?? []
     },
+  })`)
+  }
+
+  return '\n' + hooks.join('\n\n') + '\n'
+}
+
+/**
+ * Generate useQuery lookup hooks for FK columns in the detail view.
+ * Unlike form hooks, these query by the actual FK value from the loaded record.
+ * Each hook fetches ONE row by ID to get the display name.
+ * The entity's query state is passed as `entityQuery` so hooks are conditional-safe.
+ */
+function generateFKDetailLookupHooks(
+  foreignKeys: ForeignKeyInfo[],
+  contract: SchemaContract,
+  entityQueryVar: string, // e.g., 'watches' — the variable for the main entity query
+): string {
+  if (foreignKeys.length === 0) return ''
+
+  const seen = new Set<string>()
+  const hooks: string[] = []
+
+  for (const fk of foreignKeys) {
+    if (seen.has(fk.column)) continue
+    seen.add(fk.column)
+
+    const lookupVar = `${snakeToCamel(fk.refTable)}FkLookup_${snakeToCamel(fk.column)}`
+    const displayCol = findDisplayColumn(fk.refTable, contract)
+    const selectCols = displayCol === 'id' ? 'id' : `id, ${displayCol}`
+
+    hooks.push(`  const ${lookupVar} = useQuery({
+    queryKey: ['${fk.refTable}', 'fk-lookup', ${entityQueryVar}.data?.${fk.column}],
+    queryFn: async () => {
+      const fkId = ${entityQueryVar}.data?.${fk.column}
+      if (!fkId) return null
+      const { data } = await supabase.from('${fk.refTable}').select('${selectCols}').eq('id', String(fkId)).single()
+      return data
+    },
+    enabled: !!${entityQueryVar}.data?.${fk.column},
   })`)
   }
 
@@ -236,7 +277,7 @@ export function assembleListPage(spec: PageFeatureSpec, contract: SchemaContract
     "import { supabase } from '@/lib/supabase'",
     "import { Button } from '@/components/ui/button'",
     "import { Card, CardContent } from '@/components/ui/card'",
-    "import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'",
+    "import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog'",
     "import { Skeleton } from '@/components/ui/skeleton'",
   ]
   if (needsInput) imports.push("import { Input } from '@/components/ui/input'")
@@ -415,6 +456,7 @@ ${filterBar}
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Create ${singularTitle}</DialogTitle>
+            <DialogDescription className="sr-only">Fill in the details to create a new ${singularTitle}.</DialogDescription>
           </DialogHeader>
           <form
             className="space-y-4 py-2"
@@ -441,8 +483,8 @@ ${formFields}
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
             <DialogTitle>Delete ${singularTitle}?</DialogTitle>
+            <DialogDescription className="sr-only">This action cannot be undone.</DialogDescription>
           </DialogHeader>
-          <p className="text-sm text-muted-foreground">This action cannot be undone.</p>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeleteTargetId(null)}>Cancel</Button>
             <Button
@@ -583,6 +625,9 @@ export function assembleDetailPage(spec: PageFeatureSpec, contract: SchemaContra
   const editFieldNames = new Set(spec.detailPage.editFormFields.map((f) => f.field))
   const foreignKeys = allForeignKeys.filter((fk) => editFieldNames.has(fk.column))
 
+  // All FKs for the detail view (not filtered to editFormFields — sections may show any FK column)
+  const allFKsForDetail = allForeignKeys
+
   // Only import Input if edit form uses text/number/email/url/date inputs (not just FK selects or textareas)
   const needsInput = spec.detailPage.editFormFields.some((f) => {
     const isFk = foreignKeys.some((fk) => fk.column === f.field)
@@ -606,13 +651,23 @@ export function assembleDetailPage(spec: PageFeatureSpec, contract: SchemaContra
   const sectionCards = spec.detailPage.sections
     .map((section) => {
       const fields = section.fields
-        .map(
-          (f) =>
-            `            <div>
+        .map((f) => {
+          // Check if this field is a FK — if so, use the lookup hook to show display name
+          const fkInfo = allFKsForDetail.find((fk) => fk.column === f.field)
+          if (fkInfo) {
+            const lookupVar = `${snakeToCamel(fkInfo.refTable)}FkLookup_${snakeToCamel(fkInfo.column)}`
+            const displayCol = findDisplayColumn(fkInfo.refTable, contract)
+            const displayExpr = displayCol === 'id' ? `${lookupVar}.data?.id` : `${lookupVar}.data?.${displayCol}`
+            return `            <div>
+              <p className="text-sm text-muted-foreground">${f.label}</p>
+              <p className="font-medium">{${displayExpr} ?? String(data.${f.field} ?? '—')}</p>
+            </div>`
+          }
+          return `            <div>
               <p className="text-sm text-muted-foreground">${f.label}</p>
               <p className="font-medium">${cellRenderer(f.field, f.format, 'data')}</p>
-            </div>`,
-        )
+            </div>`
+        })
         .join('\n')
       return `        <Card>
           <CardHeader>
@@ -637,6 +692,9 @@ ${fields}
 
   // FK dropdown hooks — must be at component top level (Rules of Hooks)
   const fkHooks = generateFKHooks(foreignKeys, contract)
+
+  // FK lookup hooks for DETAIL VIEW — resolves UUID → display name in sections
+  const fkDetailLookupHooks = generateFKDetailLookupHooks(allFKsForDetail, contract, camel)
 
   return `// Auto-generated by VibeStack — deterministic assembly from PageFeatureSpec
 ${imports.join('\n')}
@@ -664,6 +722,7 @@ function ${pascal}DetailPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['${entity}'] }),
   })
 ${fkHooks}
+${fkDetailLookupHooks}
   const [isEditing, setIsEditing] = useState(false)
   const [editForm, setEditForm] = useState<Record<string, string | boolean>>({})
 

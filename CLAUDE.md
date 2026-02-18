@@ -163,6 +163,7 @@ Required in `.env.local`:
 | `STRIPE_WEBHOOK_SECRET` | Stripe webhook validation |
 | `VITE_STRIPE_PUBLISHABLE_KEY` | Stripe client key |
 | `HELICONE_API_KEY` | Helicone LLM proxy (observability + per-user tracking) |
+| `UNSPLASH_ACCESS_KEY` | Unsplash API for hero images in generated apps |
 | `VITE_SENTRY_DSN` | Sentry client DSN (optional) |
 | `SENTRY_DSN` | Sentry server DSN (optional) |
 

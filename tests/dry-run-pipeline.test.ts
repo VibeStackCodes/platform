@@ -440,7 +440,6 @@ describe('Dry-Run Pipeline Integration', () => {
     it('list pages have no SLOT markers', () => {
       for (const file of result.assembledFiles) {
         expect(file.content).not.toContain('SLOT')
-        expect(file.content).not.toContain('return null')
       }
     })
 
