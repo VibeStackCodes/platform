@@ -1,5 +1,7 @@
 import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
+import { parse as parseColor, formatCss, oklch as toOklch } from 'culori'
+import { stripIndent } from 'common-tags'
 import { inferFeatures, type SchemaContract, type DesignPreferences, type InferredFeatures } from './schema-contract'
 import { contractToPages } from './contract-to-pages'
 import { contractToSQL } from './contract-to-sql'
@@ -53,57 +55,16 @@ interface BlueprintInput {
 }
 
 // ============================================================================
-// Color utilities — hex → oklch conversion for Tailwind v4 @theme
+// Color utilities — hex → oklch conversion for Tailwind v4 @theme (via culori)
 // ============================================================================
-
-/**
- * Convert a 6-digit hex color to OKLCH components.
- * Returns {L, C, H} where L ∈ [0,1], C ∈ [0,~0.4], H ∈ [0,360).
- */
-function hexToOklch(hex: string): { L: number; C: number; H: number } {
-  const h = hex.replace('#', '')
-  if (h.length !== 6) return { L: 0.48, C: 0.18, H: 240 }
-
-  const r = parseInt(h.slice(0, 2), 16) / 255
-  const g = parseInt(h.slice(2, 4), 16) / 255
-  const b = parseInt(h.slice(4, 6), 16) / 255
-
-  // Linearize (sRGB gamma decode)
-  const lin = (c: number) => (c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4))
-  const lr = lin(r), lg = lin(g), lb = lin(b)
-
-  // RGB → XYZ (D65)
-  const X = 0.4124564 * lr + 0.3575761 * lg + 0.1804375 * lb
-  const Y = 0.2126729 * lr + 0.7151522 * lg + 0.0721750 * lb
-  const Z = 0.0193339 * lr + 0.1191920 * lg + 0.9503041 * lb
-
-  // XYZ → Oklab (via LMS cone response)
-  const lc = 0.8189330101 * X + 0.3618667424 * Y - 0.1288597137 * Z
-  const mc = 0.0329845436 * X + 0.9293118715 * Y + 0.0361456387 * Z
-  const sc = 0.0482003018 * X + 0.2643662691 * Y + 0.6338517070 * Z
-
-  const l_ = Math.cbrt(lc), m_ = Math.cbrt(mc), s_ = Math.cbrt(sc)
-  const L = 0.2104542553 * l_ + 0.7936177850 * m_ - 0.0040720468 * s_
-  const a = 1.9779984951 * l_ - 2.4285922050 * m_ + 0.4505937099 * s_
-  const bv = 0.0259040371 * l_ + 0.7827717662 * m_ - 0.8086757660 * s_
-
-  const C = Math.sqrt(a * a + bv * bv)
-  const H = ((Math.atan2(bv, a) * 180 / Math.PI) + 360) % 360
-
-  return { L, C, H }
-}
-
-/** Format oklch components to a CSS oklch() string */
-function oklch(L: number, C: number, H: number): string {
-  return `oklch(${L.toFixed(4)} ${C.toFixed(4)} ${H.toFixed(2)})`
-}
 
 /**
  * Generate a full shadcn/ui color palette derived from a single primary hex color.
  * Returns CSS oklch() strings for all required tokens.
  */
 function buildColorPalette(primaryHex: string) {
-  const { L, C, H } = hexToOklch(primaryHex)
+  const parsed = toOklch(parseColor(primaryHex) ?? parseColor('#6366f1')!)!
+  const { l: L, c: C, h: H = 0 } = parsed
 
   // Primary: use the color as-is, clamp L to reasonable range for readability
   const primaryL = Math.min(0.72, Math.max(0.35, L))
@@ -123,25 +84,25 @@ function buildColorPalette(primaryHex: string) {
   const borderC = Math.min(C * 0.06, 0.012)
 
   return {
-    primary:            oklch(primaryL, Math.min(C, 0.28), H),
-    primaryForeground:  oklch(primaryFgL, 0, 0),
-    secondary:          oklch(secondaryL, secondaryC, H),
-    secondaryFg:        oklch(0.21, 0, 0),
-    muted:              oklch(0.965, mutedC, H),
-    mutedFg:            oklch(0.50, Math.min(C * 0.12, 0.02), H),
-    accent:             oklch(0.955, accentC, H),
-    accentFg:           oklch(0.20, 0, 0),
-    border:             oklch(0.918, borderC, H),
-    input:              oklch(0.918, borderC, H),
-    ring:               oklch(primaryL, Math.min(C * 0.65, 0.20), H),
+    primary:            formatCss({ mode: 'oklch', l: primaryL, c: Math.min(C, 0.28), h: H }),
+    primaryForeground:  formatCss({ mode: 'oklch', l: primaryFgL, c: 0, h: 0 }),
+    secondary:          formatCss({ mode: 'oklch', l: secondaryL, c: secondaryC, h: H }),
+    secondaryFg:        formatCss({ mode: 'oklch', l: 0.21, c: 0, h: 0 }),
+    muted:              formatCss({ mode: 'oklch', l: 0.965, c: mutedC, h: H }),
+    mutedFg:            formatCss({ mode: 'oklch', l: 0.50, c: Math.min(C * 0.12, 0.02), h: H }),
+    accent:             formatCss({ mode: 'oklch', l: 0.955, c: accentC, h: H }),
+    accentFg:           formatCss({ mode: 'oklch', l: 0.20, c: 0, h: 0 }),
+    border:             formatCss({ mode: 'oklch', l: 0.918, c: borderC, h: H }),
+    input:              formatCss({ mode: 'oklch', l: 0.918, c: borderC, h: H }),
+    ring:               formatCss({ mode: 'oklch', l: primaryL, c: Math.min(C * 0.65, 0.20), h: H }),
     // Dark mode variants
-    darkBg:             oklch(0.085, Math.min(C * 0.06, 0.012), H),
-    darkFg:             oklch(0.96, 0, 0),
-    darkCard:           oklch(0.115, Math.min(C * 0.06, 0.012), H),
-    darkPrimary:        oklch(Math.min(primaryL + 0.10, 0.78), Math.min(C, 0.28), H),
-    darkBorder:         oklch(0.22, Math.min(C * 0.08, 0.015), H),
-    darkMuted:          oklch(0.18, Math.min(C * 0.08, 0.015), H),
-    darkMutedFg:        oklch(0.58, Math.min(C * 0.10, 0.018), H),
+    darkBg:             formatCss({ mode: 'oklch', l: 0.085, c: Math.min(C * 0.06, 0.012), h: H }),
+    darkFg:             formatCss({ mode: 'oklch', l: 0.96, c: 0, h: 0 }),
+    darkCard:           formatCss({ mode: 'oklch', l: 0.115, c: Math.min(C * 0.06, 0.012), h: H }),
+    darkPrimary:        formatCss({ mode: 'oklch', l: Math.min(primaryL + 0.10, 0.78), c: Math.min(C, 0.28), h: H }),
+    darkBorder:         formatCss({ mode: 'oklch', l: 0.22, c: Math.min(C * 0.08, 0.015), h: H }),
+    darkMuted:          formatCss({ mode: 'oklch', l: 0.18, c: Math.min(C * 0.08, 0.015), h: H }),
+    darkMutedFg:        formatCss({ mode: 'oklch', l: 0.58, c: Math.min(C * 0.10, 0.018), h: H }),
   }
 }
 
@@ -151,7 +112,7 @@ function generateIndexCSS(prefs: DesignPreferences, contract: SchemaContract): s
   const designSpec = deriveDesignSpec(contract, prefs)
   const fontCSS = designSpecToFontCSS(designSpec)
 
-  return `${fontCSS}
+  return stripIndent`${fontCSS}
 
 @import "tailwindcss";
 @import "tw-animate-css";
@@ -227,7 +188,7 @@ function googleFontsUrl(fontFamily: string): string {
 function generateIndexHTML(appName: string, prefs: DesignPreferences): string {
   // Always load font via Google Fonts (even Inter) for consistency
   const fontsUrl = googleFontsUrl(prefs.fontFamily)
-  return `<!doctype html>
+  return stripIndent`<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -250,7 +211,7 @@ function generateIndexHTML(appName: string, prefs: DesignPreferences): string {
 function generateMainTSX(_features: InferredFeatures): string {
   // Auth is handled by Supabase RLS + session tokens (auto-attached by supabase-js).
   // No AuthProvider needed — the _authenticated route guard checks session in beforeLoad.
-  return `// Auto-generated by VibeStack — do not edit manually
+  return stripIndent`// Auto-generated by VibeStack — do not edit manually
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -311,7 +272,7 @@ function generateAppLayout(appName: string, features: InferredFeatures): string 
           </button>`
     : ''
 
-  return `// Auto-generated by VibeStack — do not edit manually
+  return stripIndent`// Auto-generated by VibeStack — do not edit manually
 import { Link, Outlet } from '@tanstack/react-router'
 ${signOutImports}
 const navLinks = [
@@ -360,7 +321,7 @@ export function AppLayout() {${signOutHook}
 /** Generate auth login/signup page — split-screen branded design */
 function generateAuthLoginPage(appName: string): string {
   const initial = appName.charAt(0).toUpperCase()
-  return `// Auto-generated by VibeStack
+  return stripIndent`// Auto-generated by VibeStack
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
@@ -518,7 +479,7 @@ function AuthLoginPage() {
 
 /** Generate auth callback page — handles Supabase email confirmation links */
 function generateAuthCallbackPage(): string {
-  return `// Auto-generated by VibeStack — handles Supabase email confirmation redirects
+  return stripIndent`// Auto-generated by VibeStack — handles Supabase email confirmation redirects
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
@@ -547,7 +508,7 @@ function AuthCallbackPage() {
 
 /** Generate .env with placeholder credentials (replaced by infra provisioning) */
 function generateDotEnv(): string {
-  return `# Auto-generated — values injected by VibeStack infra provisioning
+  return stripIndent`# Auto-generated — values injected by VibeStack infra provisioning
 VITE_SUPABASE_URL=__PLACEHOLDER__
 VITE_SUPABASE_ANON_KEY=__PLACEHOLDER__
 `
@@ -555,7 +516,7 @@ VITE_SUPABASE_ANON_KEY=__PLACEHOLDER__
 
 /** Generate root route for TanStack Router */
 function generateRootRoute(): string {
-  return `// Auto-generated by VibeStack
+  return stripIndent`// Auto-generated by VibeStack
 import { createRootRoute, Outlet } from '@tanstack/react-router'
 
 export const Route = createRootRoute({
@@ -566,7 +527,7 @@ export const Route = createRootRoute({
 
 /** Generate index route that redirects to the first entity's list page */
 function generateIndexRoute(firstEntityKebab: string): string {
-  return `// Auto-generated by VibeStack — redirects to first entity page
+  return stripIndent`// Auto-generated by VibeStack — redirects to first entity page
 import { createFileRoute, redirect } from '@tanstack/react-router'
 
 export const Route = createFileRoute('/')({
@@ -651,7 +612,7 @@ function generateRouteTree(contract: SchemaContract, features: InferredFeatures)
 
 /** Generate Supabase client singleton for the generated app */
 function generateSupabaseClient(): string {
-  return `// Auto-generated by VibeStack
+  return stripIndent`// Auto-generated by VibeStack
 import { createClient } from '@supabase/supabase-js'
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
@@ -663,7 +624,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
 /** Generate Vite config — no TanStack Router plugin (we generate routeTree.gen.ts deterministically) */
 function generateViteConfig(): string {
-  return `import tailwindcss from '@tailwindcss/vite'
+  return stripIndent`import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import { resolve } from 'node:path'
 import { defineConfig } from 'vite'

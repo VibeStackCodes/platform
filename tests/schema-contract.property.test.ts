@@ -11,47 +11,8 @@ import {
   SchemaContractSchema,
   validateContract,
   SQL_RESERVED_WORDS,
+  inferRefTableFromStem,
 } from '@server/lib/schema-contract'
-
-// ─── Local copy of inferRefTableFromStem (mirrors main branch implementation) ──
-//
-// The worktree's schema-contract.ts does not yet export inferRefTableFromStem.
-// We define it here to property-test the algorithm in isolation — this lets
-// us assert invariants about the function's contract without depending on
-// whether it has been merged into the server module.
-//
-// Matching strategy (identical to main branch):
-//   1. Exact match of stem or plural variants (simple + es + y→ies)
-//   2. Substring match (e.g. 'categories' found within 'menu_categories')
-//   3. Reserved-word rename match (e.g. 'table' → 'table_record')
-function inferRefTableFromStem(stem: string, tableNames: string[]): string | undefined {
-  const variants: string[] = [
-    stem,
-    stem + 's',
-    stem + 'es',
-    stem.endsWith('y') ? stem.slice(0, -1) + 'ies' : '',
-  ].filter(Boolean)
-
-  // 1. Exact match
-  for (const v of variants) {
-    const match = tableNames.find((t) => t === v)
-    if (match) return match
-  }
-
-  // 2. Substring match (e.g. 'categories' in 'menu_categories')
-  for (const v of variants) {
-    const match = tableNames.find((t) => t.includes(v))
-    if (match) return match
-  }
-
-  // 3. Reserved-word rename (table → table_record, order → order_record)
-  const recordMatch = tableNames.find(
-    (t) => t.endsWith('_record') && t.replace(/_record$/, '') === stem,
-  )
-  if (recordMatch) return recordMatch
-
-  return undefined
-}
 
 // ─── Arbitraries ─────────────────────────────────────────────────────────────
 
