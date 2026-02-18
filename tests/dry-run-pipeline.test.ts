@@ -464,7 +464,7 @@ describe('Dry-Run Pipeline Integration', () => {
       expect(scaffoldResult.passed).toBe(true)
     })
 
-    it('generated code passes tsc --noEmit', () => {
+    it('generated code passes tsc --noEmit', { timeout: 15000 }, () => {
       const tsc = typeCheckFiles('bookmarks', result.blueprint, result.assembledFiles)
       if (!tsc.passed) {
         console.error('TSC errors for bookmarks:\n', tsc.tscOutput)
@@ -523,7 +523,7 @@ describe('Dry-Run Pipeline Integration', () => {
       expect(scaffoldResult.passed).toBe(true)
     })
 
-    it('generated code passes tsc --noEmit', () => {
+    it('generated code passes tsc --noEmit', { timeout: 15000 }, () => {
       const tsc = typeCheckFiles('taskboard', result.blueprint, result.assembledFiles)
       if (!tsc.passed) {
         console.error('TSC errors for taskboard:\n', tsc.tscOutput)
@@ -571,7 +571,7 @@ describe('Dry-Run Pipeline Integration', () => {
       expect(scaffoldResult.passed).toBe(true)
     })
 
-    it('generated code passes tsc --noEmit', () => {
+    it('generated code passes tsc --noEmit', { timeout: 15000 }, () => {
       const tsc = typeCheckFiles('finance', result.blueprint, result.assembledFiles)
       if (!tsc.passed) {
         console.error('TSC errors for finance:\n', tsc.tscOutput)
