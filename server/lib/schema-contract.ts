@@ -283,7 +283,23 @@ export const EnumDefSchema = z.object({
     })
     .describe('Enum type name'),
   values: z.array(
-    z.string().regex(/^[a-zA-Z0-9_-]+$/, 'Invalid enum value: must be alphanumeric with underscores/hyphens')
+    z.preprocess(
+      (val) => {
+        if (typeof val !== 'string') return val
+        // Bail out early if the value contains SQL-dangerous characters (quotes, semicolons, comments)
+        // so the regex below still rejects them for security.
+        if (/['";]|--/.test(val)) return val
+        return val
+          .trim()
+          .toLowerCase()
+          .replace(/\+/g, '_plus')        // "200+" → "200_plus"
+          .replace(/[^a-zA-Z0-9_-]/g, '_') // spaces/slashes/dots → "_"
+          .replace(/_+/g, '_')             // collapse consecutive underscores
+          .replace(/^_|_$/g, '')           // strip leading/trailing underscores
+          || 'value'                       // fallback for empty string after normalization
+      },
+      z.string().regex(/^[a-zA-Z0-9_-]+$/, 'Invalid enum value: must be alphanumeric with underscores/hyphens'),
+    )
   ).describe('Enum values'),
 })
 
