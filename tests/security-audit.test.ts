@@ -450,7 +450,7 @@ describe('default value safety', () => {
         columns: [
           { name: 'id', type: 'uuid' as const, primaryKey: true, default: 'gen_random_uuid()' },
           { name: 'created_at', type: 'timestamptz' as const, default: 'now()' },
-          { name: 'status', type: 'text' as const, default: 'active' },
+          { name: 'status', type: 'text' as const, default: "'active'" },
         ],
       }],
     }
@@ -462,7 +462,7 @@ describe('default value safety', () => {
       const sql = contractToSQL(parsed.data)
       expect(sql).toContain('DEFAULT gen_random_uuid()')
       expect(sql).toContain('DEFAULT now()')
-      expect(sql).toContain('DEFAULT active')
+      expect(sql).toContain("DEFAULT 'active'")
     }
   })
 

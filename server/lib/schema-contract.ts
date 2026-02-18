@@ -158,9 +158,26 @@ export const ColumnDefSchema = z.object({
   ),
   type: SQLTypeSchema.describe('PostgreSQL data type'),
   nullable: z.preprocess(nullish, z.boolean().optional()).describe('Whether column is nullable'),
-  // Accept any primitive, coerce to string (LLMs emit numbers/booleans for defaults)
+  // Accept any primitive, coerce to string (LLMs emit numbers/booleans for defaults).
+  // Strip type casts to custom/unknown types (e.g. "'scheduled'::appointment_status" →
+  // "'scheduled'") — these custom PostgreSQL types don't exist in generated schemas.
   default: z.preprocess(
-    (val) => (val != null ? String(val) : undefined),
+    (val) => {
+      if (val == null) return undefined
+      let str = String(val).trim()
+      // Strip '::custom_type' casts where the type is not in our canonical set
+      const VALID_TYPES = 'uuid|text|numeric|boolean|timestamptz|jsonb|integer|bigint'
+      str = str.replace(new RegExp(`::(?!(${VALID_TYPES})(?:\\W|$))[a-z_][a-z0-9_]*`, 'gi'), '')
+      str = str.trim()
+      // Drop bare identifiers that look like type names (no quotes, parens, or digits)
+      // e.g. "appointment_status" alone as a default makes no SQL sense
+      if (str && /^[a-z_][a-z0-9_]*$/i.test(str) &&
+          !/^(true|false|null|now|current_timestamp|current_date|current_time|gen_random_uuid)$/i.test(str)) {
+        console.warn(`[ColumnDefSchema] Bare-identifier default "${val}" → dropped`)
+        return undefined
+      }
+      return str || undefined
+    },
     z.string().optional(),
   ).describe('SQL default expression'),
   primaryKey: z.preprocess(nullish, z.boolean().optional()).describe('Whether column is primary key'),
