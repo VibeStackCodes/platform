@@ -96,7 +96,7 @@ vi.mock('@server/lib/credits', () => ({
 }))
 
 import { isAllowedModel } from '@server/lib/agents/provider'
-import { getUserCredits, updateProject } from '@server/lib/db/queries'
+import { getUserCredits } from '@server/lib/db/queries'
 import { reserveCredits, settleCredits } from '@server/lib/credits'
 import { agentRoutes } from '@server/routes/agent'
 

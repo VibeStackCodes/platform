@@ -13,7 +13,7 @@
  * Env: reads from .env.local automatically (bun feature)
  */
 
-import { writeFileSync, appendFileSync, existsSync, mkdirSync } from 'node:fs'
+import { writeFileSync, appendFileSync, existsSync } from 'node:fs'
 
 // ============================================================================
 // Config
@@ -349,7 +349,7 @@ async function phase7_codeReview(blueprint: any, contract: any, sandboxId: strin
 // Phase 8: GitHub Push
 // ============================================================================
 
-async function phase8_githubPush(sandboxId: string, githubCloneUrl: string, repoName: string) {
+async function phase8_githubPush(sandboxId: string, githubCloneUrl: string, _repoName: string) {
   const { getSandbox, runCommand } = await import('../server/lib/sandbox')
   const { getInstallationToken } = await import('../server/lib/github')
 
@@ -403,7 +403,6 @@ async function phase9_vercelDeploy(
 
   const VERCEL_TOKEN = process.env.VERCEL_TOKEN
   const VERCEL_TEAM_ID = process.env.VERCEL_TEAM_ID
-  const VERCEL_WILDCARD_PROJECT_ID = process.env.VERCEL_WILDCARD_PROJECT_ID
 
   if (!VERCEL_TOKEN) {
     throw new Error('VERCEL_TOKEN not set — skipping Vercel deployment')
@@ -725,7 +724,7 @@ async function main() {
     trackPhase('2. Blueprint', d2, 0, 'PASS', `${blueprint.fileTree.length} files (deterministic)`)
     results.blueprint = blueprint
 
-    notes.push(`[ARCH] Blueprint generates ${blueprint.fileTree.length} files across ${[...new Set(blueprint.fileTree.map((f: any) => f.layer))].length} layers`)
+    notes.push(`[ARCH] Blueprint generates ${blueprint.fileTree.length} files across ${new Set(blueprint.fileTree.map((f: any) => f.layer)).size} layers`)
 
     // --- Phase 3: Provisioning ---
     const t3 = Date.now()

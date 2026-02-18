@@ -340,7 +340,7 @@ await run("bun add @radix-ui/react-checkbox @radix-ui/react-dialog @radix-ui/rea
 
 // Build
 console.log("\n=== Building ===\n")
-const tscOk = await run("tsc --noEmit 2>&1; echo EXIT:$?", "tsc-check", 60)
+void await run("tsc --noEmit 2>&1; echo EXIT:$?", "tsc-check", 60)
 const buildOk = await run("bun run build", "build", 120)
 
 if (!buildOk) {

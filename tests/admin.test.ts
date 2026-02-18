@@ -40,7 +40,7 @@ vi.mock('@server/lib/sandbox', () => ({
 
 import { db } from '@server/lib/db/client'
 import { getPoolStatus, cleanupZombieProjects, cleanupErrorProjects, replenishPool } from '@server/lib/supabase-pool'
-import { createRateLimiter, cleanupExpiredRateLimits } from '@server/lib/rate-limit'
+import { cleanupExpiredRateLimits } from '@server/lib/rate-limit'
 import { getDaytonaClient } from '@server/lib/sandbox'
 import { adminRoutes } from '@server/routes/admin'
 

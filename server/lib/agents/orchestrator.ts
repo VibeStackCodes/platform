@@ -248,7 +248,6 @@ export async function runCodeGeneration(input: {
     entityTables.map(async (table) => {
       const files: Array<{ path: string; content: string }> = []
       let tokens = 0
-      let warning: { table: string; errors: string[] } | undefined
       let skipped = false
 
       // ================================================================
@@ -283,7 +282,7 @@ export async function runCodeGeneration(input: {
         { path: `src/routes/_authenticated/${entityPlural}.$id.tsx`, content: detailPageContent },
       )
 
-      return { files, tokens, warning, skipped, table: table.name }
+      return { files, tokens, skipped, table: table.name }
     }),
   )
 
@@ -293,7 +292,6 @@ export async function runCodeGeneration(input: {
     if (result.status === 'fulfilled') {
       assembledFiles.push(...result.value.files)
       totalTokens += result.value.tokens
-      if (result.value.warning) validationWarnings.push(result.value.warning)
       if (result.value.skipped) skippedEntities.push(result.value.table)
     } else {
       console.error('Entity processing failed:', result.reason)

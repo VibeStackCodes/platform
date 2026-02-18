@@ -1,10 +1,9 @@
 import { createActor, fromPromise, waitFor } from 'xstate'
 import { appGenerationMachine } from '@server/lib/agents/machine'
-import { describe, expect, it, vi, beforeEach } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { SchemaContract } from '@server/lib/schema-contract'
 import type { AppBlueprint } from '@server/lib/app-blueprint'
 import type { ValidationGateResult } from '@server/lib/agents/validation'
-import type { CodeReviewResult } from '@server/lib/agents/code-review'
 
 // Mock Sentry
 vi.mock('@sentry/node', () => ({
@@ -198,7 +197,7 @@ describe('state transitions', () => {
     let analysisCallCount = 0
     const testMachine = appGenerationMachine.provide({
       actors: {
-        runAnalysisActor: fromPromise(async ({ input }) => {
+        runAnalysisActor: fromPromise(async ({ input: _input }) => {
           analysisCallCount++
           // First call returns clarification
           if (analysisCallCount === 1) {
@@ -1614,82 +1613,82 @@ describe('userId and cleanup', () => {
 describe('state timeouts', () => {
   it('analyzing state has timeout configured', () => {
     const analyzingState = appGenerationMachine.config.states?.analyzing
-    expect(analyzingState?.after).toBeDefined()
-    expect(analyzingState?.after).toHaveProperty('180000')
-    const timeoutConfig = (analyzingState?.after as any)['180000']
-    expect(timeoutConfig.target).toBe('failed')
+    const after = analyzingState?.after as any
+    expect(after).toBeDefined()
+    expect(after).toHaveProperty('180000')
+    expect(after['180000'].target).toBe('failed')
   })
 
   it('blueprinting state has timeout configured', () => {
     const blueprintingState = appGenerationMachine.config.states?.blueprinting
-    expect(blueprintingState?.after).toBeDefined()
-    expect(blueprintingState?.after).toHaveProperty('120000')
-    const timeoutConfig = (blueprintingState?.after as any)['120000']
-    expect(timeoutConfig.target).toBe('failed')
+    const after = blueprintingState?.after as any
+    expect(after).toBeDefined()
+    expect(after).toHaveProperty('120000')
+    expect(after['120000'].target).toBe('failed')
   })
 
   it('provisioning state has timeout configured to cleanup', () => {
     const provisioningState = appGenerationMachine.config.states?.provisioning
-    expect(provisioningState?.after).toBeDefined()
-    expect(provisioningState?.after).toHaveProperty('300000')
-    const timeoutConfig = (provisioningState?.after as any)['300000']
-    expect(timeoutConfig.target).toBe('cleanup')
+    const after = provisioningState?.after as any
+    expect(after).toBeDefined()
+    expect(after).toHaveProperty('300000')
+    expect(after['300000'].target).toBe('cleanup')
   })
 
   it('generating state has timeout configured to cleanup', () => {
     const generatingState = appGenerationMachine.config.states?.generating
-    expect(generatingState?.after).toBeDefined()
-    expect(generatingState?.after).toHaveProperty('600000')
-    const timeoutConfig = (generatingState?.after as any)['600000']
-    expect(timeoutConfig.target).toBe('cleanup')
+    const after = generatingState?.after as any
+    expect(after).toBeDefined()
+    expect(after).toHaveProperty('600000')
+    expect(after['600000'].target).toBe('cleanup')
   })
 
   it('validating state has timeout configured to cleanup', () => {
     const validatingState = appGenerationMachine.config.states?.validating
-    expect(validatingState?.after).toBeDefined()
-    expect(validatingState?.after).toHaveProperty('180000')
-    const timeoutConfig = (validatingState?.after as any)['180000']
-    expect(timeoutConfig.target).toBe('cleanup')
+    const after = validatingState?.after as any
+    expect(after).toBeDefined()
+    expect(after).toHaveProperty('180000')
+    expect(after['180000'].target).toBe('cleanup')
   })
 
   it('awaitingClarification state has timeout configured', () => {
     const awaitingState = appGenerationMachine.config.states?.awaitingClarification
-    expect(awaitingState?.after).toBeDefined()
-    expect(awaitingState?.after).toHaveProperty('1800000')
-    const timeoutConfig = (awaitingState?.after as any)['1800000']
-    expect(timeoutConfig.target).toBe('failed')
+    const after = awaitingState?.after as any
+    expect(after).toBeDefined()
+    expect(after).toHaveProperty('1800000')
+    expect(after['1800000'].target).toBe('failed')
   })
 
   it('repairing state has timeout configured to cleanup', () => {
     const repairingState = appGenerationMachine.config.states?.repairing
-    expect(repairingState?.after).toBeDefined()
-    expect(repairingState?.after).toHaveProperty('300000')
-    const timeoutConfig = (repairingState?.after as any)['300000']
-    expect(timeoutConfig.target).toBe('cleanup')
+    const after = repairingState?.after as any
+    expect(after).toBeDefined()
+    expect(after).toHaveProperty('300000')
+    expect(after['300000'].target).toBe('cleanup')
   })
 
   it('reviewing state has timeout configured to cleanup', () => {
     const reviewingState = appGenerationMachine.config.states?.reviewing
-    expect(reviewingState?.after).toBeDefined()
-    expect(reviewingState?.after).toHaveProperty('180000')
-    const timeoutConfig = (reviewingState?.after as any)['180000']
-    expect(timeoutConfig.target).toBe('cleanup')
+    const after = reviewingState?.after as any
+    expect(after).toBeDefined()
+    expect(after).toHaveProperty('180000')
+    expect(after['180000'].target).toBe('cleanup')
   })
 
   it('deploying state has timeout configured to cleanup', () => {
     const deployingState = appGenerationMachine.config.states?.deploying
-    expect(deployingState?.after).toBeDefined()
-    expect(deployingState?.after).toHaveProperty('600000')
-    const timeoutConfig = (deployingState?.after as any)['600000']
-    expect(timeoutConfig.target).toBe('cleanup')
+    const after = deployingState?.after as any
+    expect(after).toBeDefined()
+    expect(after).toHaveProperty('600000')
+    expect(after['600000'].target).toBe('cleanup')
   })
 
   it('cleanup state has timeout configured', () => {
     const cleanupState = appGenerationMachine.config.states?.cleanup
-    expect(cleanupState?.after).toBeDefined()
-    expect(cleanupState?.after).toHaveProperty('120000')
-    const timeoutConfig = (cleanupState?.after as any)['120000']
-    expect(timeoutConfig.target).toBe('failed')
+    const after = cleanupState?.after as any
+    expect(after).toBeDefined()
+    expect(after).toHaveProperty('120000')
+    expect(after['120000'].target).toBe('failed')
   })
 })
 
@@ -1719,13 +1718,6 @@ describe('cleanup ordering', () => {
           return { errors }
         }),
       },
-    })
-
-    const actor = createActor(testMachine, {
-      input: {
-        sandboxId: 'sandbox-123',
-        supabaseProjectId: 'pool-project-123',
-      } as any,
     })
 
     // Manually trigger cleanup state

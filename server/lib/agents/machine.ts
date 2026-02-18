@@ -5,15 +5,7 @@ import type { AppBlueprint } from '../app-blueprint'
 import type { DesignPreferences, SchemaContract } from '../schema-contract'
 import type { ValidationGateResult } from './validation'
 import type { CodeReviewResult } from './code-review'
-import type {
-  AnalysisResult,
-  BlueprintResult,
-  CodeGenResult,
-  ValidationResult,
-  RepairResult,
-  ProvisioningResult,
-  DeploymentResult,
-} from './orchestrator'
+import type { AnalysisResult } from './orchestrator'
 
 // ============================================================================
 // Context type — all data flowing through the machine

@@ -100,7 +100,7 @@ adminRoutes.get('/health', async (c) => {
     const { cleanupExpiredRateLimits } = await import('../lib/rate-limit')
     const cleaned = await cleanupExpiredRateLimits()
     checks.rate_limits = { status: 'ok', details: `${cleaned} expired entries cleaned` }
-  } catch (error) {
+  } catch {
     checks.rate_limits = { status: 'warning', details: 'Cleanup failed' }
   }
 

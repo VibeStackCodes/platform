@@ -20,7 +20,7 @@ import { createActor } from 'xstate'
 import { Hono } from 'hono'
 import * as Sentry from '@sentry/node'
 import { createHeliconeProvider, isAllowedModel } from '../lib/agents/provider'
-import { appGenerationMachine, createInspectedActor } from '../lib/agents/machine'
+import { createInspectedActor } from '../lib/agents/machine'
 import type { MachineContext } from '../lib/agents/machine'
 import { editMachine } from '../lib/agents/edit-machine'
 import type { EditMachineContext } from '../lib/agents/edit-machine'
@@ -313,7 +313,6 @@ agentRoutes.post('/', async (c) => {
 
   // Return SSE stream
   return createSSEStream(async (emit: (event: StreamEvent) => void, signal: AbortSignal) => {
-    let generationFailed = false
     try {
       emit({ type: 'stage_update', stage: 'generating' })
 
@@ -344,7 +343,6 @@ agentRoutes.post('/', async (c) => {
         })
       }
     } catch (error) {
-      generationFailed = true
       if (signal.aborted) {
         console.log('[agent] Stream aborted by client')
         // Refund reserved credits on abort (check settled flag)
@@ -409,7 +407,6 @@ agentRoutes.post('/resume', async (c) => {
   }
 
   return createSSEStream(async (emit: (event: StreamEvent) => void, signal: AbortSignal) => {
-    let generationFailed = false
     try {
       // Send USER_ANSWERED event to actor
       stored.actor.send({ type: 'USER_ANSWERED', answers })
@@ -437,7 +434,6 @@ agentRoutes.post('/resume', async (c) => {
         })
       }
     } catch (error) {
-      generationFailed = true
       if (signal.aborted) {
         console.log('[agent] Resume stream aborted by client')
         // Refund reserved credits on abort (check settled flag)

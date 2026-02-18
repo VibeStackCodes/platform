@@ -56,7 +56,7 @@ export function BuilderPreview({
       }
       return next
     })
-  }, [onElementSelected])
+  }, [onElementSelected, previewUrl])
 
   const dismissSelection = useCallback(() => {
     setSelectedElement(null)

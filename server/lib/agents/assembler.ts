@@ -206,7 +206,6 @@ export function assembleListPage(spec: PageFeatureSpec, contract: SchemaContract
   const singular = singularize(entity)
   const pascal = snakeToPascal(singular)        // "Patient"        — JS identifier (hook/component names)
   const singularTitle = snakeToTitle(singular)  // "Patient"/"Menu Category" — display labels
-  const camel = snakeToCamel(entity)
   const plural = pluralize(entity)
   const pluralCamel = snakeToCamel(plural)
   const pluralKebab = snakeToKebab(plural)

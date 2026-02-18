@@ -278,8 +278,6 @@ describe('Pool replenishment advisory lock', () => {
     // The full implementation is tested in supabase-pool.test.ts line 200-237
     // This test documents the expected behavior
 
-    const REPLENISH_LOCK_ID = 42_424_242
-
     // First process acquires lock
     const process1CanProceed = true
     // Second process cannot acquire lock

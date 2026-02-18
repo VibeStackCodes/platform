@@ -1,14 +1,7 @@
 import { createActor, fromPromise, waitFor } from 'xstate'
 import { describe, expect, it } from 'vitest'
 import { editMachine } from '@server/lib/agents/edit-machine'
-import type {
-  EditMachineContext,
-  ElementContext,
-  LoadResult,
-  ReconnectResult,
-  EditResult,
-  ValidateResult,
-} from '@server/lib/agents/edit-machine'
+import type { ElementContext } from '@server/lib/agents/edit-machine'
 import type { SchemaContract } from '@server/lib/schema-contract'
 import type { AppBlueprint } from '@server/lib/app-blueprint'
 

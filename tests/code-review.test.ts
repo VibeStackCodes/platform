@@ -1,10 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import {
-  runDeterministicChecks,
-  runCodeReview,
-  type CodeReviewResult,
-  type DeterministicIssue,
-} from '@server/lib/agents/code-review'
+import { runDeterministicChecks, runCodeReview } from '@server/lib/agents/code-review'
 import type { AppBlueprint } from '@server/lib/app-blueprint'
 import type { SchemaContract } from '@server/lib/schema-contract'
 
@@ -61,7 +56,7 @@ function createMockBlueprint(files: Array<{ path: string; content: string }>): A
         },
       ],
     },
-    fileTree: files.map((f, idx) => ({
+    fileTree: files.map((f) => ({
       path: f.path,
       content: f.content,
       layer: 4,

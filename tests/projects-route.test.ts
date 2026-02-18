@@ -267,7 +267,7 @@ describe('Project Routes', () => {
       vi.mocked(getProject).mockResolvedValue(null)
 
       const res = await app.request('/api/projects/other-user-project', { method: 'GET' })
-      const data = await res.json()
+      await res.json()
 
       expect(res.status).toBe(404)
       expect(getProject).toHaveBeenCalledWith('other-user-project', 'user-123')

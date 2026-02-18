@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import type { SchemaContract, TableDef, EnumDef } from '../schema-contract'
+import type { SchemaContract, TableDef } from '../schema-contract'
 import { classifyColumn } from '../column-classifier'
 import type { ColumnClassification } from '../column-classifier'
 import { pluralize } from '../naming-utils'
@@ -139,7 +139,7 @@ export function inferPageConfig(
   // ── listColumns: sort by priority, pick top 6 visible columns ──
   const listColumns = classifications
     .filter((c) => c.cls.showInList && !c.cls.isAutoManaged)
-    .sort((a, b) => a.cls.listPriority - b.cls.listPriority)
+    .toSorted((a, b) => a.cls.listPriority - b.cls.listPriority)
     .slice(0, 6)
     .map((c) => c.col.name)
 

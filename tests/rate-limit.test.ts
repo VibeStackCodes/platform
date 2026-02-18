@@ -1,5 +1,4 @@
 // tests/rate-limit.test.ts
-import { sql } from 'drizzle-orm'
 import { Hono } from 'hono'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 

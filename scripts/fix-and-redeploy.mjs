@@ -382,7 +382,7 @@ await run("bun add @tanstack/react-query react-hook-form", "install-deps", 60)
 
 // 9. Build
 console.log("\n=== STEP 3: Build ===\n")
-const tscOk = await run("tsc --noEmit 2>&1 || true", "tsc", 60)
+void await run("tsc --noEmit 2>&1 || true", "tsc", 60)
 const buildOk = await run("bun run build", "build", 120)
 
 if (!buildOk) {
