@@ -66,6 +66,13 @@ const SQL_TYPE_ALIASES: Record<string, string> = {
   json: 'jsonb',
 }
 
+// Explicit sets to avoid false-positive substring matches (e.g. "appointment" contains "int")
+const BIGINT_TYPES = new Set(['bigint', 'int8', 'bigserial', 'int64'])
+const INTEGER_TYPES = new Set([
+  'int', 'integer', 'int2', 'int4', 'smallint', 'mediumint', 'tinyint',
+  'serial', 'serial4', 'unsigned int', 'unsigned integer',
+])
+
 export const SQLTypeSchema = z.preprocess((val) => {
   if (typeof val !== 'string') return val
   const lower = val.toLowerCase().trim()
@@ -73,24 +80,26 @@ export const SQLTypeSchema = z.preprocess((val) => {
   // 1. Exact alias match
   if (SQL_TYPE_ALIASES[lower]) return SQL_TYPE_ALIASES[lower]
 
-  // 2. Already a valid type
+  // 2. Already a valid canonical type
   if ((SQL_TYPES as readonly string[]).includes(lower)) return lower
 
-  // 3. Substring/pattern matching — ordered by specificity (bigint before int, etc.)
-  if (lower === 'bigint' || lower.includes('bigserial') || lower === 'int8') return 'bigint'
+  // 3. Explicit set lookups — avoids false positives from substring matching
+  if (BIGINT_TYPES.has(lower)) return 'bigint'
+  if (INTEGER_TYPES.has(lower)) return 'integer'
+
+  // 4. Prefix/substring patterns for compound types (safe after set checks above)
   if (lower.includes('timestamp') || lower.includes('datetime')) return 'timestamptz'
   if (lower.startsWith('date')) return 'timestamptz' // "date", "date without time zone"
-  if (lower.startsWith('time')) return 'text' // "time", "time without time zone"
+  if (lower.startsWith('time')) return 'text' // "time", "time without time zone", "timetz"
   if (lower.includes('decimal') || lower.includes('float') || lower.includes('double') ||
       lower.includes('money') || lower.includes('real') || lower.startsWith('numeric')) return 'numeric'
-  if (lower.includes('int') || lower.includes('serial')) return 'integer' // smallint, mediumint, etc.
-  if (lower.includes('char') || lower.includes('varchar') || lower.includes('string') ||
-      lower.includes('text') || lower === 'enum' || lower === 'array') return 'text'
+  if (lower.includes('char') || lower.includes('string') || lower.includes('text') ||
+      lower === 'enum' || lower === 'array' || lower === 'interval') return 'text'
   if (lower.includes('bool')) return 'boolean'
   if (lower.includes('json')) return 'jsonb'
   if (lower.includes('uuid')) return 'uuid'
 
-  // 4. Unknown type — safest fallback is text (stores anything)
+  // 5. Unknown type — safest fallback is text (stores anything as a string)
   console.warn(`[SQLTypeSchema] Unknown type "${val}" → coerced to "text"`)
   return 'text'
 }, z.enum(SQL_TYPES))
