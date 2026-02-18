@@ -1,20 +1,19 @@
 #!/usr/bin/env bun
 /**
- * E2E Pipeline Test Runner
+ * E2E Pipeline Test Runner — 10 Diverse Apps
  *
- * Runs the full VibeStack generation pipeline step-by-step:
- *   Analysis → Blueprint → Provisioning → Scaffold → CodeGen → Validation → Review → GitHub Push
- *
- * Skips: Vercel deployment (as requested)
- * Model: gpt-5.2 via Helicone proxy
+ * Runs the full VibeStack generation pipeline for one of 10 diverse app prompts:
+ *   Analysis → Blueprint → Provisioning → CodeGen → Validation → Review → GitHub Push → Vercel Deploy
  *
  * Usage:
- *   bun scripts/e2e-pipeline-test.ts
+ *   bun scripts/e2e-pipeline-test.ts --prompt=1   # simple recipe app
+ *   bun scripts/e2e-pipeline-test.ts --prompt=5   # luxury watch catalog
+ *   bun scripts/e2e-pipeline-test.ts --prompt=10  # restaurant management
  *
  * Env: reads from .env.local automatically (bun feature)
  */
 
-import { writeFileSync, appendFileSync } from 'node:fs'
+import { writeFileSync, appendFileSync, existsSync, mkdirSync } from 'node:fs'
 
 // ============================================================================
 // Config
@@ -23,42 +22,121 @@ import { writeFileSync, appendFileSync } from 'node:fs'
 const TEST_PROMPTS = [
   {
     id: 1,
-    name: 'Simple CRUD — Bookmarks Manager',
-    prompt: `Build a personal bookmarks manager. Users can save URLs with a title, description,
-and tags. They can search bookmarks by title or tag, and star their favorites.`,
+    name: 'Recipe App (ultra-vague)',
+    prompt: `recipe app`,
+    hint: 'No auth needed — public recipe browsing',
   },
   {
     id: 2,
-    name: 'Multi-Role App — Team Task Board',
-    prompt: `Build a team task board with 2 roles: Admin and Member. Admins can create projects,
-invite members, and see all tasks across projects. Members can only see tasks in
-projects they belong to. Tasks have status (todo, in-progress, done), priority
-(low, medium, high), and assignee. Include a real-time activity feed that shows
-when tasks are moved between columns.`,
+    name: 'Book Reading Tracker (personal)',
+    prompt: `I want to track the books I read. I need to log each book with its title, author, genre, my rating out of 5, when I started and finished reading it, and a personal review. I want to organize my books into reading lists like "Currently Reading", "Want to Read", and "Finished".`,
+    hint: 'Personal auth app — warm library aesthetic',
   },
   {
     id: 3,
-    name: 'Complex App — Personal Finance Tracker',
-    prompt: `Build a personal finance tracker. Users log income and expenses with category, amount,
-date, and notes. Categories include: Food, Transport, Entertainment, Bills, Shopping,
-Income, and Other.
+    name: 'Remote Developer Job Board (public catalog)',
+    prompt: `Build a remote job board for developer positions. Companies can post jobs with title, company name, location (remote/hybrid/onsite), job type (full-time/contract/freelance), tech stack required, salary range, and description. Job seekers can browse and filter by job type, tech stack, and location. No user authentication needed — anyone can view listings.`,
+    hint: 'No auth — dark terminal/code aesthetic',
+  },
+  {
+    id: 4,
+    name: 'Personal Finance Tracker (SaaS with auth)',
+    prompt: `Build a personal finance tracker. Users track income and expenses with: amount, category (Food, Transport, Entertainment, Bills, Shopping, Income, Other), date, description, and whether it's recurring.
 
 The dashboard shows:
-- Monthly spending breakdown as a pie chart
-- Income vs expenses trend as a line chart (last 6 months)
-- Top 5 spending categories this month
-- Running balance
+- Current month spending by category
+- Income vs expenses for the last 6 months
+- Running balance (total income - total expenses)
+- Top 3 spending categories this month
 
-Users can filter transactions by date range and category, and export to CSV.`,
+Users can filter transactions by date range and category.`,
+    hint: 'Auth app — emerald/dark finance aesthetic',
+  },
+  {
+    id: 5,
+    name: 'Luxury Watch Catalog (e-commerce browse)',
+    prompt: `Build a product catalog for a luxury watch boutique called "Meridian". Display watches with: name, brand, reference number, case material (steel/gold/platinum/titanium), movement type (automatic/manual/quartz), water resistance, price, and a description. Include a companion collection table for organizing watches into collections (e.g., "Dress Watches", "Sports Watches", "Limited Edition"). No authentication — this is a public catalog.`,
+    hint: 'No auth — navy/gold luxury e-commerce aesthetic',
+  },
+  {
+    id: 6,
+    name: 'Medical Clinic Scheduling (healthcare)',
+    prompt: `Build a patient appointment management system for a small family medical clinic. The system needs to track:
+- Patients: first name, last name, date of birth, phone, email, medical record number, insurance provider
+- Doctors: first name, last name, specialization, license number, active status
+- Appointments: patient (FK), doctor (FK), appointment date/time, type (new patient / follow-up / urgent), status (scheduled/confirmed/completed/cancelled/no-show), chief complaint, duration in minutes, notes
+
+Receptionists can view all appointments, create new ones, and update statuses. The appointment list should show today's schedule first.`,
+    hint: 'Auth app — teal/white medical aesthetic',
+  },
+  {
+    id: 7,
+    name: 'SaaS CRM for Small Agencies (multi-entity)',
+    prompt: `Build a lightweight CRM for small creative agencies to manage their client relationships and sales pipeline.
+
+Entities:
+- Companies: name, industry, website, size (1-10/11-50/51-200/200+), country, notes
+- Contacts: first name, last name, email, phone, job title, company (FK), is_primary_contact
+- Deals: title, company (FK), contact (FK), value (numeric), stage (lead/proposal/negotiation/closed-won/closed-lost), probability (0-100), expected_close_date, notes
+- Activities: deal (FK), contact (FK), type (call/email/meeting/demo), subject, notes, completed (boolean), activity_date
+
+The pipeline view should default to showing deals sorted by stage then value.`,
+    hint: 'Auth app — deep violet/slate SaaS aesthetic',
+  },
+  {
+    id: 8,
+    name: 'Travel Blog CMS (editorial content)',
+    prompt: `Build a content management system for a travel blog called "Wanderlust Journal".
+
+Entities:
+- Destinations: name, country, continent, description, best_season (spring/summer/fall/winter/year-round), cover_image_url
+- Authors: name, bio, avatar_url, email, social_handle
+- Articles: title, slug, author (FK), destination (FK), status (draft/review/published), published_at, excerpt, content (long text), cover_image_url, read_time_minutes
+- Tags: name, color (hex code), slug
+
+Writers sign in to create and edit articles. Published articles are visible to all.`,
+    hint: 'Auth app — coral/terracotta editorial aesthetic',
+  },
+  {
+    id: 9,
+    name: 'Agency Project Management (complex SaaS)',
+    prompt: `Build a project management tool for creative agencies with the following structure:
+
+Clients: company name, contact person, email, phone, country, contract value, status (prospect/active/paused/churned)
+
+Projects: name, client (FK), project manager name, start_date, deadline, budget, status (briefing/production/review/delivered/invoiced), description
+
+Deliverables: title, project (FK), type (logo/website/copy/video/photo/social/other), status (brief/in-progress/internal-review/client-review/approved/delivered), assignee_name, due_date, revision_count, notes
+
+Time entries: project (FK), deliverable (FK), person_name, hours, billable (boolean), date, description
+
+Dashboard defaults to showing active projects sorted by deadline (soonest first). Deliverables default to showing in-progress and review items.`,
+    hint: 'Auth app — bold amber/dark agency aesthetic',
+  },
+  {
+    id: 10,
+    name: 'Restaurant Management System (hospitality)',
+    prompt: `Build a restaurant management system for "La Piazza" an Italian restaurant.
+
+Menu categories: name, description, display_order, active (boolean)
+Menu items: name, category (FK), description, price, dietary_tags (text, comma-separated like "vegetarian,gluten-free"), available (boolean), preparation_time_minutes, image_url, calories
+Tables: table_number (integer), capacity, location (indoor/outdoor/bar/private), status (available/occupied/reserved/closed)
+Reservations: guest_name, guest_email, guest_phone, table (FK), party_size, reservation_date, reservation_time, status (pending/confirmed/seated/completed/cancelled/no-show), special_requests
+Orders: table (FK), reservation (FK, optional), status (open/in-progress/ready/served/paid/cancelled), total_amount, notes, ordered_at
+Order items: order (FK), menu_item (FK), quantity, unit_price, special_instructions, status (pending/cooking/ready/served)
+
+Staff sign in to manage reservations and orders. The reservation list defaults to today's date.`,
+    hint: 'Auth app — warm terracotta/cream Italian restaurant aesthetic',
   },
 ]
 
 const promptArg = process.argv.find((a) => a.startsWith('--prompt='))
 const promptIndex = promptArg ? parseInt(promptArg.split('=')[1], 10) - 1 : 0
-const TEST_CONFIG = TEST_PROMPTS[promptIndex] ?? TEST_PROMPTS[0]
+const TEST_CONFIG = TEST_PROMPTS[Math.min(promptIndex, TEST_PROMPTS.length - 1)] ?? TEST_PROMPTS[0]
 const TEST_PROMPT = TEST_CONFIG.prompt
 
-const LEARNINGS_PATH = `docs/e2e-pipeline-learnings-test${TEST_CONFIG.id}.md`
+const LEARNINGS_PATH = `docs/e2e-pipeline-learnings-app${TEST_CONFIG.id}.md`
+const MASTER_LEARNINGS_PATH = `docs/10-apps-learnings.md`
 
 // ============================================================================
 // Logging & Timing
@@ -90,25 +168,6 @@ function trackPhase(phase: string, durationMs: number, tokens: number, status: s
   log(`${statusIcon} ${phase}: ${status} (${(durationMs / 1000).toFixed(1)}s, ${tokens} tokens) ${notes}`)
 }
 
-async function runPhase<T>(phaseName: string, fn: () => Promise<T>): Promise<T | null> {
-  log(`\n${'='.repeat(60)}`)
-  log(`PHASE: ${phaseName}`)
-  log(`${'='.repeat(60)}`)
-  const phaseStart = Date.now()
-  try {
-    const result = await fn()
-    const duration = Date.now() - phaseStart
-    trackPhase(phaseName, duration, 0, 'PASS') // tokens updated by caller
-    return result
-  } catch (error) {
-    const duration = Date.now() - phaseStart
-    const errMsg = error instanceof Error ? error.message : String(error)
-    trackPhase(phaseName, duration, 0, 'FAIL', errMsg.slice(0, 200))
-    logError(phaseName, error)
-    return null
-  }
-}
-
 // ============================================================================
 // Phase 1: Analysis
 // ============================================================================
@@ -117,8 +176,10 @@ async function phase1_analysis() {
   log('Importing orchestrator...')
   const { runAnalysis } = await import('../server/lib/agents/orchestrator')
 
-  log(`Prompt: "${TEST_PROMPT.slice(0, 80)}..."`)
-  log('Calling analyst agent (gpt-5.2)...')
+  log(`Prompt #${TEST_CONFIG.id}: ${TEST_CONFIG.name}`)
+  log(`Prompt: "${TEST_PROMPT.slice(0, 100)}..."`)
+  log(`Hint: ${TEST_CONFIG.hint}`)
+  log('Calling analyst agent...')
 
   const result = await runAnalysis({
     userMessage: TEST_PROMPT,
@@ -127,19 +188,10 @@ async function phase1_analysis() {
 
   if (result.type === 'clarification') {
     log(`Analyst wants clarification: ${JSON.stringify(result.questions, null, 2)}`)
-    log('NOTE: In production, the machine would pause here for user input.')
-    log('For this test, re-running with enhanced prompt...')
-
-    const enhancedPrompt = `${TEST_PROMPT}
-
-Additional details:
-- Authentication: email/password via Supabase Auth
-- Styling: modern minimal, primary color #3b82f6 (blue), Inter font
-- Each bookmark has: url (required), title, description, tags (text array), is_starred (boolean)
-- RLS: users only see their own bookmarks`
+    log('Retrying with hint appended...')
 
     const result2 = await runAnalysis({
-      userMessage: enhancedPrompt,
+      userMessage: `${TEST_PROMPT}\n\nAdditional context: ${TEST_CONFIG.hint}`,
       projectId: 'e2e-test-' + Date.now(),
     })
     return result2
@@ -149,7 +201,7 @@ Additional details:
 }
 
 // ============================================================================
-// Phase 2: Blueprint (deterministic — 0 tokens)
+// Phase 2: Blueprint (deterministic)
 // ============================================================================
 
 async function phase2_blueprint(analysisResult: Extract<Awaited<ReturnType<typeof phase1_analysis>>, { type: 'done' }>) {
@@ -158,7 +210,7 @@ async function phase2_blueprint(analysisResult: Extract<Awaited<ReturnType<typeo
   log(`App: ${analysisResult.appName}`)
   log(`Description: ${analysisResult.appDescription}`)
   log(`Tables: ${analysisResult.contract.tables.map(t => t.name).join(', ')}`)
-  log(`Columns per table: ${analysisResult.contract.tables.map(t => `${t.name}(${t.columns.length})`).join(', ')}`)
+  log(`Design: style=${analysisResult.designPreferences.style} color=${analysisResult.designPreferences.primaryColor} font=${analysisResult.designPreferences.fontFamily}`)
 
   const result = runBlueprint({
     appName: analysisResult.appName,
@@ -169,7 +221,6 @@ async function phase2_blueprint(analysisResult: Extract<Awaited<ReturnType<typeo
 
   log(`Blueprint files: ${result.blueprint.fileTree.length}`)
   log(`LLM slot files: ${result.blueprint.fileTree.filter(f => f.isLLMSlot).length}`)
-  log(`File layers: ${[...new Set(result.blueprint.fileTree.map(f => f.layer))].sort().join(', ')}`)
 
   for (const file of result.blueprint.fileTree) {
     const slotTag = file.isLLMSlot ? ' [SLOT]' : ''
@@ -180,7 +231,7 @@ async function phase2_blueprint(analysisResult: Extract<Awaited<ReturnType<typeo
 }
 
 // ============================================================================
-// Phase 3: Provisioning (Sandbox + Supabase + GitHub)
+// Phase 3: Provisioning
 // ============================================================================
 
 async function phase3_provisioning(appName: string) {
@@ -196,79 +247,19 @@ async function phase3_provisioning(appName: string) {
 
   log(`Sandbox ID: ${result.sandboxId}`)
   log(`Supabase Project: ${result.supabaseProjectId}`)
-  log(`Supabase URL: ${result.supabaseUrl}`)
-  log(`GitHub Clone URL: ${result.githubCloneUrl}`)
-  log(`GitHub HTML URL: ${result.githubHtmlUrl}`)
-  log(`Repo Name: ${result.repoName}`)
+  log(`GitHub: ${result.githubHtmlUrl}`)
 
   return result
 }
 
 // ============================================================================
-// Phase 4: Write Blueprint Files to Sandbox
+// Phase 4: Code Generation
 // ============================================================================
 
-async function phase4_scaffold(blueprint: any, sandboxId: string, supabaseUrl: string, supabaseAnonKey: string) {
-  const { getSandbox, uploadFile: upload } = await import('../server/lib/sandbox')
-
-  log(`Getting sandbox: ${sandboxId}`)
-  const sandbox = await getSandbox(sandboxId)
-
-  // Write all blueprint files to sandbox, replacing .env placeholders
-  log(`Writing ${blueprint.fileTree.length} blueprint files to sandbox...`)
-
-  let written = 0
-  for (const file of blueprint.fileTree) {
-    let content = file.content
-
-    // Replace .env placeholders with real credentials
-    if (file.path === '.env') {
-      content = content
-        .replace('DATABASE_URL=__PLACEHOLDER__', `DATABASE_URL=${supabaseUrl}`)
-        .replace('SUPABASE_URL=__PLACEHOLDER__', `SUPABASE_URL=${supabaseUrl}`)
-        .replace('SUPABASE_ANON_KEY=__PLACEHOLDER__', `SUPABASE_ANON_KEY=${supabaseAnonKey}`)
-    }
-
-    const remotePath = `/workspace/${file.path}`
-
-    // Ensure parent directory exists
-    const dir = remotePath.split('/').slice(0, -1).join('/')
-    try {
-      await sandbox.process.executeCommand(`mkdir -p ${dir}`, '/workspace', undefined, 5)
-    } catch {
-      // ignore if dir exists
-    }
-
-    await upload(sandbox, content, remotePath)
-    written++
-  }
-
-  log(`Wrote ${written}/${blueprint.fileTree.length} files to sandbox`)
-
-  // Install dependencies
-  log('Installing dependencies in sandbox...')
-  const installResult = await sandbox.process.executeCommand(
-    'bun install --frozen-lockfile 2>&1 || bun install 2>&1',
-    '/workspace',
-    undefined,
-    120,
-  )
-  log(`bun install exit code: ${installResult.exitCode}`)
-  if (installResult.exitCode !== 0) {
-    log(`bun install output: ${installResult.result?.slice(-500)}`)
-  }
-
-  return sandbox
-}
-
-// ============================================================================
-// Phase 5: Code Generation (LLM fills SLOT markers)
-// ============================================================================
-
-async function phase5_codegen(blueprint: any, contract: any, sandboxId: string, supabaseProjectId: string, supabaseUrl: string, supabaseAnonKey: string) {
+async function phase4_codegen(blueprint: any, contract: any, sandboxId: string, supabaseProjectId: string, supabaseUrl: string, supabaseAnonKey: string) {
   const { runCodeGeneration } = await import('../server/lib/agents/orchestrator')
 
-  log('Running code generation (scaffold + LLM fill + assembly write)...')
+  log('Running code generation (scaffold + deterministic assembly)...')
 
   const result = await runCodeGeneration({
     blueprint,
@@ -286,160 +277,91 @@ async function phase5_codegen(blueprint: any, contract: any, sandboxId: string, 
 
   if (result.warnings && result.warnings.length > 0) {
     log(`Validation warnings:`)
-    for (const w of result.warnings) {
-      log(`  ${w.table}: ${w.errors.join(', ')}`)
-    }
+    for (const w of result.warnings) log(`  ${w.table}: ${w.errors.join(', ')}`)
   }
 
-  if (result.skippedEntities && result.skippedEntities.length > 0) {
+  if (result.skippedEntities?.length) {
     log(`Skipped entities: ${result.skippedEntities.join(', ')}`)
   }
 
-  log(`Tokens used: ${result.tokensUsed}`)
+  log(`Tokens: ${result.tokensUsed}`)
   return result
 }
 
 // ============================================================================
-// Phase 6: Write Assembled Files to Sandbox
+// Phase 5: Validation
 // ============================================================================
 
-async function phase6_assemblyWrite(assembledFiles: Array<{ path: string; content: string }>, sandboxId: string) {
-  const { getSandbox, uploadFile: upload } = await import('../server/lib/sandbox')
-
-  const sandbox = await getSandbox(sandboxId)
-  log(`Writing ${assembledFiles.length} assembled files to sandbox (overwriting skeleton SLOT files)...`)
-
-  for (const file of assembledFiles) {
-    const remotePath = `/workspace/${file.path}`
-    const dir = remotePath.split('/').slice(0, -1).join('/')
-    try {
-      await sandbox.process.executeCommand(`mkdir -p ${dir}`, '/workspace', undefined, 5)
-    } catch {
-      // ignore
-    }
-    await upload(sandbox, file.content, remotePath)
-  }
-
-  log(`Wrote ${assembledFiles.length} assembled files`)
-
-  // List files in workspace for verification
-  const lsResult = await sandbox.process.executeCommand(
-    'find /workspace -type f ! -path "*/node_modules/*" ! -path "*/.git/*" | wc -l',
-    '/workspace',
-    undefined,
-    10,
-  )
-  log(`Total files in sandbox workspace: ${lsResult.result?.trim()}`)
-
-  return sandbox
-}
-
-// ============================================================================
-// Phase 7: Validation
-// ============================================================================
-
-async function phase7_validation(blueprint: any, sandboxId: string) {
+async function phase5_validation(blueprint: any, sandboxId: string) {
   const { runValidation } = await import('../server/lib/agents/orchestrator')
 
-  log('Running validation gate: manifest → scaffold → tsc → lint → build...')
-
+  log('Running validation gate...')
   const result = await runValidation({ blueprint, sandboxId })
 
   log(`Manifest: ${result.validation.manifest.passed ? 'PASS' : 'FAIL'}`)
-  if (!result.validation.manifest.passed) {
-    for (const e of result.validation.manifest.errors.slice(0, 10)) log(`  ${e}`)
-  }
-
   log(`Scaffold: ${result.validation.scaffold.passed ? 'PASS' : 'FAIL'}`)
-  if (!result.validation.scaffold.passed) {
-    for (const e of result.validation.scaffold.errors.slice(0, 10)) log(`  ${e}`)
-  }
-
   log(`TypeCheck: ${result.validation.typecheck.passed ? 'PASS' : 'FAIL'}`)
   if (!result.validation.typecheck.passed) {
     for (const e of result.validation.typecheck.errors.slice(0, 5)) log(`  ${e.slice(0, 300)}`)
   }
-
   log(`Lint: ${result.validation.lint.passed ? 'PASS' : 'FAIL'}`)
-  if (!result.validation.lint.passed) {
-    for (const e of result.validation.lint.errors.slice(0, 5)) log(`  ${e.slice(0, 300)}`)
-  }
-
   log(`Build: ${result.validation.build.passed ? 'PASS' : 'FAIL'}`)
   if (!result.validation.build.passed) {
     for (const e of result.validation.build.errors.slice(0, 5)) log(`  ${e.slice(0, 300)}`)
   }
-
   log(`Overall: ${result.allPassed ? 'ALL PASSED' : 'FAILED'}`)
 
   return result
 }
 
 // ============================================================================
-// Phase 8: Repair (if needed)
+// Phase 6: Repair (if validation failed)
 // ============================================================================
 
-async function phase8_repair(blueprint: any, validation: any, sandboxId: string, attempt: number) {
+async function phase6_repair(blueprint: any, validation: any, sandboxId: string, attempt: number) {
   const { runRepair } = await import('../server/lib/agents/orchestrator')
 
   log(`Repair attempt ${attempt}/2...`)
-
-  const result = await runRepair({
-    blueprint,
-    validation: validation.validation,
-    sandboxId,
-  })
-
-  log(`Repair tokens used: ${result.tokensUsed}`)
+  const result = await runRepair({ blueprint, validation: validation.validation, sandboxId })
+  log(`Repair tokens: ${result.tokensUsed}`)
   return result
 }
 
 // ============================================================================
-// Phase 9: Code Review
+// Phase 7: Code Review
 // ============================================================================
 
-async function phase9_codeReview(blueprint: any, contract: any, sandboxId: string) {
+async function phase7_codeReview(blueprint: any, contract: any, sandboxId: string) {
   const { runCodeReview } = await import('../server/lib/agents/code-review')
 
   log('Running code review (deterministic + LLM checks)...')
-
   const result = await runCodeReview({ blueprint, contract, sandboxId })
 
   log(`Code review passed: ${result.passed}`)
   log(`Deterministic issues: ${result.deterministicIssues.length}`)
-  for (const issue of result.deterministicIssues) {
-    log(`  [${issue.severity}] ${issue.file}: ${issue.message}`)
-  }
   log(`LLM issues: ${result.llmIssues.length}`)
-  for (const issue of result.llmIssues) {
-    log(`  [${issue.severity}/${issue.category}] ${issue.file}: ${issue.description}`)
-  }
-  log(`Tokens used: ${result.tokensUsed}`)
+  log(`Tokens: ${result.tokensUsed}`)
 
   return result
 }
 
 // ============================================================================
-// Phase 10: GitHub Push (skip Vercel)
+// Phase 8: GitHub Push
 // ============================================================================
 
-async function phase10_githubPush(sandboxId: string, githubCloneUrl: string, repoName: string) {
+async function phase8_githubPush(sandboxId: string, githubCloneUrl: string, repoName: string) {
   const { getSandbox, runCommand } = await import('../server/lib/sandbox')
   const { getInstallationToken } = await import('../server/lib/github')
 
   const sandbox = await getSandbox(sandboxId)
-
   log('Pushing generated code to GitHub...')
 
-  // Get installation token for authenticated push
   const token = await getInstallationToken()
-  // Build authenticated URL: https://x-access-token:TOKEN@github.com/org/repo.git
   const authenticatedUrl = githubCloneUrl.replace(
     'https://github.com/',
     `https://x-access-token:${token}@github.com/`,
   )
 
-  // Git init + add + commit + push
   const commands = [
     'git init',
     'git config user.email "vibestack@vibestack.com"',
@@ -452,7 +374,6 @@ async function phase10_githubPush(sandboxId: string, githubCloneUrl: string, rep
   ]
 
   for (const cmd of commands) {
-    // Don't log the token
     const displayCmd = cmd.includes('x-access-token') ? 'git remote add origin https://x-access-token:***@github.com/...' : cmd
     log(`  $ ${displayCmd}`)
     const result = await runCommand(sandbox, cmd, 'git-push', {
@@ -461,8 +382,7 @@ async function phase10_githubPush(sandboxId: string, githubCloneUrl: string, rep
     })
     if (result.exitCode !== 0 && !cmd.includes('remote add')) {
       log(`  Exit code: ${result.exitCode}`)
-      log(`  Output: ${result.stdout?.slice(-300)}`)
-      if (result.stderr) log(`  Stderr: ${result.stderr.slice(-300)}`)
+      if (result.stdout) log(`  Output: ${result.stdout.slice(-300)}`)
     }
   }
 
@@ -470,12 +390,133 @@ async function phase10_githubPush(sandboxId: string, githubCloneUrl: string, rep
 }
 
 // ============================================================================
+// Phase 9: Vercel Deployment (build in sandbox → upload dist/ → deploy)
+// ============================================================================
+
+async function phase9_vercelDeploy(
+  sandboxId: string,
+  appName: string,
+  supabaseUrl: string,
+  supabaseAnonKey: string,
+): Promise<string> {
+  const { getSandbox, runCommand, downloadDirectory } = await import('../server/lib/sandbox')
+
+  const VERCEL_TOKEN = process.env.VERCEL_TOKEN
+  const VERCEL_TEAM_ID = process.env.VERCEL_TEAM_ID
+  const VERCEL_WILDCARD_PROJECT_ID = process.env.VERCEL_WILDCARD_PROJECT_ID
+
+  if (!VERCEL_TOKEN) {
+    throw new Error('VERCEL_TOKEN not set — skipping Vercel deployment')
+  }
+
+  const sandbox = await getSandbox(sandboxId)
+
+  // Step 1: Write production env vars
+  log('Writing production env vars to sandbox...')
+  await sandbox.fs.uploadFile(
+    Buffer.from(`VITE_SUPABASE_URL=${supabaseUrl}\nVITE_SUPABASE_ANON_KEY=${supabaseAnonKey}\n`),
+    '/workspace/.env.production',
+  )
+
+  // Step 2: Build in sandbox
+  log('Building app in sandbox (bun run build)...')
+  const buildResult = await runCommand(sandbox, 'bun run build 2>&1', 'prod-build', {
+    cwd: '/workspace',
+    timeout: 180,
+  })
+
+  if (buildResult.exitCode !== 0) {
+    throw new Error(`Production build failed: ${buildResult.stdout?.slice(-1000)}`)
+  }
+  log('Build succeeded')
+
+  // Step 3: Download dist/ files
+  log('Downloading dist/ from sandbox...')
+  const distFiles = await downloadDirectory(sandbox, '/workspace/dist')
+  log(`Downloaded ${distFiles.length} dist files`)
+
+  // Step 4: Encode files for Vercel Files API
+  const vercelFiles: Array<{ file: string; data: string; encoding?: string }> = distFiles.map((f) => {
+    const relativePath = f.path.replace(/^\/workspace\/dist\//, '')
+    const isText = /\.(html|js|css|txt|json|svg|map|ico|xml|woff|woff2)$/.test(relativePath)
+    if (isText) {
+      return { file: relativePath, data: f.content.toString('utf-8') }
+    }
+    return { file: relativePath, data: f.content.toString('base64'), encoding: 'base64' }
+  })
+
+  // Step 5: Deploy to Vercel
+  log(`Deploying ${vercelFiles.length} files to Vercel...`)
+  const teamQuery = VERCEL_TEAM_ID ? `?teamId=${VERCEL_TEAM_ID}` : ''
+
+  // Build a slug from app name
+  const slug = appName.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 30) + '-' + Date.now().toString(36)
+
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const deployPayload: Record<string, unknown> = {
+      name: slug,
+      files: vercelFiles,
+      projectSettings: {
+        framework: null,
+        buildCommand: null,
+        outputDirectory: null,
+      },
+      target: 'production',
+    }
+    if (VERCEL_WILDCARD_PROJECT_ID) {
+      deployPayload.project = VERCEL_WILDCARD_PROJECT_ID
+    }
+
+    const res = await fetch(`https://api.vercel.com/v13/deployments${teamQuery}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${VERCEL_TOKEN}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(deployPayload),
+    })
+
+    if (!res.ok && res.status >= 500 && attempt === 0) {
+      log(`Vercel returned ${res.status}, retrying...`)
+      await new Promise((r) => setTimeout(r, 3000))
+      continue
+    }
+
+    const data = (await res.json()) as { id?: string; url?: string; error?: { message: string }; readyState?: string }
+    if (data.error) throw new Error(`Vercel API error: ${data.error.message}`)
+
+    const deploymentId = data.id!
+    log(`Deployment created: ${deploymentId}`)
+
+    // Wait for ready
+    for (let i = 0; i < 30; i++) {
+      await new Promise((r) => setTimeout(r, 4000))
+      const pollRes = await fetch(`https://api.vercel.com/v13/deployments/${deploymentId}${teamQuery}`, {
+        headers: { Authorization: `Bearer ${VERCEL_TOKEN}` },
+      })
+      const pollData = (await pollRes.json()) as { readyState?: string; url?: string }
+      if (pollData.readyState === 'READY') {
+        const url = `https://${pollData.url}`
+        log(`✓ Deployed: ${url}`)
+        return url
+      }
+      if (pollData.readyState === 'ERROR' || pollData.readyState === 'CANCELED') {
+        throw new Error(`Deployment ${deploymentId} failed: ${pollData.readyState}`)
+      }
+      process.stdout.write(`  ${pollData.readyState ?? 'pending'}...\r`)
+    }
+    throw new Error(`Deployment ${deploymentId} timed out after 120s`)
+  }
+
+  throw new Error('Vercel deployment failed after retries')
+}
+
+// ============================================================================
 // Cleanup
 // ============================================================================
 
-async function cleanup(sandboxId: string | null, supabaseProjectId: string | null) {
+async function cleanup(sandboxId: string | null) {
   log('\n--- Cleanup ---')
-
   if (sandboxId) {
     try {
       const { getDaytonaClient, getSandbox } = await import('../server/lib/sandbox')
@@ -487,15 +528,10 @@ async function cleanup(sandboxId: string | null, supabaseProjectId: string | nul
       logError('Sandbox cleanup failed', error)
     }
   }
-
-  // NOTE: Not cleaning up Supabase project — user may want to inspect it
-  if (supabaseProjectId) {
-    log(`Supabase project retained for inspection: ${supabaseProjectId}`)
-  }
 }
 
 // ============================================================================
-// Write learnings file
+// Write learnings
 // ============================================================================
 
 function writeLearnings(results: {
@@ -504,96 +540,111 @@ function writeLearnings(results: {
   provisioning: any
   codegen: any
   validation: any
-  repair: any
   review: any
+  vercelUrl: string | null
   notes: string[]
 }) {
   const totalDuration = Date.now() - startTime
   const totalTokens = phaseTimings.reduce((sum, p) => sum + p.tokens, 0)
+  const estimatedCost = (totalTokens / 1_000_000 * 2.5).toFixed(4) // ~$2.50/MTok for gpt-4o level
 
   const tableRows = phaseTimings.map((p, i) =>
     `| ${i + 1} | ${p.phase} | ${p.status} | ${(p.durationMs / 1000).toFixed(1)}s | ${p.tokens} | ${p.notes.slice(0, 80)} |`
   ).join('\n')
 
-  const content = `# E2E Pipeline Run — Learnings & Observations
+  const content = `# App ${TEST_CONFIG.id}: ${TEST_CONFIG.name}
 
 **Date**: ${new Date().toISOString().split('T')[0]}
-**Test Prompt**: Test ${TEST_CONFIG.id} (${TEST_CONFIG.name})
-**Model**: gpt-5.2 via Helicone proxy
+**Prompt Complexity**: ${TEST_CONFIG.name.includes('vague') ? 'Ultra-vague' : TEST_CONFIG.name.includes('complex') ? 'Complex' : 'Medium'}
+**Vercel URL**: ${results.vercelUrl ? `[Live](${results.vercelUrl})` : 'N/A'}
 **Total Duration**: ${(totalDuration / 1000).toFixed(1)}s
-**Total Tokens**: ${totalTokens}
+**Total Tokens**: ${totalTokens} (~$${estimatedCost})
 
 ---
 
-## Pipeline Phases
+## Prompt
+
+\`\`\`
+${TEST_PROMPT}
+\`\`\`
+
+## Phase Summary
 
 | # | Phase | Status | Duration | Tokens | Notes |
 |---|-------|--------|----------|--------|-------|
 ${tableRows}
 
-## Analysis Output
+## Design Choices (from analyst)
 
 ${results.analysis ? `- **App Name**: ${results.analysis.appName}
 - **Description**: ${results.analysis.appDescription}
-- **Tables**: ${results.analysis.contract?.tables?.map((t: any) => t.name).join(', ')}
-- **Tokens**: ${results.analysis.tokensUsed}` : 'Failed'}
+- **Primary Color**: ${results.analysis.designPreferences?.primaryColor}
+- **Font**: ${results.analysis.designPreferences?.fontFamily}
+- **Style**: ${results.analysis.designPreferences?.style}
+- **Tables**: ${results.analysis.contract?.tables?.map((t: any) => t.name).join(', ')}` : 'Failed'}
 
-## Blueprint Output
+## Blueprint
 
 ${results.blueprint ? `- **Total Files**: ${results.blueprint.fileTree?.length}
 - **LLM Slot Files**: ${results.blueprint.fileTree?.filter((f: any) => f.isLLMSlot).length}
-- **Layers**: ${[...new Set(results.blueprint.fileTree?.map((f: any) => f.layer))].sort().join(', ')}` : 'Failed'}
+- **Auth**: ${results.blueprint.features?.auth ? 'Yes' : 'No'}` : 'Failed'}
 
-## Provisioning Output
-
-${results.provisioning ? `- **Sandbox**: ${results.provisioning.sandboxId}
-- **Supabase**: ${results.provisioning.supabaseProjectId} (${results.provisioning.supabaseUrl})
-- **GitHub**: ${results.provisioning.githubHtmlUrl}` : 'Failed'}
-
-## Code Generation Output
+## Code Generation
 
 ${results.codegen ? `- **Assembled Files**: ${results.codegen.assembledFiles?.length}
 - **Tokens**: ${results.codegen.tokensUsed}
-- **Warnings**: ${results.codegen.warnings?.length ?? 0}
-- **Skipped**: ${results.codegen.skippedEntities?.join(', ') || 'none'}` : 'Failed'}
+- **Warnings**: ${results.codegen.warnings?.length ?? 0}` : 'Failed'}
 
-## Validation Output
+## Validation
 
 ${results.validation ? `- **Manifest**: ${results.validation.validation?.manifest?.passed ? 'PASS' : 'FAIL'}
-- **Scaffold**: ${results.validation.validation?.scaffold?.passed ? 'PASS' : 'FAIL'}
 - **TypeCheck**: ${results.validation.validation?.typecheck?.passed ? 'PASS' : 'FAIL'}
-- **Lint**: ${results.validation.validation?.lint?.passed ? 'PASS' : 'FAIL'}
 - **Build**: ${results.validation.validation?.build?.passed ? 'PASS' : 'FAIL'}
-- **Overall**: ${results.validation.allPassed ? 'ALL PASSED' : 'FAILED'}` : 'Failed'}
+- **Overall**: ${results.validation.allPassed ? '✅ ALL PASSED' : '❌ FAILED'}` : 'Failed'}
 
-## Code Review Output
+## Code Review
 
 ${results.review ? `- **Passed**: ${results.review.passed}
 - **Deterministic Issues**: ${results.review.deterministicIssues?.length}
-- **LLM Issues**: ${results.review.llmIssues?.length}
-- **Tokens**: ${results.review.tokensUsed}` : 'Skipped or Failed'}
+- **LLM Issues**: ${results.review.llmIssues?.length}` : 'Skipped'}
+
+## Provisioning
+
+${results.provisioning ? `- **GitHub**: ${results.provisioning.githubHtmlUrl}
+- **Supabase**: ${results.provisioning.supabaseUrl}` : 'Failed'}
 
 ## Learnings
 
 ### Architecture Observations
-
-${results.notes.filter(n => n.startsWith('[ARCH]')).map(n => `- ${n.replace('[ARCH] ', '')}`).join('\n') || '(none)'}
+${results.notes.filter((n: string) => n.startsWith('[ARCH]')).map((n: string) => `- ${n.replace('[ARCH] ', '')}`).join('\n') || '(none)'}
 
 ### Bugs Found
-
-${results.notes.filter(n => n.startsWith('[BUG]')).map(n => `- ${n.replace('[BUG] ', '')}`).join('\n') || '(none)'}
+${results.notes.filter((n: string) => n.startsWith('[BUG]')).map((n: string) => `- ${n.replace('[BUG] ', '')}`).join('\n') || '(none)'}
 
 ### Performance Notes
-
-${results.notes.filter(n => n.startsWith('[PERF]')).map(n => `- ${n.replace('[PERF] ', '')}`).join('\n') || '(none)'}
-
-### Recommendations
-
-${results.notes.filter(n => n.startsWith('[REC]')).map(n => `- ${n.replace('[REC] ', '')}`).join('\n') || '(none)'}
+${results.notes.filter((n: string) => n.startsWith('[PERF]')).map((n: string) => `- ${n.replace('[PERF] ', '')}`).join('\n') || '(none)'}
 `
 
   writeFileSync(LEARNINGS_PATH, content)
   log(`\nLearnings written to ${LEARNINGS_PATH}`)
+
+  // Append to master learnings file
+  const masterEntry = `\n## App ${TEST_CONFIG.id}: ${TEST_CONFIG.name}\n` +
+    `- **URL**: ${results.vercelUrl ? results.vercelUrl : 'N/A'}\n` +
+    `- **Duration**: ${(totalDuration / 1000).toFixed(1)}s | **Tokens**: ${totalTokens} (~$${estimatedCost})\n` +
+    `- **Color**: ${results.analysis?.designPreferences?.primaryColor} | **Font**: ${results.analysis?.designPreferences?.fontFamily}\n` +
+    `- **Tables**: ${results.analysis?.contract?.tables?.map((t: any) => t.name).join(', ')}\n` +
+    `- **Status**: ${results.validation?.allPassed ? '✅' : '❌'}\n`
+
+  try {
+    if (!existsSync(MASTER_LEARNINGS_PATH)) {
+      writeFileSync(MASTER_LEARNINGS_PATH, `# 10 Apps Build Log\n\nGenerated by VibeStack — ${new Date().toISOString().split('T')[0]}\n`)
+    }
+    appendFileSync(MASTER_LEARNINGS_PATH, masterEntry)
+    log(`Appended to master learnings: ${MASTER_LEARNINGS_PATH}`)
+  } catch {
+    // non-fatal
+  }
 }
 
 // ============================================================================
@@ -601,22 +652,20 @@ ${results.notes.filter(n => n.startsWith('[REC]')).map(n => `- ${n.replace('[REC
 // ============================================================================
 
 async function main() {
-  log(`=== VibeStack E2E Pipeline Test ${TEST_CONFIG.id}/3: ${TEST_CONFIG.name} ===`)
+  log(`=== VibeStack E2E Pipeline — App ${TEST_CONFIG.id}/10: ${TEST_CONFIG.name} ===`)
   log(`Prompt: "${TEST_PROMPT.slice(0, 80)}..."`)
-  log(`Model: gpt-5.2 via Helicone`)
   log('')
 
-  // Set up Helicone session context so all LLM calls appear in Sessions tab
-  const sessionId = `e2e-${Date.now()}`
+  // Set up Helicone session context
+  const sessionId = `e2e-app${TEST_CONFIG.id}-${Date.now()}`
   const { setGlobalHeliconeContext } = await import('../server/lib/agents/provider')
   setGlobalHeliconeContext({
     userId: '00000000-0000-4000-8000-000000000e2e',
     projectId: sessionId,
     sessionId,
-    environment: 'e2e-test',
+    environment: 'e2e-10apps',
   })
   log(`Helicone session: ${sessionId}`)
-  log('View at: https://helicone.ai → Sessions tab')
 
   const notes: string[] = []
   let sandboxId: string | null = null
@@ -628,111 +677,139 @@ async function main() {
     provisioning: null,
     codegen: null,
     validation: null,
-    repair: null,
     review: null,
+    vercelUrl: null,
     notes,
   }
 
   try {
     // --- Phase 1: Analysis ---
-    const phaseStart1 = Date.now()
+    const t1 = Date.now()
     const analysisResult = await phase1_analysis()
-    const duration1 = Date.now() - phaseStart1
+    const d1 = Date.now() - t1
     const tokens1 = analysisResult?.tokensUsed ?? 0
 
     if (!analysisResult || analysisResult.type !== 'done') {
-      trackPhase('1. Analysis', duration1, tokens1, 'FAIL', 'Analyst did not produce requirements')
-      throw new Error('Analysis failed to produce requirements')
+      trackPhase('1. Analysis', d1, tokens1, 'FAIL', 'Analyst did not produce requirements')
+      throw new Error('Analysis failed')
     }
-
-    // Overwrite the auto-tracked phase with correct tokens
-    phaseTimings.pop() // remove the runPhase auto-entry if any
-    trackPhase('1. Analysis', duration1, tokens1, 'PASS', `${analysisResult.contract.tables.length} tables`)
+    trackPhase('1. Analysis', d1, tokens1, 'PASS',
+      `${analysisResult.contract.tables.length} tables | ${analysisResult.designPreferences.primaryColor} | ${analysisResult.designPreferences.fontFamily}`)
     results.analysis = analysisResult
 
     // --- Phase 2: Blueprint ---
-    const phaseStart2 = Date.now()
+    const t2 = Date.now()
     const blueprint = await phase2_blueprint(analysisResult)
-    const duration2 = Date.now() - phaseStart2
-    trackPhase('2. Blueprint', duration2, 0, 'PASS', `${blueprint.fileTree.length} files (deterministic)`)
+    const d2 = Date.now() - t2
+    trackPhase('2. Blueprint', d2, 0, 'PASS', `${blueprint.fileTree.length} files (deterministic)`)
     results.blueprint = blueprint
 
-    notes.push(`[ARCH] Blueprint generates ${blueprint.fileTree.length} files across ${[...new Set(blueprint.fileTree.map(f => f.layer))].length} layers`)
-    notes.push(`[ARCH] ${blueprint.fileTree.filter(f => f.isLLMSlot).length} files have SLOT markers for LLM filling`)
+    notes.push(`[ARCH] Blueprint generates ${blueprint.fileTree.length} files across ${[...new Set(blueprint.fileTree.map((f: any) => f.layer))].length} layers`)
 
     // --- Phase 3: Provisioning ---
-    const phaseStart3 = Date.now()
+    const t3 = Date.now()
     const provisioningResult = await phase3_provisioning(analysisResult.appName)
-    const duration3 = Date.now() - phaseStart3
+    const d3 = Date.now() - t3
     sandboxId = provisioningResult.sandboxId
     supabaseProjectId = provisioningResult.supabaseProjectId
-    trackPhase('3. Provisioning', duration3, 0, 'PASS', `sandbox=${sandboxId?.slice(0, 8)}... supabase=${supabaseProjectId?.slice(0, 8)}...`)
+    trackPhase('3. Provisioning', d3, 0, 'PASS', `sandbox + supabase + github`)
     results.provisioning = provisioningResult
+    notes.push(`[PERF] Provisioning: ${(d3/1000).toFixed(1)}s`)
 
-    notes.push(`[PERF] Provisioning took ${(duration3 / 1000).toFixed(1)}s (parallel: sandbox + supabase + github)`)
-
-    // --- Phase 4: Code Generation (now includes scaffold write + assembly write) ---
-    const phaseStart5 = Date.now()
-    const codegenResult = await phase5_codegen(
+    // --- Phase 4: Code Generation ---
+    const t4 = Date.now()
+    const codegenResult = await phase4_codegen(
       blueprint, analysisResult.contract, sandboxId,
       provisioningResult.supabaseProjectId,
       provisioningResult.supabaseUrl, provisioningResult.supabaseAnonKey,
     )
-    const duration5 = Date.now() - phaseStart5
-    trackPhase('4. Code Generation', duration5, codegenResult.tokensUsed,
+    const d4 = Date.now() - t4
+    trackPhase('4. Code Generation', d4, codegenResult.tokensUsed,
       codegenResult.skippedEntities?.length ? 'PARTIAL' : 'PASS',
-      `${codegenResult.assembledFiles.length} files, ${codegenResult.tokensUsed} tokens${codegenResult.skippedEntities?.length ? `, skipped: ${codegenResult.skippedEntities.join(', ')}` : ''}`)
+      `${codegenResult.assembledFiles.length} files`)
     results.codegen = codegenResult
 
-    notes.push(`[PERF] Code gen took ${(duration5 / 1000).toFixed(1)}s for ${codegenResult.assembledFiles.length} assembled files`)
     if (codegenResult.warnings?.length) {
-      notes.push(`[BUG] Code gen validation warnings: ${JSON.stringify(codegenResult.warnings)}`)
+      notes.push(`[BUG] Code gen warnings: ${JSON.stringify(codegenResult.warnings)}`)
     }
 
     // --- Phase 5: Validation ---
-    const phaseStart7 = Date.now()
-    let validationResult = await phase7_validation(blueprint, sandboxId)
-    const duration7 = Date.now() - phaseStart7
-    trackPhase('5. Validation', duration7, 0, validationResult.allPassed ? 'PASS' : 'FAIL',
-      `manifest=${validationResult.validation.manifest.passed} scaffold=${validationResult.validation.scaffold.passed} tsc=${validationResult.validation.typecheck.passed} build=${validationResult.validation.build.passed}`)
+    const t5 = Date.now()
+    let validationResult = await phase5_validation(blueprint, sandboxId)
+    const d5 = Date.now() - t5
+    trackPhase('5. Validation', d5, 0, validationResult.allPassed ? 'PASS' : 'FAIL',
+      `manifest=${validationResult.validation.manifest.passed} tsc=${validationResult.validation.typecheck.passed} build=${validationResult.validation.build.passed}`)
     results.validation = validationResult
 
-    // --- Phase 6: Repair (DISABLED — stop on validation failure to debug deterministically) ---
+    // --- Phase 6: Repair (if needed, up to 2 attempts) ---
     if (!validationResult.allPassed) {
-      console.error('\n[STOP] Validation failed — repair disabled. Fix deterministic generators instead.')
-      console.error('[STOP] Validation details:', JSON.stringify(validationResult.validation, null, 2))
+      for (let attempt = 1; attempt <= 2 && !validationResult.allPassed; attempt++) {
+        const t6 = Date.now()
+        await phase6_repair(blueprint, validationResult, sandboxId, attempt)
+        const d6 = Date.now() - t6
+
+        // Re-validate
+        validationResult = await phase5_validation(blueprint, sandboxId)
+        trackPhase(`6. Repair #${attempt}`, d6, 0,
+          validationResult.allPassed ? 'PASS' : 'FAIL',
+          `tsc=${validationResult.validation.typecheck.passed} build=${validationResult.validation.build.passed}`)
+        results.validation = validationResult
+        notes.push(`[BUG] Needed repair attempt ${attempt}`)
+      }
     }
 
     // --- Phase 7: Code Review ---
     if (validationResult.allPassed) {
       try {
-        const phaseStart9 = Date.now()
-        const reviewResult = await phase9_codeReview(blueprint, analysisResult.contract, sandboxId)
-        const duration9 = Date.now() - phaseStart9
-        trackPhase('7. Code Review', duration9, reviewResult.tokensUsed,
+        const t7 = Date.now()
+        const reviewResult = await phase7_codeReview(blueprint, analysisResult.contract, sandboxId)
+        const d7 = Date.now() - t7
+        trackPhase('7. Code Review', d7, reviewResult.tokensUsed,
           reviewResult.passed ? 'PASS' : 'WARN',
-          `${reviewResult.deterministicIssues.length} deterministic + ${reviewResult.llmIssues.length} LLM issues`)
+          `${reviewResult.deterministicIssues.length} det + ${reviewResult.llmIssues.length} LLM issues`)
         results.review = reviewResult
       } catch (error) {
         logError('Code review failed (non-blocking)', error)
-        notes.push(`[BUG] Code review threw: ${error instanceof Error ? error.message : String(error)}`)
       }
-    } else {
-      log('Skipping code review — validation did not pass')
-      trackPhase('7. Code Review', 0, 0, 'SKIP', 'validation failed')
     }
 
     // --- Phase 8: GitHub Push ---
     if (provisioningResult.githubCloneUrl) {
       try {
-        const phaseStart10 = Date.now()
-        await phase10_githubPush(sandboxId, provisioningResult.githubCloneUrl, provisioningResult.repoName)
-        const duration10 = Date.now() - phaseStart10
-        trackPhase('10. GitHub Push', duration10, 0, 'PASS', provisioningResult.githubHtmlUrl)
+        const t8 = Date.now()
+        await phase8_githubPush(sandboxId, provisioningResult.githubCloneUrl, provisioningResult.repoName)
+        const d8 = Date.now() - t8
+        trackPhase('8. GitHub Push', d8, 0, 'PASS', provisioningResult.githubHtmlUrl)
       } catch (error) {
         logError('GitHub push failed', error)
         notes.push(`[BUG] GitHub push failed: ${error instanceof Error ? error.message : String(error)}`)
       }
+    }
+
+    // --- Phase 9: Vercel Deploy ---
+    if (validationResult.allPassed) {
+      try {
+        const t9 = Date.now()
+        const vercelUrl = await phase9_vercelDeploy(
+          sandboxId,
+          analysisResult.appName,
+          provisioningResult.supabaseUrl,
+          provisioningResult.supabaseAnonKey,
+        )
+        const d9 = Date.now() - t9
+        trackPhase('9. Vercel Deploy', d9, 0, 'PASS', vercelUrl)
+        results.vercelUrl = vercelUrl
+
+        log(`\n🚀 APP ${TEST_CONFIG.id} LIVE: ${vercelUrl}`)
+        log(`   App: ${analysisResult.appName}`)
+        log(`   Color: ${analysisResult.designPreferences.primaryColor} | Font: ${analysisResult.designPreferences.fontFamily}`)
+      } catch (error) {
+        logError('Vercel deploy failed', error)
+        notes.push(`[BUG] Vercel deploy failed: ${error instanceof Error ? error.message : String(error)}`)
+        trackPhase('9. Vercel Deploy', 0, 0, 'FAIL', (error instanceof Error ? error.message : String(error)).slice(0, 100))
+      }
+    } else {
+      trackPhase('9. Vercel Deploy', 0, 0, 'SKIP', 'validation failed')
     }
 
     // --- Summary ---
@@ -740,33 +817,26 @@ async function main() {
     const totalTokens = phaseTimings.reduce((sum, p) => sum + p.tokens, 0)
 
     log('\n' + '='.repeat(60))
-    log('PIPELINE COMPLETE')
+    log(`APP ${TEST_CONFIG.id} COMPLETE: ${TEST_CONFIG.name}`)
     log('='.repeat(60))
     log(`Total duration: ${(totalDuration / 1000).toFixed(1)}s`)
-    log(`Total tokens: ${totalTokens}`)
+    log(`Total tokens: ${totalTokens} (~$${(totalTokens / 1_000_000 * 2.5).toFixed(4)})`)
     log(`Phases: ${phaseTimings.filter(p => p.status === 'PASS').length}/${phaseTimings.length} passed`)
-    log(`Validation: ${validationResult.allPassed ? 'ALL PASSED' : 'FAILED'}`)
-    if (provisioningResult.githubHtmlUrl) {
-      log(`GitHub: ${provisioningResult.githubHtmlUrl}`)
-    }
-    if (provisioningResult.supabaseUrl) {
-      log(`Supabase: ${provisioningResult.supabaseUrl}`)
-    }
+    if (results.vercelUrl) log(`🔗 Live URL: ${results.vercelUrl}`)
+    if (provisioningResult?.githubHtmlUrl) log(`📦 GitHub: ${provisioningResult.githubHtmlUrl}`)
 
   } catch (error) {
     logError('Pipeline failed', error)
-    notes.push(`[BUG] Pipeline failed at top level: ${error instanceof Error ? error.message : String(error)}`)
+    notes.push(`[BUG] Pipeline failed: ${error instanceof Error ? error.message : String(error)}`)
   } finally {
-    // Write learnings file
     writeLearnings(results)
 
-    // Ask before cleanup
-    log('\n--- Resources Created ---')
-    if (sandboxId) log(`  Sandbox: ${sandboxId}`)
-    if (supabaseProjectId) log(`  Supabase: ${supabaseProjectId}`)
-    log('NOTE: Not auto-deleting resources — inspect them first, then delete manually.')
+    // Cleanup sandbox
+    await cleanup(sandboxId)
+
+    log('\n--- Resources Retained ---')
+    if (supabaseProjectId) log(`  Supabase: ${supabaseProjectId} (retained for inspection)`)
   }
 }
 
-// Run
 main().catch(console.error)

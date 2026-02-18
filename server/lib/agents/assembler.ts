@@ -227,12 +227,14 @@ export function assembleListPage(spec: PageFeatureSpec, contract: SchemaContract
 
   // Build imports
   const imports = [
-    "import { createFileRoute } from '@tanstack/react-router'",
+    "import { createFileRoute, Link } from '@tanstack/react-router'",
     "import { useState } from 'react'",
     "import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'",
     "import { supabase } from '@/lib/supabase'",
     "import { Button } from '@/components/ui/button'",
-    "import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'",
+    "import { Card, CardContent } from '@/components/ui/card'",
+    "import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'",
+    "import { Skeleton } from '@/components/ui/skeleton'",
   ]
   if (needsInput) imports.push("import { Input } from '@/components/ui/input'")
   if (needsBadge) imports.push("import { Badge } from '@/components/ui/badge'")
@@ -383,110 +385,170 @@ ${fkHooks}
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null)
   const [createForm, setCreateForm] = useState<Record<string, string | boolean>>(${formInitial})
 
-  if (${pluralCamel}.isPending) {
-    return <div className="flex justify-center py-12"><p className="text-muted-foreground">Loading...</p></div>
-  }
-
-  if (${pluralCamel}.error) {
-    return <div className="flex justify-center py-12"><p className="text-destructive">Error: {${pluralCamel}.error.message}</p></div>
-  }
-
-  const data = ${pluralCamel}.data?.items ?? []
-
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">${snakeToPascal(plural)}</h1>
-        <Button onClick={() => setIsCreateOpen(true)}>Create ${pascal}</Button>
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">${snakeToPascal(plural)}</h1>
+          {!${pluralCamel}.isPending && (
+            <p className="text-sm text-muted-foreground mt-0.5">
+              {${pluralCamel}.data?.totalCount ?? 0} total
+            </p>
+          )}
+        </div>
+        <Button onClick={() => setIsCreateOpen(true)} size="sm">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16" className="mr-1.5 -ml-0.5">
+            <path d="M8 2a.5.5 0 0 1 .5.5v5h5a.5.5 0 0 1 0 1h-5v5a.5.5 0 0 1-1 0v-5h-5a.5.5 0 0 1 0-1h5v-5A.5.5 0 0 1 8 2"/>
+          </svg>
+          New ${pascal}
+        </Button>
       </div>
-${filterBar}
-      {isCreateOpen && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Create ${pascal}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <form
-              className="space-y-4"
-              onSubmit={(e) => {
-                e.preventDefault()
-                create${pascal}.mutate(createForm)
-                setCreateForm(${formInitial})
-                setIsCreateOpen(false)
-              }}
-            >
-${formFields}
-              <div className="flex gap-2">
-                <Button type="submit" disabled={create${pascal}.isPending}>
-                  {create${pascal}.isPending ? 'Creating...' : 'Create'}
-                </Button>
-                <Button type="button" variant="outline" onClick={() => setIsCreateOpen(false)}>Cancel</Button>
-              </div>
-            </form>
-          </CardContent>
-        </Card>
-      )}
 
-      {deleteTargetId && (
-        <Card className="border-destructive">
-          <CardContent className="pt-6">
-            <p>Are you sure you want to delete this ${entity}?</p>
-            <div className="mt-4 flex gap-2">
-              <Button
-                variant="destructive"
-                onClick={() => {
+${filterBar}
+
+      {/* Create dialog */}
+      <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Create ${pascal}</DialogTitle>
+          </DialogHeader>
+          <form
+            className="space-y-4 py-2"
+            onSubmit={(e) => {
+              e.preventDefault()
+              create${pascal}.mutate(createForm)
+              setCreateForm(${formInitial})
+              setIsCreateOpen(false)
+            }}
+          >
+${formFields}
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setIsCreateOpen(false)}>Cancel</Button>
+              <Button type="submit" disabled={create${pascal}.isPending}>
+                {create${pascal}.isPending ? 'Creating…' : 'Create'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete confirm dialog */}
+      <Dialog open={!!deleteTargetId} onOpenChange={(open) => { if (!open) setDeleteTargetId(null) }}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Delete ${pascal}?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">This action cannot be undone.</p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteTargetId(null)}>Cancel</Button>
+            <Button
+              variant="destructive"
+              disabled={delete${pascal}.isPending}
+              onClick={() => {
+                if (deleteTargetId) {
                   delete${pascal}.mutate(deleteTargetId)
                   setDeleteTargetId(null)
-                }}
-              >
-                Delete
-              </Button>
-              <Button variant="outline" onClick={() => setDeleteTargetId(null)}>Cancel</Button>
+                }
+              }}
+            >
+              {delete${pascal}.isPending ? 'Deleting…' : 'Delete'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Data table */}
+      {${pluralCamel}.isPending ? (
+        <Card>
+          <CardContent className="p-0">
+            <div className="space-y-0 divide-y">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className="flex items-center gap-4 px-4 py-3.5">
+                  <Skeleton className="h-4 w-[40%]" />
+                  <Skeleton className="h-4 w-[25%]" />
+                  <Skeleton className="h-4 w-[15%] ml-auto" />
+                </div>
+              ))}
             </div>
           </CardContent>
         </Card>
-      )}
-
-      {data.length === 0 ? (
+      ) : ${pluralCamel}.error ? (
+        <Card className="border-destructive/30 bg-destructive/5">
+          <CardContent className="py-10 text-center">
+            <p className="text-sm text-destructive font-medium">Failed to load data</p>
+            <p className="text-xs text-muted-foreground mt-1">{${pluralCamel}.error.message}</p>
+            <Button variant="outline" size="sm" className="mt-4" onClick={() => ${pluralCamel}.refetch()}>
+              Try again
+            </Button>
+          </CardContent>
+        </Card>
+      ) : (${pluralCamel}.data?.items ?? []).length === 0 ? (
         <Card>
-          <CardContent className="py-12 text-center">
-            <p className="text-muted-foreground">${spec.listPage.emptyStateMessage}</p>
+          <CardContent className="py-16 text-center">
+            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-muted">
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5" className="text-muted-foreground">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
+              </svg>
+            </div>
+            <p className="font-medium text-sm">${spec.listPage.emptyStateMessage}</p>
+            <p className="text-xs text-muted-foreground mt-1">Get started by creating your first one.</p>
+            <Button size="sm" className="mt-4" onClick={() => setIsCreateOpen(true)}>
+              Create ${pascal}
+            </Button>
           </CardContent>
         </Card>
       ) : (
-        <div className="rounded-md border">
-          <table className="w-full">
-            <thead className="border-b bg-muted/50">
-              <tr>
+        <Card className="overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b bg-muted/40">
 ${headers}
-                <th className="px-4 py-3 text-right text-sm font-medium text-muted-foreground">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {data.map((item) => (
-                <tr key={item.id} className="hover:bg-muted/50">
-${cells}
-                  <td className="px-4 py-3 text-right text-sm">
-                    <Button variant="ghost" size="sm" onClick={() => setDeleteTargetId(item.id)}>Delete</Button>
-                  </td>
+                  <th className="px-4 py-3 text-right font-medium text-muted-foreground whitespace-nowrap">Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y">
+                {(${pluralCamel}.data?.items ?? []).map((item) => (
+                  <tr key={item.id} className="group hover:bg-muted/30 transition-colors">
+${cells}
+                    <td className="px-4 py-3 text-right whitespace-nowrap">
+                      <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Link to="/${pluralKebab}/$id" params={{ id: item.id } as any}>
+                          <Button variant="ghost" size="sm" className="h-7 px-2 text-xs">View</Button>
+                        </Link>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 px-2 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
+                          onClick={() => setDeleteTargetId(item.id)}
+                        >
+                          Delete
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
       )}
 
+      {/* Pagination */}
       {${pluralCamel}.data && ${pluralCamel}.data.totalCount > pageSize && (
-        <div className="flex justify-center gap-2 py-4">
-          <Button variant="outline" onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}>
-            Previous
-          </Button>
-          <span className="flex items-center text-sm text-muted-foreground">
-            Page {page + 1} of {Math.ceil(${pluralCamel}.data.totalCount / pageSize)}
-          </span>
-          <Button variant="outline" onClick={() => setPage(p => p + 1)} disabled={(page + 1) * pageSize >= ${pluralCamel}.data.totalCount}>
-            Next
-          </Button>
+        <div className="flex items-center justify-between py-2">
+          <p className="text-xs text-muted-foreground">
+            Showing {page * pageSize + 1}–{Math.min((page + 1) * pageSize, ${pluralCamel}.data.totalCount)} of {${pluralCamel}.data.totalCount}
+          </p>
+          <div className="flex gap-1">
+            <Button variant="outline" size="sm" onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}>
+              ← Prev
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setPage(p => p + 1)} disabled={(page + 1) * pageSize >= ${pluralCamel}.data.totalCount}>
+              Next →
+            </Button>
+          </div>
         </div>
       )}
     </div>

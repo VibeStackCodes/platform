@@ -50,10 +50,22 @@ Guidelines for extracting requirements:
 3. Design preferences: style, primaryColor (hex), fontFamily
 
 Smart defaults when unspecified:
-- Auth: Supabase Auth with email/password + Google OAuth. Include users table with RLS policy using auth.uid()
-- Styling: Modern minimal, primary blue (#3b82f6), Inter font
-- Database: PostgreSQL via Supabase, RLS enabled on all tables
+- Auth: Supabase Auth with email/password. Include user_id FK on tables that should be user-owned, with RLS policy using auth.uid()
+- Database: PostgreSQL via Supabase, RLS enabled on all user-owned tables
 - Every table gets id (uuid, default gen_random_uuid()), created_at, updated_at columns
+
+Design preferences — be CREATIVE, match the app's domain personality:
+- Finance/Banking apps: Deep tones like emerald (#059669) or indigo (#4f46e5), font "Sora" or "DM Sans"
+- Healthcare/Medical: Teal (#0d9488) or sage (#4ade80) for trust/calm, font "Nunito"
+- E-commerce/Retail: Brand-forward rose (#f43f5e), amber (#d97706), or deep slate (#475569), font "Raleway" or "Cormorant Garamond"
+- Creative/Blog/CMS: Editorial deep burgundy (#7c3aed), terracotta (#c2410c), or charcoal (#1c1917), font "Playfair Display" or "Lora"
+- SaaS/Productivity: Clean blue-violet (#2563eb or #7c3aed) or teal (#0891b2), font "Outfit" or "Geist"
+- Food/Recipe apps: Warm amber (#92400e), rich red (#dc2626), font "Nunito" or "Lato"
+- Real estate/Property: Premium navy (#1e40af) or forest (#065f46), font "Raleway"
+- Travel/Lifestyle: Sky blue (#0284c7) or coral (#f97316), font "Poppins"
+- DO NOT default to blue (#3b82f6) + Inter — be imaginative, use the domain to guide your choices
+- primaryColor must be a 6-digit hex code
+- fontFamily must be a Google Fonts-compatible name (e.g., "DM Sans", "Outfit", "Nunito", "Sora", "Raleway")
 
 When using askClarifyingQuestions:
 - 1-4 questions, 2-4 options each

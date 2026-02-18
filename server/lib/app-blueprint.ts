@@ -51,8 +51,102 @@ interface BlueprintInput {
   designPreferences: DesignPreferences
 }
 
+// ============================================================================
+// Color utilities — hex → oklch conversion for Tailwind v4 @theme
+// ============================================================================
+
+/**
+ * Convert a 6-digit hex color to OKLCH components.
+ * Returns {L, C, H} where L ∈ [0,1], C ∈ [0,~0.4], H ∈ [0,360).
+ */
+function hexToOklch(hex: string): { L: number; C: number; H: number } {
+  const h = hex.replace('#', '')
+  if (h.length !== 6) return { L: 0.48, C: 0.18, H: 240 }
+
+  const r = parseInt(h.slice(0, 2), 16) / 255
+  const g = parseInt(h.slice(2, 4), 16) / 255
+  const b = parseInt(h.slice(4, 6), 16) / 255
+
+  // Linearize (sRGB gamma decode)
+  const lin = (c: number) => (c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4))
+  const lr = lin(r), lg = lin(g), lb = lin(b)
+
+  // RGB → XYZ (D65)
+  const X = 0.4124564 * lr + 0.3575761 * lg + 0.1804375 * lb
+  const Y = 0.2126729 * lr + 0.7151522 * lg + 0.0721750 * lb
+  const Z = 0.0193339 * lr + 0.1191920 * lg + 0.9503041 * lb
+
+  // XYZ → Oklab (via LMS cone response)
+  const lc = 0.8189330101 * X + 0.3618667424 * Y - 0.1288597137 * Z
+  const mc = 0.0329845436 * X + 0.9293118715 * Y + 0.0361456387 * Z
+  const sc = 0.0482003018 * X + 0.2643662691 * Y + 0.6338517070 * Z
+
+  const l_ = Math.cbrt(lc), m_ = Math.cbrt(mc), s_ = Math.cbrt(sc)
+  const L = 0.2104542553 * l_ + 0.7936177850 * m_ - 0.0040720468 * s_
+  const a = 1.9779984951 * l_ - 2.4285922050 * m_ + 0.4505937099 * s_
+  const bv = 0.0259040371 * l_ + 0.7827717662 * m_ - 0.8086757660 * s_
+
+  const C = Math.sqrt(a * a + bv * bv)
+  const H = ((Math.atan2(bv, a) * 180 / Math.PI) + 360) % 360
+
+  return { L, C, H }
+}
+
+/** Format oklch components to a CSS oklch() string */
+function oklch(L: number, C: number, H: number): string {
+  return `oklch(${L.toFixed(4)} ${C.toFixed(4)} ${H.toFixed(2)})`
+}
+
+/**
+ * Generate a full shadcn/ui color palette derived from a single primary hex color.
+ * Returns CSS oklch() strings for all required tokens.
+ */
+function buildColorPalette(primaryHex: string) {
+  const { L, C, H } = hexToOklch(primaryHex)
+
+  // Primary: use the color as-is, clamp L to reasonable range for readability
+  const primaryL = Math.min(0.72, Math.max(0.35, L))
+  const primaryFgL = primaryL > 0.55 ? 0.12 : 0.98
+
+  // Secondary: very light tint of primary hue
+  const secondaryL = 0.965
+  const secondaryC = Math.min(C * 0.12, 0.025)
+
+  // Muted: very subtle hue-tinted neutral
+  const mutedC = Math.min(C * 0.08, 0.015)
+
+  // Accent: slightly more saturated than secondary
+  const accentC = Math.min(C * 0.18, 0.035)
+
+  // Border: very light with tiny hint of hue
+  const borderC = Math.min(C * 0.06, 0.012)
+
+  return {
+    primary:            oklch(primaryL, Math.min(C, 0.28), H),
+    primaryForeground:  oklch(primaryFgL, 0, 0),
+    secondary:          oklch(secondaryL, secondaryC, H),
+    secondaryFg:        oklch(0.21, 0, 0),
+    muted:              oklch(0.965, mutedC, H),
+    mutedFg:            oklch(0.50, Math.min(C * 0.12, 0.02), H),
+    accent:             oklch(0.955, accentC, H),
+    accentFg:           oklch(0.20, 0, 0),
+    border:             oklch(0.918, borderC, H),
+    input:              oklch(0.918, borderC, H),
+    ring:               oklch(primaryL, Math.min(C * 0.65, 0.20), H),
+    // Dark mode variants
+    darkBg:             oklch(0.085, Math.min(C * 0.06, 0.012), H),
+    darkFg:             oklch(0.96, 0, 0),
+    darkCard:           oklch(0.115, Math.min(C * 0.06, 0.012), H),
+    darkPrimary:        oklch(Math.min(primaryL + 0.10, 0.78), Math.min(C, 0.28), H),
+    darkBorder:         oklch(0.22, Math.min(C * 0.08, 0.015), H),
+    darkMuted:          oklch(0.18, Math.min(C * 0.08, 0.015), H),
+    darkMutedFg:        oklch(0.58, Math.min(C * 0.10, 0.018), H),
+  }
+}
+
 /** Generate Tailwind v4 CSS theme with shadcn/ui color tokens */
 function generateIndexCSS(prefs: DesignPreferences): string {
+  const pal = buildColorPalette(prefs.primaryColor)
   return `@import "tailwindcss";
 @import "tw-animate-css";
 
@@ -60,37 +154,82 @@ function generateIndexCSS(prefs: DesignPreferences): string {
 
 @theme inline {
   --color-background: oklch(1 0 0);
-  --color-foreground: oklch(0.145 0 0);
+  --color-foreground: oklch(0.140 0 0);
   --color-card: oklch(1 0 0);
-  --color-card-foreground: oklch(0.145 0 0);
+  --color-card-foreground: oklch(0.140 0 0);
   --color-popover: oklch(1 0 0);
-  --color-popover-foreground: oklch(0.145 0 0);
-  --color-primary: oklch(0.205 0 0);
-  --color-primary-foreground: oklch(0.985 0 0);
-  --color-secondary: oklch(0.97 0 0);
-  --color-secondary-foreground: oklch(0.205 0 0);
-  --color-muted: oklch(0.97 0 0);
-  --color-muted-foreground: oklch(0.556 0 0);
-  --color-accent: oklch(0.97 0 0);
-  --color-accent-foreground: oklch(0.205 0 0);
+  --color-popover-foreground: oklch(0.140 0 0);
+  --color-primary: ${pal.primary};
+  --color-primary-foreground: ${pal.primaryForeground};
+  --color-secondary: ${pal.secondary};
+  --color-secondary-foreground: ${pal.secondaryFg};
+  --color-muted: ${pal.muted};
+  --color-muted-foreground: ${pal.mutedFg};
+  --color-accent: ${pal.accent};
+  --color-accent-foreground: ${pal.accentFg};
   --color-destructive: oklch(0.577 0.245 27.325);
   --color-destructive-foreground: oklch(0.985 0 0);
-  --color-border: oklch(0.922 0 0);
-  --color-input: oklch(0.922 0 0);
-  --color-ring: oklch(0.708 0 0);
-  --radius: 0.625rem;
+  --color-border: ${pal.border};
+  --color-input: ${pal.input};
+  --color-ring: ${pal.ring};
+  --radius: 0.5rem;
   --font-sans: '${prefs.fontFamily}', ui-sans-serif, system-ui, sans-serif;
+}
+
+/* Dark mode overrides */
+.dark {
+  --color-background: ${pal.darkBg};
+  --color-foreground: ${pal.darkFg};
+  --color-card: ${pal.darkCard};
+  --color-card-foreground: ${pal.darkFg};
+  --color-popover: ${pal.darkCard};
+  --color-popover-foreground: ${pal.darkFg};
+  --color-primary: ${pal.darkPrimary};
+  --color-primary-foreground: oklch(0.10 0 0);
+  --color-secondary: ${pal.darkMuted};
+  --color-secondary-foreground: ${pal.darkFg};
+  --color-muted: ${pal.darkMuted};
+  --color-muted-foreground: ${pal.darkMutedFg};
+  --color-accent: ${pal.darkMuted};
+  --color-accent-foreground: ${pal.darkFg};
+  --color-destructive: oklch(0.704 0.191 22.216);
+  --color-border: ${pal.darkBorder};
+  --color-input: ${pal.darkBorder};
+  --color-ring: ${pal.ring};
+}
+
+/* Smooth transitions for all interactive elements */
+* {
+  @apply border-border;
+}
+
+body {
+  @apply bg-background text-foreground antialiased;
+  font-feature-settings: "cv11", "ss01";
+  font-variation-settings: "opsz" 32;
 }
 `
 }
 
-/** Generate index.html for the Vite SPA */
-function generateIndexHTML(appName: string): string {
+/** Build a Google Fonts URL for a given font family name */
+function googleFontsUrl(fontFamily: string): string {
+  const encoded = fontFamily.trim().replace(/\s+/g, '+')
+  return `https://fonts.googleapis.com/css2?family=${encoded}:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap`
+}
+
+/** Generate index.html for the Vite SPA with optional Google Fonts */
+function generateIndexHTML(appName: string, prefs: DesignPreferences): string {
+  // Always load font via Google Fonts (even Inter) for consistency
+  const fontsUrl = googleFontsUrl(prefs.fontFamily)
   return `<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="${appName}" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="${fontsUrl}" rel="stylesheet">
     <title>${appName}</title>
   </head>
   <body>
@@ -132,7 +271,7 @@ createRoot(document.getElementById('root')!).render(
 `
 }
 
-/** Generate app-layout.tsx with nav links and optional sign-out button */
+/** Generate app-layout.tsx with branded nav and optional sign-out button */
 function generateAppLayout(appName: string, features: InferredFeatures): string {
   const navLinks = features.entities.map((entity) => {
     const plural = pluralize(entity)
@@ -140,6 +279,9 @@ function generateAppLayout(appName: string, features: InferredFeatures): string 
     const kebab = snakeToKebab(plural)
     return `  { to: '/${kebab}', label: '${label}' }`
   }).join(',\n')
+
+  // Pick a brand initial for the logo mark
+  const initial = appName.charAt(0).toUpperCase()
 
   const signOutImports = features.auth
     ? `import { useNavigate } from '@tanstack/react-router'\nimport { supabase } from '@/lib/supabase'\n`
@@ -154,7 +296,13 @@ function generateAppLayout(appName: string, features: InferredFeatures): string 
     : ''
 
   const signOutButton = features.auth
-    ? `\n          <button onClick={signOut} className="ml-auto text-sm text-muted-foreground hover:text-foreground">Sign out</button>`
+    ? `
+          <button
+            onClick={signOut}
+            className="ml-auto rounded-md px-3 py-1.5 text-xs font-medium text-muted-foreground ring-1 ring-border hover:bg-muted hover:text-foreground transition-colors"
+          >
+            Sign out
+          </button>`
     : ''
 
   return `// Auto-generated by VibeStack — do not edit manually
@@ -167,22 +315,34 @@ ${navLinks},
 export function AppLayout() {${signOutHook}
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b">
-        <nav className="container mx-auto flex items-center gap-6 py-4">
-          <Link to="/" className="text-lg font-bold">${appName}</Link>
+      <header className="sticky top-0 z-50 border-b bg-card/80 backdrop-blur-md">
+        <nav className="container mx-auto flex items-center gap-1 px-4 py-3">
+          {/* Brand mark */}
+          <Link to="/" className="mr-6 flex items-center gap-2.5 shrink-0">
+            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary text-xs font-bold text-primary-foreground shadow-sm">
+              ${initial}
+            </span>
+            <span className="text-sm font-semibold tracking-tight">${appName}</span>
+          </Link>
+
+          {/* Nav links */}
           {navLinks.map((link) => (
             <Link
               key={link.to}
               to={link.to}
-              className="text-sm text-muted-foreground hover:text-foreground"
-              activeProps={{ className: 'text-foreground font-medium' }}
+              className="rounded-md px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              activeProps={{ className: 'rounded-md px-3 py-1.5 text-sm bg-muted text-foreground font-medium' }}
             >
               {link.label}
             </Link>
-          ))}${signOutButton}
+          ))}
+          ${signOutButton}
         </nav>
+        {/* Accent line */}
+        <div className="h-px bg-gradient-to-r from-transparent via-primary/40 to-transparent" />
       </header>
-      <main className="container mx-auto py-6">
+
+      <main className="container mx-auto px-4 py-8">
         <Outlet />
       </main>
     </div>
@@ -191,15 +351,15 @@ export function AppLayout() {${signOutHook}
 `
 }
 
-/** Generate auth login/signup page */
-function generateAuthLoginPage(): string {
+/** Generate auth login/signup page — split-screen branded design */
+function generateAuthLoginPage(appName: string): string {
+  const initial = appName.charAt(0).toUpperCase()
   return `// Auto-generated by VibeStack
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
 export const Route = createFileRoute('/auth/login')({
   component: AuthLoginPage,
@@ -241,25 +401,62 @@ function AuthLoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background px-4">
-      <Card className="w-full max-w-md">
-        <CardHeader>
-          <CardTitle>{mode === 'signin' ? 'Sign In' : 'Create Account'}</CardTitle>
-        </CardHeader>
-        <CardContent>
+    <div className="grid min-h-screen lg:grid-cols-2">
+      {/* Left: brand panel */}
+      <div className="hidden flex-col justify-between bg-primary p-10 text-primary-foreground lg:flex">
+        <div className="flex items-center gap-3">
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary-foreground/15 text-base font-bold">
+            ${initial}
+          </span>
+          <span className="text-lg font-semibold">${appName}</span>
+        </div>
+        <div className="space-y-3">
+          <p className="text-3xl font-bold leading-tight tracking-tight">
+            Welcome back
+          </p>
+          <p className="text-primary-foreground/70 text-sm leading-relaxed max-w-xs">
+            Sign in to your account to continue where you left off.
+          </p>
+        </div>
+        <p className="text-xs text-primary-foreground/40">© {new Date().getFullYear()} ${appName}</p>
+      </div>
+
+      {/* Right: form panel */}
+      <div className="flex items-center justify-center bg-background p-8">
+        <div className="w-full max-w-sm space-y-6">
+          {/* Mobile logo */}
+          <div className="flex items-center gap-2 lg:hidden">
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-sm font-bold text-primary-foreground">
+              ${initial}
+            </span>
+            <span className="font-semibold">${appName}</span>
+          </div>
+
+          <div className="space-y-1.5">
+            <h1 className="text-2xl font-bold tracking-tight">
+              {mode === 'signin' ? 'Sign in' : 'Create account'}
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              {mode === 'signin'
+                ? 'Enter your credentials to access your account'
+                : 'Fill in the details below to get started'}
+            </p>
+          </div>
+
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-1">
-              <label className="text-sm font-medium">Email</label>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium leading-none">Email address</label>
               <Input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 placeholder="you@example.com"
+                className="h-10"
               />
             </div>
-            <div className="space-y-1">
-              <label className="text-sm font-medium">Password</label>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium leading-none">Password</label>
               <Input
                 type="password"
                 value={password}
@@ -267,23 +464,46 @@ function AuthLoginPage() {
                 required
                 placeholder="••••••••"
                 minLength={6}
+                className="h-10"
               />
             </div>
-            {error && <p className="text-sm text-destructive">{error}</p>}
-            {message && <p className="text-sm text-green-600">{message}</p>}
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? 'Loading…' : mode === 'signin' ? 'Sign In' : 'Create Account'}
+
+            {error && (
+              <div className="rounded-md border border-destructive/30 bg-destructive/8 px-3 py-2.5 text-sm text-destructive">
+                {error}
+              </div>
+            )}
+            {message && (
+              <div className="rounded-md border border-green-500/30 bg-green-50 px-3 py-2.5 text-sm text-green-700">
+                {message}
+              </div>
+            )}
+
+            <Button type="submit" className="w-full h-10" disabled={loading}>
+              {loading ? (
+                <span className="flex items-center gap-2">
+                  <svg className="h-4 w-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                  Please wait…
+                </span>
+              ) : mode === 'signin' ? 'Sign in' : 'Create account'}
             </Button>
+          </form>
+
+          <p className="text-center text-sm text-muted-foreground">
+            {mode === 'signin' ? "Don't have an account?" : 'Already have an account?'}{' '}
             <button
               type="button"
-              className="text-sm text-muted-foreground underline w-full text-center"
+              className="font-medium text-primary underline-offset-4 hover:underline"
               onClick={() => { setMode(mode === 'signin' ? 'signup' : 'signin'); setError(null); setMessage(null) }}
             >
-              {mode === 'signin' ? "Don't have an account? Sign up" : 'Already have an account? Sign in'}
+              {mode === 'signin' ? 'Sign up' : 'Sign in'}
             </button>
-          </form>
-        </CardContent>
-      </Card>
+          </p>
+        </div>
+      </div>
     </div>
   )
 }
@@ -534,7 +754,7 @@ Thumbs.db
   })
   fileTree.push({
     path: 'index.html',
-    content: generateIndexHTML(input.appName),
+    content: generateIndexHTML(input.appName, input.designPreferences),
     layer: 1,
     isLLMSlot: false,
   })
@@ -619,7 +839,7 @@ export const Route = createFileRoute('/_authenticated')({
   if (features.auth) {
     fileTree.push({
       path: 'src/routes/auth/login.tsx',
-      content: generateAuthLoginPage(),
+      content: generateAuthLoginPage(input.appName),
       layer: 3,
       isLLMSlot: false,
     })
