@@ -268,11 +268,33 @@ export function contractToSeedSQL(contract: SchemaContract, rowsPerTable: number
   for (let tableIdx = 0; tableIdx < sorted.length; tableIdx++) {
     const table = sorted[tableIdx]
 
-    // Skip tables whose PK references auth.users — these are user profile tables
-    // populated by Supabase Auth triggers, not direct INSERT
+    // Profile tables: PK is the user's auth.users id — insert ONE row with SEED_USER_ID
+    // so downstream FK references (e.g. appointments.patient_id → profiles.id) work.
     const pkCol = table.columns.find((c) => c.primaryKey)
     if (pkCol?.references?.table === 'auth.users') {
-      tableIds.set(table.name, [SEED_USER_ID]) // downstream FKs can still reference this
+      tableIds.set(table.name, [SEED_USER_ID])
+      // Build a minimal INSERT with id = SEED_USER_ID + required columns filled
+      const profileCols: string[] = [pkCol.name]
+      const profileVals: string[] = [`'${SEED_USER_ID}'`]
+      for (const col of table.columns) {
+        if (col.primaryKey) continue
+        if (col.default && !col.references) continue
+        if (col.references?.table === 'auth.users') {
+          profileCols.push(col.name)
+          profileVals.push(`'${SEED_USER_ID}'`)
+          continue
+        }
+        if (col.nullable === false || col.type === 'text') {
+          const val = generateValue(col, 0, table.name, col.unique === true)
+          if (val !== null) {
+            profileCols.push(col.name)
+            profileVals.push(val)
+          }
+        }
+      }
+      lines.push(
+        `INSERT INTO "${table.name}" (${profileCols.join(', ')}) VALUES (${profileVals.join(', ')}) ON CONFLICT DO NOTHING;`,
+      )
       continue
     }
 
