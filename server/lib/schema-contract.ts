@@ -67,8 +67,32 @@ const SQL_TYPE_ALIASES: Record<string, string> = {
 }
 
 export const SQLTypeSchema = z.preprocess((val) => {
-  if (typeof val === 'string') return SQL_TYPE_ALIASES[val.toLowerCase()] ?? val
-  return val
+  if (typeof val !== 'string') return val
+  const lower = val.toLowerCase().trim()
+
+  // 1. Exact alias match
+  if (SQL_TYPE_ALIASES[lower]) return SQL_TYPE_ALIASES[lower]
+
+  // 2. Already a valid type
+  if ((SQL_TYPES as readonly string[]).includes(lower)) return lower
+
+  // 3. Substring/pattern matching — ordered by specificity (bigint before int, etc.)
+  if (lower === 'bigint' || lower.includes('bigserial') || lower === 'int8') return 'bigint'
+  if (lower.includes('timestamp') || lower.includes('datetime')) return 'timestamptz'
+  if (lower.startsWith('date')) return 'timestamptz' // "date", "date without time zone"
+  if (lower.startsWith('time')) return 'text' // "time", "time without time zone"
+  if (lower.includes('decimal') || lower.includes('float') || lower.includes('double') ||
+      lower.includes('money') || lower.includes('real') || lower.startsWith('numeric')) return 'numeric'
+  if (lower.includes('int') || lower.includes('serial')) return 'integer' // smallint, mediumint, etc.
+  if (lower.includes('char') || lower.includes('varchar') || lower.includes('string') ||
+      lower.includes('text') || lower === 'enum' || lower === 'array') return 'text'
+  if (lower.includes('bool')) return 'boolean'
+  if (lower.includes('json')) return 'jsonb'
+  if (lower.includes('uuid')) return 'uuid'
+
+  // 4. Unknown type — safest fallback is text (stores anything)
+  console.warn(`[SQLTypeSchema] Unknown type "${val}" → coerced to "text"`)
+  return 'text'
 }, z.enum(SQL_TYPES))
 
 /**
