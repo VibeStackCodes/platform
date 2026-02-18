@@ -19,9 +19,9 @@ describe('contractToSeedSQL', () => {
       ],
     }
     const sql = contractToSeedSQL(contract, 3)
-    expect(sql).toContain('INSERT INTO items')
+    expect(sql).toContain('INSERT INTO "items"')
     // 3 rows requested
-    const insertCount = (sql.match(/INSERT INTO items/g) || []).length
+    const insertCount = (sql.match(/INSERT INTO "items"/g) || []).length
     expect(insertCount).toBe(3)
     // title should have generated text values
     expect(sql).toContain('title')
@@ -52,8 +52,8 @@ describe('contractToSeedSQL', () => {
       ],
     }
     const sql = contractToSeedSQL(contract, 2)
-    const postsIdx = sql.indexOf('INSERT INTO posts')
-    const commentsIdx = sql.indexOf('INSERT INTO comments')
+    const postsIdx = sql.indexOf('INSERT INTO "posts"')
+    const commentsIdx = sql.indexOf('INSERT INTO "comments"')
     expect(postsIdx).toBeGreaterThan(-1)
     expect(commentsIdx).toBeGreaterThan(-1)
     expect(postsIdx).toBeLessThan(commentsIdx)
@@ -114,7 +114,7 @@ describe('contractToSeedSQL', () => {
     // Category IDs (table 0): 00000000-0000-4000-8000-000000000001, 00000000-0000-4000-8000-000000000002
     expect(sql).toContain("'00000000-0000-4000-8000-000000000001'")
     // Check that products reference a category id
-    const productLines = sql.split('\n').filter((l) => l.includes('INSERT INTO products'))
+    const productLines = sql.split('\n').filter((l) => l.includes('INSERT INTO "products"'))
     expect(productLines.length).toBe(2)
     for (const line of productLines) {
       expect(line).toMatch(/00000000-0000-4000-8000-00000000000[12]/)
@@ -168,7 +168,7 @@ describe('contractToSeedSQL', () => {
     // Status should be one of the known enum values
     expect(sql).toMatch(/active|pending|completed|inactive|draft/)
     // Description should contain multi-word text (faker paragraph)
-    expect(sql).toMatch(/INSERT INTO users.*description/)
+    expect(sql).toMatch(/INSERT INTO "users".*description/)
   })
 
   it('skips columns with defaults (except PKs)', () => {

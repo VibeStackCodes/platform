@@ -114,7 +114,7 @@ export function contractToSeedSQL(contract: SchemaContract, rowsPerTable: number
           continue
         }
 
-        const value = generateValue(col, row, table.name)
+        const value = generateValue(col, row, table.name, col.unique === true)
         if (value !== null) {
           cols.push(col.name)
           vals.push(value)
@@ -122,7 +122,8 @@ export function contractToSeedSQL(contract: SchemaContract, rowsPerTable: number
       }
 
       if (cols.length > 0) {
-        lines.push(`INSERT INTO ${table.name} (${cols.join(', ')}) VALUES (${vals.join(', ')});`)
+        // ON CONFLICT DO NOTHING makes seed idempotent across re-runs of the pipeline
+        lines.push(`INSERT INTO "${table.name}" (${cols.join(', ')}) VALUES (${vals.join(', ')}) ON CONFLICT DO NOTHING;`)
       }
     }
 
@@ -148,20 +149,28 @@ function makeId(tableIdx: number, rowIdx: number): string {
 /**
  * Generate a column value based on type and name heuristics.
  * Uses copycat with `${tableName}.${colName}.${rowIdx}` as deterministic input key.
+ * For unique columns, the row index is appended to the generated value to guarantee uniqueness.
  */
-function generateValue(col: ColumnDef, rowIdx: number, tableName: string): string | null {
+function generateValue(col: ColumnDef, rowIdx: number, tableName: string, enforceUnique = false): string | null {
   const n = rowIdx + 1
   const key = `${tableName}.${col.name}.${n}`
 
   switch (col.type) {
-    case 'text':
-      return `'${escapeSQL(inferTextValue(col.name.toLowerCase(), key))}'`
+    case 'text': {
+      let textVal = inferTextValue(col.name.toLowerCase(), key)
+      // For unique columns, suffix the row index to guarantee no collisions
+      if (enforceUnique) textVal = `${textVal}-${n}`
+      return `'${escapeSQL(textVal)}'`
+    }
 
     case 'integer':
     case 'bigint':
+      // For unique integer columns, use the row index directly
+      if (enforceUnique) return String(n * 1000 + n)
       return String(copycat.int(key, { min: 1, max: 1000 }))
 
     case 'numeric':
+      if (enforceUnique) return (n * 100.0).toFixed(2)
       return copycat.float(key, { min: 0.01, max: 9999.99 }).toFixed(2)
 
     case 'boolean':
