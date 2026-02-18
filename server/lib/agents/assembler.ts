@@ -89,7 +89,8 @@ function generateFKHooks(foreignKeys: ForeignKeyInfo[], contract: SchemaContract
 // ============================================================================
 
 function cellRenderer(field: string, format: string, itemVar: string): string {
-  const accessor = `${itemVar}.${snakeToCamel(field)}`
+  // Supabase returns raw snake_case column names — never camelCase
+  const accessor = `${itemVar}.${field}`
   switch (format) {
     case 'date':
       return `{${accessor} ? new Date(${accessor}).toLocaleDateString() : '—'}`
@@ -119,12 +120,13 @@ function formFieldRenderer(
   foreignKeys: ForeignKeyInfo[],
   contract: SchemaContract,
 ): string {
-  const camelField = snakeToCamel(field.field)
-  const fieldId = `field-${field.field}`
-  const valueExpr = `${formVar}.${camelField}`
+  // Use raw snake_case field names throughout — form state keys match Supabase column names
+  const snakeField = field.field
+  const fieldId = `field-${snakeField}`
+  const valueExpr = `${formVar}.${snakeField}`
   // String() narrows Record<string, string | boolean> to string for value props
   const stringValueExpr = `String(${valueExpr} ?? '')`
-  const changeExpr = `${setFormVar}(prev => ({ ...prev, ${camelField}: e.target.value }))`
+  const changeExpr = `${setFormVar}(prev => ({ ...prev, ${snakeField}: e.target.value }))`
   const placeholder = field.placeholder ? ` placeholder="${field.placeholder}"` : ''
 
   // Check if this field is a FK (E7) — references hoisted useQuery hook (not inline IIFE)
@@ -133,7 +135,7 @@ function formFieldRenderer(
     const refTableCamel = snakeToCamel(fk.refTable)
     const refTablePascal = snakeToPascal(fk.refTable)
     const displayCol = findDisplayColumn(fk.refTable, contract)
-    const displayExpr = displayCol === 'id' ? 'opt.id' : `opt.${snakeToCamel(displayCol)} ?? opt.id`
+    const displayExpr = displayCol === 'id' ? 'opt.id' : `opt.${displayCol} ?? opt.id`
     return `            <div>
               <label htmlFor="${fieldId}" className="text-sm font-medium">${field.label}</label>
               <select id="${fieldId}" className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={${stringValueExpr}} onChange={(e) => ${changeExpr}}>
@@ -184,7 +186,7 @@ ${options}
             </div>`
     case 'checkbox':
       return `            <div className="flex items-center gap-2">
-              <input id="${fieldId}" type="checkbox" checked={!!${valueExpr}} onChange={(e) => ${setFormVar}(prev => ({ ...prev, ${camelField}: e.target.checked }))} />
+              <input id="${fieldId}" type="checkbox" checked={!!${valueExpr}} onChange={(e) => ${setFormVar}(prev => ({ ...prev, ${snakeField}: e.target.checked }))} />
               <label htmlFor="${fieldId}" className="text-sm font-medium">${field.label}</label>
             </div>`
     default: // text
@@ -274,9 +276,9 @@ export function assembleListPage(spec: PageFeatureSpec, contract: SchemaContract
     .map((f) => formFieldRenderer(f, 'createForm', 'setCreateForm', foreignKeys, contract))
     .join('\n')
 
-  // Build initial form state (booleans get false, everything else gets '')
+  // Build initial form state — keys use raw snake_case to match Supabase column names
   const formInitFields = spec.listPage.createFormFields
-    .map((f) => `${snakeToCamel(f.field)}: ${f.inputType === 'checkbox' ? 'false' : "''"}`)
+    .map((f) => `${f.field}: ${f.inputType === 'checkbox' ? 'false' : "''"}`)
     .join(', ')
   const formInitial = `{ ${formInitFields} }`
 
@@ -629,9 +631,9 @@ ${fields}
     .map((f) => formFieldRenderer(f, 'editForm', 'setEditForm', foreignKeys, contract))
     .join('\n')
 
-  // Build initial edit form state
+  // Build initial edit form state — snake_case keys match Supabase data and column names
   const editFormInitFields = spec.detailPage.editFormFields
-    .map((f) => `${snakeToCamel(f.field)}: data.${snakeToCamel(f.field)} ?? ''`)
+    .map((f) => `${f.field}: data.${f.field} ?? ''`)
     .join(', ')
 
   // FK dropdown hooks — must be at component top level (Rules of Hooks)
@@ -688,7 +690,7 @@ ${fkHooks}
       </div>
 
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">{data.${snakeToCamel(spec.detailPage.headerField)}}</h1>
+        <h1 className="text-2xl font-bold">{data.${spec.detailPage.headerField}}</h1>
         <Button onClick={() => {
           if (!isEditing) {
             setEditForm({ ${editFormInitFields} })
