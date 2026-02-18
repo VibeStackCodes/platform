@@ -4,6 +4,7 @@ import { inferFeatures, type SchemaContract, type DesignPreferences, type Inferr
 import { contractToPages } from './contract-to-pages'
 import { contractToSQL } from './contract-to-sql'
 import { snakeToPascal, snakeToKebab, snakeToTitle, pluralize } from './naming-utils'
+import { deriveDesignSpec, designSpecToFontCSS } from './design-spec'
 
 // ============================================================================
 // UI Kit — shadcn/ui components read from snapshot/ui-kit/ at runtime
@@ -145,9 +146,14 @@ function buildColorPalette(primaryHex: string) {
 }
 
 /** Generate Tailwind v4 CSS theme with shadcn/ui color tokens */
-function generateIndexCSS(prefs: DesignPreferences): string {
+function generateIndexCSS(prefs: DesignPreferences, contract: SchemaContract): string {
   const pal = buildColorPalette(prefs.primaryColor)
-  return `@import "tailwindcss";
+  const designSpec = deriveDesignSpec(contract, prefs)
+  const fontCSS = designSpecToFontCSS(designSpec)
+
+  return `${fontCSS}
+
+@import "tailwindcss";
 @import "tw-animate-css";
 
 @custom-variant dark (&:is(.dark *));
@@ -748,7 +754,7 @@ Thumbs.db
   })
   fileTree.push({
     path: 'src/index.css',
-    content: generateIndexCSS(input.designPreferences),
+    content: generateIndexCSS(input.designPreferences, input.contract),
     layer: 1,
     isLLMSlot: false,
   })
