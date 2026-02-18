@@ -224,7 +224,14 @@ function generateValue(col: ColumnDef, rowIdx: number, tableName: string, enforc
  */
 function needsAuthSeed(contract: SchemaContract): boolean {
   return contract.tables.some((t) =>
-    t.columns.some((c) => c.references?.table === 'auth.users'),
+    t.columns.some(
+      (c) =>
+        c.references?.table === 'auth.users' ||
+        // Implicit auth FK — no references field but column name implies auth.users
+        (c.type === 'uuid' &&
+          c.nullable === false &&
+          /^(user_id|owner_id|created_by|author_id|member_id|assigned_to)$/.test(c.name)),
+    ),
   )
 }
 
@@ -302,6 +309,20 @@ export function contractToSeedSQL(contract: SchemaContract, rowsPerTable: number
             }
             // If parent table has no IDs (shouldn't happen with topo sort), skip
           }
+          continue
+        }
+
+        // Implicit auth FK: user_id / owner_id / created_by / author_id columns that
+        // are uuid + NOT NULL but lack an explicit `references` in the contract
+        // (LLM sometimes omits the FK reference). Use SEED_USER_ID so the value is
+        // a known auth.users row that RLS policies can match against.
+        if (
+          col.type === 'uuid' &&
+          col.nullable === false &&
+          /^(user_id|owner_id|created_by|author_id|member_id|assigned_to)$/.test(col.name)
+        ) {
+          cols.push(col.name)
+          vals.push(`'${SEED_USER_ID}'`)
           continue
         }
 
