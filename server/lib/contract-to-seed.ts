@@ -1,25 +1,223 @@
 // lib/contract-to-seed.ts
-// Uses @snaplet/copycat for deterministic seed data generation
-// (Supabase-recommended: https://supabase.com/docs/guides/local-development/seeding-your-database)
-import { copycat } from '@snaplet/copycat'
-import type { ColumnDef, SchemaContract, TableDef } from './schema-contract'
+// Domain-aware seed data generation using @faker-js/faker.
+// Tables are topologically sorted so parents are inserted before children.
+// Faker is deterministically seeded per-value so the same contract always
+// produces identical SQL — safe to rerun (ON CONFLICT DO NOTHING).
 
-/**
- * Generate deterministic INSERT SQL from a SchemaContract.
- *
- * Tables are topologically sorted so parent rows exist before FK references.
- * Columns with defaults (id, created_at, updated_at) use DEFAULT.
- * FK columns referencing auth.users use a fixed seed user UUID.
- * FK columns referencing other tables reuse previously-generated row IDs.
- *
- * Uses @snaplet/copycat for input-keyed deterministic fake data:
- *   copycat.email(`${table}.${col}.${row}`) — always the same for a given key.
- */
+import { faker } from '@faker-js/faker'
+import type { ColumnDef, SchemaContract, TableDef } from './schema-contract'
 
 // Fixed UUID for seed data — clearly distinguishable as synthetic
 // Uses '5eed' (valid hex that reads as "seed") to avoid invalid UUID parse errors
 const SEED_USER_ID = '00000000-0000-4000-a000-0000000005ee'
 const SEED_USER_EMAIL = 'seed@vibestack.test'
+
+/**
+ * FNV-1a hash — fast, well-distributed, deterministic.
+ * Used to convert a string key into a numeric faker seed.
+ */
+function stableHash(str: string): number {
+  let hash = 2166136261
+  for (let i = 0; i < str.length; i++) {
+    hash ^= str.charCodeAt(i)
+    hash = Math.imul(hash, 16777619) >>> 0
+  }
+  return hash
+}
+
+type TableDomain = 'food' | 'medical' | 'commerce' | 'professional' | 'content' | 'travel' | 'fitness' | 'generic'
+
+/**
+ * Detect the semantic domain of a table from its name.
+ * Drives contextual faker method selection for `name`/`title` columns.
+ */
+function detectTableDomain(tableName: string): TableDomain {
+  const n = tableName.toLowerCase()
+  if (/menu|food|dish|recipe|ingredient|restaurant|meal|cuisine|drink|beverage/.test(n)) return 'food'
+  if (/patient|doctor|physician|clinic|appointment|medical|health|prescription|diagnosis/.test(n)) return 'medical'
+  if (/product|order|cart|invoice|customer|shop|store|catalog|item|purchase|payment/.test(n)) return 'commerce'
+  if (/employee|staff|department|job|salary|project|task|client|company|contract|member/.test(n)) return 'professional'
+  if (/post|article|blog|comment|tag|author|content|story|entry|journal|book/.test(n)) return 'content'
+  if (/destination|trip|travel|journey|booking|hotel|flight|itinerary|route/.test(n)) return 'travel'
+  if (/workout|exercise|fitness|training|gym|class|schedule|session/.test(n)) return 'fitness'
+  return 'generic'
+}
+
+/**
+ * Select a domain-appropriate fake entity name.
+ * Caller must seed faker before calling this.
+ */
+function inferNameByDomain(domain: TableDomain, tableName: string): string {
+  const n = tableName.toLowerCase()
+
+  switch (domain) {
+    case 'food':
+      if (n.includes('ingredient')) return faker.food.ingredient()
+      if (n.includes('category') || n.includes('categorie')) return faker.food.ethnicCategory()
+      return faker.food.dish()
+
+    case 'medical':
+      // Most medical tables with a "name" are about people
+      if (n.includes('department') || n.includes('specialty')) return faker.commerce.department()
+      return faker.person.fullName()
+
+    case 'commerce':
+      if (n.includes('category') || n.includes('department')) return faker.commerce.department()
+      if (n.includes('brand') || n.includes('company') || n.includes('vendor') || n.includes('supplier')) return faker.company.name()
+      return faker.commerce.productName()
+
+    case 'professional':
+      if (n.includes('company') || n.includes('client') || n.includes('vendor') || n.includes('organization')) return faker.company.name()
+      if (n.includes('department') || n.includes('team') || n.includes('division')) return faker.commerce.department()
+      if (n.includes('project') || n.includes('task')) return faker.lorem.words(3)
+      return faker.person.fullName()
+
+    case 'content':
+      if (n.includes('tag') || n.includes('label') || n.includes('category')) return faker.word.noun()
+      if (n.includes('book')) return faker.lorem.words(3)
+      return faker.lorem.words(3)
+
+    case 'travel':
+      if (n.includes('destination') || n.includes('city') || n.includes('location')) return faker.location.city()
+      if (n.includes('hotel') || n.includes('accommodation') || n.includes('property')) return `${faker.location.city()} ${faker.helpers.arrayElement(['Hotel', 'Resort', 'Inn', 'Lodge'])}`
+      return faker.location.country()
+
+    case 'fitness':
+      return faker.helpers.arrayElement(['Yoga Flow', 'HIIT Cardio', 'Power Lifting', 'Pilates Core', 'Spin Class', 'Aqua Aerobics', 'Boxing Basics', 'Zumba Dance', 'Stretch & Tone', 'CrossFit'])
+
+    default:
+      return faker.lorem.words(2)
+  }
+}
+
+/**
+ * Infer a domain-aware text value from column name + table context.
+ * Seeds faker with stableHash(key) before each call for determinism.
+ */
+function inferTextValue(colName: string, tableName: string, key: string): string {
+  faker.seed(stableHash(key))
+
+  const name = colName.toLowerCase()
+  const domain = detectTableDomain(tableName)
+
+  if (name.includes('email')) return faker.internet.email()
+  if (name.includes('phone')) return faker.phone.number()
+  if (name.endsWith('_url') || name === 'url' || name.includes('link') || name.includes('website'))
+    return faker.internet.url()
+  if (name.includes('avatar') || name.includes('image') || name.includes('photo'))
+    return faker.image.url()
+
+  if (name === 'name' || name === 'full_name') return inferNameByDomain(domain, tableName)
+
+  if (name === 'first_name') return faker.person.firstName()
+  if (name === 'last_name') return faker.person.lastName()
+
+  if (name.endsWith('_name') || name.startsWith('name_')) return inferNameByDomain(domain, tableName)
+
+  if (name.includes('title')) {
+    if (domain === 'content') return faker.lorem.words(4)
+    if (domain === 'commerce') return faker.commerce.productName()
+    if (domain === 'food') return faker.food.dish()
+    if (domain === 'travel') return faker.location.city()
+    return faker.lorem.words(3)
+  }
+
+  if (name.includes('description') || name.includes('content') || name.includes('body') || name.includes('summary'))
+    return faker.lorem.paragraph()
+
+  if (name.includes('note') || name.includes('comment') || name.includes('remark'))
+    return faker.lorem.sentence()
+
+  if (name === 'bio' || name === 'about') return faker.lorem.sentences(2)
+
+  if (name.includes('status')) {
+    if (domain === 'medical') return faker.helpers.arrayElement(['scheduled', 'completed', 'cancelled', 'no-show', 'pending'])
+    if (domain === 'commerce') return faker.helpers.arrayElement(['active', 'pending', 'shipped', 'delivered', 'cancelled'])
+    return faker.helpers.arrayElement(['active', 'pending', 'completed', 'inactive', 'draft'])
+  }
+
+  if (name.includes('type')) {
+    if (domain === 'medical') return faker.helpers.arrayElement(['routine', 'urgent', 'follow-up', 'emergency', 'consultation'])
+    if (domain === 'food') return faker.helpers.arrayElement(['appetizer', 'main', 'dessert', 'beverage', 'side'])
+    if (domain === 'professional') return faker.helpers.arrayElement(['full-time', 'part-time', 'contract', 'intern', 'freelance'])
+    return faker.helpers.arrayElement(['standard', 'premium', 'basic', 'enterprise', 'custom'])
+  }
+
+  if (name.includes('category')) {
+    if (domain === 'food') return faker.food.ethnicCategory()
+    if (domain === 'commerce') return faker.commerce.department()
+    if (domain === 'content') return faker.word.noun()
+    return faker.lorem.word()
+  }
+
+  if (name.includes('role')) return faker.helpers.arrayElement(['admin', 'member', 'viewer', 'editor', 'owner'])
+  if (name.includes('gender')) return faker.helpers.arrayElement(['male', 'female', 'non-binary', 'prefer not to say'])
+  if (name.includes('language')) return faker.helpers.arrayElement(['English', 'Spanish', 'French', 'German', 'Portuguese'])
+
+  if (name.includes('address') || name.includes('street')) return faker.location.streetAddress()
+  if (name === 'city') return faker.location.city()
+  if (name === 'state' || name.includes('province')) return faker.location.state()
+  if (name === 'country') return faker.location.country()
+  if (name.includes('zip') || name.includes('postal')) return faker.location.zipCode()
+
+  if (name.includes('company') || name.includes('organization')) return faker.company.name()
+  if (name.includes('tag') || name.includes('label')) return faker.word.noun()
+  if (name.includes('slug')) return faker.lorem.words(2).replace(/\s+/g, '-').toLowerCase()
+  if (name.includes('color') || name.includes('colour')) return faker.color.human()
+  if (name.includes('currency')) return faker.finance.currencyCode()
+  if (name.includes('isbn') || name.includes('barcode')) return faker.commerce.isbn()
+  if (name.includes('sku') || name.includes('code')) return faker.string.alphanumeric(8).toUpperCase()
+
+  // Generic fallback
+  return faker.lorem.words(2)
+}
+
+/**
+ * Generate a column value based on type and name heuristics.
+ * Seeds faker deterministically so the same contract always produces the same SQL.
+ */
+function generateValue(col: ColumnDef, rowIdx: number, tableName: string, enforceUnique = false): string | null {
+  const n = rowIdx + 1
+  const key = `${tableName}.${col.name}.${n}`
+
+  switch (col.type) {
+    case 'text': {
+      let textVal = inferTextValue(col.name.toLowerCase(), tableName, key)
+      // For unique columns, suffix the row index to guarantee no collisions
+      if (enforceUnique) textVal = `${textVal}-${n}`
+      return `'${escapeSQL(textVal)}'`
+    }
+
+    case 'integer':
+    case 'bigint':
+      if (enforceUnique) return String(n * 1000 + n)
+      faker.seed(stableHash(key))
+      return String(faker.number.int({ min: 1, max: 1000 }))
+
+    case 'numeric':
+      if (enforceUnique) return (n * 100.0).toFixed(2)
+      faker.seed(stableHash(key))
+      return faker.number.float({ min: 0.01, max: 9999.99, fractionDigits: 2 }).toFixed(2)
+
+    case 'boolean':
+      faker.seed(stableHash(key))
+      return faker.datatype.boolean() ? 'true' : 'false'
+
+    case 'timestamptz':
+      // Spread seed dates across the last 30 days
+      return `now() - interval '${30 - n} days'`
+
+    case 'jsonb':
+      return `'{}'::jsonb`
+
+    case 'uuid':
+      // Non-PK, non-FK uuid — generate a fresh one
+      return 'gen_random_uuid()'
+
+    default:
+      return null
+  }
+}
 
 /**
  * Check if any table has FK references to auth.users (directly or via a profile table).
@@ -33,7 +231,6 @@ function needsAuthSeed(contract: SchemaContract): boolean {
 /**
  * Generate auth.users + auth.identities seed preamble.
  * Required so that FK references to auth.users(id) don't violate constraints.
- * Pattern from: https://supabase.com/docs/guides/local-development/seeding-your-database
  */
 function generateAuthSeed(): string[] {
   return [
@@ -144,91 +341,6 @@ function makeId(tableIdx: number, rowIdx: number): string {
   const t = tableIdx.toString(16).padStart(3, '0')
   const r = (rowIdx + 1).toString(16).padStart(12, '0')
   return `00000000-0000-4000-8${t}-${r}`
-}
-
-/**
- * Generate a column value based on type and name heuristics.
- * Uses copycat with `${tableName}.${colName}.${rowIdx}` as deterministic input key.
- * For unique columns, the row index is appended to the generated value to guarantee uniqueness.
- */
-function generateValue(col: ColumnDef, rowIdx: number, tableName: string, enforceUnique = false): string | null {
-  const n = rowIdx + 1
-  const key = `${tableName}.${col.name}.${n}`
-
-  switch (col.type) {
-    case 'text': {
-      let textVal = inferTextValue(col.name.toLowerCase(), key)
-      // For unique columns, suffix the row index to guarantee no collisions
-      if (enforceUnique) textVal = `${textVal}-${n}`
-      return `'${escapeSQL(textVal)}'`
-    }
-
-    case 'integer':
-    case 'bigint':
-      // For unique integer columns, use the row index directly
-      if (enforceUnique) return String(n * 1000 + n)
-      return String(copycat.int(key, { min: 1, max: 1000 }))
-
-    case 'numeric':
-      if (enforceUnique) return (n * 100.0).toFixed(2)
-      return copycat.float(key, { min: 0.01, max: 9999.99 }).toFixed(2)
-
-    case 'boolean':
-      return copycat.bool(key) ? 'true' : 'false'
-
-    case 'timestamptz':
-      // Spread seed dates across the last 30 days
-      return `now() - interval '${30 - n} days'`
-
-    case 'jsonb':
-      return `'{}'::jsonb`
-
-    case 'uuid':
-      // Non-PK, non-FK uuid — generate a fresh one
-      return 'gen_random_uuid()'
-
-    default:
-      return null
-  }
-}
-
-/**
- * Infer a realistic text value from the column name using @snaplet/copycat.
- * Deterministic: copycat uses input-keyed SipHash — same key → same output.
- */
-function inferTextValue(name: string, key: string): string {
-  if (name.includes('email')) return copycat.email(key)
-  if (name.includes('phone')) return copycat.phoneNumber(key)
-  if (name.endsWith('_url') || name === 'url' || name.includes('link') || name.includes('website'))
-    return copycat.url(key)
-  if (name.includes('avatar') || name.includes('image') || name.includes('photo'))
-    return copycat.url(key) // copycat has no avatar — use URL
-  if (name === 'name' || name === 'full_name') return copycat.fullName(key)
-  if (name === 'first_name') return copycat.firstName(key)
-  if (name === 'last_name') return copycat.lastName(key)
-  if (name.includes('_name') || name.includes('title')) return copycat.words(key)
-  if (
-    name.includes('description') ||
-    name.includes('content') ||
-    name.includes('body')
-  )
-    return copycat.paragraph(key)
-  if (name.includes('note') || name.includes('comment')) return copycat.sentence(key)
-  if (name.includes('status'))
-    return copycat.oneOfString(key, ['active', 'pending', 'completed', 'inactive', 'draft'])
-  if (name.includes('type') || name.includes('category') || name.includes('role'))
-    return copycat.oneOfString(key, ['standard', 'premium', 'basic', 'enterprise', 'custom'])
-  if (name.includes('address') || name.includes('street')) return copycat.streetAddress(key)
-  if (name.includes('city')) return copycat.city(key)
-  if (name.includes('state') || name.includes('province')) return copycat.state(key)
-  if (name.includes('country')) return copycat.country(key)
-  if (name.includes('zip') || name.includes('postal')) return copycat.postalAddress(key)
-  if (name.includes('company') || name.includes('organization')) return copycat.fullName(key) // company approx
-  if (name.includes('tag') || name.includes('label')) return copycat.word(key)
-  if (name.includes('slug')) return copycat.words(key).toLowerCase().replace(/\s+/g, '-')
-
-  // Generic fallback
-  return copycat.words(key)
 }
 
 function escapeSQL(value: string): string {

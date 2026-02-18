@@ -138,9 +138,9 @@ describe('contractToSeedSQL', () => {
       ],
     }
     const sql = contractToSeedSQL(contract, 2)
-    // Integer values (copycat.int produces random ints in range)
+    // Integer values (faker.number.int produces random ints in range)
     expect(sql).toMatch(/count.*\b\d+\b/)
-    // Numeric values (copycat.float produces decimals)
+    // Numeric values (faker.number.float produces decimals)
     expect(sql).toMatch(/score.*\d+\.\d{2}/)
     // Boolean values
     expect(sql).toMatch(/\b(true|false)\b/)
@@ -148,7 +148,7 @@ describe('contractToSeedSQL', () => {
     expect(sql).toContain("'{}'::jsonb")
   })
 
-  it('infers realistic text values from column names using copycat', () => {
+  it('infers realistic text values from column names using faker', () => {
     const contract: SchemaContract = {
       tables: [
         {
