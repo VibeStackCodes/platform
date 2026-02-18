@@ -23,6 +23,7 @@ import { contractToSQL } from '@server/lib/contract-to-sql'
 import type { SchemaContract, DesignPreferences } from '@server/lib/schema-contract'
 import type { PageConfig } from '@server/lib/agents/feature-schema'
 import { writeFileSync, mkdirSync, rmSync } from 'node:fs'
+import { snakeToKebab, pluralize } from '@server/lib/naming-utils'
 import { join } from 'node:path'
 import { execFileSync } from 'node:child_process'
 
@@ -66,15 +67,15 @@ function runFullPipeline(
     const listCode = assembleListPage(spec, contract)
     const detailCode = assembleDetailPage(spec, contract)
 
-    const kebab = config.entityName.replace(/_/g, '-')
-    const plural = kebab.endsWith('s') ? kebab : `${kebab}s`
+    // Use same naming logic as contractToPages() + orchestrator: snakeToKebab(pluralize())
+    const entityRouteKebab = snakeToKebab(pluralize(config.entityName))
 
     assembledFiles.push({
-      path: `src/routes/_authenticated/${plural}.tsx`,
+      path: `src/routes/_authenticated/${entityRouteKebab}.tsx`,
       content: listCode,
     })
     assembledFiles.push({
-      path: `src/routes/_authenticated/${plural}.$id.tsx`,
+      path: `src/routes/_authenticated/${entityRouteKebab}.$id.tsx`,
       content: detailCode,
     })
   }
@@ -443,6 +444,17 @@ describe('Dry-Run Pipeline Integration', () => {
       }
     })
 
+    it('assembled file paths match blueprint SLOT paths', () => {
+      // Guard against double-pluralization: orchestrator must write to the same
+      // path that contractToPages() put the SLOT file at.
+      const blueprintSlotPaths = new Set(
+        result.blueprint.fileTree.filter((f) => f.isLLMSlot).map((f) => f.path),
+      )
+      for (const assembled of result.assembledFiles) {
+        expect(blueprintSlotPaths.has(assembled.path)).toBe(true)
+      }
+    })
+
     it('bookmark_tag list page has FK hooks for bookmark and tag', () => {
       const btList = result.assembledFiles.find((f) => f.path.includes('bookmark-tags.tsx'))
       expect(btList).toBeDefined()
@@ -511,6 +523,15 @@ describe('Dry-Run Pipeline Integration', () => {
       }
     })
 
+    it('assembled file paths match blueprint SLOT paths', () => {
+      const blueprintSlotPaths = new Set(
+        result.blueprint.fileTree.filter((f) => f.isLLMSlot).map((f) => f.path),
+      )
+      for (const assembled of result.assembledFiles) {
+        expect(blueprintSlotPaths.has(assembled.path)).toBe(true)
+      }
+    })
+
     it('passes scaffold validation', () => {
       const allFiles = [
         ...result.blueprint.fileTree.map((f) => ({ path: f.path, content: f.content })),
@@ -557,6 +578,15 @@ describe('Dry-Run Pipeline Integration', () => {
     it('no server files in blueprint', () => {
       const paths = result.blueprint.fileTree.map((f) => f.path)
       expect(paths.some((p) => p.startsWith('server/'))).toBe(false)
+    })
+
+    it('assembled file paths match blueprint SLOT paths', () => {
+      const blueprintSlotPaths = new Set(
+        result.blueprint.fileTree.filter((f) => f.isLLMSlot).map((f) => f.path),
+      )
+      for (const assembled of result.assembledFiles) {
+        expect(blueprintSlotPaths.has(assembled.path)).toBe(true)
+      }
     })
 
     it('passes scaffold validation', () => {
