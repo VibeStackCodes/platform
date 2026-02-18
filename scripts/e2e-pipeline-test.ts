@@ -349,44 +349,31 @@ async function phase7_codeReview(blueprint: any, contract: any, sandboxId: strin
 // Phase 8: GitHub Push
 // ============================================================================
 
-async function phase8_githubPush(sandboxId: string, githubCloneUrl: string, _repoName: string) {
-  const { getSandbox, runCommand } = await import('../server/lib/sandbox')
-  const { getInstallationToken } = await import('../server/lib/github')
+async function phase8_githubPush(
+  githubCloneUrl: string,
+  blueprintFiles: Array<{ path: string; content: string; isLLMSlot: boolean }>,
+  assembledFiles: Array<{ path: string; content: string }>,
+) {
+  const { pushFilesViaAPI } = await import('../server/lib/github')
 
-  const sandbox = await getSandbox(sandboxId)
-  log('Pushing generated code to GitHub...')
+  // Parse owner/repo from clone URL: https://github.com/OWNER/REPO[.git]
+  const match = githubCloneUrl.match(/github\.com\/([^/]+)\/([^/]+?)(?:\.git)?$/)
+  if (!match) throw new Error(`Cannot parse GitHub URL: ${githubCloneUrl}`)
+  const [, owner, repo] = match
 
-  const token = await getInstallationToken()
-  const authenticatedUrl = githubCloneUrl.replace(
-    'https://github.com/',
-    `https://x-access-token:${token}@github.com/`,
-  )
-
-  const commands = [
-    'git init',
-    'git config user.email "vibestack@vibestack.com"',
-    'git config user.name "VibeStack Bot"',
-    'git add -A',
-    'git commit -m "Initial generation by VibeStack"',
-    `git remote add origin ${authenticatedUrl}`,
-    'git branch -M main',
-    'git push -u origin main --force',
-  ]
-
-  for (const cmd of commands) {
-    const displayCmd = cmd.includes('x-access-token') ? 'git remote add origin https://x-access-token:***@github.com/...' : cmd
-    log(`  $ ${displayCmd}`)
-    const result = await runCommand(sandbox, cmd, 'git-push', {
-      cwd: '/workspace',
-      timeout: cmd.includes('push') ? 120 : 30,
-    })
-    if (result.exitCode !== 0 && !cmd.includes('remote add')) {
-      log(`  Exit code: ${result.exitCode}`)
-      if (result.stdout) log(`  Output: ${result.stdout.slice(-300)}`)
-    }
+  // Merge blueprint static files + assembled LLM-slot files.
+  // Assembled files take precedence (they replace slot stubs with real content).
+  const fileMap = new Map<string, string>(blueprintFiles.map((f) => [f.path, f.content]))
+  for (const af of assembledFiles) {
+    fileMap.set(af.path, af.content)
   }
+  const allFiles = Array.from(fileMap.entries()).map(([path, content]) => ({ path, content }))
 
-  log('GitHub push complete')
+  log(`Pushing ${allFiles.length} files to GitHub via REST API (${blueprintFiles.length} blueprint + ${assembledFiles.length} assembled)...`)
+  log(`  Repo: ${owner}/${repo}`)
+
+  await pushFilesViaAPI(allFiles, owner, repo)
+  log('GitHub push complete (REST API — no sandbox git timeout)')
 }
 
 // ============================================================================
@@ -797,7 +784,7 @@ async function main() {
     if (provisioningResult.githubCloneUrl) {
       try {
         const t8 = Date.now()
-        await phase8_githubPush(sandboxId, provisioningResult.githubCloneUrl, provisioningResult.repoName)
+        await phase8_githubPush(provisioningResult.githubCloneUrl, blueprint.fileTree, codegenResult.assembledFiles)
         const d8 = Date.now() - t8
         trackPhase('8. GitHub Push', d8, 0, 'PASS', provisioningResult.githubHtmlUrl)
       } catch (error) {

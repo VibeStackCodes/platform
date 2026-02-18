@@ -102,3 +102,51 @@ export async function getInstallationToken(): Promise<string> {
 export function buildRepoName(_appName: string, projectId: string): string {
   return `vibestack-${projectId}`
 }
+
+/**
+ * Push all files to a GitHub repo using the Git Data API (3 API calls total).
+ * Avoids sandbox git entirely — no network timeout risk, no auth token wrangling.
+ *
+ * Creates: tree → commit (no parents) → refs/heads/main
+ */
+export async function pushFilesViaAPI(
+  files: Array<{ path: string; content: string }>,
+  owner: string,
+  repo: string,
+): Promise<void> {
+  const octokit = getOctokit()
+
+  // Step 1: Create a tree with all files inline (no pre-created blobs needed)
+  const { data: tree } = await octokit.rest.git.createTree({
+    owner,
+    repo,
+    tree: files.map((f) => ({
+      path: f.path,
+      mode: '100644' as const,
+      type: 'blob' as const,
+      content: f.content,
+    })),
+  })
+
+  // Step 2: Create initial commit (no parents = first commit)
+  const { data: commit } = await octokit.rest.git.createCommit({
+    owner,
+    repo,
+    message: 'Initial generation by VibeStack',
+    tree: tree.sha,
+    parents: [],
+    author: {
+      name: 'VibeStack Bot',
+      email: 'vibestack@vibestack.com',
+      date: new Date().toISOString(),
+    },
+  })
+
+  // Step 3: Create refs/heads/main pointing to the new commit
+  await octokit.rest.git.createRef({
+    owner,
+    repo,
+    ref: 'refs/heads/main',
+    sha: commit.sha,
+  })
+}
