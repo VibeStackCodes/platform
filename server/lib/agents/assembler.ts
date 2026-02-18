@@ -5,7 +5,7 @@
 
 import type { PageFeatureSpec } from './feature-schema'
 import type { SchemaContract } from '../schema-contract'
-import { snakeToPascal, snakeToCamel, snakeToKebab, pluralize } from '../naming-utils'
+import { snakeToPascal, snakeToCamel, snakeToKebab, snakeToTitle, pluralize } from '../naming-utils'
 
 // ============================================================================
 // Foreign key detection (E7)
@@ -390,7 +390,7 @@ ${fkHooks}
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">${snakeToPascal(plural)}</h1>
+          <h1 className="text-2xl font-bold tracking-tight">${snakeToTitle(plural)}</h1>
           {!${pluralCamel}.isPending && (
             <p className="text-sm text-muted-foreground mt-0.5">
               {${pluralCamel}.data?.totalCount ?? 0} total
@@ -679,7 +679,7 @@ ${fkHooks}
     <div className="space-y-6">
       <div className="flex items-center gap-4">
         <Link to="/${pluralKebab}" className="text-sm text-muted-foreground hover:text-foreground">
-          ← Back to ${snakeToPascal(plural)}
+          ← Back to ${snakeToTitle(plural)}
         </Link>
       </div>
 

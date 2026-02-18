@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { inferFeatures, type SchemaContract, type DesignPreferences, type InferredFeatures } from './schema-contract'
 import { contractToPages } from './contract-to-pages'
 import { contractToSQL } from './contract-to-sql'
-import { snakeToPascal, snakeToKebab, pluralize } from './naming-utils'
+import { snakeToPascal, snakeToKebab, snakeToTitle, pluralize } from './naming-utils'
 
 // ============================================================================
 // UI Kit — shadcn/ui components read from snapshot/ui-kit/ at runtime
@@ -275,7 +275,7 @@ createRoot(document.getElementById('root')!).render(
 function generateAppLayout(appName: string, features: InferredFeatures): string {
   const navLinks = features.entities.map((entity) => {
     const plural = pluralize(entity)
-    const label = snakeToPascal(plural)
+    const label = snakeToTitle(plural)
     const kebab = snakeToKebab(plural)
     return `  { to: '/${kebab}', label: '${label}' }`
   }).join(',\n')
