@@ -1,6 +1,6 @@
 // lib/contract-to-sql.ts
 import type { SchemaContract, TableDef } from './schema-contract'
-import { SQL_IDENTIFIER } from './schema-contract'
+import { SQL_IDENTIFIER, inferFeatures } from './schema-contract'
 import { contractToSQLFunctions } from './contract-to-sql-functions'
 
 const SQL_TYPE_MAP: Record<string, string> = {
@@ -61,18 +61,15 @@ $$;`,
     )
   }
 
-  // 3. Tables in topological order
+  // 3. Tables in topological order — two-pass to allow cross-table RLS subqueries.
+  //    Pass A: CREATE TABLE + FK indexes + updated_at triggers (all tables first)
+  //    Pass B: ENABLE ROW LEVEL SECURITY + CREATE POLICY (after all tables exist)
+  //    This handles cases like project's RLS referencing project_member (a later table).
   const sorted = topologicalSort(contract.tables)
+
+  // Pass A: schemas
   for (const table of sorted) {
     parts.push(generateCreateTable(table))
-
-    // RLS
-    if (table.rlsPolicies && table.rlsPolicies.length > 0) {
-      parts.push(`ALTER TABLE ${table.name} ENABLE ROW LEVEL SECURITY;`)
-      for (const policy of table.rlsPolicies) {
-        parts.push(generatePolicy(table.name, policy))
-      }
-    }
 
     // FK indexes
     for (const col of table.columns) {
@@ -86,6 +83,19 @@ $$;`,
       parts.push(
         `CREATE TRIGGER trg_${table.name}_updated_at BEFORE UPDATE ON ${table.name} FOR EACH ROW EXECUTE FUNCTION update_updated_at();`,
       )
+    }
+  }
+
+  // Pass B: RLS (all tables already exist, so cross-table subqueries are valid)
+  const features = inferFeatures(contract)
+  if (features.auth) {
+    for (const table of sorted) {
+      if (table.rlsPolicies && table.rlsPolicies.length > 0) {
+        parts.push(`ALTER TABLE ${table.name} ENABLE ROW LEVEL SECURITY;`)
+        for (const policy of table.rlsPolicies) {
+          parts.push(generatePolicy(table.name, policy))
+        }
+      }
     }
   }
 

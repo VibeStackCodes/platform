@@ -665,7 +665,7 @@ describe('RLS policy expression safety', () => {
         name: 'posts',
         columns: [
           { name: 'id', type: 'uuid' as const, primaryKey: true },
-          { name: 'user_id', type: 'uuid' as const },
+          { name: 'user_id', type: 'uuid' as const, references: { table: 'auth.users', column: 'id' } },
         ],
         rlsPolicies: [{
           name: 'users_own_posts',
@@ -688,7 +688,10 @@ describe('RLS policy expression safety', () => {
     const result = SchemaContractSchema.safeParse({
       tables: [{
         name: 'posts',
-        columns: [{ name: 'id', type: 'uuid' as const, primaryKey: true }],
+        columns: [
+          { name: 'id', type: 'uuid' as const, primaryKey: true },
+          { name: 'user_id', type: 'uuid' as const, references: { table: 'auth.users', column: 'id' } },
+        ],
         rlsPolicies: [{
           name: 'Users can view their own posts',
           operation: 'SELECT' as const,
@@ -712,7 +715,7 @@ describe('RLS policy expression safety', () => {
         name: 'posts',
         columns: [
           { name: 'id', type: 'uuid' as const, primaryKey: true },
-          { name: 'user_id', type: 'uuid' as const },
+          { name: 'user_id', type: 'uuid' as const, references: { table: 'auth.users', column: 'id' } },
         ],
         rlsPolicies: [{
           name: 'insert_policy',

@@ -210,10 +210,11 @@ export async function runCodeGeneration(input: {
   if (migrationFile) {
     const migResult = await runMigration(input.supabaseProjectId, migrationFile.content)
     if (!migResult.success) {
-      console.error(`[codegen] Migration failed: ${migResult.error}`)
-    } else {
-      console.log('[codegen] Migration applied to Supabase')
+      // FATAL per CLAUDE.md determinism rules — a bad migration means bad SQL generator.
+      // Never silently continue: the app would launch with no tables and all queries fail.
+      throw new Error(`[codegen] Migration failed — fix the SQL generator, not the symptom: ${migResult.error}`)
     }
+    console.log('[codegen] Migration applied to Supabase')
   }
 
   const seedSQL = contractToSeedSQL(input.contract)
