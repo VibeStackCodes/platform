@@ -53,13 +53,24 @@ describe('contractToBlueprint', () => {
     expect(paths).toContain('index.html')
   })
 
-  it('includes .env and migration (no tRPC routers)', () => {
+  it('includes .gitignore, .env, and migration (no tRPC routers)', () => {
     const bp = contractToBlueprint({ appName: 'Test', appDescription: '', contract, designPreferences })
     const paths = bp.fileTree.map((f) => f.path)
+    expect(paths).toContain('.gitignore')
     expect(paths).toContain('.env')
     expect(paths).toContain('supabase/migrations/0001_initial.sql')
     // No server-side files in PostgREST architecture
     expect(paths.some((p) => p.startsWith('server/'))).toBe(false)
+  })
+
+  it('.gitignore excludes node_modules, dist, and .env', () => {
+    const bp = contractToBlueprint({ appName: 'Test', appDescription: '', contract, designPreferences })
+    const gitignore = bp.fileTree.find((f) => f.path === '.gitignore')
+    expect(gitignore).toBeDefined()
+    expect(gitignore!.content).toContain('node_modules/')
+    expect(gitignore!.content).toContain('dist/')
+    expect(gitignore!.content).toContain('.env')
+    expect(gitignore!.layer).toBe(0) // must be written before git add -A
   })
 
   it('includes all layer 4 page skeletons', () => {

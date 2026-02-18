@@ -314,6 +314,38 @@ export function contractToBlueprint(input: BlueprintInput): AppBlueprint {
 
   // Layer 0: Build config + Vite config + Vercel SPA rewrite (overwrite snapshot defaults)
   fileTree.push({
+    path: '.gitignore',
+    content: `# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build output
+dist/
+dist-ssr/
+*.local
+
+# Environment files — use Vercel env vars for secrets
+.env
+.env.local
+.env.*.local
+
+# Vite caches
+.vite/
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+`,
+    layer: 0,
+    isLLMSlot: false,
+  })
+  fileTree.push({
     path: 'vite.config.ts',
     content: generateViteConfig(),
     layer: 0,
