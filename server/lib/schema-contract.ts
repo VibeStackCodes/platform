@@ -37,7 +37,39 @@ const SQL_TYPES = [
   'bigint',
 ] as const
 
-export const SQLTypeSchema = z.enum(SQL_TYPES)
+// Common LLM-generated type aliases → canonical SQL types
+// LLMs frequently emit "decimal", "int", "date", etc. which aren't in our allowed set.
+// z.preprocess() runs before the enum check, normalizing these before validation.
+const SQL_TYPE_ALIASES: Record<string, string> = {
+  decimal: 'numeric',
+  float: 'numeric',
+  double: 'numeric',
+  number: 'numeric',
+  money: 'numeric',
+  real: 'numeric',
+  int: 'integer',
+  int2: 'integer',
+  int4: 'integer',
+  smallint: 'integer',
+  serial: 'integer',
+  int8: 'bigint',
+  bigserial: 'bigint',
+  varchar: 'text',
+  string: 'text',
+  char: 'text',
+  character: 'text',
+  time: 'text',
+  date: 'timestamptz',
+  timestamp: 'timestamptz',
+  datetime: 'timestamptz',
+  bool: 'boolean',
+  json: 'jsonb',
+}
+
+export const SQLTypeSchema = z.preprocess((val) => {
+  if (typeof val === 'string') return SQL_TYPE_ALIASES[val.toLowerCase()] ?? val
+  return val
+}, z.enum(SQL_TYPES))
 
 /**
  * Apply the same reserved-word renaming rules as TableDefSchema/ColumnDefSchema to FK refs.
