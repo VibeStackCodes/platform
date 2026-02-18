@@ -5,7 +5,7 @@
 
 import type { PageFeatureSpec } from './feature-schema'
 import type { SchemaContract } from '../schema-contract'
-import { snakeToPascal, snakeToCamel, snakeToKebab, snakeToTitle, pluralize } from '../naming-utils'
+import { snakeToPascal, snakeToCamel, snakeToKebab, snakeToTitle, pluralize, singularize } from '../naming-utils'
 
 // ============================================================================
 // Foreign key detection (E7)
@@ -201,7 +201,9 @@ ${options}
 
 export function assembleListPage(spec: PageFeatureSpec, contract: SchemaContract): string {
   const entity = spec.entityName
-  const pascal = snakeToPascal(entity)
+  const singular = singularize(entity)
+  const pascal = snakeToPascal(singular)        // "Patient"        — JS identifier (hook/component names)
+  const singularTitle = snakeToTitle(singular)  // "Patient"/"Menu Category" — display labels
   const camel = snakeToCamel(entity)
   const plural = pluralize(entity)
   const pluralCamel = snakeToCamel(plural)
@@ -401,7 +403,7 @@ ${fkHooks}
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16" className="mr-1.5 -ml-0.5">
             <path d="M8 2a.5.5 0 0 1 .5.5v5h5a.5.5 0 0 1 0 1h-5v5a.5.5 0 0 1-1 0v-5h-5a.5.5 0 0 1 0-1h5v-5A.5.5 0 0 1 8 2"/>
           </svg>
-          New ${pascal}
+          New ${singularTitle}
         </Button>
       </div>
 
@@ -411,7 +413,7 @@ ${filterBar}
       <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Create ${pascal}</DialogTitle>
+            <DialogTitle>Create ${singularTitle}</DialogTitle>
           </DialogHeader>
           <form
             className="space-y-4 py-2"
@@ -437,7 +439,7 @@ ${formFields}
       <Dialog open={!!deleteTargetId} onOpenChange={(open) => { if (!open) setDeleteTargetId(null) }}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
-            <DialogTitle>Delete ${pascal}?</DialogTitle>
+            <DialogTitle>Delete ${singularTitle}?</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">This action cannot be undone.</p>
           <DialogFooter>
@@ -494,7 +496,7 @@ ${formFields}
             <p className="font-medium text-sm">${spec.listPage.emptyStateMessage}</p>
             <p className="text-xs text-muted-foreground mt-1">Get started by creating your first one.</p>
             <Button size="sm" className="mt-4" onClick={() => setIsCreateOpen(true)}>
-              Create ${pascal}
+              Create ${singularTitle}
             </Button>
           </CardContent>
         </Card>
@@ -563,7 +565,9 @@ ${cells}
 
 export function assembleDetailPage(spec: PageFeatureSpec, contract: SchemaContract): string {
   const entity = spec.entityName
-  const pascal = snakeToPascal(entity)
+  const singular = singularize(entity)
+  const pascal = snakeToPascal(singular)        // "Patient"        — JS identifier
+  const singularTitle = snakeToTitle(singular)  // "Patient"/"Menu Category" — display labels
   const camel = snakeToCamel(entity)
   const plural = pluralize(entity)
   const pluralKebab = snakeToKebab(plural)
@@ -698,7 +702,7 @@ ${fkHooks}
       {isEditing ? (
         <Card>
           <CardHeader>
-            <CardTitle>Edit ${pascal}</CardTitle>
+            <CardTitle>Edit ${singularTitle}</CardTitle>
           </CardHeader>
           <CardContent>
             <form
