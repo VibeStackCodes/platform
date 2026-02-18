@@ -265,6 +265,30 @@ export async function createSupabaseProject(
 }
 
 /**
+ * Update the Supabase Auth configuration for a project.
+ * Must be called after the Vercel URL is known (post-deployment).
+ *
+ * Sets SITE_URL so confirmation/magic-link emails redirect to the live app
+ * instead of the default http://localhost:3000.
+ */
+export async function updateAuthConfig(projectId: string, siteUrl: string): Promise<void> {
+  const response = await mgmtFetch(`/projects/${projectId}/config/auth`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      site_url: siteUrl,
+      additional_redirect_urls: siteUrl,
+    }),
+  })
+
+  if (!response.ok) {
+    const body = await response.text()
+    throw new Error(`Failed to update auth config for project ${projectId}: ${body}`)
+  }
+
+  console.log(`[supabase-mgmt] Auth config updated for ${projectId}: SITE_URL=${siteUrl}`)
+}
+
+/**
  * Delete a Supabase project
  */
 export async function deleteSupabaseProject(projectId: string): Promise<void> {

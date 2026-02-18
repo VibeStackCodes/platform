@@ -810,6 +810,20 @@ async function main() {
         log(`\n🚀 APP ${TEST_CONFIG.id} LIVE: ${vercelUrl}`)
         log(`   App: ${analysisResult.appName}`)
         log(`   Color: ${analysisResult.designPreferences.primaryColor} | Font: ${analysisResult.designPreferences.fontFamily}`)
+
+        // --- Phase 9.5: Update Supabase Auth SITE_URL ---
+        // Must run after Vercel deploy so we know the live URL.
+        // Fixes confirmation/magic-link emails redirecting to localhost:3000.
+        if (blueprint.features?.auth && provisioningResult?.supabaseProjectId) {
+          try {
+            const { updateAuthConfig } = await import('../server/lib/supabase-mgmt')
+            await updateAuthConfig(provisioningResult.supabaseProjectId, vercelUrl)
+            log(`   Auth SITE_URL updated: ${vercelUrl}`)
+          } catch (authErr) {
+            logError('Auth config update failed (non-blocking)', authErr)
+            notes.push(`[BUG] Supabase SITE_URL update failed: ${authErr instanceof Error ? authErr.message : String(authErr)}`)
+          }
+        }
       } catch (error) {
         logError('Vercel deploy failed', error)
         notes.push(`[BUG] Vercel deploy failed: ${error instanceof Error ? error.message : String(error)}`)
