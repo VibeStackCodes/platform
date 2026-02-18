@@ -551,10 +551,8 @@ describe('foreign key reference safety', () => {
     expect(result.success).toBe(true)
     if (result.success) {
       const sql = contractToSQL(result.data)
-      // KNOWN ISSUE: preprocessor parses 'auth.users' as { table: 'auth', column: 'users' }
-      // instead of { table: 'auth.users', column: 'id' }
-      // This generates: REFERENCES "auth"("users") instead of REFERENCES auth.users(id)
-      expect(sql).toContain('REFERENCES "auth"("users")')
+      // "auth.users" is schema-qualified — should generate REFERENCES "auth"."users"("id")
+      expect(sql).toContain('REFERENCES "auth"."users"("id")')
     }
   })
 

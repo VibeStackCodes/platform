@@ -114,16 +114,39 @@ function applyFKRenames(ref: { table?: unknown; column?: unknown }): { table: st
   let column = typeof ref.column === 'string' ? ref.column.trim() : String(ref.column ?? 'id')
   if (SQL_RESERVED_WORDS.has(table)) table = `${table}_record`
   if (SQL_RESERVED_WORDS.has(column)) column = `${column}_val`
+  // All generated tables use UUID `id` as their primary key. LLMs sometimes reference
+  // non-PK columns (e.g. `name`, `code`, `title`) which lack unique constraints and cause:
+  //   ERROR: 42830: there is no unique constraint matching given keys for referenced table
+  // Force FK column to `id` unless it was already `id` or was renamed from a reserved word
+  // (`_val` suffix indicates a reserved-word rename, which we preserve as-is).
+  if (column !== 'id' && !column.endsWith('_val')) {
+    console.warn(`[FKReference] Non-PK FK column "${column}" on "${table}" → normalized to "id"`)
+    column = 'id'
+  }
   return { table, column }
 }
+
+// Known PostgreSQL schemas. When dot-notation contains these as the first segment,
+// the full string is a schema-qualified table name (e.g. "auth.users"), NOT a
+// "table.column" pair — treat the full string as the table, default column to "id".
+const KNOWN_SCHEMAS = new Set(['auth', 'public', 'extensions', 'storage', 'vault', 'graphql_public'])
 
 // FK reference schema — accepts both object `{ table, column }` and string "table.column"
 const FKReferenceSchema = z
   .preprocess((val) => {
     if (typeof val === 'string') {
-      // Parse "table.column" or "table(column)" format
+      // Parse "table.column" or "table(column)" format.
+      // Special case: schema-qualified names like "auth.users" use dot as schema separator,
+      // not table.column separator — detect via KNOWN_SCHEMAS and treat full string as table.
       const dotMatch = val.match(/^([^.(]+)\.([^.(]+)$/)
-      if (dotMatch) return applyFKRenames({ table: dotMatch[1], column: dotMatch[2] })
+      if (dotMatch) {
+        const [, first, second] = dotMatch
+        if (KNOWN_SCHEMAS.has(first.toLowerCase())) {
+          // Schema-qualified name: e.g. "auth.users" → { table: 'auth.users', column: 'id' }
+          return applyFKRenames({ table: `${first}.${second}`, column: 'id' })
+        }
+        return applyFKRenames({ table: first, column: second })
+      }
       const parenMatch = val.match(/^([^(]+)\(([^)]+)\)$/)
       if (parenMatch) return applyFKRenames({ table: parenMatch[1], column: parenMatch[2] })
       // Assume it's a table name referencing "id"
