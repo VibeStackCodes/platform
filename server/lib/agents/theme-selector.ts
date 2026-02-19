@@ -46,8 +46,9 @@ function detectIntent(
   const adminScore = ADMIN_SIGNALS.filter(s => text.includes(s)).length
   const websiteScore = WEBSITE_SIGNALS.filter(s => text.includes(s)).length
 
-  // Admin signals win on tie (safer default — avoids injecting website base tables)
-  return websiteScore > adminScore ? 'website' : 'admin'
+  // Website is the default — most user-facing apps (recipe, todo, shop, etc.) should get
+  // public-facing themes. Only route to admin when explicit staff/management signals present.
+  return adminScore > websiteScore ? 'admin' : 'website'
 }
 
 /**

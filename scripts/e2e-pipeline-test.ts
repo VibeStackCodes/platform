@@ -699,14 +699,6 @@ async function main() {
       `${analysisResult.contract.tables.length} tables`)
     results.analysis = analysisResult
 
-    // Log theme selection from Design Agent
-    if ('selectedTheme' in analysisResult) {
-      log(`[design] Theme selected: ${analysisResult.selectedTheme}`)
-      log(`[design] Theme reasoning: ${analysisResult.themeReasoning}`)
-      const initialTableCount = analysisResult.contract.tables.length
-      log(`[design] Tables from user schema: ${initialTableCount}`)
-    }
-
     // --- Phase 2: Blueprint ---
     const t2 = Date.now()
     const blueprint = await phase2_blueprint(analysisResult)

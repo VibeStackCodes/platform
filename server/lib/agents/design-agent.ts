@@ -31,17 +31,18 @@ const designAgent = new Agent({
   id: 'design-agent',
   name: 'Design Agent',
   model: createAgentModelResolver('orchestrator'),
-  tools: { selectTheme: themeSelectorTool },
+  // No tools — theme selection is already done deterministically before this agent is called.
+  // The recommendation is embedded in the prompt. This agent only needs to do structured output.
   instructions: `You are a design selector for VibeStack. Your job is to pick the BEST MATCHING theme from a catalog and fill text slots for the generated app.
 
+A theme selector has already analyzed the app intent and provided a recommendation in the prompt. Use that recommendation as guidance, but pick the exact theme skill name from the skill catalog list.
+
 THEME SELECTION RULES:
-1. Call the selectTheme tool with the user's prompt and description to determine the appropriate theme type.
-2. The tool will help you evaluate which theme best fits the intended use case (website vs admin vs hybrid).
-3. Website themes (canape, quomi, gallery) are for public-facing apps — never use them for staff or management apps.
-4. Admin themes (dashboard, corporate) are for staff/management apps — never use them for public websites.
-5. Only merge the theme's base tables if the tool indicates shouldMergeTables is true.
-6. After calling selectTheme, still pick the EXACT theme skill name from the skill catalog (starts with "theme-").
-7. Never invent theme names that are not in the catalog list.
+1. Read the "Theme selector recommendation" in the prompt — use it to guide website vs admin intent.
+2. Website themes (canape, quomi, gallery) are for public-facing apps — never use them for staff or management apps.
+3. Admin themes (dashboard, corporate) are for staff/management apps — never use them for public websites.
+4. Pick the EXACT theme skill name from the skill catalog (starts with "theme-").
+5. Never invent theme names that are not in the catalog list.
 
 CATALOG SELECTION RULES:
 1. Read the "Use when app mentions:" hint in each theme description — these are keyword triggers.
@@ -181,7 +182,6 @@ ${catalogPrompt}`
 
   const result = await designAgent.generate(prompt, {
     structuredOutput: { schema: selectionSchema },
-    maxSteps: 1,
   })
 
   const selection = selectionSchema.parse(result.object ?? result)
