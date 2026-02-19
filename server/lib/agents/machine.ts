@@ -155,6 +155,7 @@ export const appGenerationMachine = setup({
           projectId: string
           contract?: SchemaContract | null
           blueprint?: AppBlueprint | null
+          capabilityManifest?: string[] | null
           supabaseProjectId?: string | null
           githubCloneUrl?: string | null
         }
@@ -699,6 +700,7 @@ export const appGenerationMachine = setup({
           projectId: context.projectId,
           contract: context.contract,
           blueprint: context.blueprint,
+          capabilityManifest: context.capabilityManifest,
           supabaseProjectId: context.supabaseProjectId,
           githubCloneUrl: context.githubCloneUrl,
         }),

@@ -464,6 +464,7 @@ export async function runDeployment(input: {
   projectId: string
   contract?: SchemaContract | null
   blueprint?: AppBlueprint | null
+  capabilityManifest?: string[] | null
   supabaseProjectId?: string | null
   githubCloneUrl?: string | null
 }): Promise<DeploymentResult> {
@@ -497,6 +498,7 @@ export async function runDeployment(input: {
         supabaseProjectId: input.supabaseProjectId ?? null,
         githubRepo: input.githubCloneUrl ?? null,
         fileManifest,
+        capabilityManifest: input.capabilityManifest ?? [],
         lastEditedAt: new Date().toISOString(),
       },
     })

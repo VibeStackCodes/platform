@@ -21,6 +21,7 @@ describe('editMachine', () => {
       expect(states).toContain('idle')
       expect(states).toContain('loading')
       expect(states).toContain('reconnecting')
+      expect(states).toContain('analyzing')
       expect(states).toContain('editing')
       expect(states).toContain('validating')
       expect(states).toContain('persisting')
@@ -62,10 +63,15 @@ describe('editMachine', () => {
       expect(context.sandboxId).toBeNull()
       expect(context.supabaseProjectId).toBeNull()
       expect(context.githubRepo).toBeNull()
+      expect(context.capabilityManifest).toEqual([])
+      expect(context.requestedCapabilities).toEqual([])
       expect(context.targetFile).toBeNull()
       expect(context.targetElement).toBeNull()
       expect(context.editResult).toBeNull()
       expect(context.conversationHistory).toEqual([])
+      expect(context.injectAnalysis).toBeNull()
+      expect(context.additiveResult).toBeNull()
+      expect(context.injectionAttempts).toBe(0)
 
       actor.stop()
     })
@@ -218,6 +224,12 @@ describe('editMachine', () => {
       expect((reconnectingState?.invoke as any)?.src).toBe('reconnectSandboxActor')
     })
 
+    it('analyzing state has invoke for runAnalystActor', () => {
+      const analyzingState = editMachine.config.states?.analyzing
+      expect(analyzingState?.invoke).toBeDefined()
+      expect((analyzingState?.invoke as any)?.src).toBe('runAnalystActor')
+    })
+
     it('editing state has invoke for applyEditActor', () => {
       const editingState = editMachine.config.states?.editing
       expect(editingState?.invoke).toBeDefined()
@@ -254,6 +266,12 @@ describe('editMachine', () => {
       expect((reconnectingState?.after as any)?.[120_000]).toBeDefined()
     })
 
+    it('analyzing state has timeout transition', () => {
+      const analyzingState = editMachine.config.states?.analyzing
+      expect(analyzingState?.after).toBeDefined()
+      expect((analyzingState?.after as any)?.[60_000]).toBeDefined()
+    })
+
     it('editing state has timeout transition', () => {
       const editingState = editMachine.config.states?.editing
       expect(editingState?.after).toBeDefined()
@@ -268,7 +286,7 @@ describe('editMachine', () => {
 
     it('persisting state transitions to complete', () => {
       const persistingState = editMachine.config.states?.persisting
-      expect(persistingState?.always).toBeDefined()
+      expect(persistingState?.invoke).toBeDefined()
     })
   })
 
@@ -341,7 +359,7 @@ describe('editMachine', () => {
         features: [],
         pages: [],
         contract: mockContract,
-      }
+      } as any
 
       const testMachine = editMachine.provide({
         actors: {
@@ -352,10 +370,16 @@ describe('editMachine', () => {
             sandboxId: 'sandbox-123',
             supabaseProjectId: null,
             githubRepo: null,
+            capabilityManifest: [],
             conversationHistory: [],
           })),
           reconnectSandboxActor: fromPromise(async () => ({
             sandboxId: 'sandbox-456',
+          })),
+          runAnalystActor: fromPromise(async () => ({
+            type: 'done',
+            capabilityManifest: [],
+            tokensUsed: 10,
           })),
         },
       })
@@ -398,10 +422,16 @@ describe('editMachine', () => {
             sandboxId: 'sandbox-123',
             supabaseProjectId: null,
             githubRepo: null,
+            capabilityManifest: [],
             conversationHistory: [],
           })),
           reconnectSandboxActor: fromPromise(async () => ({
             sandboxId: 'sandbox-123',
+          })),
+          runAnalystActor: fromPromise(async () => ({
+            type: 'done',
+            capabilityManifest: [],
+            tokensUsed: 10,
           })),
           applyEditActor: fromPromise(async () => ({
             filePath: 'src/components/Button.tsx',
@@ -456,10 +486,16 @@ describe('editMachine', () => {
             sandboxId: 'sandbox-123',
             supabaseProjectId: null,
             githubRepo: null,
+            capabilityManifest: [],
             conversationHistory: [],
           })),
           reconnectSandboxActor: fromPromise(async () => ({
             sandboxId: 'sandbox-123',
+          })),
+          runAnalystActor: fromPromise(async () => ({
+            type: 'done',
+            capabilityManifest: [],
+            tokensUsed: 10,
           })),
           applyEditActor: fromPromise(async () => ({
             filePath: 'src/components/Button.tsx',
@@ -513,10 +549,16 @@ describe('editMachine', () => {
             sandboxId: 'sandbox-123',
             supabaseProjectId: null,
             githubRepo: null,
+            capabilityManifest: [],
             conversationHistory: [],
           })),
           reconnectSandboxActor: fromPromise(async () => ({
             sandboxId: 'sandbox-123',
+          })),
+          runAnalystActor: fromPromise(async () => ({
+            type: 'done',
+            capabilityManifest: [],
+            tokensUsed: 10,
           })),
           applyEditActor: fromPromise(async () => ({
             filePath: 'src/components/Button.tsx',
@@ -527,6 +569,9 @@ describe('editMachine', () => {
           validateEditActor: fromPromise(async () => ({
             valid: true,
           })),
+          runPersistActor: fromPromise(async () => {
+            return { success: true }
+          }),
         },
       })
 
@@ -570,10 +615,16 @@ describe('editMachine', () => {
             sandboxId: 'sandbox-123',
             supabaseProjectId: null,
             githubRepo: null,
+            capabilityManifest: [],
             conversationHistory: [],
           })),
           reconnectSandboxActor: fromPromise(async () => ({
             sandboxId: 'sandbox-123',
+          })),
+          runAnalystActor: fromPromise(async () => ({
+            type: 'done',
+            capabilityManifest: [],
+            tokensUsed: 10,
           })),
           applyEditActor: fromPromise(async () => ({
             filePath: 'src/components/Button.tsx',
@@ -587,6 +638,9 @@ describe('editMachine', () => {
               return { valid: false, error: 'Type error' }
             }
             return { valid: true }
+          }),
+          runPersistActor: fromPromise(async () => {
+            return { success: true }
           }),
         },
       })
@@ -671,11 +725,17 @@ describe('editMachine', () => {
             sandboxId: 'sandbox-123',
             supabaseProjectId: null,
             githubRepo: null,
+            capabilityManifest: [],
             conversationHistory: [],
           })),
           reconnectSandboxActor: fromPromise(async () => {
             throw new Error('Sandbox not available')
           }),
+          runAnalystActor: fromPromise(async () => ({
+            type: 'done',
+            capabilityManifest: [],
+            tokensUsed: 10,
+          })),
         },
       })
 
@@ -708,10 +768,16 @@ describe('editMachine', () => {
             sandboxId: 'sandbox-123',
             supabaseProjectId: null,
             githubRepo: null,
+            capabilityManifest: [],
             conversationHistory: [],
           })),
           reconnectSandboxActor: fromPromise(async () => ({
             sandboxId: 'sandbox-123',
+          })),
+          runAnalystActor: fromPromise(async () => ({
+            type: 'done',
+            capabilityManifest: [],
+            tokensUsed: 10,
           })),
           applyEditActor: fromPromise(async () => {
             throw new Error('No target element selected')

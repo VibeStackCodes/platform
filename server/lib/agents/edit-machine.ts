@@ -1,6 +1,8 @@
 import { assign, fromPromise, setup } from 'xstate'
 import type { SchemaContract } from '../schema-contract'
 import type { AppBlueprint } from '../app-blueprint'
+import type { InjectAnalysis } from '../capabilities/inject'
+import type { AdditiveResult } from '../capabilities/additive'
 
 // ============================================================================
 // Context type
@@ -33,6 +35,8 @@ export interface EditMachineContext {
   sandboxId: string | null
   supabaseProjectId: string | null
   githubRepo: string | null
+  capabilityManifest: string[]
+  requestedCapabilities: string[]
   // Edit-specific
   targetFile: string | null
   targetElement: ElementContext | null
@@ -42,6 +46,10 @@ export interface EditMachineContext {
   error: string | null
   repairAttempts: number
   totalTokens: number
+  // Injection-specific
+  injectAnalysis: InjectAnalysis | null
+  additiveResult: AdditiveResult | null
+  injectionAttempts: number
 }
 
 // ============================================================================
@@ -74,6 +82,7 @@ export interface LoadResult {
   sandboxId: string | null
   supabaseProjectId: string | null
   githubRepo: string | null
+  capabilityManifest: string[]
   conversationHistory: ChatMessage[]
 }
 
@@ -93,6 +102,18 @@ export interface ValidateResult {
   error?: string
 }
 
+export interface InjectionAnalysisResult {
+  analysis: InjectAnalysis
+  delta: AdditiveResult
+  blueprint: AppBlueprint
+  tokensUsed: number
+}
+
+export interface InjectionValidateResult {
+  passed: boolean
+  errors: string
+}
+
 // ============================================================================
 // Machine definition
 // ============================================================================
@@ -103,6 +124,12 @@ export const editMachine = setup({
     events: {} as EditMachineEvent,
   },
   actors: {
+    runAnalystActor: fromPromise(
+      async ({ input }: { input: { userMessage: string; projectId: string } }) => {
+        const { runAnalysis } = await import('./orchestrator')
+        return runAnalysis(input)
+      },
+    ),
     loadProjectActor: fromPromise(
       async ({ input }: { input: { projectId: string; userId: string } }) => {
         const { getProjectGenerationState, getProjectMessages } = await import('../db/queries')
@@ -123,6 +150,7 @@ export const editMachine = setup({
           sandboxId: project.sandboxId ?? (genState.sandboxId as string) ?? null,
           supabaseProjectId: project.supabaseProjectId ?? null,
           githubRepo: project.githubRepoUrl ?? (genState.githubRepo as string) ?? null,
+          capabilityManifest: Array.isArray(genState.capabilityManifest) ? genState.capabilityManifest : [],
           conversationHistory: messages.map((m) => ({
             role: (m.role === 'system' ? 'assistant' : m.role) as 'user' | 'assistant',
             content: Array.isArray(m.parts)
@@ -289,6 +317,176 @@ export const editMachine = setup({
         } satisfies ValidateResult
       },
     ),
+    runInjectionActor: fromPromise(
+      async ({
+        input,
+      }: {
+        input: {
+          existingManifest: string[]
+          requestedCapabilities: string[]
+          appName: string
+          appDescription: string
+          userPrompt: string
+          fileManifest: Record<string, string>
+        }
+      }) => {
+        const { analyzeInjection } = await import('../capabilities/inject')
+        const { computeAdditiveDelta } = await import('../capabilities/additive')
+        const { contractToBlueprintWithDesignAgent } = await import('../app-blueprint')
+
+        const analysis = analyzeInjection(input.existingManifest, input.requestedCapabilities)
+        const blueprint = await contractToBlueprintWithDesignAgent({
+          appName: input.appName,
+          appDescription: input.appDescription,
+          userPrompt: input.userPrompt,
+          contract: analysis.fullAssembly.contract,
+          assembly: analysis.fullAssembly,
+        })
+
+        const delta = computeAdditiveDelta(
+          analysis,
+          blueprint,
+          new Set(Object.keys(input.fileManifest)),
+        )
+
+        return {
+          analysis,
+          delta,
+          blueprint,
+          tokensUsed: 0, // contractToBlueprintWithDesignAgent tokens are tracked internally
+        } satisfies InjectionAnalysisResult
+      },
+    ),
+    runInjectionUploadActor: fromPromise(
+      async ({
+        input,
+      }: {
+        input: { sandboxId: string; newFiles: BlueprintFile[]; updatedFiles: BlueprintFile[] }
+      }) => {
+        const { getSandbox, uploadFiles } = await import('../sandbox')
+        const sandbox = await getSandbox(input.sandboxId)
+
+        const uploads = [...input.newFiles, ...input.updatedFiles].map((f) => ({
+          path: `/workspace/${f.path}`,
+          content: f.content,
+        }))
+
+        await uploadFiles(sandbox, uploads)
+        return { success: true }
+      },
+    ),
+    runInjectionMigrateActor: fromPromise(
+      async ({
+        input,
+      }: {
+        input: { supabaseProjectId: string; additiveMigration: string | null }
+      }) => {
+        if (!input.additiveMigration) return { success: true }
+
+        const { runMigration } = await import('../supabase-mgmt')
+        const result = await runMigration(input.supabaseProjectId, input.additiveMigration)
+
+        if (!result.success) {
+          throw new Error(`Additive migration failed: ${result.error}`)
+        }
+
+        return { success: true }
+      },
+    ),
+    runInjectionValidateActor: fromPromise(
+      async ({ input }: { input: { sandboxId: string } }) => {
+        const { getSandbox, runCommand } = await import('../sandbox')
+        const sandbox = await getSandbox(input.sandboxId)
+        const sessionId = `inject-validate-${Date.now()}`
+
+        const tscResult = await runCommand(sandbox, 'bunx tsc --noEmit', sessionId, {
+          cwd: '/workspace',
+          timeout: 300,
+        })
+        if (tscResult.exitCode !== 0) {
+          return {
+            passed: false,
+            errors: `TypeScript errors:\n${tscResult.stderr}\n${tscResult.stdout}`,
+          } satisfies InjectionValidateResult
+        }
+
+        const buildResult = await runCommand(sandbox, 'bun run build', sessionId, {
+          cwd: '/workspace',
+          timeout: 300,
+        })
+        if (buildResult.exitCode !== 0) {
+          return {
+            passed: false,
+            errors: `Build errors:\n${buildResult.stderr}\n${buildResult.stdout}`,
+          } satisfies InjectionValidateResult
+        }
+
+        return { passed: true, errors: '' } satisfies InjectionValidateResult
+      },
+    ),
+    runInjectionDeployActor: fromPromise(
+      async ({
+        input,
+      }: {
+        input: { sandboxId: string; analysis: InjectAnalysis }
+      }) => {
+        const { getSandbox, runCommand } = await import('../sandbox')
+        const sandbox = await getSandbox(input.sandboxId)
+
+        const capNames = input.analysis.newCapabilities.join(', ')
+        await runCommand(sandbox, 'git add -A', 'git-add')
+        await runCommand(sandbox, `git commit -m "feat: add ${capNames} capabilities"`, 'git-commit')
+        await runCommand(sandbox, 'git push', 'git-push')
+
+        return { success: true }
+      },
+    ),
+    runPersistActor: fromPromise(async ({ input }: { input: { projectId: string; context: EditMachineContext } }) => {
+      const { updateProject } = await import('../db/queries')
+      const { analysis, delta } = input.context.injectAnalysis ? { analysis: input.context.injectAnalysis, delta: input.context.additiveResult } : { analysis: null, delta: null }
+
+      if (analysis && delta) {
+        // Update manifest and contract after injection
+        const newFileManifest = { ...input.context.fileManifest }
+        for (const f of [...delta.newFiles, ...delta.updatedFiles]) {
+          const hash = `${f.content.length}:${Buffer.from(f.content).toString('base64').slice(0, 16)}`
+          newFileManifest[f.path] = hash
+        }
+
+        await updateProject(input.projectId, {
+          generationState: {
+            contract: analysis.fullAssembly.contract,
+            blueprint: input.context.blueprint,
+            sandboxId: input.context.sandboxId,
+            supabaseProjectId: input.context.supabaseProjectId,
+            githubRepo: input.context.githubRepo,
+            fileManifest: newFileManifest,
+            capabilityManifest: analysis.mergedManifest,
+            lastEditedAt: new Date().toISOString(),
+          },
+        })
+      } else if (input.context.editResult) {
+        // Update single file hash after visual edit
+        const newFileManifest = { ...input.context.fileManifest }
+        const { filePath, newContent } = input.context.editResult
+        const hash = `${newContent.length}:${Buffer.from(newContent).toString('base64').slice(0, 16)}`
+        newFileManifest[filePath] = hash
+
+        await updateProject(input.projectId, {
+          generationState: {
+            contract: input.context.contract,
+            blueprint: input.context.blueprint,
+            sandboxId: input.context.sandboxId,
+            supabaseProjectId: input.context.supabaseProjectId,
+            githubRepo: input.context.githubRepo,
+            fileManifest: newFileManifest,
+            capabilityManifest: input.context.capabilityManifest,
+            lastEditedAt: new Date().toISOString(),
+          },
+        })
+      }
+      return { success: true }
+    }),
   },
   guards: {
     canRetry: ({ context }) => context.repairAttempts < 2,
@@ -306,6 +504,8 @@ export const editMachine = setup({
     sandboxId: null,
     supabaseProjectId: null,
     githubRepo: null,
+    capabilityManifest: [],
+    requestedCapabilities: [],
     targetFile: null,
     targetElement: null,
     editTier: null,
@@ -314,6 +514,10 @@ export const editMachine = setup({
     error: null,
     repairAttempts: 0,
     totalTokens: 0,
+    // Injection-specific
+    injectAnalysis: null,
+    additiveResult: null,
+    injectionAttempts: 0,
   },
   states: {
     idle: {
@@ -352,6 +556,7 @@ export const editMachine = setup({
             sandboxId: ({ event }) => event.output.sandboxId,
             supabaseProjectId: ({ event }) => event.output.supabaseProjectId,
             githubRepo: ({ event }) => event.output.githubRepo,
+            capabilityManifest: ({ event }) => event.output.capabilityManifest,
             conversationHistory: ({ event }) => event.output.conversationHistory,
           }),
         },
@@ -380,11 +585,179 @@ export const editMachine = setup({
           githubRepo: context.githubRepo,
         }),
         onDone: {
-          target: 'editing',
+          target: 'analyzing',
           actions: assign({
             sandboxId: ({ event }) => event.output.sandboxId,
           }),
         },
+        onError: {
+          target: 'failed',
+          actions: assign({
+            error: ({ event }) =>
+              event.error instanceof Error ? event.error.message : String(event.error),
+          }),
+        },
+      },
+    },
+
+    analyzing: {
+      after: {
+        60_000: {
+          target: 'failed',
+          actions: assign({ error: () => 'Analysis timed out' }),
+        },
+      },
+      invoke: {
+        src: 'runAnalystActor',
+        input: ({ context }) => ({
+          userMessage: context.userMessage,
+          projectId: context.projectId,
+        }),
+        onDone: [
+          {
+            // If new capabilities detected -> injection flow
+            guard: ({ context, event }) => {
+              if (event.output.type !== 'done') return false
+              const requested = event.output.capabilityManifest ?? []
+              const existing = new Set(context.capabilityManifest)
+              return requested.some((cap: string) => !existing.has(cap))
+            },
+            target: 'injecting',
+            actions: assign({
+              editTier: () => 3 as any, // Tier 3 = Injection
+              requestedCapabilities: ({ event }) => event.output.capabilityManifest ?? [],
+              totalTokens: ({ context, event }) => context.totalTokens + event.output.tokensUsed,
+            }),
+          },
+          {
+            // No new capabilities -> visual edit flow
+            target: 'editing',
+            actions: assign({
+              requestedCapabilities: ({ event }) => event.output.capabilityManifest ?? [],
+              totalTokens: ({ context, event }) => context.totalTokens + event.output.tokensUsed,
+            }),
+          },
+        ],
+        onError: {
+          target: 'failed',
+          actions: assign({
+            error: ({ event }) =>
+              event.error instanceof Error ? event.error.message : String(event.error),
+          }),
+        },
+      },
+    },
+
+    injecting: {
+      invoke: {
+        src: 'runInjectionActor',
+        input: ({ context }) => ({
+          existingManifest: context.capabilityManifest,
+          requestedCapabilities: context.requestedCapabilities,
+          appName: context.blueprint?.meta.appName ?? 'App',
+          appDescription: context.blueprint?.meta.appDescription ?? '',
+          userPrompt: context.userMessage,
+          fileManifest: context.fileManifest ?? {},
+        }),
+        onDone: {
+          target: 'injectionUploading',
+          actions: assign({
+            injectAnalysis: ({ event }) => event.output.analysis,
+            additiveResult: ({ event }) => event.output.delta,
+            blueprint: ({ event }) => event.output.blueprint,
+            totalTokens: ({ context, event }) => context.totalTokens + event.output.tokensUsed,
+          }),
+        },
+        onError: {
+          target: 'failed',
+          actions: assign({
+            error: ({ event }) =>
+              event.error instanceof Error ? event.error.message : String(event.error),
+          }),
+        },
+      },
+    },
+
+    injectionUploading: {
+      invoke: {
+        src: 'runInjectionUploadActor',
+        input: ({ context }) => ({
+          sandboxId: context.sandboxId!,
+          newFiles: context.additiveResult!.newFiles,
+          updatedFiles: context.additiveResult!.updatedFiles,
+        }),
+        onDone: { target: 'injectionMigrating' },
+        onError: {
+          target: 'failed',
+          actions: assign({
+            error: ({ event }) =>
+              event.error instanceof Error ? event.error.message : String(event.error),
+          }),
+        },
+      },
+    },
+
+    injectionMigrating: {
+      invoke: {
+        src: 'runInjectionMigrateActor',
+        input: ({ context }) => ({
+          supabaseProjectId: context.supabaseProjectId!,
+          additiveMigration: context.additiveResult!.additiveMigration,
+        }),
+        onDone: { target: 'injectionValidating' },
+        onError: {
+          target: 'failed',
+          actions: assign({
+            error: ({ event }) =>
+              event.error instanceof Error ? event.error.message : String(event.error),
+          }),
+        },
+      },
+    },
+
+    injectionValidating: {
+      invoke: {
+        src: 'runInjectionValidateActor',
+        input: ({ context }) => ({
+          sandboxId: context.sandboxId!,
+        }),
+        onDone: [
+          {
+            guard: ({ event }) => event.output.passed,
+            target: 'injectionDeploying',
+          },
+          {
+            guard: ({ context }) => context.injectionAttempts < 2,
+            target: 'failed', // For now, we don't have injection repair
+            actions: assign({
+              error: ({ event }) => `Injection validation failed: ${event.output.errors}`,
+            }),
+          },
+          {
+            target: 'failed',
+            actions: assign({
+              error: ({ event }) => `Injection validation failed after max retries: ${event.output.errors}`,
+            }),
+          },
+        ],
+        onError: {
+          target: 'failed',
+          actions: assign({
+            error: ({ event }) =>
+              event.error instanceof Error ? event.error.message : String(event.error),
+          }),
+        },
+      },
+    },
+
+    injectionDeploying: {
+      invoke: {
+        src: 'runInjectionDeployActor',
+        input: ({ context }) => ({
+          sandboxId: context.sandboxId!,
+          analysis: context.injectAnalysis!,
+        }),
+        onDone: { target: 'persisting' },
         onError: {
           target: 'failed',
           actions: assign({
@@ -479,10 +852,20 @@ export const editMachine = setup({
     },
 
     persisting: {
-      always: {
-        target: 'complete',
-        // In a full implementation, this would update fileManifest in DB
-        // For now, transition directly to complete
+      invoke: {
+        src: 'runPersistActor',
+        input: ({ context }) => ({
+          projectId: context.projectId,
+          context,
+        }),
+        onDone: { target: 'complete' },
+        onError: {
+          target: 'failed',
+          actions: assign({
+            error: ({ event }) =>
+              event.error instanceof Error ? event.error.message : String(event.error),
+          }),
+        },
       },
     },
 

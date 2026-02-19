@@ -77,6 +77,7 @@ const STATE_PHASES: Record<string, { name: string; phase: number }> = {
   blueprinting: { name: 'Creating blueprint', phase: 2 },
   provisioning: { name: 'Provisioning infrastructure', phase: 3 },
   generating: { name: 'Generating code', phase: 4 },
+  polishing: { name: 'Polishing design', phase: 4 },
   validating: { name: 'Validating code', phase: 5 },
   repairing: { name: 'Repairing errors', phase: 5 },
   deploying: { name: 'Deploying application', phase: 6 },
@@ -91,6 +92,7 @@ const STATE_TO_DB_STATUS: Record<string, string> = {
   blueprinting: 'planning',
   provisioning: 'generating',
   generating: 'generating',
+  polishing: 'generating',
   validating: 'verifying',
   repairing: 'verifying',
   reviewing: 'verifying',
@@ -556,11 +558,36 @@ agentRoutes.post('/edit', async (c) => {
   const EDIT_STATE_PHASES: Record<string, { name: string; phase: number }> = {
     loading: { name: 'Loading project state', phase: 1 },
     reconnecting: { name: 'Reconnecting sandbox', phase: 2 },
+    analyzing: { name: 'Analyzing request', phase: 2 },
+    injecting: { name: 'Adding capabilities', phase: 2 },
+    injectionUploading: { name: 'Uploading new files', phase: 3 },
+    injectionMigrating: { name: 'Running migration', phase: 4 },
+    injectionValidating: { name: 'Validating changes', phase: 5 },
+    injectionRepairing: { name: 'Repairing errors', phase: 5 },
+    injectionDeploying: { name: 'Deploying update', phase: 6 },
     editing: { name: 'Applying edit', phase: 3 },
     validating: { name: 'Validating changes', phase: 4 },
     persisting: { name: 'Persisting changes', phase: 5 },
     complete: { name: 'Complete', phase: 6 },
     failed: { name: 'Failed', phase: 6 },
+  }
+
+  // Define status mapping for edit machine states
+  const EDIT_STATE_TO_DB_STATUS: Record<string, string> = {
+    loading: 'planning',
+    reconnecting: 'planning',
+    analyzing: 'planning',
+    injecting: 'generating',
+    injectionUploading: 'generating',
+    injectionMigrating: 'generating',
+    injectionValidating: 'verifying',
+    injectionRepairing: 'verifying',
+    injectionDeploying: 'deploying',
+    editing: 'generating',
+    validating: 'verifying',
+    persisting: 'deploying',
+    complete: 'deployed',
+    failed: 'error',
   }
 
   return createSSEStream(async (emit: (event: StreamEvent) => void, signal: AbortSignal) => {
@@ -588,6 +615,15 @@ agentRoutes.post('/edit', async (c) => {
 
             const state = snapshot.value as string
             const phaseInfo = EDIT_STATE_PHASES[state]
+
+            // Update project status in DB based on state transition
+            const dbStatus = EDIT_STATE_TO_DB_STATUS[state]
+            if (dbStatus) {
+              updateProject(projectId, { status: dbStatus }, user.id).catch((err) => {
+                console.error('[agent:edit] Failed to update project status:', err)
+              })
+            }
+
             if (!phaseInfo) return
 
             if (state === 'complete') {
