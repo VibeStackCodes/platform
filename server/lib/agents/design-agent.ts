@@ -8,6 +8,7 @@ import { fetchHeroImages } from '../unsplash'
 import { createAgentModelResolver } from './provider'
 import { getThemeBaseSchema, isThemeSpecificSchema } from '../theme-schemas'
 import { createThemeSelectorTool } from './theme-selector'
+import { ThemeSelectorOutputSchema } from './schemas'
 
 const textSlotsSchema = z.object({
   hero_headline: z.string().min(5).describe('One bold sentence that captures the app\'s purpose'),
@@ -157,11 +158,7 @@ export async function runDesignAgent(
   if ('error' in selectorRaw && selectorRaw.error === true) {
     throw new Error(`Theme selector validation error: ${selectorRaw.message}`)
   }
-  const selectorResult = selectorRaw as {
-    themeName: string
-    reasoning: string
-    shouldMergeTables: boolean
-  }
+  const selectorResult = ThemeSelectorOutputSchema.parse(selectorRaw)
   const { themeName: selectorThemeName, reasoning: themeReasoning } = selectorResult
 
   const catalogPrompt = await buildSkillCatalogPrompt()
