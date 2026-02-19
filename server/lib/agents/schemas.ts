@@ -22,3 +22,14 @@ export const AnalystOutputSchema = z.object({
   appDescription: z.string().describe('One-line app description'),
   contract: SchemaContractSchema.describe('Database schema contract'),
 })
+
+export const ThemeSelectorInputSchema = z.object({
+  userPrompt: z.string().min(5).describe('User prompt describing the app'),
+  appDescription: z.string().optional().describe('App description'),
+})
+
+export const ThemeSelectorOutputSchema = z.object({
+  themeName: z.string().describe('Selected theme name'),
+  reasoning: z.string().describe('Why this theme was selected'),
+  shouldMergeTables: z.boolean().describe('Whether to merge theme base tables with user schema'),
+})
