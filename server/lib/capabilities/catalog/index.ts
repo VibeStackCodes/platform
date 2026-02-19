@@ -1,9 +1,9 @@
 import { CapabilityRegistry } from '../registry'
-import { auth } from './auth'
-import { publicWebsite } from './public-website'
-import { blog } from './blog'
-import { recipes } from './recipes'
-import { portfolio } from './portfolio'
+import { auth } from './auth/contract'
+import { publicWebsite } from './public-website/contract'
+import { blog } from './blog/contract'
+import { recipes } from './recipes/contract'
+import { portfolio } from './portfolio/contract'
 
 export function loadCoreRegistry(): CapabilityRegistry {
   const registry = new CapabilityRegistry()
@@ -13,4 +13,9 @@ export function loadCoreRegistry(): CapabilityRegistry {
   registry.register(recipes)
   registry.register(portfolio)
   return registry
+}
+
+/** Absolute path to capability catalog — pass to Mastra Workspace skills config */
+export function getCapabilitySkillsPath(): string {
+  return import.meta.dirname
 }

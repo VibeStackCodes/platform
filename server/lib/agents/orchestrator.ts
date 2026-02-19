@@ -23,8 +23,8 @@ export type AnalysisResult =
       appName: string
       appDescription: string
       contract: SchemaContract
-      capabilityManifest: string[]
-      assembly: AssemblyResult | null
+      capabilityManifest?: string[]
+      assembly?: AssemblyResult | null
       tokensUsed: number
     }
   | {

@@ -3,20 +3,20 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { glob } from 'glob'
+import { getCapabilitySkillsPath } from '../capabilities/catalog'
 
 export interface ThemeCatalogEntry {
   name: string
   description: string
-  category: string
-  heroQuery: string
-  slotNames: string[]
-  /** Relative path from catalog root to the SKILL.md dir (e.g. "blog-editorial/theme-inkwell") */
+  version: string
+  tags: string[]
+  /** Relative path from catalog root to the SKILL.md dir (e.g. "recipes") */
   catalogDir: string
 }
 
 /**
  * Parse a single SKILL.md file into a ThemeCatalogEntry.
- * Returns null if the file doesn't match theme format.
+ * Returns null if the file doesn't match capability skill format.
  */
 function parseSkillMd(content: string, relativeDir: string): ThemeCatalogEntry | null {
   const fmMatch = content.match(/^---\n([\s\S]+?)\n---/)
@@ -24,33 +24,27 @@ function parseSkillMd(content: string, relativeDir: string): ThemeCatalogEntry |
 
   const frontmatter = fmMatch[1]
   const name = frontmatter.match(/name:\s*(.+)/)?.[1]?.trim()
-  if (!name || !name.startsWith('theme-')) return null
+  if (!name) return null
 
-  const description = frontmatter.match(/description:\s*>([\s\S]+?)(?=\w+:|$)/)?.[1]?.trim()?.replace(/\n\s+/g, ' ') ?? ''
-  const category = frontmatter.match(/category:\s*(.+)/)?.[1]?.trim() ?? 'general'
-
-  // Parse hero-query bullet
-  const heroQueryMatch = content.match(/- \*\*hero-query\*\*:\s*(.+)/i)
-  const heroQuery = heroQueryMatch?.[1]?.trim() ?? 'abstract modern design'
-
-  // Parse ## Slots section — extract slot names
-  const slotNames: string[] = []
-  const slotsSection = content.match(/## Slots\n([\s\S]+?)(?=\n##|\n$|$)/)
-  if (slotsSection) {
-    const slotLines = slotsSection[1].matchAll(/- \*\*(\w+)\*\*/g)
-    for (const match of slotLines) {
-      slotNames.push(match[1])
+  const description = frontmatter.match(/description:\s*>([\s\S]+?)(?=\n\w+:|$)/)?.[1]?.trim()?.replace(/\n\s+/g, ' ') ?? ''
+  const version = frontmatter.match(/version:\s*(.+)/)?.[1]?.trim() ?? '1.0.0'
+  const tags: string[] = []
+  const tagsMatch = frontmatter.match(/tags:\n([\s\S]+)$/)
+  if (tagsMatch) {
+    for (const tagLine of tagsMatch[1].split('\n')) {
+      const tag = tagLine.match(/-\s*(.+)/)?.[1]?.trim()
+      if (tag) tags.push(tag)
     }
   }
 
-  return { name, description, category, heroQuery, slotNames, catalogDir: relativeDir }
+  return { name, description, version, tags, catalogDir: relativeDir }
 }
 
 /**
- * Load all theme catalog entries from SKILL.md files.
+ * Load all capability catalog entries from SKILL.md files.
  */
 export async function loadThemeCatalog(): Promise<ThemeCatalogEntry[]> {
-  const catalogPath = path.join(process.cwd(), 'server/lib/skills/catalog')
+  const catalogPath = getCapabilitySkillsPath()
   const skillFiles = await glob('**/SKILL.md', { cwd: catalogPath })
   const entries: ThemeCatalogEntry[] = []
 
@@ -66,14 +60,13 @@ export async function loadThemeCatalog(): Promise<ThemeCatalogEntry[]> {
 }
 
 /**
- * Build the theme catalog prompt for the design agent LLM.
- * With 12 curated themes, this is ~500 tokens vs ~10K with 227 themes.
+ * Build the capability catalog prompt for the design/polish agents.
  */
 export async function buildSkillCatalogPrompt(): Promise<string> {
   const entries = await loadThemeCatalog()
 
-  let prompt = 'AVAILABLE THEMES:\n'
-  prompt += 'Select the best-matching theme for the generated app.\n\n'
+  let prompt = 'AVAILABLE CAPABILITIES:\n'
+  prompt += 'Select the best-matching capability visual identity for the generated app.\n\n'
 
   for (const entry of entries) {
     prompt += `- ${entry.name}: ${entry.description}\n`
@@ -83,26 +76,11 @@ export async function buildSkillCatalogPrompt(): Promise<string> {
 }
 
 /**
- * Resolve SKILL.md file path for a given theme name.
- * Searches all category subdirectories.
+ * Resolve SKILL.md file path for a given capability/theme name.
  */
 export async function resolveThemeSkillPath(themeName: string): Promise<string | null> {
-  const catalogPath = path.join(process.cwd(), 'server/lib/skills/catalog')
+  const catalogPath = getCapabilitySkillsPath()
   const skillFiles = await glob(`**/${themeName}/SKILL.md`, { cwd: catalogPath })
   if (skillFiles.length === 0) return null
   return path.join(catalogPath, skillFiles[0])
-}
-
-/**
- * Load the TypeScript implementation of a skill.
- */
-export async function loadSkillImplementation(name: string) {
-  try {
-    const skillPath = path.join(process.cwd(), `server/lib/skills/catalog/${name}/index.ts`)
-    const { skill } = await import(skillPath)
-    return skill
-  } catch (e) {
-    console.error(`[catalog-loader] Failed to load skill ${name}:`, e)
-    return null
-  }
 }

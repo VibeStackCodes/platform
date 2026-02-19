@@ -37,6 +37,7 @@ describe('appGenerationMachine', () => {
     expect(states).toContain('preparing')
     expect(states).toContain('blueprinting')
     expect(states).toContain('generating')
+    expect(states).toContain('polishing')
     expect(states).toContain('validating')
     expect(states).toContain('repairing')
     expect(states).toContain('reviewing')
@@ -75,6 +76,13 @@ describe('appGenerationMachine', () => {
     actor.stop()
   })
 
+  it('context includes polishTokens', () => {
+    const actor = createActor(appGenerationMachine)
+    actor.start()
+    expect(actor.getSnapshot().context.polishTokens).toBe(0)
+    actor.stop()
+  })
+
   it('machine has invoke on blueprinting state', () => {
     const state = appGenerationMachine.config.states?.blueprinting
     expect(state?.invoke).toBeDefined()
@@ -82,6 +90,11 @@ describe('appGenerationMachine', () => {
 
   it('machine has invoke on generating state', () => {
     const state = appGenerationMachine.config.states?.generating
+    expect(state?.invoke).toBeDefined()
+  })
+
+  it('machine has invoke on polishing state', () => {
+    const state = appGenerationMachine.config.states?.polishing
     expect(state?.invoke).toBeDefined()
   })
 

@@ -20,7 +20,7 @@ const textSlotsSchema = z.object({
 })
 
 const selectionSchema = z.object({
-  theme: z.string().describe('Theme skill name, must start with theme-'),
+  theme: z.string().describe('Capability skill name from catalog'),
   heroImageQuery: z.string().min(3).describe('Unsplash query optimized for this app context'),
   textSlots: textSlotsSchema,
 })
@@ -33,7 +33,7 @@ const designAgent = new Agent({
   model: createAgentModelResolver('orchestrator'),
   // No tools — theme selection is already done deterministically before this agent is called.
   // The recommendation is embedded in the prompt. This agent only needs to do structured output.
-  instructions: `You are a design selector for VibeStack. Your job is to pick the BEST MATCHING theme from a catalog and fill text slots for the generated app.
+  instructions: `You are a design selector for VibeStack. Your job is to pick the BEST MATCHING capability from a catalog and fill text slots for the generated app.
 
 A theme selector has already analyzed the app intent and provided a recommendation in the prompt. Use that recommendation as guidance, but pick the exact theme skill name from the skill catalog list.
 
@@ -41,7 +41,7 @@ THEME SELECTION RULES:
 1. Read the "Theme selector recommendation" in the prompt — use it to guide website vs admin intent.
 2. Website themes (canape, quomi, gallery) are for public-facing apps — never use them for staff or management apps.
 3. Admin themes (dashboard, corporate) are for staff/management apps — never use them for public websites.
-4. Pick the EXACT theme skill name from the skill catalog (starts with "theme-").
+4. Pick the EXACT skill name from the catalog list.
 5. Never invent theme names that are not in the catalog list.
 
 CATALOG SELECTION RULES:
@@ -128,11 +128,11 @@ function parseThemeTokens(name: string, markdown: string): ThemeTokens {
 
 function normalizeThemeName(raw: string, catalogPrompt: string): string {
   const trimmed = raw.trim()
-  const candidate = trimmed.startsWith('theme-') ? trimmed : `theme-${trimmed}`
+  const candidate = trimmed
   if (catalogPrompt.includes(`- ${candidate}:`)) return candidate
 
-  const firstTheme = catalogPrompt.match(/- (theme-[a-z0-9-]+):/i)?.[1]
-  return firstTheme ?? 'theme-stratton'
+  const firstTheme = catalogPrompt.match(/- ([a-z0-9-]+):/i)?.[1]
+  return firstTheme ?? 'public-website'
 }
 
 export async function runDesignAgent(
@@ -193,8 +193,8 @@ ${catalogPrompt}`
   if (skillPath) {
     markdown = await readFile(skillPath, 'utf8')
   } else {
-    // Fallback to first available theme
-    const fallbackPath = await resolveThemeSkillPath('theme-stratton')
+    // Fallback to first available capability
+    const fallbackPath = await resolveThemeSkillPath('public-website')
     markdown = fallbackPath
       ? await readFile(fallbackPath, 'utf8')
       : ''

@@ -42,6 +42,7 @@ export interface AppBlueprint {
   meta: {
     appName: string
     appDescription: string
+    tokens?: ThemeTokens
   }
   features: InferredFeatures
   contract: SchemaContract
@@ -634,6 +635,7 @@ Thumbs.db
     meta: {
       appName: input.appName,
       appDescription: input.appDescription,
+      tokens,
     },
     features,
     contract: input.contract,

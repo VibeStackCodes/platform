@@ -4,6 +4,7 @@ import * as Sentry from '@sentry/node'
 import type { AppBlueprint } from '../app-blueprint'
 import type { SchemaContract } from '../schema-contract'
 import type { AssemblyResult } from '../capabilities/assembler'
+import type { ThemeTokens } from '../themed-code-engine'
 import type { ValidationGateResult } from './validation'
 import type { CodeReviewResult } from './code-review'
 import type { AnalysisResult } from './orchestrator'
@@ -54,6 +55,7 @@ export interface MachineContext {
 
   // Token tracking
   totalTokens: number
+  polishTokens: number
 
   // Error
   error: string | null
@@ -126,6 +128,12 @@ export const appGenerationMachine = setup({
       async ({ input }: { input: { blueprint: AppBlueprint; contract: SchemaContract; sandboxId: string; supabaseProjectId: string; supabaseUrl: string; supabaseAnonKey: string } }) => {
         const { runCodeGeneration } = await import('./orchestrator')
         return runCodeGeneration(input)
+      },
+    ),
+    runPolishActor: fromPromise(
+      async ({ input }: { input: { sandboxId: string; blueprint: AppBlueprint; assembly: AssemblyResult | null; tokens: ThemeTokens } }) => {
+        const { runPolish } = await import('./polish-agent')
+        return runPolish(input)
       },
     ),
     runValidationActor: fromPromise(async ({ input }: { input: { blueprint: AppBlueprint; sandboxId: string } }) => {
@@ -233,6 +241,7 @@ export const appGenerationMachine = setup({
     reviewSkipped: false,
     deploymentUrl: null,
     totalTokens: 0,
+    polishTokens: 0,
     error: null,
   },
   states: {
@@ -286,8 +295,8 @@ export const appGenerationMachine = setup({
                       appName: ({ event }) => (event.output as Extract<AnalysisResult, { type: 'done' }>).appName,
                       appDescription: ({ event }) => (event.output as Extract<AnalysisResult, { type: 'done' }>).appDescription,
                       contract: ({ event }) => (event.output as Extract<AnalysisResult, { type: 'done' }>).contract,
-                      capabilityManifest: ({ event }) => (event.output as Extract<AnalysisResult, { type: 'done' }>).capabilityManifest,
-                      assembly: ({ event }) => (event.output as Extract<AnalysisResult, { type: 'done' }>).assembly,
+                      capabilityManifest: ({ event }) => (event.output as Extract<AnalysisResult, { type: 'done' }>).capabilityManifest ?? [],
+                      assembly: ({ event }) => (event.output as Extract<AnalysisResult, { type: 'done' }>).assembly ?? null,
                       totalTokens: ({ context, event }) => context.totalTokens + event.output.tokensUsed,
                     }),
                   },
@@ -442,7 +451,7 @@ export const appGenerationMachine = setup({
           supabaseAnonKey: context.supabaseAnonKey!,
         }),
         onDone: {
-          target: 'validating',
+          target: 'polishing',
           actions: assign({
             totalTokens: ({ context, event }) => context.totalTokens + event.output.tokensUsed,
           }),
@@ -458,6 +467,61 @@ export const appGenerationMachine = setup({
               return String(err)
             },
           }),
+        },
+      },
+    },
+
+    polishing: {
+      invoke: {
+        src: 'runPolishActor',
+        input: ({ context }) => ({
+          sandboxId: context.sandboxId!,
+          blueprint: context.blueprint!,
+          assembly: context.assembly,
+          tokens: (context.blueprint?.meta as { tokens?: ThemeTokens } | undefined)?.tokens ?? {
+            name: 'public-website',
+            fonts: { display: 'Inter', body: 'Inter', googleFontsUrl: '' },
+            colors: {
+              background: '#ffffff',
+              foreground: '#111111',
+              primary: '#2b6cb0',
+              primaryForeground: '#ffffff',
+              secondary: '#e5e7eb',
+              accent: '#f59e0b',
+              muted: '#f3f4f6',
+              border: '#d1d5db',
+            },
+            style: {
+              borderRadius: '0.5rem',
+              cardStyle: 'elevated',
+              navStyle: 'top-bar',
+              heroLayout: 'split',
+              spacing: 'normal',
+              motion: 'subtle',
+              imagery: 'minimal',
+            },
+            authPosture: 'hybrid',
+            heroImages: [],
+            heroQuery: 'modern web app',
+            textSlots: {
+              hero_headline: 'Welcome',
+              hero_subtext: 'Generated app',
+              about_paragraph: 'Generated app experience.',
+              cta_label: 'Get started',
+              empty_state: 'No items yet.',
+              footer_tagline: 'Built with care.',
+            },
+          },
+        }),
+        onDone: {
+          target: 'validating',
+          actions: assign({
+            totalTokens: ({ context, event }) => context.totalTokens + (event.output?.tokensUsed ?? 0),
+            polishTokens: ({ context, event }) => context.polishTokens + (event.output?.tokensUsed ?? 0),
+          }),
+        },
+        onError: {
+          target: 'validating',
         },
       },
     },

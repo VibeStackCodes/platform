@@ -19,7 +19,7 @@ import type { SchemaContract } from '@server/lib/schema-contract'
 // generate() returns a minimal selectionSchema-compatible object.
 // The theme returned by the mock is controlled per-test via `mockTheme`.
 // ---------------------------------------------------------------------------
-let mockTheme = 'theme-canape'
+let mockTheme = 'recipes'
 
 function makeSelection() {
   return {
@@ -55,11 +55,11 @@ vi.mock('@mastra/core/agent', () => {
 vi.mock('@server/lib/skills/catalog-loader', () => ({
   buildSkillCatalogPrompt: vi.fn(async () =>
     [
-      '- theme-canape: Restaurant website theme',
-      '- theme-dashboard: Admin dashboard theme',
-      '- theme-corporate: Corporate website theme',
-      '- theme-quomi: Portfolio/gallery theme',
-      '- theme-gallery: Image gallery theme',
+      '- recipes: Recipe capability with food-focused visuals',
+      '- blog: Editorial blog capability',
+      '- portfolio: Portfolio/gallery capability',
+      '- public-website: Marketing website capability',
+      '- auth: Authentication capability',
     ].join('\n'),
   ),
   resolveThemeSkillPath: vi.fn(async () => null),
@@ -104,7 +104,7 @@ const contract: SchemaContract = {
 describe('runDesignAgent', () => {
   beforeEach(() => {
     // Reset mock theme to default before each test
-    mockTheme = 'theme-canape'
+    mockTheme = 'recipes'
   })
 
   it('returns selectedTheme and themeReasoning in result', async () => {
@@ -123,16 +123,15 @@ describe('runDesignAgent', () => {
     expect(typeof result.themeReasoning).toBe('string')
   })
 
-  it('selectedTheme is normalized to a theme- prefixed name', async () => {
+  it('selectedTheme is normalized to a catalog capability name', async () => {
     const result = await runDesignAgent('Build an app', contract)
 
-    // normalizeThemeName ensures the theme starts with "theme-"
-    expect(result.selectedTheme).toMatch(/^theme-/)
+    expect(['recipes', 'blog', 'portfolio', 'public-website', 'auth']).toContain(result.selectedTheme)
   })
 
   it('selects appropriate theme based on prompt intent (website)', async () => {
     // Mock the LLM to return canape for a restaurant website prompt
-    mockTheme = 'theme-canape'
+    mockTheme = 'recipes'
 
     const result = await runDesignAgent(
       'Restaurant website with menu and reservations',
@@ -141,14 +140,14 @@ describe('runDesignAgent', () => {
       'Public-facing restaurant website',
     )
 
-    expect(result.selectedTheme).toBe('theme-canape')
+    expect(result.selectedTheme).toBe('recipes')
     // themeReasoning comes from the deterministic theme selector tool
     expect(result.themeReasoning).toContain('website')
   })
 
   it('does NOT select website theme for management apps', async () => {
     // Mock the LLM to return dashboard for a management app prompt
-    mockTheme = 'theme-dashboard'
+    mockTheme = 'public-website'
 
     const result = await runDesignAgent(
       'Restaurant management system for staff',
@@ -157,8 +156,8 @@ describe('runDesignAgent', () => {
       'Staff-only management app',
     )
 
-    expect(['theme-dashboard', 'theme-corporate']).toContain(result.selectedTheme)
-    expect(result.selectedTheme).not.toBe('theme-canape')
+    expect(['public-website', 'blog', 'portfolio']).toContain(result.selectedTheme)
+    expect(result.selectedTheme).not.toBe('recipes')
     // themeReasoning from the tool should mention management/staff intent
     expect(result.themeReasoning).toBeTruthy()
   })
@@ -176,7 +175,7 @@ describe('runDesignAgent', () => {
   })
 
   it('themeReasoning reflects management intent for admin prompts', async () => {
-    mockTheme = 'theme-dashboard'
+    mockTheme = 'public-website'
 
     const result = await runDesignAgent(
       'Restaurant management system for staff',
