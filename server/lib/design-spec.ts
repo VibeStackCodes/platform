@@ -1,9 +1,9 @@
 // lib/design-spec.ts
 //
-// Deterministic DesignSpec derivation from SchemaContract + DesignPreferences.
+// Deterministic DesignSpec derivation from SchemaContract.
 // No LLM calls — archetype detection is keyword-based pattern matching.
 
-import type { SchemaContract, DesignPreferences } from './schema-contract'
+import type { SchemaContract } from './schema-contract'
 
 export type LayoutArchetype =
   | 'editorial'   // magazines, blogs, articles, travel
@@ -209,7 +209,7 @@ const HERO_QUERIES: Record<LayoutArchetype, string> = {
  * Deterministically derive a DesignSpec from contract + design preferences.
  * No LLM calls.
  */
-export function deriveDesignSpec(contract: SchemaContract, _prefs: DesignPreferences): DesignSpec {
+export function deriveDesignSpec(contract: SchemaContract): DesignSpec {
   const entityTableNames = contract.tables
     .filter((t) => !t.name.startsWith('_'))
     .map((t) => t.name)

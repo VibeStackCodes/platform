@@ -42,7 +42,6 @@ function createMockBlueprint(files: Array<{ path: string; content: string }>): A
     meta: {
       appName: 'Test App',
       appDescription: 'Test description',
-      designPreferences: { style: 'modern', primaryColor: '#3b82f6', fontFamily: 'Inter' },
     },
     features: { auth: false, entities: ['tasks'] },
     contract: {

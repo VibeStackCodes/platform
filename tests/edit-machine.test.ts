@@ -301,7 +301,6 @@ describe('editMachine', () => {
         features: [],
         pages: [],
         contract: mockContract,
-        designPreferences: null,
       }
 
       const testMachine = editMachine.provide({
@@ -342,7 +341,6 @@ describe('editMachine', () => {
         features: [],
         pages: [],
         contract: mockContract,
-        designPreferences: null,
       }
 
       const testMachine = editMachine.provide({

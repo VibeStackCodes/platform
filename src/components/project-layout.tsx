@@ -3,6 +3,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { useQuery } from '@tanstack/react-query'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { apiFetch } from '@/lib/utils'
 import { BuilderChat } from '@/components/builder-chat'
 import { BuilderPreview } from '@/components/builder-preview'
 import type { ElementContext } from '@/lib/types'
@@ -91,7 +92,7 @@ export function ProjectLayout({
   const { data: sandboxUrls } = useQuery({
     queryKey: ['sandbox-urls', projectId],
     queryFn: async () => {
-      const res = await fetch(`/api/projects/${projectId}/sandbox-urls`)
+      const res = await apiFetch(`/api/projects/${projectId}/sandbox-urls`)
       if (!res.ok) return null
       return res.json() as Promise<{
         sandboxId: string
@@ -117,7 +118,7 @@ export function ProjectLayout({
   // Fetch sandbox URLs imperatively when generation completes
   const fetchSandboxUrls = useCallback(async (): Promise<boolean> => {
     try {
-      const res = await fetch(`/api/projects/${projectId}/sandbox-urls`)
+      const res = await apiFetch(`/api/projects/${projectId}/sandbox-urls`)
       if (!res.ok) return false
       const data = await res.json()
       if (!data.previewUrl) return false

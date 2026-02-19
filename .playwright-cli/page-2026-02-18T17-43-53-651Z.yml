@@ -1,0 +1,50 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - navigation [ref=e5]:
+      - link "S StudioSprint" [ref=e6] [cursor=pointer]:
+        - /url: /
+        - generic [ref=e7]: S
+        - generic [ref=e8]: StudioSprint
+      - link "Clients" [ref=e9] [cursor=pointer]:
+        - /url: /clients
+      - link "Projects" [ref=e10] [cursor=pointer]:
+        - /url: /projects
+      - link "Deliverables" [ref=e11] [cursor=pointer]:
+        - /url: /deliverables
+      - link "Time Entries" [ref=e12] [cursor=pointer]:
+        - /url: /time-entries
+  - main [ref=e14]:
+    - generic [ref=e81]:
+      - link "← Back to Clients" [ref=e83] [cursor=pointer]:
+        - /url: /clients
+      - generic [ref=e84]:
+        - heading "Sample clients" [level=1] [ref=e85]
+        - button "Edit" [ref=e86]
+      - generic [ref=e87]:
+        - generic [ref=e89]: Details
+        - generic [ref=e90]:
+          - generic [ref=e91]:
+            - paragraph [ref=e92]: Company Name
+            - paragraph [ref=e93]: Sample clients
+          - generic [ref=e94]:
+            - paragraph [ref=e95]: Contact Person
+            - paragraph [ref=e96]: Sample clients
+          - generic [ref=e97]:
+            - paragraph [ref=e98]: Email
+            - paragraph [ref=e99]: Sample clients
+          - generic [ref=e100]:
+            - paragraph [ref=e101]: Phone
+            - paragraph [ref=e102]: Sample clients
+          - generic [ref=e103]:
+            - paragraph [ref=e104]: Country
+            - paragraph [ref=e105]: Sample clients
+      - generic [ref=e106]:
+        - generic [ref=e108]: Properties
+        - generic [ref=e109]:
+          - generic [ref=e110]:
+            - paragraph [ref=e111]: Contract Value
+            - paragraph
+          - generic [ref=e112]:
+            - paragraph [ref=e113]: Status
+            - paragraph [ref=e114]:
+              - generic [ref=e115]: prospect

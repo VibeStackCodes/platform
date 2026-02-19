@@ -1,0 +1,71 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - navigation [ref=e5]:
+      - link "M Meridian" [ref=e6] [cursor=pointer]:
+        - /url: /
+        - generic [ref=e7]: M
+        - generic [ref=e8]: Meridian
+      - link "Collections" [ref=e9] [cursor=pointer]:
+        - /url: /collections
+      - link "Watches" [active] [ref=e10] [cursor=pointer]:
+        - /url: /watches
+      - link "Collection Watches" [ref=e11] [cursor=pointer]:
+        - /url: /collection-watches
+  - main [ref=e13]:
+    - generic [ref=e16]:
+      - generic [ref=e17]:
+        - heading "Watches" [level=1] [ref=e18]
+        - button "New Watches" [ref=e19]:
+          - img
+          - text: New Watches
+      - generic [ref=e20]:
+        - generic [ref=e21]:
+          - generic [ref=e23]: C
+          - link "comes communis" [ref=e26] [cursor=pointer]:
+            - /url: /watches/2ff82e9e-e9fe-4679-9ffd-5fbb0ef7b320
+          - generic [ref=e27]:
+            - paragraph [ref=e28]: comes communis
+            - paragraph [ref=e29]: "10"
+            - paragraph [ref=e30]: basic
+            - button [ref=e32]:
+              - img
+        - generic [ref=e33]:
+          - generic [ref=e35]: T
+          - link "textus bellum" [ref=e38] [cursor=pointer]:
+            - /url: /watches/5c645618-079e-4358-9f2c-7c28611e177a
+          - generic [ref=e39]:
+            - paragraph [ref=e40]: textus bellum
+            - paragraph [ref=e41]: "721"
+            - paragraph [ref=e42]: enterprise
+            - button [ref=e44]:
+              - img
+        - generic [ref=e45]:
+          - generic [ref=e47]: A
+          - link "adulescens voluptas" [ref=e50] [cursor=pointer]:
+            - /url: /watches/e22c9d8d-ddef-4e33-a6bc-9d0e96e21402
+          - generic [ref=e51]:
+            - paragraph [ref=e52]: adulescens voluptas
+            - paragraph [ref=e53]: "846"
+            - paragraph [ref=e54]: standard
+            - button [ref=e56]:
+              - img
+        - generic [ref=e57]:
+          - generic [ref=e59]: T
+          - link "tui repellat" [ref=e62] [cursor=pointer]:
+            - /url: /watches/e99690e6-b8a5-48ad-b120-db684643b388
+          - generic [ref=e63]:
+            - paragraph [ref=e64]: tui repellat
+            - paragraph [ref=e65]: "603"
+            - paragraph [ref=e66]: basic
+            - button [ref=e68]:
+              - img
+        - generic [ref=e69]:
+          - generic [ref=e71]: A
+          - link "ademptio dens" [ref=e74] [cursor=pointer]:
+            - /url: /watches/3fc84907-5dfd-4bd1-97e2-39d2c2f59140
+          - generic [ref=e75]:
+            - paragraph [ref=e76]: ademptio dens
+            - paragraph [ref=e77]: "686"
+            - paragraph [ref=e78]: premium
+            - button [ref=e80]:
+              - img

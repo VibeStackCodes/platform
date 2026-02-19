@@ -1,0 +1,77 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - navigation [ref=e5]:
+      - link "L La Piazza Manager" [ref=e6] [cursor=pointer]:
+        - /url: /
+        - generic [ref=e7]: L
+        - generic [ref=e8]: La Piazza Manager
+      - link "Menu Categories" [ref=e9] [cursor=pointer]:
+        - /url: /menu-categories
+      - link "Menu Items" [ref=e10] [cursor=pointer]:
+        - /url: /menu-items
+      - link "Restaurant Tables" [ref=e11] [cursor=pointer]:
+        - /url: /restaurant-tables
+      - link "Reservations" [active] [ref=e12] [cursor=pointer]:
+        - /url: /reservations
+      - link "Orders" [ref=e13] [cursor=pointer]:
+        - /url: /orders
+      - link "Order Items" [ref=e14] [cursor=pointer]:
+        - /url: /order-items
+  - main [ref=e16]:
+    - generic [ref=e288]:
+      - generic [ref=e289]:
+        - heading "Reservations" [level=1] [ref=e290]
+        - button "New Reservation" [ref=e291]:
+          - img
+          - text: New Reservation
+      - generic [ref=e292]:
+        - generic [ref=e293]:
+          - generic [ref=e295]: S
+          - link "Sample reservations" [ref=e298] [cursor=pointer]:
+            - /url: /reservations/fc0b27c6-7809-461e-a66e-5eea7ae673ab
+          - generic [ref=e299]:
+            - paragraph [ref=e300]: Sample reservations
+            - paragraph [ref=e301]: pending
+            - paragraph [ref=e302]: "1"
+            - button [ref=e304]:
+              - img
+        - generic [ref=e305]:
+          - generic [ref=e307]: S
+          - link "Sample reservations" [ref=e310] [cursor=pointer]:
+            - /url: /reservations/b0bbb646-a8be-46af-93da-63510c963396
+          - generic [ref=e311]:
+            - paragraph [ref=e312]: Sample reservations
+            - paragraph [ref=e313]: pending
+            - paragraph [ref=e314]: "2"
+            - button [ref=e316]:
+              - img
+        - generic [ref=e317]:
+          - generic [ref=e319]: S
+          - link "Sample reservations" [ref=e322] [cursor=pointer]:
+            - /url: /reservations/dc6731c7-3b38-4ded-9824-b48c9d07e2d0
+          - generic [ref=e323]:
+            - paragraph [ref=e324]: Sample reservations
+            - paragraph [ref=e325]: pending
+            - paragraph [ref=e326]: "3"
+            - button [ref=e328]:
+              - img
+        - generic [ref=e329]:
+          - generic [ref=e331]: S
+          - link "Sample reservations" [ref=e334] [cursor=pointer]:
+            - /url: /reservations/e1113266-d1e7-4d36-91a1-5efb027bae35
+          - generic [ref=e335]:
+            - paragraph [ref=e336]: Sample reservations
+            - paragraph [ref=e337]: pending
+            - paragraph [ref=e338]: "4"
+            - button [ref=e340]:
+              - img
+        - generic [ref=e341]:
+          - generic [ref=e343]: S
+          - link "Sample reservations" [ref=e346] [cursor=pointer]:
+            - /url: /reservations/a42894fd-5c42-4570-9dc8-405b21cb1bb9
+          - generic [ref=e347]:
+            - paragraph [ref=e348]: Sample reservations
+            - paragraph [ref=e349]: pending
+            - paragraph [ref=e350]: "5"
+            - button [ref=e352]:
+              - img

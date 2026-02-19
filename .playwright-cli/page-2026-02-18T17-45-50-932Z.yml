@@ -1,0 +1,62 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - navigation [ref=e5]:
+      - link "L La Piazza Manager" [ref=e6] [cursor=pointer]:
+        - /url: /
+        - generic [ref=e7]: L
+        - generic [ref=e8]: La Piazza Manager
+      - link "Menu Categories" [ref=e9] [cursor=pointer]:
+        - /url: /menu-categories
+      - link "Menu Items" [ref=e10] [cursor=pointer]:
+        - /url: /menu-items
+      - link "Restaurant Tables" [ref=e11] [cursor=pointer]:
+        - /url: /restaurant-tables
+      - link "Reservations" [ref=e12] [cursor=pointer]:
+        - /url: /reservations
+      - link "Orders" [ref=e13] [cursor=pointer]:
+        - /url: /orders
+      - link "Order Items" [ref=e14] [cursor=pointer]:
+        - /url: /order-items
+  - main [ref=e16]:
+    - generic [ref=e17]:
+      - generic [ref=e19]:
+        - heading "Order Items" [level=1] [ref=e20]
+        - button "Add Item" [ref=e21]:
+          - img
+          - text: Add Item
+      - generic [ref=e22]:
+        - generic [ref=e23]:
+          - link "Sample order_items" [ref=e25] [cursor=pointer]:
+            - /url: /order-items/6c9afa59-77e9-40bf-950a-b5cf0e055e30
+          - generic [ref=e26]:
+            - generic [ref=e27]: $0.00
+            - button [ref=e28]:
+              - img
+        - generic [ref=e29]:
+          - link "Sample order_items" [ref=e31] [cursor=pointer]:
+            - /url: /order-items/623ac0ca-5d37-4308-805f-3ef8e4593e59
+          - generic [ref=e32]:
+            - generic [ref=e33]: $0.00
+            - button [ref=e34]:
+              - img
+        - generic [ref=e35]:
+          - link "Sample order_items" [ref=e37] [cursor=pointer]:
+            - /url: /order-items/ba70f3e6-6522-458a-a4fc-9a1bf50e0060
+          - generic [ref=e38]:
+            - generic [ref=e39]: $0.00
+            - button [ref=e40]:
+              - img
+        - generic [ref=e41]:
+          - link "Sample order_items" [ref=e43] [cursor=pointer]:
+            - /url: /order-items/62d451db-9fe8-4237-9b9e-1a0748b8e073
+          - generic [ref=e44]:
+            - generic [ref=e45]: $0.00
+            - button [ref=e46]:
+              - img
+        - generic [ref=e47]:
+          - link "Sample order_items" [ref=e49] [cursor=pointer]:
+            - /url: /order-items/219c41f6-a200-4243-8d67-b1aa0097b63a
+          - generic [ref=e50]:
+            - generic [ref=e51]: $0.00
+            - button [ref=e52]:
+              - img

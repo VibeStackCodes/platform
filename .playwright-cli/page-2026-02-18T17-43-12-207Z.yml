@@ -1,0 +1,17 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - navigation [ref=e5]:
+      - link "S StudioSprint" [ref=e6] [cursor=pointer]:
+        - /url: /
+        - generic [ref=e7]: S
+        - generic [ref=e8]: StudioSprint
+      - link "Clients" [ref=e9] [cursor=pointer]:
+        - /url: /clients
+      - link "Projects" [ref=e10] [cursor=pointer]:
+        - /url: /projects
+      - link "Deliverables" [ref=e11] [cursor=pointer]:
+        - /url: /deliverables
+      - link "Time Entries" [ref=e12] [cursor=pointer]:
+        - /url: /time-entries
+  - main [ref=e14]:
+    - paragraph [ref=e16]: Loading...

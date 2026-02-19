@@ -1,9 +1,23 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import type { SchemaContract } from '@server/lib/schema-contract'
+import type { AppBlueprint } from '@server/lib/app-blueprint'
+
+vi.mock('@server/lib/app-blueprint', () => ({
+  contractToBlueprintWithDesignAgent: vi.fn(async (input) => ({
+    meta: { appName: input.appName, appDescription: input.appDescription },
+    contract: input.contract,
+    features: { auth: false, entities: input.contract.tables.map((t: { name: string }) => t.name) },
+    fileTree: [
+      { path: 'src/lib/supabase.ts', content: '', layer: 1, isLLMSlot: false },
+      { path: 'supabase/migrations/0001_initial.sql', content: '', layer: 2, isLLMSlot: false },
+    ],
+  }) as AppBlueprint),
+}))
+
 import { runBlueprint } from '@server/lib/agents/orchestrator'
-import type { SchemaContract, DesignPreferences } from '@server/lib/schema-contract'
 
 describe('runBlueprint', () => {
-  it('generates AppBlueprint from contract', () => {
+  it('generates AppBlueprint from contract', async () => {
     const contract: SchemaContract = {
       tables: [
         {
@@ -16,17 +30,10 @@ describe('runBlueprint', () => {
         },
       ],
     }
-    const prefs: DesignPreferences = {
-      style: 'modern',
-      primaryColor: '#3b82f6',
-      fontFamily: 'Inter',
-    }
-
-    const result = runBlueprint({
+    const result = await runBlueprint({
       appName: 'TaskFlow',
       appDescription: 'Task management',
       contract,
-      designPreferences: prefs,
     })
 
     expect(result.blueprint.meta.appName).toBe('TaskFlow')

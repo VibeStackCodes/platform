@@ -1,0 +1,55 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - navigation [ref=e5]:
+      - link "W Wanderlust Journal" [ref=e6] [cursor=pointer]:
+        - /url: /
+        - generic [ref=e7]: W
+        - generic [ref=e8]: Wanderlust Journal
+      - link "Authors" [ref=e9] [cursor=pointer]:
+        - /url: /authors
+      - link "Destinations" [ref=e10] [cursor=pointer]:
+        - /url: /destinations
+      - link "Tags" [ref=e11] [cursor=pointer]:
+        - /url: /tags
+      - link "Articles" [ref=e12] [cursor=pointer]:
+        - /url: /articles
+      - link "Article Tags" [ref=e13] [cursor=pointer]:
+        - /url: /article-tags
+  - main [ref=e15]:
+    - article [ref=e18]:
+      - generic [ref=e19]:
+        - link "Back to Articles" [ref=e20] [cursor=pointer]:
+          - /url: /articles
+          - img [ref=e21]
+          - text: Back to Articles
+        - button "Edit" [ref=e23]:
+          - img
+          - text: Edit
+      - img "Sample articles" [ref=e25]
+      - heading "Sample articles" [level=1] [ref=e27]
+      - paragraph [ref=e29]: Sample articles
+      - generic [ref=e30]:
+        - generic [ref=e31]:
+          - paragraph [ref=e32]: Author Id
+          - paragraph [ref=e33]: 00000000-0000-4000-a000-0000000005ee
+        - generic [ref=e34]:
+          - paragraph [ref=e35]: Destination Id
+          - paragraph [ref=e36]: —
+        - generic [ref=e37]:
+          - paragraph [ref=e38]: Slug
+          - paragraph [ref=e39]: Sample articles
+        - generic [ref=e40]:
+          - paragraph [ref=e41]: Excerpt
+          - paragraph [ref=e42]: Sample articles
+        - generic [ref=e43]:
+          - paragraph [ref=e44]: Cover Image Url
+          - paragraph [ref=e45]: Sample articles
+        - generic [ref=e46]:
+          - paragraph [ref=e47]: Status
+          - paragraph [ref=e48]: draft
+        - generic [ref=e49]:
+          - paragraph [ref=e50]: Read Time Minutes
+          - paragraph [ref=e51]: —
+        - generic [ref=e52]:
+          - paragraph [ref=e53]: Published At
+          - paragraph [ref=e54]: —

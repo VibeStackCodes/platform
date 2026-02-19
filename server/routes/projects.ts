@@ -42,14 +42,19 @@ projectRoutes.post('/', async (c) => {
     return c.json({ error: 'Missing project name' }, 400)
   }
 
-  const project = await createProject({
-    userId: user.id,
-    name: body.name,
-    prompt: body.prompt ?? null,
-    status: 'pending',
-  })
+  try {
+    const project = await createProject({
+      userId: user.id,
+      name: body.name,
+      prompt: body.prompt ?? null,
+      status: 'pending',
+    })
 
-  return c.json(project, 201)
+    return c.json(project, 201)
+  } catch (err) {
+    console.error('[projects] POST / failed:', err)
+    return c.json({ error: 'Failed to create project' }, 500)
+  }
 })
 
 /**

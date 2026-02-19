@@ -1,0 +1,55 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - navigation [ref=e5]:
+      - link "W Wanderlust Journal" [ref=e6] [cursor=pointer]:
+        - /url: /
+        - generic [ref=e7]: W
+        - generic [ref=e8]: Wanderlust Journal
+      - link "Authors" [ref=e9] [cursor=pointer]:
+        - /url: /authors
+      - link "Destinations" [ref=e10] [cursor=pointer]:
+        - /url: /destinations
+      - link "Tags" [ref=e11] [cursor=pointer]:
+        - /url: /tags
+      - link "Articles" [ref=e12] [cursor=pointer]:
+        - /url: /articles
+      - link "Article Tags" [ref=e13] [cursor=pointer]:
+        - /url: /article-tags
+  - main [ref=e15]:
+    - article [ref=e53]:
+      - generic [ref=e54]:
+        - link "Back to Articles" [ref=e55] [cursor=pointer]:
+          - /url: /articles
+          - img [ref=e56]
+          - text: Back to Articles
+        - button "Edit" [ref=e58]:
+          - img
+          - text: Edit
+      - img "consequatur culpa dens derelinquo" [ref=e60]
+      - heading "consequatur culpa dens derelinquo" [level=1] [ref=e62]
+      - paragraph [ref=e64]: Defungo degenero succurro verbera vobis dolorem demum. Amoveo nisi solus conforto ceno voco. Cohibeo repellat accommodo tenus quaerat denuncio usque vir campana.
+      - generic [ref=e65]:
+        - generic [ref=e66]:
+          - paragraph [ref=e67]: Slug
+          - paragraph [ref=e68]: acerbitas-cur
+        - generic [ref=e69]:
+          - paragraph [ref=e70]: Author Id
+          - paragraph [ref=e71]: 00000000-0000-4000-a000-0000000005ee
+        - generic [ref=e72]:
+          - paragraph [ref=e73]: Destination Id
+          - paragraph [ref=e74]: —
+        - generic [ref=e75]:
+          - paragraph [ref=e76]: Excerpt
+          - paragraph [ref=e77]: tergum testimonium
+        - generic [ref=e78]:
+          - paragraph [ref=e79]: Cover Image Url
+          - paragraph [ref=e80]: https://sparse-mozzarella.org/
+        - generic [ref=e81]:
+          - paragraph [ref=e82]: Status
+          - paragraph [ref=e83]: draft
+        - generic [ref=e84]:
+          - paragraph [ref=e85]: Read Time Minutes
+          - paragraph [ref=e86]: —
+        - generic [ref=e87]:
+          - paragraph [ref=e88]: Published At
+          - paragraph [ref=e89]: —

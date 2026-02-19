@@ -1,0 +1,29 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - navigation [ref=e5]:
+      - link "C ClinicSched" [ref=e6] [cursor=pointer]:
+        - /url: /
+        - generic [ref=e7]: C
+        - generic [ref=e8]: ClinicSched
+      - link "Patientses" [ref=e9] [cursor=pointer]:
+        - /url: /patientses
+      - link "Doctorses" [ref=e10] [cursor=pointer]:
+        - /url: /doctorses
+      - link "Appointmentses" [ref=e11] [cursor=pointer]:
+        - /url: /appointmentses
+      - link "Profileses" [ref=e12] [cursor=pointer]:
+        - /url: /profileses
+  - main [ref=e14]:
+    - generic [ref=e15]:
+      - generic [ref=e16]:
+        - heading "Patientses" [level=1] [ref=e18]
+        - button "New Patients" [ref=e19]:
+          - img
+          - text: New Patients
+      - generic [ref=e22]:
+        - generic [ref=e23]:
+          - text: Date Of Birth From
+          - textbox "Date Of Birth From" [ref=e24]
+        - generic [ref=e25]:
+          - text: Date Of Birth To
+          - textbox "Date Of Birth To" [ref=e26]

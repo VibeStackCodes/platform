@@ -1,0 +1,88 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - navigation [ref=e5]:
+      - link "O OpenRecipe" [ref=e6] [cursor=pointer]:
+        - /url: /
+        - generic [ref=e7]: O
+        - generic [ref=e8]: OpenRecipe
+      - link "Recipes" [ref=e9] [cursor=pointer]:
+        - /url: /recipes
+      - link "RecipeIngredients" [ref=e10] [cursor=pointer]:
+        - /url: /recipe-ingredients
+      - link "RecipeSteps" [ref=e11] [cursor=pointer]:
+        - /url: /recipe-steps
+      - link "RecipeFavorites" [ref=e12] [cursor=pointer]:
+        - /url: /recipe-favorites
+  - main [ref=e14]:
+    - generic [ref=e15]:
+      - generic [ref=e16]:
+        - generic [ref=e17]:
+          - heading "Recipes" [level=1] [ref=e18]
+          - paragraph [ref=e43]: 5 total
+        - button "New Recipe" [ref=e19]:
+          - img
+          - text: New Recipe
+      - table [ref=e45]:
+        - rowgroup [ref=e46]:
+          - row "Title Prep Time Minutes Cook Time Minutes Servings Actions" [ref=e47]:
+            - columnheader "Title" [ref=e48] [cursor=pointer]
+            - columnheader "Prep Time Minutes" [ref=e49] [cursor=pointer]
+            - columnheader "Cook Time Minutes" [ref=e50] [cursor=pointer]
+            - columnheader "Servings" [ref=e51] [cursor=pointer]
+            - columnheader "Actions" [ref=e52]
+        - rowgroup [ref=e53]:
+          - row "View Delete" [ref=e54]:
+            - cell [ref=e55]
+            - cell [ref=e56]
+            - cell [ref=e57]
+            - cell [ref=e58]
+            - cell "View Delete" [ref=e59]:
+              - generic [ref=e60]:
+                - link "View" [ref=e61] [cursor=pointer]:
+                  - /url: /recipes/00000000-0000-4000-8000-000000000001
+                  - button "View" [ref=e62]
+                - button "Delete" [ref=e63]
+          - row "View Delete" [ref=e64]:
+            - cell [ref=e65]
+            - cell [ref=e66]
+            - cell [ref=e67]
+            - cell [ref=e68]
+            - cell "View Delete" [ref=e69]:
+              - generic [ref=e70]:
+                - link "View" [ref=e71] [cursor=pointer]:
+                  - /url: /recipes/00000000-0000-4000-8000-000000000002
+                  - button "View" [ref=e72]
+                - button "Delete" [ref=e73]
+          - row "View Delete" [ref=e74]:
+            - cell [ref=e75]
+            - cell [ref=e76]
+            - cell [ref=e77]
+            - cell [ref=e78]
+            - cell "View Delete" [ref=e79]:
+              - generic [ref=e80]:
+                - link "View" [ref=e81] [cursor=pointer]:
+                  - /url: /recipes/00000000-0000-4000-8000-000000000003
+                  - button "View" [ref=e82]
+                - button "Delete" [ref=e83]
+          - row "View Delete" [ref=e84]:
+            - cell [ref=e85]
+            - cell [ref=e86]
+            - cell [ref=e87]
+            - cell [ref=e88]
+            - cell "View Delete" [ref=e89]:
+              - generic [ref=e90]:
+                - link "View" [ref=e91] [cursor=pointer]:
+                  - /url: /recipes/00000000-0000-4000-8000-000000000004
+                  - button "View" [ref=e92]
+                - button "Delete" [ref=e93]
+          - row "View Delete" [ref=e94]:
+            - cell [ref=e95]
+            - cell [ref=e96]
+            - cell [ref=e97]
+            - cell [ref=e98]
+            - cell "View Delete" [ref=e99]:
+              - generic [ref=e100]:
+                - link "View" [ref=e101] [cursor=pointer]:
+                  - /url: /recipes/00000000-0000-4000-8000-000000000005
+                  - button "View" [ref=e102]
+                - button "Delete" [ref=e103]

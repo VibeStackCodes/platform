@@ -1,0 +1,97 @@
+- generic:
+  - generic:
+    - generic:
+      - banner:
+        - navigation:
+          - link:
+            - /url: /
+            - generic: D
+            - generic: DevRemote Board
+          - link:
+            - /url: /jobs
+            - text: Jobs
+          - link:
+            - /url: /tech-tags
+            - text: Tech Tags
+      - main:
+        - generic:
+          - generic:
+            - generic:
+              - heading [level=1]: Tech Tags
+              - paragraph: 5 total
+            - button:
+              - img
+              - text: New Tech Tag
+          - generic:
+            - generic:
+              - table:
+                - rowgroup:
+                  - row:
+                    - columnheader: Name
+                    - columnheader: Created At ↓
+                    - columnheader: Actions
+                - rowgroup:
+                  - row:
+                    - cell: Sample tech_tags
+                    - cell: 18/02/2026
+                    - cell:
+                      - generic:
+                        - link:
+                          - /url: /tech-tags/84a5eeeb-e8d5-4e25-bddc-8a664a47fd24
+                          - button: View
+                        - button: Delete
+                  - row:
+                    - cell: Sample tech_tags
+                    - cell: 18/02/2026
+                    - cell:
+                      - generic:
+                        - link:
+                          - /url: /tech-tags/69919612-d327-4a66-a41e-ee3f5b972866
+                          - button: View
+                        - button: Delete
+                  - row:
+                    - cell: Sample tech_tags
+                    - cell: 18/02/2026
+                    - cell:
+                      - generic:
+                        - link:
+                          - /url: /tech-tags/ec09678d-eb61-4747-9d5e-d1a00f8ded49
+                          - button: View
+                        - button: Delete
+                  - row:
+                    - cell: Sample tech_tags
+                    - cell: 18/02/2026
+                    - cell:
+                      - generic:
+                        - link:
+                          - /url: /tech-tags/e9675070-c5d1-45ca-b4fb-26658fda8b32
+                          - button: View
+                        - button: Delete
+                  - row:
+                    - cell: Sample tech_tags
+                    - cell: 18/02/2026
+                    - cell:
+                      - generic:
+                        - link:
+                          - /url: /tech-tags/fbc12517-3793-416a-bc31-3d40ce151a86
+                          - button: View
+                        - button: Delete
+  - dialog "Create Tech Tag" [ref=e91]:
+    - generic [ref=e92]:
+      - heading "Create Tech Tag" [level=2] [ref=e93]
+      - paragraph [ref=e94]: Fill in the details to create a new Tech Tag.
+    - generic [ref=e95]:
+      - generic [ref=e96]:
+        - text: Name
+        - textbox "Name" [active] [ref=e97]:
+          - /placeholder: Enter name
+      - generic [ref=e98]:
+        - text: Slug
+        - textbox "Slug" [ref=e99]:
+          - /placeholder: Enter slug
+      - generic [ref=e100]:
+        - button "Cancel" [ref=e101]
+        - button "Create" [ref=e102]
+    - button "Close" [ref=e103]:
+      - img
+      - generic [ref=e104]: Close

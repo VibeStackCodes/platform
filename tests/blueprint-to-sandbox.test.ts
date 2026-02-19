@@ -9,7 +9,7 @@ describe('blueprintToSandbox', () => {
   }
 
   const blueprint: AppBlueprint = {
-    meta: { appName: 'Test', appDescription: '', designPreferences: { style: 'modern', primaryColor: '#000', fontFamily: 'Inter' } },
+    meta: { appName: 'Test', appDescription: '' },
     features: { auth: false, entities: ['item'] },
     contract: { tables: [] },
     fileTree: [

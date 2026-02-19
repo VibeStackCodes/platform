@@ -1,0 +1,63 @@
+- generic [active] [ref=e1]:
+  - link "Skip to content":
+    - /url: "#geist-skip-nav"
+  - alert [ref=e2]
+  - generic [ref=e4]:
+    - banner [ref=e5]:
+      - link "Vercel logo":
+        - /url: /home
+        - button "Vercel Logo":
+          - img "Vercel Logo"
+      - navigation [ref=e6]:
+        - navigation [ref=e7]:
+          - link "Sign Up" [ref=e8] [cursor=pointer]:
+            - /url: /signup?next=%2Fsso-api%3Furl%3Dhttps%253A%252F%252Fwanderlust-journal-mls94y7k-4ywojr8cz-vibe-stack-team.vercel.app%252F%26nonce%3D4a172eb61865e6803c5b4b2dd87e1a9285dfc2b405419929dd9389f0d6c94935
+            - paragraph [ref=e10]: Sign Up
+    - main [ref=e11]:
+      - generic [ref=e12]:
+        - heading "Log in to Vercel" [level=1] [ref=e15]
+        - generic [ref=e16]:
+          - generic [ref=e17]:
+            - textbox "Email Address" [ref=e19]
+            - button "Continue with Email" [ref=e23] [cursor=pointer]:
+              - generic [ref=e24]: Continue with Email
+          - generic [ref=e25]:
+            - generic [ref=e28]:
+              - button "Continue with Google" [ref=e29] [cursor=pointer]:
+                - img [ref=e32]
+                - generic [ref=e38]: Continue with Google
+              - button "Continue with GitHub" [ref=e39] [cursor=pointer]:
+                - img [ref=e41]
+                - generic [ref=e45]: Continue with GitHub
+              - button "Continue with Apple" [ref=e46] [cursor=pointer]:
+                - img [ref=e48]
+                - generic [ref=e51]: Continue with Apple
+              - button "Continue with SAML SSO" [ref=e53] [cursor=pointer]:
+                - img [ref=e55]
+                - generic [ref=e57]: Continue with SAML SSO
+              - button "Continue with Passkey" [ref=e58] [cursor=pointer]:
+                - img [ref=e60]
+                - generic [ref=e62]: Continue with Passkey
+              - button "Show other options" [ref=e63] [cursor=pointer]:
+                - generic [ref=e64]: Show other options
+            - generic [ref=e65]:
+              - paragraph [ref=e66]:
+                - img [ref=e67]
+                - generic [ref=e69]: Single Sign-On is required to continue.
+              - button [ref=e70] [cursor=pointer]:
+                - img [ref=e72]
+                - generic [ref=e74]: Continue with SAML SSO
+        - paragraph [ref=e75]:
+          - text: Don't have an account?
+          - link "Sign Up" [ref=e76] [cursor=pointer]:
+            - /url: /signup?next=%2Fsso-api%3Furl%3Dhttps%253A%252F%252Fwanderlust-journal-mls94y7k-4ywojr8cz-vibe-stack-team.vercel.app%252F%26nonce%3D4a172eb61865e6803c5b4b2dd87e1a9285dfc2b405419929dd9389f0d6c94935
+      - generic [ref=e79]:
+        - link "Terms" [ref=e80] [cursor=pointer]:
+          - /url: /legal/terms
+        - link "Privacy Policy" [ref=e81] [cursor=pointer]:
+          - /url: /legal/privacy-policy
+  - generic:
+    - generic:
+      - generic:
+        - generic:
+          - img

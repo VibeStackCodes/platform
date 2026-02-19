@@ -1,0 +1,21 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - navigation [ref=e5]:
+      - link "O OpenRecipe" [ref=e6] [cursor=pointer]:
+        - /url: /
+        - generic [ref=e7]: O
+        - generic [ref=e8]: OpenRecipe
+      - link "Recipes" [ref=e9] [cursor=pointer]:
+        - /url: /recipes
+      - link "RecipeIngredients" [ref=e10] [cursor=pointer]:
+        - /url: /recipe-ingredients
+      - link "RecipeSteps" [ref=e11] [cursor=pointer]:
+        - /url: /recipe-steps
+      - link "RecipeFavorites" [ref=e12] [cursor=pointer]:
+        - /url: /recipe-favorites
+  - main [ref=e14]:
+    - generic [ref=e16]:
+      - heading "Recipes" [level=1] [ref=e18]
+      - button "New Recipe" [ref=e19]:
+        - img
+        - text: New Recipe

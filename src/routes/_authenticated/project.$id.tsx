@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
 import { ProjectLayout } from '@/components/project-layout'
+import { apiFetch } from '@/lib/utils'
 
 export const Route = createFileRoute('/_authenticated/project/$id')({
   component: ProjectPage,
@@ -12,7 +13,7 @@ function ProjectPage() {
   const { data: project, isLoading } = useQuery({
     queryKey: ['project', id],
     queryFn: async () => {
-      const res = await fetch(`/api/projects/${id}`)
+      const res = await apiFetch(`/api/projects/${id}`)
       if (!res.ok) throw new Error('Project not found')
       return res.json() as Promise<{
         id: string
@@ -29,7 +30,7 @@ function ProjectPage() {
   const { data: messages } = useQuery({
     queryKey: ['project-messages', id],
     queryFn: async () => {
-      const res = await fetch(`/api/projects/${id}/messages`)
+      const res = await apiFetch(`/api/projects/${id}/messages`)
       if (!res.ok) return []
       return res.json() as Promise<
         Array<{

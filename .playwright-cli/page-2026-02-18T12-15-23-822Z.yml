@@ -1,0 +1,106 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - navigation [ref=e5]:
+      - link "O OpenPantry" [ref=e6] [cursor=pointer]:
+        - /url: /
+        - generic [ref=e7]: O
+        - generic [ref=e8]: OpenPantry
+      - link "Recipes" [ref=e9] [cursor=pointer]:
+        - /url: /recipes
+      - link "Recipe Ingredients" [ref=e10] [cursor=pointer]:
+        - /url: /recipe-ingredients
+      - link "Recipe Steps" [ref=e11] [cursor=pointer]:
+        - /url: /recipe-steps
+      - link "Tags" [ref=e12] [cursor=pointer]:
+        - /url: /tags
+      - link "Recipe Tags" [ref=e13] [cursor=pointer]:
+        - /url: /recipe-tags
+      - link "Recipe Ratings" [ref=e14] [cursor=pointer]:
+        - /url: /recipe-ratings
+  - main [ref=e16]:
+    - generic [ref=e17]:
+      - generic [ref=e18]:
+        - generic [ref=e19]:
+          - heading "Recipes" [level=1] [ref=e20]
+          - paragraph [ref=e51]: 5 total
+        - button "New Recipe" [ref=e21]:
+          - img
+          - text: New Recipe
+      - generic [ref=e25]:
+        - checkbox "Published" [ref=e26]
+        - generic [ref=e27]: Published
+      - table [ref=e53]:
+        - rowgroup [ref=e54]:
+          - row "Title Published Prep Minutes Cook Minutes Servings Actions" [ref=e55]:
+            - columnheader "Title" [ref=e56] [cursor=pointer]
+            - columnheader "Published" [ref=e57] [cursor=pointer]
+            - columnheader "Prep Minutes" [ref=e58] [cursor=pointer]
+            - columnheader "Cook Minutes" [ref=e59] [cursor=pointer]
+            - columnheader "Servings" [ref=e60] [cursor=pointer]
+            - columnheader "Actions" [ref=e61]
+        - rowgroup [ref=e62]:
+          - row "Yogurt-infused Chicken Yes View Delete" [ref=e63]:
+            - cell "Yogurt-infused Chicken" [ref=e64]
+            - cell "Yes" [ref=e65]:
+              - generic [ref=e66]: "Yes"
+            - cell [ref=e67]
+            - cell [ref=e68]
+            - cell [ref=e69]
+            - cell "View Delete" [ref=e70]:
+              - generic [ref=e71]:
+                - link "View" [ref=e72] [cursor=pointer]:
+                  - /url: /recipes/22b1b60f-b5ea-4efa-a3fd-f4e26a3825fa
+                  - button "View" [ref=e73]
+                - button "Delete" [ref=e74]
+          - row "Goji Berry-infused Turkey Roast Yes View Delete" [ref=e75]:
+            - cell "Goji Berry-infused Turkey Roast" [ref=e76]
+            - cell "Yes" [ref=e77]:
+              - generic [ref=e78]: "Yes"
+            - cell [ref=e79]
+            - cell [ref=e80]
+            - cell [ref=e81]
+            - cell "View Delete" [ref=e82]:
+              - generic [ref=e83]:
+                - link "View" [ref=e84] [cursor=pointer]:
+                  - /url: /recipes/ce1a8a11-6d3f-4526-97fd-1a63a3bde958
+                  - button "View" [ref=e85]
+                - button "Delete" [ref=e86]
+          - row "Poutine Yes View Delete" [ref=e87]:
+            - cell "Poutine" [ref=e88]
+            - cell "Yes" [ref=e89]:
+              - generic [ref=e90]: "Yes"
+            - cell [ref=e91]
+            - cell [ref=e92]
+            - cell [ref=e93]
+            - cell "View Delete" [ref=e94]:
+              - generic [ref=e95]:
+                - link "View" [ref=e96] [cursor=pointer]:
+                  - /url: /recipes/c19cfc4e-3419-4792-86c0-734ebd6d0c37
+                  - button "View" [ref=e97]
+                - button "Delete" [ref=e98]
+          - row "Clair's Special Brussels Sprouts Yes View Delete" [ref=e99]:
+            - cell "Clair's Special Brussels Sprouts" [ref=e100]
+            - cell "Yes" [ref=e101]:
+              - generic [ref=e102]: "Yes"
+            - cell [ref=e103]
+            - cell [ref=e104]
+            - cell [ref=e105]
+            - cell "View Delete" [ref=e106]:
+              - generic [ref=e107]:
+                - link "View" [ref=e108] [cursor=pointer]:
+                  - /url: /recipes/d9826eea-0a69-4843-83d5-00fcf663b22d
+                  - button "View" [ref=e109]
+                - button "Delete" [ref=e110]
+          - row "Caesar Salad Yes View Delete" [ref=e111]:
+            - cell "Caesar Salad" [ref=e112]
+            - cell "Yes" [ref=e113]:
+              - generic [ref=e114]: "Yes"
+            - cell [ref=e115]
+            - cell [ref=e116]
+            - cell [ref=e117]
+            - cell "View Delete" [ref=e118]:
+              - generic [ref=e119]:
+                - link "View" [ref=e120] [cursor=pointer]:
+                  - /url: /recipes/5e9c856b-4e45-4168-9e19-95684dcc7f67
+                  - button "View" [ref=e121]
+                - button "Delete" [ref=e122]

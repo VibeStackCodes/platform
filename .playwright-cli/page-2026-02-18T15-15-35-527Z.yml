@@ -1,0 +1,50 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - navigation [ref=e5]:
+      - link "W Wanderlust Journal" [ref=e6] [cursor=pointer]:
+        - /url: /
+        - generic [ref=e7]: W
+        - generic [ref=e8]: Wanderlust Journal
+      - link "Authors" [ref=e9] [cursor=pointer]:
+        - /url: /authors
+      - link "Destinations" [ref=e10] [cursor=pointer]:
+        - /url: /destinations
+      - link "Tags" [ref=e11] [cursor=pointer]:
+        - /url: /tags
+      - link "Articles" [ref=e12] [cursor=pointer]:
+        - /url: /articles
+      - link "Article Tags" [ref=e13] [cursor=pointer]:
+        - /url: /article-tags
+  - main [ref=e15]:
+    - generic [ref=e16]:
+      - generic [ref=e18]:
+        - heading "Authors" [level=1] [ref=e19]
+        - button "Add Authors" [ref=e20]:
+          - img
+          - text: Add Authors
+      - generic [ref=e21]:
+        - generic [ref=e23]:
+          - img "avaritia villa abundans" [ref=e25]
+          - link "avaritia villa abundans" [ref=e26] [cursor=pointer]:
+            - /url: /authors/8d44d6e5-86f6-4508-ba90-a6e4df1238f3
+          - paragraph [ref=e27]: Apto arca comptus audio accendo patior. Utilis demens curvo.
+        - generic [ref=e29]:
+          - img "agnitio solitudo vapulus" [ref=e31]
+          - link "agnitio solitudo vapulus" [ref=e32] [cursor=pointer]:
+            - /url: /authors/899ca782-de0e-4488-a854-d8f2a8d18fcf
+          - paragraph [ref=e33]: Valetudo denique absum vitiosus illum clarus compello solutio. Convoco deinde patria.
+        - generic [ref=e35]:
+          - img "angelus tantum compello" [ref=e37]
+          - link "angelus tantum compello" [ref=e38] [cursor=pointer]:
+            - /url: /authors/d9e3a2d1-ed37-407f-830e-bed57039d04d
+          - paragraph [ref=e39]: Colligo terminatio accusator caveo titulus veniam tabella. Suscipit via facilis super arcus surgo defaeco una dolore deleniti.
+        - generic [ref=e41]:
+          - img "sortitus subvenio tamen" [ref=e43]
+          - link "sortitus subvenio tamen" [ref=e44] [cursor=pointer]:
+            - /url: /authors/b1ef78eb-653f-4a5c-b8b0-4da47c6c7106
+          - paragraph [ref=e45]: Appositus cultellus ager bardus tripudio. Antepono celer aeger.
+        - generic [ref=e47]:
+          - img "blandior voro cenaculum" [ref=e49]
+          - link "blandior voro cenaculum" [ref=e50] [cursor=pointer]:
+            - /url: /authors/34eae3e3-be4f-4b87-ac6c-9d909d685dbc
+          - paragraph [ref=e51]: Sequi tergeo reiciendis auditor trans utpote armarium articulus. Debeo solus vita antiquus.

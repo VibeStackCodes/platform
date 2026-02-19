@@ -1,0 +1,73 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - navigation [ref=e5]:
+      - link "S StudioSprint" [ref=e6] [cursor=pointer]:
+        - /url: /
+        - generic [ref=e7]: S
+        - generic [ref=e8]: StudioSprint
+      - link "Clients" [ref=e9] [cursor=pointer]:
+        - /url: /clients
+      - link "Projects" [ref=e10] [cursor=pointer]:
+        - /url: /projects
+      - link "Deliverables" [ref=e11] [cursor=pointer]:
+        - /url: /deliverables
+      - link "Time Entries" [ref=e12] [cursor=pointer]:
+        - /url: /time-entries
+  - main [ref=e14]:
+    - generic [ref=e15]:
+      - generic [ref=e17]:
+        - heading "Clients" [level=1] [ref=e18]
+        - button "New Client" [active] [ref=e19]:
+          - img
+          - text: New Client
+      - generic [ref=e20]:
+        - generic [ref=e21]:
+          - generic [ref=e23]: S
+          - link "Sample clients" [ref=e26] [cursor=pointer]:
+            - /url: /clients/afe42931-7695-4a6e-9cdd-95d20ec22b06
+          - generic [ref=e27]:
+            - paragraph [ref=e28]: Sample clients
+            - paragraph [ref=e29]: prospect
+            - paragraph [ref=e30]: —
+            - button [ref=e32]:
+              - img
+        - generic [ref=e33]:
+          - generic [ref=e35]: S
+          - link "Sample clients" [ref=e38] [cursor=pointer]:
+            - /url: /clients/b80959c5-9906-426d-ab5f-ea6b33892093
+          - generic [ref=e39]:
+            - paragraph [ref=e40]: Sample clients
+            - paragraph [ref=e41]: prospect
+            - paragraph [ref=e42]: —
+            - button [ref=e44]:
+              - img
+        - generic [ref=e45]:
+          - generic [ref=e47]: S
+          - link "Sample clients" [ref=e50] [cursor=pointer]:
+            - /url: /clients/fcf2c70d-cae5-434f-bc02-ea62a969c4b3
+          - generic [ref=e51]:
+            - paragraph [ref=e52]: Sample clients
+            - paragraph [ref=e53]: prospect
+            - paragraph [ref=e54]: —
+            - button [ref=e56]:
+              - img
+        - generic [ref=e57]:
+          - generic [ref=e59]: S
+          - link "Sample clients" [ref=e62] [cursor=pointer]:
+            - /url: /clients/896de97d-09e5-4a39-b40b-833e9ebf4878
+          - generic [ref=e63]:
+            - paragraph [ref=e64]: Sample clients
+            - paragraph [ref=e65]: prospect
+            - paragraph [ref=e66]: —
+            - button [ref=e68]:
+              - img
+        - generic [ref=e69]:
+          - generic [ref=e71]: S
+          - link "Sample clients" [ref=e74] [cursor=pointer]:
+            - /url: /clients/0dac09ad-e40d-4cd5-a73b-8e440bc3c0ed
+          - generic [ref=e75]:
+            - paragraph [ref=e76]: Sample clients
+            - paragraph [ref=e77]: prospect
+            - paragraph [ref=e78]: —
+            - button [ref=e80]:
+              - img

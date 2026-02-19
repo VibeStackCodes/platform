@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { supabase } from '@/lib/supabase-browser'
+import { apiFetch } from '@/lib/utils'
 
 export const Route = createFileRoute('/auth/login')({
   component: LoginPage,
@@ -24,7 +25,7 @@ function LoginPage() {
     const pendingPrompt = sessionStorage.getItem(PENDING_PROMPT_KEY)
     if (pendingPrompt) {
       sessionStorage.removeItem(PENDING_PROMPT_KEY)
-      const res = await fetch('/api/projects', {
+      const res = await apiFetch('/api/projects', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

@@ -1,0 +1,17 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - navigation [ref=e5]:
+      - link "D DevRemote Board" [ref=e6] [cursor=pointer]:
+        - /url: /
+        - generic [ref=e7]: D
+        - generic [ref=e8]: DevRemote Board
+      - link "Jobs" [ref=e9] [cursor=pointer]:
+        - /url: /jobs
+      - link "Tech Tags" [ref=e10] [cursor=pointer]:
+        - /url: /tech-tags
+  - main [ref=e12]:
+    - generic [ref=e14]:
+      - heading "Tech Tags" [level=1] [ref=e16]
+      - button "New Tech Tag" [ref=e17]:
+        - img
+        - text: New Tech Tag

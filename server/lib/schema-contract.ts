@@ -403,12 +403,6 @@ export const SchemaContractSchema = z.object({
   }
 })
 
-export const DesignPreferencesSchema = z.object({
-  style: z.string().default('modern').describe('Design style (e.g., modern, minimal, playful)'),
-  primaryColor: z.string().default('#3b82f6').describe('Primary color (hex code)'),
-  fontFamily: z.string().default('Inter').describe('Font family'),
-})
-
 // ============================================================================
 // TypeScript types (inferred from Zod schemas — single source of truth)
 // ============================================================================
@@ -419,7 +413,6 @@ export type RLSPolicy = z.infer<typeof RLSPolicySchema>
 export type TableDef = z.infer<typeof TableDefSchema>
 export type EnumDef = z.infer<typeof EnumDefSchema>
 export type SchemaContract = z.infer<typeof SchemaContractSchema>
-export type DesignPreferences = z.infer<typeof DesignPreferencesSchema>
 
 export interface ValidationResult {
   valid: boolean

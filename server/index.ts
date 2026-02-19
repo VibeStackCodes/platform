@@ -21,6 +21,13 @@ import { stripeWebhookRoutes } from './routes/stripe-webhook'
 import { supabaseProxyRoutes } from './routes/supabase-proxy'
 import { adminRoutes } from './routes/admin'
 
+declare const Bun: {
+  serve: (options: {
+    port: number
+    fetch: (request: Request) => Response | Promise<Response>
+  }) => unknown
+}
+
 const app = new Hono().basePath('/api')
 
 // Global middleware — applied in order
@@ -112,3 +119,10 @@ export default handle(app)
 
 // Named export for dev server (used by Vite proxy)
 export { app }
+
+// Dev server — Bun runtime (Vite proxies /api → localhost:8787)
+if (typeof Bun !== 'undefined' && !process.env.VERCEL) {
+  const port = Number(process.env.PORT) || 8787
+  Bun.serve({ port, fetch: app.fetch })
+  console.log(`[server] API running on http://localhost:${port}`)
+}

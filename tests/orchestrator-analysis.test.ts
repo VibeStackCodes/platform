@@ -26,7 +26,6 @@ describe('runAnalysis', () => {
                 contract: {
                   tables: [{ name: 'task', columns: [{ name: 'id', type: 'uuid', primaryKey: true }] }],
                 },
-                designPreferences: { style: 'modern', primaryColor: '#3b82f6', fontFamily: 'Inter' },
               },
             },
           ],

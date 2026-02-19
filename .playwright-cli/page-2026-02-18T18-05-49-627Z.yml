@@ -1,0 +1,72 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - navigation [ref=e5]:
+      - link "L La Piazza Manager" [ref=e6] [cursor=pointer]:
+        - /url: /
+        - generic [ref=e7]: L
+        - generic [ref=e8]: La Piazza Manager
+      - link "Menu Categories" [ref=e9] [cursor=pointer]:
+        - /url: /menu-categories
+      - link "Menu Items" [ref=e10] [cursor=pointer]:
+        - /url: /menu-items
+      - link "Restaurant Tables" [ref=e11] [cursor=pointer]:
+        - /url: /restaurant-tables
+      - link "Reservations" [ref=e12] [cursor=pointer]:
+        - /url: /reservations
+      - link "Orders" [ref=e13] [cursor=pointer]:
+        - /url: /orders
+      - link "Order Items" [ref=e14] [cursor=pointer]:
+        - /url: /order-items
+  - main [ref=e16]:
+    - generic [ref=e78]:
+      - generic [ref=e79]:
+        - heading "Menu Items" [level=1] [ref=e80]
+        - button "Add Item" [active] [ref=e81]:
+          - img
+          - text: Add Item
+      - generic [ref=e82]:
+        - generic [ref=e83]:
+          - generic [ref=e84]:
+            - link "Sample menu_items" [ref=e85] [cursor=pointer]:
+              - /url: /menu-items/f2a34645-cbd7-47ae-a9e6-3b90cb58625f
+            - paragraph [ref=e86]: Sample menu_items
+          - generic [ref=e87]:
+            - generic [ref=e88]: $10.00
+            - button [ref=e89]:
+              - img
+        - generic [ref=e90]:
+          - generic [ref=e91]:
+            - link "Sample menu_items" [ref=e92] [cursor=pointer]:
+              - /url: /menu-items/5c7d3d33-d8e9-4d46-b288-431dc666b7eb
+            - paragraph [ref=e93]: Sample menu_items
+          - generic [ref=e94]:
+            - generic [ref=e95]: $20.00
+            - button [ref=e96]:
+              - img
+        - generic [ref=e97]:
+          - generic [ref=e98]:
+            - link "Sample menu_items" [ref=e99] [cursor=pointer]:
+              - /url: /menu-items/5bd3b369-2b13-43d9-b78d-9717f5c73dad
+            - paragraph [ref=e100]: Sample menu_items
+          - generic [ref=e101]:
+            - generic [ref=e102]: $30.00
+            - button [ref=e103]:
+              - img
+        - generic [ref=e104]:
+          - generic [ref=e105]:
+            - link "Sample menu_items" [ref=e106] [cursor=pointer]:
+              - /url: /menu-items/d2beb8bc-c805-4404-96e9-750bcd728994
+            - paragraph [ref=e107]: Sample menu_items
+          - generic [ref=e108]:
+            - generic [ref=e109]: $40.00
+            - button [ref=e110]:
+              - img
+        - generic [ref=e111]:
+          - generic [ref=e112]:
+            - link "Sample menu_items" [ref=e113] [cursor=pointer]:
+              - /url: /menu-items/f46427e0-3dbf-4f19-a0da-d0db180db95e
+            - paragraph [ref=e114]: Sample menu_items
+          - generic [ref=e115]:
+            - generic [ref=e116]: $50.00
+            - button [ref=e117]:
+              - img

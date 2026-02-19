@@ -1,0 +1,11 @@
+[     173ms] Error: Invariant failed
+    at un (https://e2e-deploy.vercel.app/assets/index-CBGs-_Kn.js:9:82175)
+    at https://e2e-deploy.vercel.app/assets/index-CBGs-_Kn.js:9:88106
+    at gn (https://e2e-deploy.vercel.app/assets/index-CBGs-_Kn.js:9:83660)
+    at gn (https://e2e-deploy.vercel.app/assets/index-CBGs-_Kn.js:9:85697)
+    at En (https://e2e-deploy.vercel.app/assets/index-CBGs-_Kn.js:9:88075)
+    at Rr.buildRouteTree (https://e2e-deploy.vercel.app/assets/index-CBGs-_Kn.js:9:112760)
+    at Rr.update (https://e2e-deploy.vercel.app/assets/index-CBGs-_Kn.js:9:111821)
+    at new Rr (https://e2e-deploy.vercel.app/assets/index-CBGs-_Kn.js:9:125291)
+    at new ua (https://e2e-deploy.vercel.app/assets/index-CBGs-_Kn.js:9:152381)
+    at la (https://e2e-deploy.vercel.app/assets/index-CBGs-_Kn.js:9:152336)

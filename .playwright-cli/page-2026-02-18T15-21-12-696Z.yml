@@ -1,0 +1,142 @@
+- generic:
+  - generic:
+    - generic:
+      - banner:
+        - navigation:
+          - link:
+            - /url: /
+            - generic: M
+            - generic: Meridian
+          - link:
+            - /url: /collections
+            - text: Collections
+          - link:
+            - /url: /watches
+            - text: Watches
+          - link:
+            - /url: /collection-watches
+            - text: Collection Watches
+      - main:
+        - generic:
+          - generic:
+            - heading [level=1]: Watches
+            - button [expanded]:
+              - img
+              - text: New Watches
+          - generic:
+            - generic:
+              - generic:
+                - generic: C
+              - generic:
+                - generic:
+                  - link:
+                    - /url: /watches/2ff82e9e-e9fe-4679-9ffd-5fbb0ef7b320
+                    - text: comes communis
+              - generic:
+                - paragraph: comes communis
+                - paragraph: "10"
+                - paragraph: basic
+                - generic:
+                  - button:
+                    - img
+            - generic:
+              - generic:
+                - generic: T
+              - generic:
+                - generic:
+                  - link:
+                    - /url: /watches/5c645618-079e-4358-9f2c-7c28611e177a
+                    - text: textus bellum
+              - generic:
+                - paragraph: textus bellum
+                - paragraph: "721"
+                - paragraph: enterprise
+                - generic:
+                  - button:
+                    - img
+            - generic:
+              - generic:
+                - generic: A
+              - generic:
+                - generic:
+                  - link:
+                    - /url: /watches/e22c9d8d-ddef-4e33-a6bc-9d0e96e21402
+                    - text: adulescens voluptas
+              - generic:
+                - paragraph: adulescens voluptas
+                - paragraph: "846"
+                - paragraph: standard
+                - generic:
+                  - button:
+                    - img
+            - generic:
+              - generic:
+                - generic: T
+              - generic:
+                - generic:
+                  - link:
+                    - /url: /watches/e99690e6-b8a5-48ad-b120-db684643b388
+                    - text: tui repellat
+              - generic:
+                - paragraph: tui repellat
+                - paragraph: "603"
+                - paragraph: basic
+                - generic:
+                  - button:
+                    - img
+            - generic:
+              - generic:
+                - generic: A
+              - generic:
+                - generic:
+                  - link:
+                    - /url: /watches/3fc84907-5dfd-4bd1-97e2-39d2c2f59140
+                    - text: ademptio dens
+              - generic:
+                - paragraph: ademptio dens
+                - paragraph: "686"
+                - paragraph: premium
+                - generic:
+                  - button:
+                    - img
+  - dialog "New Watches" [ref=e82]:
+    - heading "New Watches" [level=2] [ref=e84]
+    - generic [ref=e85]:
+      - generic [ref=e86]:
+        - text: Name
+        - textbox "Enter name" [active] [ref=e87]
+      - generic [ref=e88]:
+        - text: Brand
+        - textbox "Enter brand" [ref=e89]
+      - generic [ref=e90]:
+        - text: Reference Number
+        - textbox "Enter reference number" [ref=e91]
+      - generic [ref=e92]:
+        - text: Case Material
+        - textbox "Enter case material" [ref=e93]
+      - generic [ref=e94]:
+        - text: Movement Type
+        - combobox [ref=e95]:
+          - option "Select..." [selected]
+          - option "automatic"
+          - option "manual"
+          - option "quartz"
+      - generic [ref=e96]:
+        - text: Water Resistance M
+        - spinbutton [ref=e97]
+      - generic [ref=e98]:
+        - text: Price Cents
+        - spinbutton [ref=e99]
+      - generic [ref=e100]:
+        - text: Currency
+        - textbox "Enter currency" [ref=e101]
+      - generic [ref=e102]:
+        - text: Description
+        - textbox "Enter description" [ref=e103]
+      - generic [ref=e104]:
+        - text: Is Active
+        - textbox [ref=e105]
+      - button "Create Watches" [ref=e106]
+    - button "Close" [ref=e107]:
+      - img
+      - generic [ref=e108]: Close

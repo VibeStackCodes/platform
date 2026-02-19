@@ -1,0 +1,12 @@
+[     223ms] Error: Invariant failed: Duplicate routes found with id: __root__
+    at invariant (http://localhost:4567/node_modules/.vite/deps/@tanstack_react-router.js?v=1bcc9e70:834:8)
+    at http://localhost:4567/node_modules/.vite/deps/@tanstack_react-router.js?v=1bcc9e70:1259:3
+    at parseSegments (http://localhost:4567/node_modules/.vite/deps/@tanstack_react-router.js?v=1bcc9e70:1001:11)
+    at parseSegments (http://localhost:4567/node_modules/.vite/deps/@tanstack_react-router.js?v=1bcc9e70:1124:58)
+    at processRouteTree (http://localhost:4567/node_modules/.vite/deps/@tanstack_react-router.js?v=1bcc9e70:1257:2)
+    at RouterCore.buildRouteTree (http://localhost:4567/node_modules/.vite/deps/@tanstack_react-router.js?v=1bcc9e70:2817:19)
+    at RouterCore.update (http://localhost:4567/node_modules/.vite/deps/@tanstack_react-router.js?v=1bcc9e70:2779:36)
+    at new RouterCore (http://localhost:4567/node_modules/.vite/deps/@tanstack_react-router.js?v=1bcc9e70:3473:8)
+    at new Router (http://localhost:4567/node_modules/.vite/deps/@tanstack_react-router.js?v=1bcc9e70:5782:3)
+    at createRouter (http://localhost:4567/node_modules/.vite/deps/@tanstack_react-router.js?v=1bcc9e70:5778:9)
+[     225ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:4567/favicon.ico:0

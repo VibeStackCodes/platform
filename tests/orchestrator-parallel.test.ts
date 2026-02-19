@@ -48,7 +48,7 @@ vi.mock('@server/lib/agents/provider', () => ({
   },
 }))
 
-// Mock feature schema — inferPageConfig returns deterministic PageConfig, derivePageFeatureSpec derives full spec
+// Mock feature schema (not used by runCodeGeneration after themed migration)
 vi.mock('@server/lib/agents/feature-schema', () => ({
   inferPageConfig: vi.fn((table: any) => ({
     entityName: table.name,
@@ -315,9 +315,7 @@ describe('runCodeGeneration', () => {
     vi.clearAllMocks()
   })
 
-  it('processes multiple entities in parallel with deterministic inference', async () => {
-    const { inferPageConfig } = await import('@server/lib/agents/feature-schema')
-
+  it('writes pre-generated blueprint files and skips legacy assembly path', async () => {
     const contract: SchemaContract = {
       tables: [
         {
@@ -339,7 +337,10 @@ describe('runCodeGeneration', () => {
 
     const blueprint: AppBlueprint = {
       appName: 'test-app',
-      fileTree: [],
+      fileTree: [
+        { path: 'src/routes/index.tsx', content: 'export default {}', layer: 4, isLLMSlot: true },
+        { path: '.env', content: 'VITE_SUPABASE_URL=__PLACEHOLDER__\nVITE_SUPABASE_ANON_KEY=__PLACEHOLDER__\n', layer: 1, isLLMSlot: false },
+      ],
       dependencies: {},
       devDependencies: {},
       envVars: [],
@@ -354,19 +355,14 @@ describe('runCodeGeneration', () => {
       supabaseAnonKey: 'test-anon-key',
     })
 
-    // inferPageConfig called once per entity (fully deterministic — no LLM)
-    expect(inferPageConfig).toHaveBeenCalledTimes(2)
-
-    // Should return assembled files for both entities (2 pages per entity)
-    expect(result.assembledFiles.length).toBeGreaterThanOrEqual(4)
+    // Themed files are generated in blueprint stage, so no legacy assembled files are emitted here.
+    expect(result.assembledFiles).toEqual([])
 
     // No tokens used — no LLM calls in code generation
     expect(result.tokensUsed).toBe(0)
   })
 
-  it('skips system tables starting with underscore', async () => {
-    const { inferPageConfig } = await import('@server/lib/agents/feature-schema')
-
+  it('does not process entities directly in codegen (including system tables)', async () => {
     const contract: SchemaContract = {
       tables: [
         {
@@ -382,13 +378,13 @@ describe('runCodeGeneration', () => {
 
     const blueprint: AppBlueprint = {
       appName: 'test-app',
-      fileTree: [],
+      fileTree: [{ path: 'src/routes/index.tsx', content: 'export default {}', layer: 4, isLLMSlot: true }],
       dependencies: {},
       devDependencies: {},
       envVars: [],
     }
 
-    await runCodeGeneration({
+    const result = await runCodeGeneration({
       blueprint,
       contract,
       sandboxId: 'sandbox-123',
@@ -397,7 +393,8 @@ describe('runCodeGeneration', () => {
       supabaseAnonKey: 'test-anon-key',
     })
 
-    // Should only process 'task', not '_migrations'
-    expect(inferPageConfig).toHaveBeenCalledTimes(1)
+    // Entity processing is handled during blueprint generation, not runCodeGeneration.
+    expect(result.assembledFiles).toEqual([])
+    expect(result.tokensUsed).toBe(0)
   })
 })

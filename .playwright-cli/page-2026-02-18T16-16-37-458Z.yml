@@ -1,0 +1,50 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - navigation [ref=e5]:
+      - link "W Wanderlust Journal" [ref=e6] [cursor=pointer]:
+        - /url: /
+        - generic [ref=e7]: W
+        - generic [ref=e8]: Wanderlust Journal
+      - link "Authors" [ref=e9] [cursor=pointer]:
+        - /url: /authors
+      - link "Destinations" [ref=e10] [cursor=pointer]:
+        - /url: /destinations
+      - link "Tags" [ref=e11] [cursor=pointer]:
+        - /url: /tags
+      - link "Articles" [ref=e12] [cursor=pointer]:
+        - /url: /articles
+      - link "Article Tags" [ref=e13] [cursor=pointer]:
+        - /url: /article-tags
+  - main [ref=e15]:
+    - generic [ref=e16]:
+      - generic [ref=e18]:
+        - heading "Article Tags" [level=1] [ref=e19]
+        - button "New Article Tags" [ref=e20]:
+          - img
+          - text: New Article Tags
+      - link "February 18, 2026 759208a0-698d-45da-9f30-92c076e7fb40" [ref=e21] [cursor=pointer]:
+        - /url: /article-tags/759208a0-698d-45da-9f30-92c076e7fb40
+        - generic [ref=e23]:
+          - paragraph [ref=e24]: February 18, 2026
+          - heading "759208a0-698d-45da-9f30-92c076e7fb40" [level=2] [ref=e25]
+      - generic [ref=e26]:
+        - link "18/02/2026 6d968202-c493-4fe1-b36e-261d063dcf8e" [ref=e27] [cursor=pointer]:
+          - /url: /article-tags/6d968202-c493-4fe1-b36e-261d063dcf8e
+          - generic [ref=e29]:
+            - paragraph [ref=e30]: 18/02/2026
+            - heading "6d968202-c493-4fe1-b36e-261d063dcf8e" [level=3] [ref=e31]
+        - link "18/02/2026 f44e44ce-c54e-4131-97ea-32b55c293055" [ref=e32] [cursor=pointer]:
+          - /url: /article-tags/f44e44ce-c54e-4131-97ea-32b55c293055
+          - generic [ref=e34]:
+            - paragraph [ref=e35]: 18/02/2026
+            - heading "f44e44ce-c54e-4131-97ea-32b55c293055" [level=3] [ref=e36]
+        - link "18/02/2026 6210d944-5c29-48c7-b840-537adedf84bf" [ref=e37] [cursor=pointer]:
+          - /url: /article-tags/6210d944-5c29-48c7-b840-537adedf84bf
+          - generic [ref=e39]:
+            - paragraph [ref=e40]: 18/02/2026
+            - heading "6210d944-5c29-48c7-b840-537adedf84bf" [level=3] [ref=e41]
+        - link "18/02/2026 a443ebb5-992c-45c5-99d4-7b4db6a6affc" [ref=e42] [cursor=pointer]:
+          - /url: /article-tags/a443ebb5-992c-45c5-99d4-7b4db6a6affc
+          - generic [ref=e44]:
+            - paragraph [ref=e45]: 18/02/2026
+            - heading "a443ebb5-992c-45c5-99d4-7b4db6a6affc" [level=3] [ref=e46]

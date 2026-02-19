@@ -2,6 +2,7 @@
 
 import { MousePointer, Pencil, Rocket, X } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { apiFetch } from '@/lib/utils'
 import { WebPreview, WebPreviewBody } from '@/components/ai-elements/web-preview'
 import { DatabaseManager } from '@/components/supabase-manager/database'
 import { Badge } from '@/components/ui/badge'
@@ -84,7 +85,7 @@ export function BuilderPreview({
 
   const handleDeploy = async () => {
     try {
-      const response = await fetch('/api/projects/deploy', {
+      const response = await apiFetch('/api/projects/deploy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ projectId }),

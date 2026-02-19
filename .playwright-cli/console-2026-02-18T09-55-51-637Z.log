@@ -1,0 +1,1 @@
+[   29716ms] [ERROR] Failed to load resource: the server responded with a status of 500 () @ https://wiqcithulfzhzcvmqewy.supabase.co/auth/v1/token?grant_type=password:0

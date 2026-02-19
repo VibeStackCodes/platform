@@ -51,8 +51,12 @@ export const authMiddleware = createMiddleware(async (c, next) => {
     return c.json({ error: 'Server misconfigured: missing Supabase credentials' }, 500)
   }
 
-  // Supabase stores session in cookies as sb-<ref>-auth-token
+  // Check Authorization header first (SPA sends Bearer token from localStorage),
+  // then fall back to cookies (for SSR or cookie-based setups)
+  const authHeader = c.req.header('Authorization')
+  const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null
   const accessToken =
+    bearerToken ??
     getCookie(c, 'sb-access-token') ??
     getCookie(c, `sb-${new URL(supabaseUrl).hostname.split('.')[0]}-auth-token`)
   const refreshToken = getCookie(c, 'sb-refresh-token')

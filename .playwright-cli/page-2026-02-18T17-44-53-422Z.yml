@@ -1,0 +1,77 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - navigation [ref=e5]:
+      - link "L La Piazza Manager" [ref=e6] [cursor=pointer]:
+        - /url: /
+        - generic [ref=e7]: L
+        - generic [ref=e8]: La Piazza Manager
+      - link "Menu Categories" [ref=e9] [cursor=pointer]:
+        - /url: /menu-categories
+      - link "Menu Items" [ref=e10] [cursor=pointer]:
+        - /url: /menu-items
+      - link "Restaurant Tables" [ref=e11] [cursor=pointer]:
+        - /url: /restaurant-tables
+      - link "Reservations" [ref=e12] [cursor=pointer]:
+        - /url: /reservations
+      - link "Orders" [ref=e13] [cursor=pointer]:
+        - /url: /orders
+      - link "Order Items" [ref=e14] [cursor=pointer]:
+        - /url: /order-items
+  - main [ref=e16]:
+    - generic [ref=e17]:
+      - generic [ref=e19]:
+        - heading "Restaurant Tables" [level=1] [ref=e20]
+        - button "New Restaurant Table" [ref=e21]:
+          - img
+          - text: New Restaurant Table
+      - generic [ref=e22]:
+        - generic [ref=e23]:
+          - generic [ref=e25]: I
+          - link "indoor" [ref=e28] [cursor=pointer]:
+            - /url: /restaurant-tables/fa77b58c-c813-493f-86ba-7c3952cfa5bd
+          - generic [ref=e29]:
+            - paragraph [ref=e30]: available
+            - paragraph [ref=e31]: "1"
+            - paragraph [ref=e32]: "2"
+            - button [ref=e34]:
+              - img
+        - generic [ref=e35]:
+          - generic [ref=e37]: I
+          - link "indoor" [ref=e40] [cursor=pointer]:
+            - /url: /restaurant-tables/606c1ec1-a419-40a2-9314-c8b67ab76f5d
+          - generic [ref=e41]:
+            - paragraph [ref=e42]: available
+            - paragraph [ref=e43]: "2"
+            - paragraph [ref=e44]: "2"
+            - button [ref=e46]:
+              - img
+        - generic [ref=e47]:
+          - generic [ref=e49]: I
+          - link "indoor" [ref=e52] [cursor=pointer]:
+            - /url: /restaurant-tables/d8f746a5-541e-4fa8-afca-f264677b02ad
+          - generic [ref=e53]:
+            - paragraph [ref=e54]: available
+            - paragraph [ref=e55]: "3"
+            - paragraph [ref=e56]: "2"
+            - button [ref=e58]:
+              - img
+        - generic [ref=e59]:
+          - generic [ref=e61]: I
+          - link "indoor" [ref=e64] [cursor=pointer]:
+            - /url: /restaurant-tables/40a40229-c1f6-4984-ab1a-0a8b6491f04c
+          - generic [ref=e65]:
+            - paragraph [ref=e66]: available
+            - paragraph [ref=e67]: "4"
+            - paragraph [ref=e68]: "2"
+            - button [ref=e70]:
+              - img
+        - generic [ref=e71]:
+          - generic [ref=e73]: I
+          - link "indoor" [ref=e76] [cursor=pointer]:
+            - /url: /restaurant-tables/b101bbc0-76e7-4a58-aff4-0c81637766ca
+          - generic [ref=e77]:
+            - paragraph [ref=e78]: available
+            - paragraph [ref=e79]: "5"
+            - paragraph [ref=e80]: "2"
+            - button [ref=e82]:
+              - img

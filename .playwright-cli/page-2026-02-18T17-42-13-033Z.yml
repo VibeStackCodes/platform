@@ -1,0 +1,73 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - navigation [ref=e5]:
+      - link "S StudioSprint" [ref=e6] [cursor=pointer]:
+        - /url: /
+        - generic [ref=e7]: S
+        - generic [ref=e8]: StudioSprint
+      - link "Clients" [ref=e9] [cursor=pointer]:
+        - /url: /clients
+      - link "Projects" [ref=e10] [cursor=pointer]:
+        - /url: /projects
+      - link "Deliverables" [ref=e11] [cursor=pointer]:
+        - /url: /deliverables
+      - link "Time Entries" [ref=e12] [cursor=pointer]:
+        - /url: /time-entries
+  - main [ref=e14]:
+    - generic [ref=e15]:
+      - generic [ref=e17]:
+        - heading "Deliverables" [level=1] [ref=e18]
+        - button "New Deliverable" [ref=e19]:
+          - img
+          - text: New Deliverable
+      - generic [ref=e20]:
+        - generic [ref=e21]:
+          - generic [ref=e23]: S
+          - link "Sample deliverables" [ref=e26] [cursor=pointer]:
+            - /url: /deliverables/e1133848-3f96-4fd0-8efc-62023de07975
+          - generic [ref=e27]:
+            - paragraph [ref=e28]: brief
+            - paragraph [ref=e29]: "0"
+            - paragraph [ref=e30]: "Due Date: —"
+            - button [ref=e32]:
+              - img
+        - generic [ref=e33]:
+          - generic [ref=e35]: S
+          - link "Sample deliverables" [ref=e38] [cursor=pointer]:
+            - /url: /deliverables/21d0afc4-0099-41d1-a86c-97ddbe7d549d
+          - generic [ref=e39]:
+            - paragraph [ref=e40]: brief
+            - paragraph [ref=e41]: "0"
+            - paragraph [ref=e42]: "Due Date: —"
+            - button [ref=e44]:
+              - img
+        - generic [ref=e45]:
+          - generic [ref=e47]: S
+          - link "Sample deliverables" [ref=e50] [cursor=pointer]:
+            - /url: /deliverables/ed304e49-113b-4a5c-9111-d91ba0c26678
+          - generic [ref=e51]:
+            - paragraph [ref=e52]: brief
+            - paragraph [ref=e53]: "0"
+            - paragraph [ref=e54]: "Due Date: —"
+            - button [ref=e56]:
+              - img
+        - generic [ref=e57]:
+          - generic [ref=e59]: S
+          - link "Sample deliverables" [ref=e62] [cursor=pointer]:
+            - /url: /deliverables/4af594d8-a096-4ff7-b698-919a08560392
+          - generic [ref=e63]:
+            - paragraph [ref=e64]: brief
+            - paragraph [ref=e65]: "0"
+            - paragraph [ref=e66]: "Due Date: —"
+            - button [ref=e68]:
+              - img
+        - generic [ref=e69]:
+          - generic [ref=e71]: S
+          - link "Sample deliverables" [ref=e74] [cursor=pointer]:
+            - /url: /deliverables/4f38a5f4-c380-4ea3-8c8e-63930ad70c07
+          - generic [ref=e75]:
+            - paragraph [ref=e76]: brief
+            - paragraph [ref=e77]: "0"
+            - paragraph [ref=e78]: "Due Date: —"
+            - button [ref=e80]:
+              - img

@@ -1,0 +1,61 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - navigation [ref=e5]:
+      - link "W Wanderlust Journal" [ref=e6] [cursor=pointer]:
+        - /url: /
+        - generic [ref=e7]: W
+        - generic [ref=e8]: Wanderlust Journal
+      - link "Authors" [ref=e9] [cursor=pointer]:
+        - /url: /authors
+      - link "Destinations" [ref=e10] [cursor=pointer]:
+        - /url: /destinations
+      - link "Tags" [ref=e11] [cursor=pointer]:
+        - /url: /tags
+      - link "Articles" [ref=e12] [cursor=pointer]:
+        - /url: /articles
+      - link "Article Tags" [ref=e13] [cursor=pointer]:
+        - /url: /article-tags
+  - main [ref=e15]:
+    - generic [ref=e16]:
+      - generic [ref=e18]:
+        - heading "Destinations" [level=1] [ref=e19]
+        - button "New Destinations" [ref=e20]:
+          - img
+          - text: New Destinations
+      - link "Sample destinations February 18, 2026 Sample destinations Sample destinations" [ref=e21] [cursor=pointer]:
+        - /url: /destinations/55b94894-da34-48c6-a296-82dea74d34c9
+        - generic [ref=e22]:
+          - img "Sample destinations" [ref=e23]
+          - generic [ref=e24]:
+            - paragraph [ref=e25]: February 18, 2026
+            - heading "Sample destinations" [level=2] [ref=e26]
+            - paragraph [ref=e27]: Sample destinations
+      - generic [ref=e28]:
+        - link "Sample destinations 18/02/2026 Sample destinations Sample destinations" [ref=e29] [cursor=pointer]:
+          - /url: /destinations/32d781e4-31c2-4732-a632-cb0eb34fde3c
+          - img "Sample destinations" [ref=e31]
+          - generic [ref=e32]:
+            - paragraph [ref=e33]: 18/02/2026
+            - heading "Sample destinations" [level=3] [ref=e34]
+            - paragraph [ref=e35]: Sample destinations
+        - link "Sample destinations 18/02/2026 Sample destinations Sample destinations" [ref=e36] [cursor=pointer]:
+          - /url: /destinations/e636414e-26b3-4dc9-879d-db442318543b
+          - img "Sample destinations" [ref=e38]
+          - generic [ref=e39]:
+            - paragraph [ref=e40]: 18/02/2026
+            - heading "Sample destinations" [level=3] [ref=e41]
+            - paragraph [ref=e42]: Sample destinations
+        - link "Sample destinations 18/02/2026 Sample destinations Sample destinations" [ref=e43] [cursor=pointer]:
+          - /url: /destinations/5c6daff4-bd9d-41fa-9f8e-a0fb25168cbb
+          - img "Sample destinations" [ref=e45]
+          - generic [ref=e46]:
+            - paragraph [ref=e47]: 18/02/2026
+            - heading "Sample destinations" [level=3] [ref=e48]
+            - paragraph [ref=e49]: Sample destinations
+        - link "Sample destinations 18/02/2026 Sample destinations Sample destinations" [ref=e50] [cursor=pointer]:
+          - /url: /destinations/d342ef19-3a3c-434d-9eae-b1720a1b63e9
+          - img "Sample destinations" [ref=e52]
+          - generic [ref=e53]:
+            - paragraph [ref=e54]: 18/02/2026
+            - heading "Sample destinations" [level=3] [ref=e55]
+            - paragraph [ref=e56]: Sample destinations

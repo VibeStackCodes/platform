@@ -1,0 +1,54 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - navigation [ref=e5]:
+      - link "S StudioPipeline CRM" [ref=e6] [cursor=pointer]:
+        - /url: /
+        - generic [ref=e7]: S
+        - generic [ref=e8]: StudioPipeline CRM
+      - link "Companies" [ref=e9] [cursor=pointer]:
+        - /url: /companies
+      - link "Contacts" [ref=e10] [cursor=pointer]:
+        - /url: /contacts
+      - link "Deals" [ref=e11] [cursor=pointer]:
+        - /url: /deals
+      - link "Activities" [ref=e12] [cursor=pointer]:
+        - /url: /activities
+  - main [ref=e14]:
+    - generic [ref=e82]:
+      - link "← Back to Deals" [ref=e84] [cursor=pointer]:
+        - /url: /deals
+      - generic [ref=e85]:
+        - heading "agnitio ustilo paulatim" [level=1] [ref=e86]
+        - button "Edit" [ref=e87]
+      - generic [ref=e88]:
+        - generic [ref=e90]: Details
+        - generic [ref=e91]:
+          - generic [ref=e92]:
+            - paragraph [ref=e93]: Title
+            - paragraph [ref=e94]: agnitio ustilo paulatim
+          - generic [ref=e95]:
+            - paragraph [ref=e96]: Company Id
+            - paragraph [ref=e97]: 2ae27eed-e375-4451-b855-c4882b24a06d
+          - generic [ref=e98]:
+            - paragraph [ref=e99]: Contact Id
+            - paragraph
+          - generic [ref=e100]:
+            - paragraph [ref=e101]: Stage
+            - paragraph [ref=e102]: lead
+          - generic [ref=e103]:
+            - paragraph [ref=e104]: Notes
+            - paragraph [ref=e105]: Adnuo constans arca creator pecto.
+      - generic [ref=e106]:
+        - generic [ref=e108]: Properties
+        - generic [ref=e109]:
+          - generic [ref=e110]:
+            - paragraph [ref=e111]: Value
+            - paragraph [ref=e112]: "0"
+          - generic [ref=e113]:
+            - paragraph [ref=e114]: Probability
+            - paragraph [ref=e115]: "0"
+      - generic [ref=e116]:
+        - generic [ref=e118]: Dates
+        - generic [ref=e120]:
+          - paragraph [ref=e121]: Expected Close Date
+          - paragraph [ref=e122]: —

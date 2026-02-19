@@ -135,9 +135,18 @@ Rules:
       prompt,
     })
 
+    // Build a case-insensitive + plural-insensitive lookup map
     const map = new Map<string, Row[]>()
     for (const tableData of result.object.tables) {
-      map.set(tableData.name, tableData.rows as Row[])
+      // Store under both the exact name and normalized variants
+      const rows = tableData.rows as Row[]
+      map.set(tableData.name, rows)
+      map.set(tableData.name.toLowerCase(), rows)
+      // Handle plural/singular variants: "Collection" → "collections", "watches" → "watch"
+      const lower = tableData.name.toLowerCase()
+      if (!lower.endsWith('s')) map.set(lower + 's', rows)
+      if (lower.endsWith('s')) map.set(lower.slice(0, -1), rows)
+      if (lower.endsWith('ies')) map.set(lower.slice(0, -3) + 'y', rows)
     }
     return map
   } catch (err) {
@@ -164,19 +173,31 @@ function formatLLMValue(value: unknown): string | null {
 
 /**
  * Fallback value for a column when the LLM did not provide one.
- * Based solely on the SQL type — intentionally simple.
+ * Uses column name + table name + row index to generate varied, contextual values.
  */
 function fallbackValue(col: ColumnDef, tableName: string, rowIdx: number): string | null {
   switch (col.type) {
-    case 'text':
-      return `'Sample ${escapeSQL(tableName)}'`
+    case 'text': {
+      // Use column name to generate contextual fallback text
+      const singular = tableName.endsWith('s') ? tableName.slice(0, -1) : tableName
+      const colName = col.name.replace(/_/g, ' ')
+      if (/name|title|label/.test(col.name)) return `'${escapeSQL(singular)} ${rowIdx + 1}'`
+      if (/description|bio|summary|body|content/.test(col.name)) return `'A ${escapeSQL(colName)} for ${escapeSQL(singular)} ${rowIdx + 1}.'`
+      if (/slug/.test(col.name)) return `'${escapeSQL(singular.replace(/\s+/g, '-'))}-${rowIdx + 1}'`
+      if (/email/.test(col.name)) return `'user${rowIdx + 1}@example.com'`
+      if (/url|link|website/.test(col.name)) return `'https://example.com/${escapeSQL(singular)}/${rowIdx + 1}'`
+      if (/image|photo|avatar|thumbnail|cover/.test(col.name)) return `'https://picsum.photos/seed/${escapeSQL(singular)}-${rowIdx + 1}/800/600'`
+      if (/phone/.test(col.name)) return `'+1-555-010${rowIdx}'`
+      if (/address/.test(col.name)) return `'${100 + rowIdx} Main Street'`
+      return `'${escapeSQL(singular)} ${escapeSQL(colName)} ${rowIdx + 1}'`
+    }
     case 'integer':
     case 'bigint':
       return String(rowIdx + 1)
     case 'numeric':
       return `${(rowIdx + 1) * 10}.00`
     case 'boolean':
-      return 'true'
+      return rowIdx % 2 === 0 ? 'true' : 'false'
     case 'timestamptz':
       return `now() - interval '${30 - rowIdx} days'`
     case 'jsonb':

@@ -3,14 +3,13 @@
 // XState invoke handlers — each function maps to one machine state.
 // The machine calls these via fromPromise actors.
 
-import type { SchemaContract, DesignPreferences } from '../schema-contract'
-import { SchemaContractSchema, DesignPreferencesSchema, validateContract } from '../schema-contract'
+import type { SchemaContract } from '../schema-contract'
+import { SchemaContractSchema, validateContract } from '../schema-contract'
 import type { AppBlueprint } from '../app-blueprint'
-import { contractToBlueprint } from '../app-blueprint'
+import { contractToBlueprintWithDesignAgent } from '../app-blueprint'
 import type { ValidationGateResult } from './validation'
 import { runValidationGate } from './validation'
 import { buildRepairPrompt } from './repair'
-import { snakeToKebab, pluralize } from '../naming-utils'
 
 // ============================================================================
 // Result types for each handler
@@ -22,7 +21,6 @@ export type AnalysisResult =
       appName: string
       appDescription: string
       contract: SchemaContract
-      designPreferences: DesignPreferences
       tokensUsed: number
     }
   | {
@@ -107,14 +105,11 @@ export async function runAnalysis(input: {
           throw new Error(`Analyst produced invalid contract: ${contractValidation.errors.join('; ')}`)
         }
 
-        const designParsed = DesignPreferencesSchema.safeParse(part.input.designPreferences)
-
         return {
           type: 'done',
           appName: part.input.appName,
           appDescription: part.input.appDescription,
           contract: contractParsed.data,
-          designPreferences: designParsed.success ? designParsed.data : { style: 'modern', primaryColor: '#3b82f6', fontFamily: 'Inter' },
           tokensUsed,
         }
       }
@@ -136,13 +131,13 @@ export async function runAnalysis(input: {
 // Blueprint handler (Task 7)
 // ============================================================================
 
-export function runBlueprint(input: {
+export async function runBlueprint(input: {
+  userPrompt?: string
   appName: string
   appDescription: string
   contract: SchemaContract
-  designPreferences: DesignPreferences
-}): BlueprintResult {
-  const blueprint = contractToBlueprint(input)
+}): Promise<BlueprintResult> {
+  const blueprint = await contractToBlueprintWithDesignAgent(input)
   return { blueprint, tokensUsed: 0 }
 }
 
@@ -158,12 +153,7 @@ export async function runCodeGeneration(input: {
   supabaseUrl: string
   supabaseAnonKey: string
 }): Promise<CodeGenResult> {
-  // Dynamic imports to avoid circular deps and lazy-load assembler dependencies
-  const {
-    inferPageConfig,
-    derivePageFeatureSpec,
-  } = await import('./feature-schema')
-  const { assembleListPage, assembleDetailPage } = await import('./assembler')
+  // Dynamic imports to avoid circular deps
   const { getSandbox, uploadFiles } = await import('../sandbox')
 
   // Step 1: Write ALL blueprint files to sandbox (scaffold)
@@ -237,105 +227,12 @@ export async function runCodeGeneration(input: {
     }
   }
 
+  // Themed route files are already generated in the blueprint.
+  // Do not run legacy design-spec/skill-classifier/assembler overrides.
   const assembledFiles: Array<{ path: string; content: string }> = []
-  const validationWarnings: Array<{ table: string; errors: string[] }> = []
-  const skippedEntities: string[] = []
-
-  // Filter entity tables (skip junction/system tables)
-  const entityTables = input.contract.tables.filter((t) => !t.name.startsWith('_'))
-
-  // Derive design spec once for all entities
-  const { deriveDesignSpec } = await import('../design-spec')
-  const { fetchHeroImages } = await import('../unsplash')
-  const designPrefs = input.blueprint.meta?.designPreferences ?? { style: 'modern', primaryColor: '#3b82f6', fontFamily: 'Inter' }
-  const designSpec = deriveDesignSpec(input.contract, designPrefs)
-  designSpec.heroImages = await fetchHeroImages(designSpec.heroImageQuery ?? '', 3)
-  console.log(`[codegen] DesignSpec: archetype=${designSpec.layoutArchetype}, fontPair=${designSpec.fontPair.name}`)
-
-  // Process all entities in parallel
-  const entityResults = await Promise.allSettled(
-    entityTables.map(async (table) => {
-      const files: Array<{ path: string; content: string }> = []
-      let tokens = 0
-      let skipped = false
-
-      // ================================================================
-      // Fully deterministic page config + spec derivation
-      //
-      // No LLM call — inferPageConfig() uses ColumnSemanticClassifier
-      // to pick list columns, header, enums, and sections.
-      // ================================================================
-
-      const pageConfig = inferPageConfig(table, input.contract)
-
-      // Derive full spec deterministically from config + contract
-      const featureSpec = derivePageFeatureSpec(pageConfig, input.contract)
-
-      // Design Engine v2: classify entity skill + attempt rich skill template
-      const { classifyEntitySkill } = await import('../skill-classifier')
-      const { renderListSkill, renderDetailSkill } = await import('../skills/index')
-      const columnNames = table.columns.map((c) => c.name)
-      const entityLayout = classifyEntitySkill(table.name, columnNames, designSpec.layoutArchetype)
-
-      const skillProps = {
-        entity: table.name,
-        contract: input.contract,
-        spec: featureSpec,
-        layout: entityLayout,
-        primaryColor: designPrefs.primaryColor,
-        fontFamily: designPrefs.fontFamily,
-        heroImages: designSpec.heroImages,
-      }
-
-      const richListPage = await renderListSkill(entityLayout.listSkill, skillProps)
-      const richDetailPage = await renderDetailSkill(entityLayout.detailSkill, skillProps)
-
-      // Fall back to legacy assembler if skill returns '' (DataTable/FormSheet)
-      const listPageContent = richListPage || assembleListPage(featureSpec, input.contract)
-      const detailPageContent = richDetailPage || assembleDetailPage(featureSpec, input.contract)
-
-      // Match the file paths generated by contractToPages() in app-blueprint.ts.
-      // Table names are already plural (SQL convention) — use the shared pluralize()
-      // which is idempotent for already-plural words, then convert to kebab-case.
-      const entityRouteKebab = snakeToKebab(pluralize(table.name))
-
-      files.push(
-        { path: `src/routes/_authenticated/${entityRouteKebab}.tsx`, content: listPageContent },
-        { path: `src/routes/_authenticated/${entityRouteKebab}.$id.tsx`, content: detailPageContent },
-      )
-
-      return { files, tokens, skipped, table: table.name }
-    }),
-  )
-
-  // Aggregate results
-  let totalTokens = 0
-  for (const result of entityResults) {
-    if (result.status === 'fulfilled') {
-      assembledFiles.push(...result.value.files)
-      totalTokens += result.value.tokens
-      if (result.value.skipped) skippedEntities.push(result.value.table)
-    } else {
-      console.error('Entity processing failed:', result.reason)
-    }
-  }
-
-  // Step 3: Write assembled files back to sandbox (overwriting skeleton SLOT files)
-  if (assembledFiles.length > 0) {
-    console.log(`[codegen] Writing ${assembledFiles.length} assembled files to sandbox...`)
-    const assemblyUploads = assembledFiles.map((f) => ({
-      content: f.content,
-      path: `/workspace/${f.path}`,
-    }))
-    await uploadFiles(sandbox, assemblyUploads)
-    console.log(`[codegen] Assembly complete: ${assembledFiles.length} files overwritten`)
-  }
-
   return {
     assembledFiles,
-    tokensUsed: totalTokens,
-    warnings: validationWarnings.length > 0 ? validationWarnings : undefined,
-    skippedEntities: skippedEntities.length > 0 ? skippedEntities : undefined,
+    tokensUsed: 0,
   }
 }
 

@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { ExternalLink, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { apiFetch } from '@/lib/utils'
 import {
   Card,
   CardContent,
@@ -19,7 +20,7 @@ function DashboardPage() {
   const { data: projects, isLoading } = useQuery({
     queryKey: ['projects'],
     queryFn: async () => {
-      const res = await fetch('/api/projects')
+      const res = await apiFetch('/api/projects')
       if (!res.ok) throw new Error('Failed to fetch projects')
       return res.json() as Promise<
         Array<{

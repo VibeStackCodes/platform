@@ -1,0 +1,110 @@
+- generic:
+  - generic:
+    - generic:
+      - banner:
+        - navigation:
+          - link:
+            - /url: /
+            - generic: L
+            - generic: La Piazza Manager
+          - link:
+            - /url: /menu-categories
+            - text: Menu Categories
+          - link:
+            - /url: /menu-items
+            - text: Menu Items
+          - link:
+            - /url: /restaurant-tables
+            - text: Restaurant Tables
+          - link:
+            - /url: /reservations
+            - text: Reservations
+          - link:
+            - /url: /orders
+            - text: Orders
+          - link:
+            - /url: /order-items
+            - text: Order Items
+      - main:
+        - generic:
+          - generic:
+            - heading [level=1]: Order Items
+            - button [expanded]:
+              - img
+              - text: Add Item
+          - generic:
+            - generic:
+              - generic:
+                - link:
+                  - /url: /order-items/0e3437db-c543-45b8-9b6f-1115eba4ea43
+                  - text: Sample order_items
+              - generic:
+                - generic: $10.00
+                - button:
+                  - img
+            - generic:
+              - generic:
+                - link:
+                  - /url: /order-items/6f13a2f6-de12-41c5-9f2e-d76c80190094
+                  - text: Sample order_items
+              - generic:
+                - generic: $20.00
+                - button:
+                  - img
+            - generic:
+              - generic:
+                - link:
+                  - /url: /order-items/760dedfb-0504-46bb-8cd5-0cf67fa06450
+                  - text: Sample order_items
+              - generic:
+                - generic: $30.00
+                - button:
+                  - img
+            - generic:
+              - generic:
+                - link:
+                  - /url: /order-items/86f43aed-376b-4a06-98a5-e73519b405f3
+                  - text: Sample order_items
+              - generic:
+                - generic: $40.00
+                - button:
+                  - img
+            - generic:
+              - generic:
+                - link:
+                  - /url: /order-items/ea4f142c-5427-41e4-813e-905604833c9c
+                  - text: Sample order_items
+              - generic:
+                - generic: $50.00
+                - button:
+                  - img
+  - dialog "New Order Item" [ref=e266]:
+    - generic [ref=e267]:
+      - heading "New Order Item" [level=2] [ref=e268]
+      - paragraph [ref=e269]: Create a new Order Item
+    - generic [ref=e270]:
+      - generic [ref=e271]:
+        - text: Order Id
+        - textbox "Enter order id" [active] [ref=e272]
+      - generic [ref=e273]:
+        - text: Menu Item Id
+        - textbox "Enter menu item id" [ref=e274]
+      - generic [ref=e275]:
+        - text: Quantity
+        - spinbutton [ref=e276]
+      - generic [ref=e277]:
+        - text: Unit Price
+        - spinbutton [ref=e278]
+      - generic [ref=e279]:
+        - text: Special Instructions
+        - textbox "Enter special instructions" [ref=e280]
+      - generic [ref=e281]:
+        - text: Status
+        - textbox [ref=e282]
+      - generic [ref=e283]:
+        - text: Created By
+        - textbox "Enter created by" [ref=e284]
+      - button "Add Item" [ref=e285]
+    - button "Close" [ref=e286]:
+      - img
+      - generic [ref=e287]: Close

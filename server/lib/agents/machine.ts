@@ -2,7 +2,7 @@ import { assign, createActor, fromPromise, setup } from 'xstate'
 import type { ActorOptions } from 'xstate'
 import * as Sentry from '@sentry/node'
 import type { AppBlueprint } from '../app-blueprint'
-import type { DesignPreferences, SchemaContract } from '../schema-contract'
+import type { SchemaContract } from '../schema-contract'
 import type { ValidationGateResult } from './validation'
 import type { CodeReviewResult } from './code-review'
 import type { AnalysisResult } from './orchestrator'
@@ -21,7 +21,6 @@ export interface MachineContext {
   appName: string
   appDescription: string
   contract: SchemaContract | null
-  designPreferences: DesignPreferences | null
 
   // Clarification
   clarificationQuestions: unknown[] | null
@@ -69,7 +68,6 @@ type MachineEvent =
       appName: string
       appDescription: string
       contract: SchemaContract
-      designPreferences: DesignPreferences
     }
   | { type: 'CLARIFICATION_NEEDED'; questions: unknown[] }
   | { type: 'BLUEPRINT_DONE'; blueprint: AppBlueprint }
@@ -111,7 +109,7 @@ export const appGenerationMachine = setup({
       async ({
         input,
       }: {
-        input: { appName: string; appDescription: string; contract: SchemaContract; designPreferences: DesignPreferences }
+        input: { userPrompt?: string; appName: string; appDescription: string; contract: SchemaContract }
       }) => {
         const { runBlueprint } = await import('./orchestrator')
         return runBlueprint(input)
@@ -214,7 +212,6 @@ export const appGenerationMachine = setup({
     appName: '',
     appDescription: '',
     contract: null,
-    designPreferences: null,
     clarificationQuestions: null,
     blueprint: null,
     sandboxId: null,
@@ -237,7 +234,7 @@ export const appGenerationMachine = setup({
     idle: {
       on: {
         START: {
-          target: 'analyzing',
+          target: 'preparing',
           actions: assign({
             userMessage: ({ event }) => event.userMessage,
             projectId: ({ event }) => event.projectId,
@@ -247,74 +244,134 @@ export const appGenerationMachine = setup({
       },
     },
 
-    analyzing: {
-      after: {
-        180_000: {
-          target: 'failed',
-          actions: assign({
-            error: () => 'Analysis timed out after 3 minutes',
-          }),
-        },
-      },
-      invoke: {
-        src: 'runAnalysisActor',
-        input: ({ context }) => ({
-          userMessage: context.userMessage,
-          projectId: context.projectId,
-        }),
-        onDone: [
-          {
-            guard: ({ event }) => event.output.type === 'clarification',
-            target: 'awaitingClarification',
-            actions: assign({
-              clarificationQuestions: ({ event }) => (event.output as Extract<AnalysisResult, { type: 'clarification' }>).questions,
-              totalTokens: ({ context, event }) => context.totalTokens + event.output.tokensUsed,
-            }),
-          },
-          {
-            target: 'blueprinting',
-            actions: assign({
-              appName: ({ event }) => (event.output as Extract<AnalysisResult, { type: 'done' }>).appName,
-              appDescription: ({ event }) => (event.output as Extract<AnalysisResult, { type: 'done' }>).appDescription,
-              contract: ({ event }) => (event.output as Extract<AnalysisResult, { type: 'done' }>).contract,
-              designPreferences: ({ event }) => (event.output as Extract<AnalysisResult, { type: 'done' }>).designPreferences,
-              totalTokens: ({ context, event }) => context.totalTokens + event.output.tokensUsed,
-            }),
-          },
-        ],
-        onError: {
-          target: 'failed',
-          actions: assign({
-            error: ({ event }) => {
-              const err = event.error
-              if (err instanceof Error) {
-                return `${err.message}${err.stack ? `\n${err.stack}` : ''}`
-              }
-              return String(err)
+    // ── Parallel state: analysis + provisioning run concurrently ──
+    preparing: {
+      type: 'parallel',
+      states: {
+        analysis: {
+          initial: 'running',
+          states: {
+            running: {
+              after: {
+                180_000: {
+                  target: '#appGeneration.failed',
+                  actions: assign({
+                    error: () => 'Analysis timed out after 3 minutes',
+                  }),
+                },
+              },
+              invoke: {
+                src: 'runAnalysisActor',
+                input: ({ context }) => ({
+                  userMessage: context.userMessage,
+                  projectId: context.projectId,
+                }),
+                onDone: [
+                  {
+                    guard: ({ event }) => event.output.type === 'clarification',
+                    target: 'awaitingClarification',
+                    actions: assign({
+                      clarificationQuestions: ({ event }) => (event.output as Extract<AnalysisResult, { type: 'clarification' }>).questions,
+                      totalTokens: ({ context, event }) => context.totalTokens + event.output.tokensUsed,
+                    }),
+                  },
+                  {
+                    target: 'done',
+                    actions: assign({
+                      appName: ({ event }) => (event.output as Extract<AnalysisResult, { type: 'done' }>).appName,
+                      appDescription: ({ event }) => (event.output as Extract<AnalysisResult, { type: 'done' }>).appDescription,
+                      contract: ({ event }) => (event.output as Extract<AnalysisResult, { type: 'done' }>).contract,
+                      totalTokens: ({ context, event }) => context.totalTokens + event.output.tokensUsed,
+                    }),
+                  },
+                ],
+                onError: {
+                  target: '#appGeneration.failed',
+                  actions: assign({
+                    error: ({ event }) => {
+                      const err = event.error
+                      if (err instanceof Error) {
+                        return `${err.message}${err.stack ? `\n${err.stack}` : ''}`
+                      }
+                      return String(err)
+                    },
+                  }),
+                },
+              },
             },
-          }),
+            awaitingClarification: {
+              after: {
+                1_800_000: {
+                  target: '#appGeneration.failed',
+                  actions: assign({
+                    error: () => 'Awaiting clarification timed out after 30 minutes',
+                  }),
+                },
+              },
+              on: {
+                USER_ANSWERED: {
+                  target: 'running',
+                  actions: assign({
+                    userMessage: ({ context, event }) =>
+                      `${context.userMessage}\n\nUser's answers:\n${event.answers}`,
+                  }),
+                },
+              },
+            },
+            done: { type: 'final' as const },
+          },
+        },
+        infrastructure: {
+          initial: 'provisioning',
+          states: {
+            provisioning: {
+              after: {
+                300_000: {
+                  target: '#appGeneration.cleanup',
+                  actions: assign({
+                    error: () => 'Provisioning timed out after 5 minutes',
+                  }),
+                },
+              },
+              invoke: {
+                src: 'runProvisioningActor',
+                input: ({ context }) => ({
+                  appName: context.appName || `project-${context.projectId.slice(0, 8)}`,
+                  projectId: context.projectId,
+                  userId: context.userId,
+                }),
+                onDone: {
+                  target: 'done',
+                  actions: assign({
+                    sandboxId: ({ event }) => event.output.sandboxId,
+                    supabaseProjectId: ({ event }) => event.output.supabaseProjectId,
+                    supabaseUrl: ({ event }) => event.output.supabaseUrl,
+                    supabaseAnonKey: ({ event }) => event.output.supabaseAnonKey,
+                    githubCloneUrl: ({ event }) => event.output.githubCloneUrl,
+                    githubHtmlUrl: ({ event }) => event.output.githubHtmlUrl,
+                    repoName: ({ event }) => event.output.repoName,
+                    totalTokens: ({ context, event }) => context.totalTokens + event.output.tokensUsed,
+                  }),
+                },
+                onError: {
+                  target: '#appGeneration.cleanup',
+                  actions: assign({
+                    error: ({ event }) => {
+                      const err = event.error
+                      if (err instanceof Error) {
+                        return `${err.message}${err.stack ? `\n${err.stack}` : ''}`
+                      }
+                      return String(err)
+                    },
+                  }),
+                },
+              },
+            },
+            done: { type: 'final' as const },
+          },
         },
       },
-    },
-
-    awaitingClarification: {
-      after: {
-        1_800_000: {
-          target: 'failed',
-          actions: assign({
-            error: () => 'Awaiting clarification timed out after 30 minutes',
-          }),
-        },
-      },
-      on: {
-        USER_ANSWERED: {
-          target: 'analyzing',
-          actions: assign({
-            userMessage: ({ context, event }) =>
-              `${context.userMessage}\n\nUser's answers:\n${event.answers}`,
-          }),
-        },
-      },
+      onDone: { target: 'blueprinting' },
     },
 
     blueprinting: {
@@ -329,13 +386,13 @@ export const appGenerationMachine = setup({
       invoke: {
         src: 'runBlueprintActor',
         input: ({ context }) => ({
+          userPrompt: context.userMessage,
           appName: context.appName ?? '',
           appDescription: context.appDescription ?? '',
           contract: context.contract!,
-          designPreferences: context.designPreferences!,
         }),
         onDone: {
-          target: 'provisioning',
+          target: 'generating',
           actions: assign({
             blueprint: ({ event }) => event.output.blueprint,
             totalTokens: ({ context, event }) => context.totalTokens + event.output.tokensUsed,
@@ -343,50 +400,6 @@ export const appGenerationMachine = setup({
         },
         onError: {
           target: 'failed',
-          actions: assign({
-            error: ({ event }) => {
-              const err = event.error
-              if (err instanceof Error) {
-                return `${err.message}${err.stack ? `\n${err.stack}` : ''}`
-              }
-              return String(err)
-            },
-          }),
-        },
-      },
-    },
-
-    provisioning: {
-      after: {
-        300_000: {
-          target: 'cleanup',
-          actions: assign({
-            error: () => 'Provisioning timed out after 5 minutes',
-          }),
-        },
-      },
-      invoke: {
-        src: 'runProvisioningActor',
-        input: ({ context }) => ({
-          appName: context.appName ?? '',
-          projectId: context.projectId,
-          userId: context.userId,
-        }),
-        onDone: {
-          target: 'generating',
-          actions: assign({
-            sandboxId: ({ event }) => event.output.sandboxId,
-            supabaseProjectId: ({ event }) => event.output.supabaseProjectId,
-            supabaseUrl: ({ event }) => event.output.supabaseUrl,
-            supabaseAnonKey: ({ event }) => event.output.supabaseAnonKey,
-            githubCloneUrl: ({ event }) => event.output.githubCloneUrl,
-            githubHtmlUrl: ({ event }) => event.output.githubHtmlUrl,
-            repoName: ({ event }) => event.output.repoName,
-            totalTokens: ({ context, event }) => context.totalTokens + event.output.tokensUsed,
-          }),
-        },
-        onError: {
-          target: 'cleanup',
           actions: assign({
             error: ({ event }) => {
               const err = event.error

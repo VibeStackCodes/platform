@@ -1,0 +1,104 @@
+- generic:
+  - generic:
+    - generic:
+      - banner:
+        - navigation:
+          - link:
+            - /url: /
+            - generic: W
+            - generic: Wanderlust Journal
+          - link:
+            - /url: /authors
+            - text: Authors
+          - link:
+            - /url: /destinations
+            - text: Destinations
+          - link:
+            - /url: /tags
+            - text: Tags
+          - link:
+            - /url: /articles
+            - text: Articles
+          - link:
+            - /url: /article-tags
+            - text: Article Tags
+      - main:
+        - generic:
+          - generic:
+            - heading [level=1]: Articles
+            - button [expanded]:
+              - img
+              - text: New Articles
+          - link:
+            - /url: /articles/3b67b8cb-421c-4dac-8918-52f5ba01d119
+            - generic:
+              - img
+              - generic:
+                - heading [level=2]: consequatur culpa dens derelinquo
+                - paragraph: tergum testimonium
+          - generic:
+            - link:
+              - /url: /articles/b2d85e75-2621-4e56-87c1-05d893a72780
+              - generic:
+                - img
+              - generic:
+                - heading [level=3]: angelus adamo adeptio tracto
+                - paragraph: cotidie urbs
+            - link:
+              - /url: /articles/2a1620f0-d3ea-40f2-8440-81659e0cfd59
+              - generic:
+                - img
+              - generic:
+                - heading [level=3]: adsidue suggero ater suffoco
+                - paragraph: sto ustilo
+            - link:
+              - /url: /articles/5bfc6c2f-dd88-4610-b476-07bd6a9390d9
+              - generic:
+                - img
+              - generic:
+                - heading [level=3]: absque admoneo appositus vulnus
+                - paragraph: depraedor articulus
+            - link:
+              - /url: /articles/17faa09f-0d1e-48cc-b411-23b5970f8174
+              - generic:
+                - img
+              - generic:
+                - heading [level=3]: verbera adfero ad quam
+                - paragraph: torqueo communis
+  - dialog "New Articles" [ref=e126]:
+    - heading "New Articles" [level=2] [ref=e128]
+    - generic [ref=e129]:
+      - generic [ref=e130]:
+        - text: Title
+        - textbox "Enter title" [active] [ref=e131]
+      - generic [ref=e132]:
+        - text: Slug
+        - textbox "Enter slug" [ref=e133]
+      - generic [ref=e134]:
+        - text: Author Id
+        - textbox "Enter author id" [ref=e135]
+      - generic [ref=e136]:
+        - text: Destination Id
+        - textbox "Enter destination id" [ref=e137]
+      - generic [ref=e138]:
+        - text: Status
+        - textbox [ref=e139]
+      - generic [ref=e140]:
+        - text: Published At
+        - textbox [ref=e141]
+      - generic [ref=e142]:
+        - text: Excerpt
+        - textbox "Enter excerpt" [ref=e143]
+      - generic [ref=e144]:
+        - text: Content
+        - textbox [ref=e145]
+      - generic [ref=e146]:
+        - text: Cover Image Url
+        - textbox "e.g., https://example.com" [ref=e147]
+      - generic [ref=e148]:
+        - text: Read Time Minutes
+        - textbox "Enter read time minutes" [ref=e149]
+      - button "Publish" [ref=e150]
+    - button "Close" [ref=e151]:
+      - img
+      - generic [ref=e152]: Close

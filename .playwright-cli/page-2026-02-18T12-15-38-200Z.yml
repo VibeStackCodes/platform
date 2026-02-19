@@ -1,0 +1,23 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - navigation [ref=e5]:
+      - link "W Wanderlust Journal" [ref=e6] [cursor=pointer]:
+        - /url: /
+        - generic [ref=e7]: W
+        - generic [ref=e8]: Wanderlust Journal
+      - link "Authors" [ref=e9] [cursor=pointer]:
+        - /url: /authors
+      - link "Destinations" [ref=e10] [cursor=pointer]:
+        - /url: /destinations
+      - link "Articles" [ref=e11] [cursor=pointer]:
+        - /url: /articles
+      - link "Tags" [ref=e12] [cursor=pointer]:
+        - /url: /tags
+      - link "Article Tags" [ref=e13] [cursor=pointer]:
+        - /url: /article-tags
+  - main [ref=e15]:
+    - generic [ref=e17]:
+      - heading "Authors" [level=1] [ref=e19]
+      - button "New Author" [ref=e20]:
+        - img
+        - text: New Author

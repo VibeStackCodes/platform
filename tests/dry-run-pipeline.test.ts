@@ -20,7 +20,7 @@ import { assembleListPage, assembleDetailPage } from '@server/lib/agents/assembl
 import { derivePageFeatureSpec } from '@server/lib/agents/feature-schema'
 import { checkScaffold } from '@server/lib/agents/validation'
 import { contractToSQL } from '@server/lib/contract-to-sql'
-import type { SchemaContract, DesignPreferences } from '@server/lib/schema-contract'
+import type { SchemaContract } from '@server/lib/schema-contract'
 import type { PageConfig } from '@server/lib/agents/feature-schema'
 import { writeFileSync, mkdirSync, rmSync } from 'node:fs'
 import { snakeToKebab, pluralize } from '@server/lib/naming-utils'
@@ -30,12 +30,6 @@ import { execFileSync } from 'node:child_process'
 // ============================================================================
 // Shared helpers
 // ============================================================================
-
-const defaultDesign: DesignPreferences = {
-  style: 'modern',
-  primaryColor: '#3b82f6',
-  fontFamily: 'Inter',
-}
 
 /**
  * Hand-crafted PageConfig for testing the deterministic pipeline.
@@ -52,7 +46,6 @@ function runFullPipeline(
     appName,
     appDescription: `${appName} app`,
     contract,
-    designPreferences: defaultDesign,
   })
 
   // 2. SQL migration

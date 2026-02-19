@@ -1,0 +1,72 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - navigation [ref=e5]:
+      - link "D DevRemote Board" [ref=e6] [cursor=pointer]:
+        - /url: /
+        - generic [ref=e7]: D
+        - generic [ref=e8]: DevRemote Board
+      - link "Jobs" [ref=e9] [cursor=pointer]:
+        - /url: /jobs
+      - link "Tech Tags" [ref=e10] [cursor=pointer]:
+        - /url: /tech-tags
+  - main [ref=e12]:
+    - generic [ref=e13]:
+      - generic [ref=e14]:
+        - generic [ref=e15]:
+          - heading "Tech Tags" [level=1] [ref=e16]
+          - paragraph [ref=e41]: 5 total
+        - button "New Tech Tag" [ref=e17]:
+          - img
+          - text: New Tech Tag
+      - table [ref=e43]:
+        - rowgroup [ref=e44]:
+          - row "Name Created At ↓ Actions" [ref=e45]:
+            - columnheader "Name" [ref=e46] [cursor=pointer]
+            - columnheader "Created At ↓" [ref=e47] [cursor=pointer]
+            - columnheader "Actions" [ref=e48]
+        - rowgroup [ref=e49]:
+          - row "Sample tech_tags 18/02/2026 View Delete" [ref=e50]:
+            - cell "Sample tech_tags" [ref=e51]
+            - cell "18/02/2026" [ref=e52]
+            - cell "View Delete" [ref=e53]:
+              - generic [ref=e54]:
+                - link "View" [ref=e55] [cursor=pointer]:
+                  - /url: /tech-tags/84a5eeeb-e8d5-4e25-bddc-8a664a47fd24
+                  - button "View" [ref=e56]
+                - button "Delete" [ref=e57]
+          - row "Sample tech_tags 18/02/2026 View Delete" [ref=e58]:
+            - cell "Sample tech_tags" [ref=e59]
+            - cell "18/02/2026" [ref=e60]
+            - cell "View Delete" [ref=e61]:
+              - generic [ref=e62]:
+                - link "View" [ref=e63] [cursor=pointer]:
+                  - /url: /tech-tags/69919612-d327-4a66-a41e-ee3f5b972866
+                  - button "View" [ref=e64]
+                - button "Delete" [ref=e65]
+          - row "Sample tech_tags 18/02/2026 View Delete" [ref=e66]:
+            - cell "Sample tech_tags" [ref=e67]
+            - cell "18/02/2026" [ref=e68]
+            - cell "View Delete" [ref=e69]:
+              - generic [ref=e70]:
+                - link "View" [ref=e71] [cursor=pointer]:
+                  - /url: /tech-tags/ec09678d-eb61-4747-9d5e-d1a00f8ded49
+                  - button "View" [ref=e72]
+                - button "Delete" [ref=e73]
+          - row "Sample tech_tags 18/02/2026 View Delete" [ref=e74]:
+            - cell "Sample tech_tags" [ref=e75]
+            - cell "18/02/2026" [ref=e76]
+            - cell "View Delete" [ref=e77]:
+              - generic [ref=e78]:
+                - link "View" [ref=e79] [cursor=pointer]:
+                  - /url: /tech-tags/e9675070-c5d1-45ca-b4fb-26658fda8b32
+                  - button "View" [ref=e80]
+                - button "Delete" [ref=e81]
+          - row "Sample tech_tags 18/02/2026 View Delete" [ref=e82]:
+            - cell "Sample tech_tags" [ref=e83]
+            - cell "18/02/2026" [ref=e84]
+            - cell "View Delete" [ref=e85]:
+              - generic [ref=e86]:
+                - link "View" [ref=e87] [cursor=pointer]:
+                  - /url: /tech-tags/fbc12517-3793-416a-bc31-3d40ce151a86
+                  - button "View" [ref=e88]
+                - button "Delete" [ref=e89]

@@ -1,0 +1,72 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - navigation [ref=e5]:
+      - link "L La Piazza Manager" [ref=e6] [cursor=pointer]:
+        - /url: /
+        - generic [ref=e7]: L
+        - generic [ref=e8]: La Piazza Manager
+      - link "Menu Categories" [ref=e9] [cursor=pointer]:
+        - /url: /menu-categories
+      - link "Menu Items" [ref=e10] [cursor=pointer]:
+        - /url: /menu-items
+      - link "Restaurant Tables" [ref=e11] [cursor=pointer]:
+        - /url: /restaurant-tables
+      - link "Reservations" [ref=e12] [cursor=pointer]:
+        - /url: /reservations
+      - link "Orders" [ref=e13] [cursor=pointer]:
+        - /url: /orders
+      - link "Order Items" [ref=e14] [cursor=pointer]:
+        - /url: /order-items
+  - main [ref=e16]:
+    - generic [ref=e147]:
+      - generic [ref=e148]:
+        - heading "Orders" [level=1] [ref=e149]
+        - button "New Order" [active] [ref=e150]:
+          - img
+          - text: New Order
+      - generic [ref=e151]:
+        - generic [ref=e152]:
+          - generic [ref=e154]: O
+          - link "open" [ref=e157] [cursor=pointer]:
+            - /url: /orders/93791055-78e9-4bda-95e2-8e654f11865a
+          - generic [ref=e158]:
+            - paragraph [ref=e159]: "Total Amount: $0.00"
+            - paragraph [ref=e160]: "Ordered At: 18/02/2026"
+            - button [ref=e162]:
+              - img
+        - generic [ref=e163]:
+          - generic [ref=e165]: O
+          - link "open" [ref=e168] [cursor=pointer]:
+            - /url: /orders/0c0c6dca-17f5-4ad4-bb28-b7abce374082
+          - generic [ref=e169]:
+            - paragraph [ref=e170]: "Total Amount: $0.00"
+            - paragraph [ref=e171]: "Ordered At: 18/02/2026"
+            - button [ref=e173]:
+              - img
+        - generic [ref=e174]:
+          - generic [ref=e176]: O
+          - link "open" [ref=e179] [cursor=pointer]:
+            - /url: /orders/05fa4065-f6b6-4386-9643-a55d521b8300
+          - generic [ref=e180]:
+            - paragraph [ref=e181]: "Total Amount: $0.00"
+            - paragraph [ref=e182]: "Ordered At: 18/02/2026"
+            - button [ref=e184]:
+              - img
+        - generic [ref=e185]:
+          - generic [ref=e187]: O
+          - link "open" [ref=e190] [cursor=pointer]:
+            - /url: /orders/f2556628-cad3-4c8e-9f8a-69313a91e594
+          - generic [ref=e191]:
+            - paragraph [ref=e192]: "Total Amount: $0.00"
+            - paragraph [ref=e193]: "Ordered At: 18/02/2026"
+            - button [ref=e195]:
+              - img
+        - generic [ref=e196]:
+          - generic [ref=e198]: O
+          - link "open" [ref=e201] [cursor=pointer]:
+            - /url: /orders/55a4e1c7-7dd0-4784-85dd-3632b2bff232
+          - generic [ref=e202]:
+            - paragraph [ref=e203]: "Total Amount: $0.00"
+            - paragraph [ref=e204]: "Ordered At: 18/02/2026"
+            - button [ref=e206]:
+              - img

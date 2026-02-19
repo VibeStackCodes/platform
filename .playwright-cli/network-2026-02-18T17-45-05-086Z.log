@@ -1,0 +1,2 @@
+[GET] https://ceuzlkbuljcaxyjnuopv.supabase.co/rest/v1/tech_tags?select=*&order=created_at.desc&offset=0&limit=20 => [200] 
+[GET] https://ceuzlkbuljcaxyjnuopv.supabase.co/rest/v1/tech_tags?select=*&order=created_at.desc&offset=0&limit=20 => [200] 

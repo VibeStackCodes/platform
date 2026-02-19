@@ -1,12 +1,12 @@
 import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { parse as parseColor, formatCss, oklch as toOklch } from 'culori'
 import { stripIndent } from 'common-tags'
-import { inferFeatures, type SchemaContract, type DesignPreferences, type InferredFeatures } from './schema-contract'
+import { inferFeatures, type SchemaContract, type InferredFeatures } from './schema-contract'
 import { contractToPages } from './contract-to-pages'
 import { contractToSQL } from './contract-to-sql'
-import { snakeToPascal, snakeToKebab, snakeToTitle, pluralize } from './naming-utils'
-import { deriveDesignSpec, designSpecToFontCSS } from './design-spec'
+import { snakeToPascal, snakeToKebab, pluralize } from './naming-utils'
+import { generateThemedApp, type ThemeTokens, DEFAULT_TEXT_SLOTS } from './themed-code-engine'
+import { runDesignAgent } from './agents/design-agent'
 
 // ============================================================================
 // UI Kit — shadcn/ui components read from snapshot/ui-kit/ at runtime
@@ -40,7 +40,6 @@ export interface AppBlueprint {
   meta: {
     appName: string
     appDescription: string
-    designPreferences: DesignPreferences
   }
   features: InferredFeatures
   contract: SchemaContract
@@ -50,144 +49,57 @@ export interface AppBlueprint {
 interface BlueprintInput {
   appName: string
   appDescription: string
+  userPrompt?: string
   contract: SchemaContract
-  designPreferences: DesignPreferences
+}
+
+/**
+ * Fallback theme tokens used when the Design Agent is unavailable.
+ * Uses theme-stratton (business/corporate) defaults — neutral and safe.
+ */
+function fallbackThemeTokens(_input: BlueprintInput): ThemeTokens {
+  return {
+    name: 'theme-stratton',
+    fonts: {
+      display: 'DM Sans',
+      body: 'Inter',
+      googleFontsUrl: 'https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap',
+    },
+    colors: {
+      background: '#ffffff',
+      foreground: '#111111',
+      primary: '#1e40af',
+      primaryForeground: '#ffffff',
+      secondary: '#f1f5f9',
+      accent: '#3b82f6',
+      muted: '#f8fafc',
+      border: '#e2e8f0',
+    },
+    style: {
+      borderRadius: '0.5rem',
+      cardStyle: 'elevated',
+      navStyle: 'top-bar',
+      heroLayout: 'split',
+      spacing: 'normal',
+      motion: 'subtle',
+      imagery: 'minimal',
+    },
+    authPosture: 'hybrid',
+    heroImages: [],
+    heroQuery: 'modern web application',
+    textSlots: { ...DEFAULT_TEXT_SLOTS },
+  }
 }
 
 // ============================================================================
 // Color utilities — hex → oklch conversion for Tailwind v4 @theme (via culori)
 // ============================================================================
 
-/**
- * Generate a full shadcn/ui color palette derived from a single primary hex color.
- * Returns CSS oklch() strings for all required tokens.
- */
-function buildColorPalette(primaryHex: string) {
-  const parsed = toOklch(parseColor(primaryHex) ?? parseColor('#6366f1')!)!
-  const { l: L, c: C, h: H = 0 } = parsed
-
-  // Primary: use the color as-is, clamp L to reasonable range for readability
-  const primaryL = Math.min(0.72, Math.max(0.35, L))
-  const primaryFgL = primaryL > 0.55 ? 0.12 : 0.98
-
-  // Secondary: very light tint of primary hue
-  const secondaryL = 0.965
-  const secondaryC = Math.min(C * 0.12, 0.025)
-
-  // Muted: very subtle hue-tinted neutral
-  const mutedC = Math.min(C * 0.08, 0.015)
-
-  // Accent: slightly more saturated than secondary
-  const accentC = Math.min(C * 0.18, 0.035)
-
-  // Border: very light with tiny hint of hue
-  const borderC = Math.min(C * 0.06, 0.012)
-
-  return {
-    primary:            formatCss({ mode: 'oklch', l: primaryL, c: Math.min(C, 0.28), h: H }),
-    primaryForeground:  formatCss({ mode: 'oklch', l: primaryFgL, c: 0, h: 0 }),
-    secondary:          formatCss({ mode: 'oklch', l: secondaryL, c: secondaryC, h: H }),
-    secondaryFg:        formatCss({ mode: 'oklch', l: 0.21, c: 0, h: 0 }),
-    muted:              formatCss({ mode: 'oklch', l: 0.965, c: mutedC, h: H }),
-    mutedFg:            formatCss({ mode: 'oklch', l: 0.50, c: Math.min(C * 0.12, 0.02), h: H }),
-    accent:             formatCss({ mode: 'oklch', l: 0.955, c: accentC, h: H }),
-    accentFg:           formatCss({ mode: 'oklch', l: 0.20, c: 0, h: 0 }),
-    border:             formatCss({ mode: 'oklch', l: 0.918, c: borderC, h: H }),
-    input:              formatCss({ mode: 'oklch', l: 0.918, c: borderC, h: H }),
-    ring:               formatCss({ mode: 'oklch', l: primaryL, c: Math.min(C * 0.65, 0.20), h: H }),
-    // Dark mode variants
-    darkBg:             formatCss({ mode: 'oklch', l: 0.085, c: Math.min(C * 0.06, 0.012), h: H }),
-    darkFg:             formatCss({ mode: 'oklch', l: 0.96, c: 0, h: 0 }),
-    darkCard:           formatCss({ mode: 'oklch', l: 0.115, c: Math.min(C * 0.06, 0.012), h: H }),
-    darkPrimary:        formatCss({ mode: 'oklch', l: Math.min(primaryL + 0.10, 0.78), c: Math.min(C, 0.28), h: H }),
-    darkBorder:         formatCss({ mode: 'oklch', l: 0.22, c: Math.min(C * 0.08, 0.015), h: H }),
-    darkMuted:          formatCss({ mode: 'oklch', l: 0.18, c: Math.min(C * 0.08, 0.015), h: H }),
-    darkMutedFg:        formatCss({ mode: 'oklch', l: 0.58, c: Math.min(C * 0.10, 0.018), h: H }),
-  }
-}
-
-/** Generate Tailwind v4 CSS theme with shadcn/ui color tokens */
-function generateIndexCSS(prefs: DesignPreferences, contract: SchemaContract): string {
-  const pal = buildColorPalette(prefs.primaryColor)
-  const designSpec = deriveDesignSpec(contract, prefs)
-  const fontCSS = designSpecToFontCSS(designSpec)
-
-  return stripIndent`${fontCSS}
-
-@import "tailwindcss";
-@import "tw-animate-css";
-
-@custom-variant dark (&:is(.dark *));
-
-@theme inline {
-  --color-background: oklch(1 0 0);
-  --color-foreground: oklch(0.140 0 0);
-  --color-card: oklch(1 0 0);
-  --color-card-foreground: oklch(0.140 0 0);
-  --color-popover: oklch(1 0 0);
-  --color-popover-foreground: oklch(0.140 0 0);
-  --color-primary: ${pal.primary};
-  --color-primary-foreground: ${pal.primaryForeground};
-  --color-secondary: ${pal.secondary};
-  --color-secondary-foreground: ${pal.secondaryFg};
-  --color-muted: ${pal.muted};
-  --color-muted-foreground: ${pal.mutedFg};
-  --color-accent: ${pal.accent};
-  --color-accent-foreground: ${pal.accentFg};
-  --color-destructive: oklch(0.577 0.245 27.325);
-  --color-destructive-foreground: oklch(0.985 0 0);
-  --color-border: ${pal.border};
-  --color-input: ${pal.input};
-  --color-ring: ${pal.ring};
-  --radius: 0.5rem;
-  --font-sans: '${prefs.fontFamily}', ui-sans-serif, system-ui, sans-serif;
-}
-
-/* Dark mode overrides */
-.dark {
-  --color-background: ${pal.darkBg};
-  --color-foreground: ${pal.darkFg};
-  --color-card: ${pal.darkCard};
-  --color-card-foreground: ${pal.darkFg};
-  --color-popover: ${pal.darkCard};
-  --color-popover-foreground: ${pal.darkFg};
-  --color-primary: ${pal.darkPrimary};
-  --color-primary-foreground: oklch(0.10 0 0);
-  --color-secondary: ${pal.darkMuted};
-  --color-secondary-foreground: ${pal.darkFg};
-  --color-muted: ${pal.darkMuted};
-  --color-muted-foreground: ${pal.darkMutedFg};
-  --color-accent: ${pal.darkMuted};
-  --color-accent-foreground: ${pal.darkFg};
-  --color-destructive: oklch(0.704 0.191 22.216);
-  --color-border: ${pal.darkBorder};
-  --color-input: ${pal.darkBorder};
-  --color-ring: ${pal.ring};
-}
-
-/* Smooth transitions for all interactive elements */
-* {
-  @apply border-border;
-}
-
-body {
-  @apply bg-background text-foreground antialiased;
-  font-feature-settings: "cv11", "ss01";
-  font-variation-settings: "opsz" 32;
-}
-`
-}
-
-/** Build a Google Fonts URL for a given font family name */
-function googleFontsUrl(fontFamily: string): string {
-  const encoded = fontFamily.trim().replace(/\s+/g, '+')
-  return `https://fonts.googleapis.com/css2?family=${encoded}:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap`
-}
+// buildColorPalette + generateIndexCSS removed — themeCss() from themed-code-engine is the sole CSS source.
+// Design Agent is the sole authority for visual identity (colors, fonts, layout).
 
 /** Generate index.html for the Vite SPA with optional Google Fonts */
-function generateIndexHTML(appName: string, prefs: DesignPreferences): string {
-  // Always load font via Google Fonts (even Inter) for consistency
-  const fontsUrl = googleFontsUrl(prefs.fontFamily)
+function generateIndexHTML(appName: string, fontsUrl: string): string {
   return stripIndent`<!doctype html>
 <html lang="en">
   <head>
@@ -240,268 +152,13 @@ createRoot(document.getElementById('root')!).render(
 
 /** Generate app-layout.tsx with branded nav and optional sign-out button */
 function generateAppLayout(appName: string, features: InferredFeatures): string {
-  const navLinks = features.entities.map((entity) => {
-    const plural = pluralize(entity)
-    const label = snakeToTitle(plural)
-    const kebab = snakeToKebab(plural)
-    return `  { to: '/${kebab}', label: '${label}' }`
-  }).join(',\n')
-
-  // Pick a brand initial for the logo mark
-  const initial = appName.charAt(0).toUpperCase()
-
-  const signOutImports = features.auth
-    ? `import { useNavigate } from '@tanstack/react-router'\nimport { supabase } from '@/lib/supabase'\n`
-    : ''
-
-  const signOutHook = features.auth
-    ? `\n  const navigate = useNavigate()
-  async function signOut() {
-    await supabase.auth.signOut()
-    navigate({ to: '/auth/login' })
-  }\n`
-    : ''
-
-  const signOutButton = features.auth
-    ? `
-          <button
-            onClick={signOut}
-            className="ml-auto rounded-md px-3 py-1.5 text-xs font-medium text-muted-foreground ring-1 ring-border hover:bg-muted hover:text-foreground transition-colors"
-          >
-            Sign out
-          </button>`
-    : ''
-
+  void appName
+  void features
   return stripIndent`// Auto-generated by VibeStack — do not edit manually
-import { Link, Outlet } from '@tanstack/react-router'
-${signOutImports}
-const navLinks = [
-${navLinks},
-]
+import { Outlet } from '@tanstack/react-router'
 
-export function AppLayout() {${signOutHook}
-  return (
-    <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-50 border-b bg-card/80 backdrop-blur-md">
-        <nav className="container mx-auto flex items-center gap-1 px-4 py-3">
-          {/* Brand mark */}
-          <Link to="/" className="mr-6 flex items-center gap-2.5 shrink-0">
-            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary text-xs font-bold text-primary-foreground shadow-sm">
-              ${initial}
-            </span>
-            <span className="text-sm font-semibold tracking-tight">${appName}</span>
-          </Link>
-
-          {/* Nav links */}
-          {navLinks.map((link) => (
-            <Link
-              key={link.to}
-              to={link.to}
-              className="rounded-md px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-              activeProps={{ className: 'rounded-md px-3 py-1.5 text-sm bg-muted text-foreground font-medium' }}
-            >
-              {link.label}
-            </Link>
-          ))}
-          ${signOutButton}
-        </nav>
-        {/* Accent line */}
-        <div className="h-px bg-gradient-to-r from-transparent via-primary/40 to-transparent" />
-      </header>
-
-      <main className="container mx-auto px-4 py-8">
-        <Outlet />
-      </main>
-    </div>
-  )
-}
-`
-}
-
-/** Generate auth login/signup page — split-screen branded design */
-function generateAuthLoginPage(appName: string): string {
-  const initial = appName.charAt(0).toUpperCase()
-  return stripIndent`// Auto-generated by VibeStack
-import { createFileRoute, useNavigate } from '@tanstack/react-router'
-import { useState } from 'react'
-import { supabase } from '@/lib/supabase'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-
-export const Route = createFileRoute('/auth/login')({
-  component: AuthLoginPage,
-})
-
-function AuthLoginPage() {
-  const navigate = useNavigate()
-  const [mode, setMode] = useState<'signin' | 'signup'>('signin')
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [message, setMessage] = useState<string | null>(null)
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    setLoading(true)
-    setError(null)
-    setMessage(null)
-
-    if (mode === 'signup') {
-      const { error } = await supabase.auth.signUp({ email, password })
-      if (error) {
-        setError(error.message)
-      } else {
-        setMessage('Check your email to confirm your account, then sign in.')
-        setMode('signin')
-      }
-    } else {
-      const { data, error } = await supabase.auth.signInWithPassword({ email, password })
-      if (error) {
-        setError(error.message)
-      } else if (data.session) {
-        navigate({ to: '/' })
-      }
-    }
-
-    setLoading(false)
-  }
-
-  return (
-    <div className="grid min-h-screen lg:grid-cols-2">
-      {/* Left: brand panel */}
-      <div className="hidden flex-col justify-between bg-primary p-10 text-primary-foreground lg:flex">
-        <div className="flex items-center gap-3">
-          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary-foreground/15 text-base font-bold">
-            ${initial}
-          </span>
-          <span className="text-lg font-semibold">${appName}</span>
-        </div>
-        <div className="space-y-3">
-          <p className="text-3xl font-bold leading-tight tracking-tight">
-            Welcome back
-          </p>
-          <p className="text-primary-foreground/70 text-sm leading-relaxed max-w-xs">
-            Sign in to your account to continue where you left off.
-          </p>
-        </div>
-        <p className="text-xs text-primary-foreground/40">© {new Date().getFullYear()} ${appName}</p>
-      </div>
-
-      {/* Right: form panel */}
-      <div className="flex items-center justify-center bg-background p-8">
-        <div className="w-full max-w-sm space-y-6">
-          {/* Mobile logo */}
-          <div className="flex items-center gap-2 lg:hidden">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-sm font-bold text-primary-foreground">
-              ${initial}
-            </span>
-            <span className="font-semibold">${appName}</span>
-          </div>
-
-          <div className="space-y-1.5">
-            <h1 className="text-2xl font-bold tracking-tight">
-              {mode === 'signin' ? 'Sign in' : 'Create account'}
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              {mode === 'signin'
-                ? 'Enter your credentials to access your account'
-                : 'Fill in the details below to get started'}
-            </p>
-          </div>
-
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium leading-none">Email address</label>
-              <Input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                placeholder="you@example.com"
-                className="h-10"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium leading-none">Password</label>
-              <Input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                placeholder="••••••••"
-                minLength={6}
-                className="h-10"
-              />
-            </div>
-
-            {error && (
-              <div className="rounded-md border border-destructive/30 bg-destructive/8 px-3 py-2.5 text-sm text-destructive">
-                {error}
-              </div>
-            )}
-            {message && (
-              <div className="rounded-md border border-green-500/30 bg-green-50 px-3 py-2.5 text-sm text-green-700">
-                {message}
-              </div>
-            )}
-
-            <Button type="submit" className="w-full h-10" disabled={loading}>
-              {loading ? (
-                <span className="flex items-center gap-2">
-                  <svg className="h-4 w-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
-                  Please wait…
-                </span>
-              ) : mode === 'signin' ? 'Sign in' : 'Create account'}
-            </Button>
-          </form>
-
-          <p className="text-center text-sm text-muted-foreground">
-            {mode === 'signin' ? "Don't have an account?" : 'Already have an account?'}{' '}
-            <button
-              type="button"
-              className="font-medium text-primary underline-offset-4 hover:underline"
-              onClick={() => { setMode(mode === 'signin' ? 'signup' : 'signin'); setError(null); setMessage(null) }}
-            >
-              {mode === 'signin' ? 'Sign up' : 'Sign in'}
-            </button>
-          </p>
-        </div>
-      </div>
-    </div>
-  )
-}
-`
-}
-
-/** Generate auth callback page — handles Supabase email confirmation links */
-function generateAuthCallbackPage(): string {
-  return stripIndent`// Auto-generated by VibeStack — handles Supabase email confirmation redirects
-import { createFileRoute, useNavigate } from '@tanstack/react-router'
-import { useEffect } from 'react'
-import { supabase } from '@/lib/supabase'
-
-export const Route = createFileRoute('/auth/callback')({
-  component: AuthCallbackPage,
-})
-
-function AuthCallbackPage() {
-  const navigate = useNavigate()
-
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      navigate({ to: data.session ? '/' : '/auth/login' })
-    })
-  }, [navigate])
-
-  return (
-    <div className="min-h-screen flex items-center justify-center">
-      <p className="text-muted-foreground">Verifying…</p>
-    </div>
-  )
+export function AppLayout() {
+  return <Outlet />
 }
 `
 }
@@ -525,26 +182,31 @@ export const Route = createRootRoute({
 `
 }
 
-/** Generate index route that redirects to the first entity's list page */
-function generateIndexRoute(firstEntityKebab: string): string {
-  return stripIndent`// Auto-generated by VibeStack — redirects to first entity page
-import { createFileRoute, redirect } from '@tanstack/react-router'
-
-export const Route = createFileRoute('/')({
-  beforeLoad: () => {
-    throw redirect({ to: '/${firstEntityKebab}' })
-  },
-})
-`
-}
-
 /** Generate routeTree.gen.ts — deterministic route tree from contract entities.
  *
  * TanStack Router v1.160+ requires `.update()` on each route to set id/path/getParentRoute.
  * Without this, createFileRoute() routes have no path info and all resolve to __root__,
  * causing "Duplicate routes found with id: __root__" at runtime.
  */
-function generateRouteTree(contract: SchemaContract, features: InferredFeatures): string {
+function isPrivateTableForTheme(
+  table: SchemaContract['tables'][number],
+  tokens: ThemeTokens,
+): boolean {
+  if (tokens.authPosture === 'private') return true
+  if (tokens.authPosture === 'public') return false
+
+  const hasUserColumn = table.columns.some((column) => column.name === 'user_id')
+  const hasAuthReference = table.columns.some((column) => column.references?.table === 'auth.users')
+  const hasRlsAuthUid = (table.rlsPolicies ?? []).some((policy) => {
+    const using = policy.using?.toLowerCase() ?? ''
+    const withCheck = policy.withCheck?.toLowerCase() ?? ''
+    return using.includes('auth.uid()') || withCheck.includes('auth.uid()')
+  })
+
+  return hasUserColumn || hasAuthReference || hasRlsAuthUid
+}
+
+function generateRouteTree(contract: SchemaContract, features: InferredFeatures, tokens: ThemeTokens): string {
   const lines: string[] = [
     '/* eslint-disable */',
     '// @ts-nocheck',
@@ -552,58 +214,84 @@ function generateRouteTree(contract: SchemaContract, features: InferredFeatures)
     '',
     "import { Route as rootRoute } from './routes/__root'",
     "import { Route as IndexImport } from './routes/index'",
-    "import { Route as AuthenticatedImport } from './routes/_authenticated/route'",
+    "import { Route as AboutImport } from './routes/about'",
+    "import { Route as ContactImport } from './routes/contact'",
   ]
 
-  if (features.auth) {
+  const authRequired = tokens.authPosture !== 'public'
+  const privateTables = contract.tables.filter((table) => isPrivateTableForTheme(table, tokens))
+  const publicTables = contract.tables.filter((table) => !isPrivateTableForTheme(table, tokens))
+
+  if (authRequired) {
+    lines.push("import { Route as AuthenticatedImport } from './routes/_authenticated/route'")
+    lines.push("import { Route as DashboardImport } from './routes/_authenticated/dashboard'")
     lines.push("import { Route as AuthLoginImport } from './routes/auth/login'")
-    lines.push("import { Route as AuthCallbackImport } from './routes/auth/callback'")
   }
 
-  // Import each entity's routes
-  for (const entity of features.entities) {
-    const plural = pluralize(entity)
+  for (const table of publicTables) {
+    const plural = pluralize(table.name)
     const kebab = snakeToKebab(plural)
     const pascal = snakeToPascal(plural)
-
-    lines.push(`import { Route as ${pascal}ListImport } from './routes/_authenticated/${kebab}'`)
-    lines.push(`import { Route as ${pascal}DetailImport } from './routes/_authenticated/${kebab}.$id'`)
+    lines.push(`import { Route as ${pascal}ListImport } from './routes/${kebab}/index'`)
+    lines.push(`import { Route as ${pascal}DetailImport } from './routes/${kebab}/$id'`)
   }
 
-  // Update routes with path/id/getParentRoute (required by TanStack Router v1.160+)
+  for (const table of privateTables) {
+    const plural = pluralize(table.name)
+    const kebab = snakeToKebab(plural)
+    const pascal = snakeToPascal(plural)
+    lines.push(`import { Route as Private${pascal}ListImport } from './routes/_authenticated/${kebab}/index'`)
+    lines.push(`import { Route as Private${pascal}DetailImport } from './routes/_authenticated/${kebab}/$id'`)
+  }
+
   lines.push('')
   lines.push("const IndexRoute = IndexImport.update({ id: '/', path: '/', getParentRoute: () => rootRoute } as any)")
-  lines.push("const AuthenticatedRoute = AuthenticatedImport.update({ id: '/_authenticated', getParentRoute: () => rootRoute } as any)")
+  lines.push("const AboutRoute = AboutImport.update({ path: '/about', getParentRoute: () => rootRoute } as any)")
+  lines.push("const ContactRoute = ContactImport.update({ path: '/contact', getParentRoute: () => rootRoute } as any)")
 
-  if (features.auth) {
+  if (authRequired) {
+    lines.push("const AuthenticatedRoute = AuthenticatedImport.update({ id: '/_authenticated', getParentRoute: () => rootRoute } as any)")
+    lines.push("const DashboardRoute = DashboardImport.update({ path: '/dashboard', getParentRoute: () => AuthenticatedRoute } as any)")
     lines.push("const AuthLoginRoute = AuthLoginImport.update({ path: '/auth/login', getParentRoute: () => rootRoute } as any)")
-    lines.push("const AuthCallbackRoute = AuthCallbackImport.update({ path: '/auth/callback', getParentRoute: () => rootRoute } as any)")
   }
 
   lines.push('')
 
-  const childRoutes: string[] = []
-  for (const entity of features.entities) {
-    const plural = pluralize(entity)
+  const publicChildren: string[] = []
+  for (const table of publicTables) {
+    const plural = pluralize(table.name)
     const kebab = snakeToKebab(plural)
     const pascal = snakeToPascal(plural)
-
-    lines.push(`const ${pascal}ListRoute = ${pascal}ListImport.update({ path: '/${kebab}', getParentRoute: () => AuthenticatedRoute } as any)`)
-    lines.push(`const ${pascal}DetailRoute = ${pascal}DetailImport.update({ path: '/${kebab}/$id', getParentRoute: () => AuthenticatedRoute } as any)`)
-
-    childRoutes.push(`    ${pascal}ListRoute,`)
-    childRoutes.push(`    ${pascal}DetailRoute,`)
+    lines.push(`const ${pascal}ListRoute = ${pascal}ListImport.update({ path: '/${kebab}/', getParentRoute: () => rootRoute } as any)`)
+    lines.push(`const ${pascal}DetailRoute = ${pascal}DetailImport.update({ path: '/${kebab}/$id', getParentRoute: () => rootRoute } as any)`)
+    publicChildren.push(`  ${pascal}ListRoute,`)
+    publicChildren.push(`  ${pascal}DetailRoute,`)
   }
 
-  const authRouteEntries = features.auth ? ['  AuthLoginRoute,', '  AuthCallbackRoute,'] : []
+  const privateChildren: string[] = []
+  for (const table of privateTables) {
+    const plural = pluralize(table.name)
+    const kebab = snakeToKebab(plural)
+    const pascal = snakeToPascal(plural)
+    lines.push(`const Private${pascal}ListRoute = Private${pascal}ListImport.update({ path: '/${kebab}/', getParentRoute: () => AuthenticatedRoute } as any)`)
+    lines.push(`const Private${pascal}DetailRoute = Private${pascal}DetailImport.update({ path: '/${kebab}/$id', getParentRoute: () => AuthenticatedRoute } as any)`)
+    privateChildren.push(`    Private${pascal}ListRoute,`)
+    privateChildren.push(`    Private${pascal}DetailRoute,`)
+  }
 
   lines.push('')
   lines.push('export const routeTree = rootRoute.addChildren([')
   lines.push('  IndexRoute,')
-  lines.push(...authRouteEntries)
-  lines.push('  AuthenticatedRoute.addChildren([')
-  lines.push(...childRoutes)
-  lines.push('  ]),')
+  lines.push('  AboutRoute,')
+  lines.push('  ContactRoute,')
+  lines.push(...publicChildren)
+  if (authRequired) {
+    lines.push('  AuthLoginRoute,')
+    lines.push('  AuthenticatedRoute.addChildren([')
+    lines.push('    DashboardRoute,')
+    lines.push(...privateChildren)
+    lines.push('  ]),')
+  }
   lines.push('])')
   lines.push('')
 
@@ -653,8 +341,9 @@ export default defineConfig({
  * Generate a complete AppBlueprint from SchemaContract + design preferences.
  * The blueprint contains every file the generated app needs, organized by dependency layer.
  */
-export function contractToBlueprint(input: BlueprintInput): AppBlueprint {
+function buildBlueprintFromTokens(input: BlueprintInput, tokens: ThemeTokens): AppBlueprint {
   const features = inferFeatures(input.contract)
+  const themedFiles = generateThemedApp(input.contract, tokens, input.appName)
   const fileTree: BlueprintFile[] = []
 
   // Layer 0: Build config + Vite config + Vercel SPA rewrite (overwrite snapshot defaults)
@@ -715,13 +404,13 @@ Thumbs.db
   })
   fileTree.push({
     path: 'src/index.css',
-    content: generateIndexCSS(input.designPreferences, input.contract),
+    content: themedFiles['src/index.css'],
     layer: 1,
     isLLMSlot: false,
   })
   fileTree.push({
     path: 'index.html',
-    content: generateIndexHTML(input.appName, input.designPreferences),
+    content: generateIndexHTML(input.appName, tokens.fonts.googleFontsUrl),
     layer: 1,
     isLLMSlot: false,
   })
@@ -753,74 +442,27 @@ Thumbs.db
     isLLMSlot: false,
   })
 
-  // Layer 3: Root route + Index redirect + Auth guard route — deterministic
+  // Layer 3: Root route + themed pages
   fileTree.push({
     path: 'src/routes/__root.tsx',
     content: generateRootRoute(),
     layer: 3,
     isLLMSlot: false,
   })
-  // Index route redirects to first entity list page
-  const firstEntityKebab = snakeToKebab(pluralize(features.entities[0]))
-  fileTree.push({
-    path: 'src/routes/index.tsx',
-    content: generateIndexRoute(firstEntityKebab),
-    layer: 3,
-    isLLMSlot: false,
-  })
-  // _authenticated/route.tsx is ALWAYS needed — all entity routes are nested under it.
-  // When auth is enabled: real session check + redirect to /auth/login.
-  // When auth is disabled: passthrough layout wrapper only.
-  const authenticatedRouteContent = features.auth
-    ? `// Auto-generated by VibeStack
-import { createFileRoute, redirect } from '@tanstack/react-router'
-import { AppLayout } from '@/components/app-layout'
-import { supabase } from '@/lib/supabase'
-
-export const Route = createFileRoute('/_authenticated')({
-  beforeLoad: async () => {
-    const { data } = await supabase.auth.getSession()
-    if (!data.session) {
-      throw redirect({ to: '/auth/login' })
-    }
-  },
-  component: AppLayout,
-})
-`
-    : `// Auto-generated by VibeStack
-import { createFileRoute } from '@tanstack/react-router'
-import { AppLayout } from '@/components/app-layout'
-
-export const Route = createFileRoute('/_authenticated')({
-  component: AppLayout,
-})
-`
-  fileTree.push({
-    path: 'src/routes/_authenticated/route.tsx',
-    content: authenticatedRouteContent,
-    layer: 3,
-    isLLMSlot: false,
-  })
-
-  // Auth pages — only when schema has auth.users FK references
-  if (features.auth) {
+  for (const [path, content] of Object.entries(themedFiles)) {
+    if (path === 'src/index.css') continue
     fileTree.push({
-      path: 'src/routes/auth/login.tsx',
-      content: generateAuthLoginPage(input.appName),
-      layer: 3,
-      isLLMSlot: false,
-    })
-    fileTree.push({
-      path: 'src/routes/auth/callback.tsx',
-      content: generateAuthCallbackPage(),
-      layer: 3,
+      path,
+      content,
+      layer: 4,
       isLLMSlot: false,
     })
   }
 
-  // Layer 4: Page skeletons (LLM fills JSX bodies)
-  const pages = contractToPages(input.contract)
-  for (const page of pages) {
+  // Compatibility layer: keep legacy SLOT files so downstream dry-run/repair flows
+  // that still expect assembler paths continue to work during migration.
+  const legacyPages = contractToPages(input.contract)
+  for (const page of legacyPages) {
     fileTree.push({
       path: `src/routes/_authenticated/${page.fileName}`,
       content: page.content,
@@ -832,7 +474,7 @@ export const Route = createFileRoute('/_authenticated')({
   // Layer 5: Route tree + wiring files (depend on routes being defined)
   fileTree.push({
     path: 'src/routeTree.gen.ts',
-    content: generateRouteTree(input.contract, features),
+    content: generateRouteTree(input.contract, features, tokens),
     layer: 5,
     isLLMSlot: false,
   })
@@ -853,10 +495,19 @@ export const Route = createFileRoute('/_authenticated')({
     meta: {
       appName: input.appName,
       appDescription: input.appDescription,
-      designPreferences: input.designPreferences,
     },
     features,
     contract: input.contract,
     fileTree,
   }
+}
+
+export function contractToBlueprint(input: BlueprintInput): AppBlueprint {
+  return buildBlueprintFromTokens(input, fallbackThemeTokens(input))
+}
+
+export async function contractToBlueprintWithDesignAgent(input: BlueprintInput): Promise<AppBlueprint> {
+  const userPrompt = input.userPrompt?.trim() || `${input.appName}. ${input.appDescription}`
+  const tokens = await runDesignAgent(userPrompt, input.contract, input.appName, input.appDescription)
+  return buildBlueprintFromTokens(input, tokens)
 }

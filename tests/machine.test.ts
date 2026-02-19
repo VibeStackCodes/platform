@@ -16,7 +16,7 @@ describe('appGenerationMachine', () => {
     expect(actor.getSnapshot().value).toBe('idle')
   })
 
-  it('transitions to analyzing on START event', () => {
+  it('transitions to preparing on START event', () => {
     const actor = createActor(appGenerationMachine)
     actor.start()
     actor.send({
@@ -25,17 +25,17 @@ describe('appGenerationMachine', () => {
       projectId: 'test-123',
       userId: 'test-user-123',
     })
-    expect(actor.getSnapshot().value).toBe('analyzing')
+    const value = actor.getSnapshot().value
+    // Parallel state: both analysis and infrastructure start concurrently
+    expect(value).toEqual({ preparing: { analysis: 'running', infrastructure: 'provisioning' } })
     actor.stop()
   })
 
   it('has all expected states', () => {
     const states = Object.keys(appGenerationMachine.config.states ?? {})
     expect(states).toContain('idle')
-    expect(states).toContain('analyzing')
-    expect(states).toContain('awaitingClarification')
+    expect(states).toContain('preparing')
     expect(states).toContain('blueprinting')
-    expect(states).toContain('provisioning')
     expect(states).toContain('generating')
     expect(states).toContain('validating')
     expect(states).toContain('repairing')
@@ -44,6 +44,13 @@ describe('appGenerationMachine', () => {
     expect(states).toContain('cleanup')
     expect(states).toContain('complete')
     expect(states).toContain('failed')
+    // Nested states inside preparing
+    const preparingStates = (appGenerationMachine.config.states?.preparing as any)?.states
+    expect(preparingStates?.analysis?.states).toHaveProperty('running')
+    expect(preparingStates?.analysis?.states).toHaveProperty('awaitingClarification')
+    expect(preparingStates?.analysis?.states).toHaveProperty('done')
+    expect(preparingStates?.infrastructure?.states).toHaveProperty('provisioning')
+    expect(preparingStates?.infrastructure?.states).toHaveProperty('done')
   })
 
   it('stores retryCount in context', () => {
@@ -54,10 +61,11 @@ describe('appGenerationMachine', () => {
     actor.stop()
   })
 
-  it('machine has invoke on analyzing state', () => {
-    const analyzeState = appGenerationMachine.config.states?.analyzing
-    expect(analyzeState).toBeDefined()
-    expect(analyzeState?.invoke).toBeDefined()
+  it('machine has invoke on analysis.running state', () => {
+    const preparingStates = (appGenerationMachine.config.states?.preparing as any)?.states
+    const runningState = preparingStates?.analysis?.states?.running
+    expect(runningState).toBeDefined()
+    expect(runningState?.invoke).toBeDefined()
   })
 
   it('context includes totalTokens', () => {
@@ -102,7 +110,8 @@ describe('appGenerationMachine', () => {
   })
 
   it('awaitingClarification still has USER_ANSWERED event', () => {
-    const state = appGenerationMachine.config.states?.awaitingClarification
+    const preparingStates = (appGenerationMachine.config.states?.preparing as any)?.states
+    const state = preparingStates?.analysis?.states?.awaitingClarification
     expect(state?.on?.USER_ANSWERED).toBeDefined()
   })
 
@@ -125,7 +134,7 @@ describe('appGenerationMachine', () => {
 // ============================================================================
 
 describe('state transitions', () => {
-  it('transitions idle → analyzing on START event', () => {
+  it('transitions idle → preparing on START event', () => {
     const actor = createActor(appGenerationMachine)
     actor.start()
     actor.send({
@@ -134,11 +143,11 @@ describe('state transitions', () => {
       projectId: 'test-123',
       userId: 'test-user-123',
     })
-    expect(actor.getSnapshot().value).toBe('analyzing')
+    expect(actor.getSnapshot().matches('preparing')).toBe(true)
     actor.stop()
   })
 
-  it('transitions analyzing → blueprinting on successful analysis (type: done)', async () => {
+  it('transitions preparing → blueprinting when analysis and provisioning both complete', async () => {
     const mockContract: SchemaContract = { tables: [], enums: [] }
     const testMachine = appGenerationMachine.provide({
       actors: {
@@ -147,8 +156,17 @@ describe('state transitions', () => {
           appName: 'TestApp',
           appDescription: 'Test description',
           contract: mockContract,
-          designPreferences: null,
           tokensUsed: 100,
+        })),
+        runProvisioningActor: fromPromise(async () => ({
+          sandboxId: 'sandbox-123',
+          supabaseProjectId: 'supabase-123',
+          supabaseUrl: 'https://test.supabase.co',
+          supabaseAnonKey: 'anon-key',
+          githubCloneUrl: 'https://github.com/test/repo.git',
+          githubHtmlUrl: 'https://github.com/test/repo',
+          repoName: 'test-repo',
+          tokensUsed: 50,
         })),
       },
     })
@@ -167,12 +185,22 @@ describe('state transitions', () => {
     actor.stop()
   })
 
-  it('transitions analyzing → awaitingClarification on clarification result', async () => {
+  it('transitions to awaitingClarification within preparing on clarification result', async () => {
     const testMachine = appGenerationMachine.provide({
       actors: {
         runAnalysisActor: fromPromise(async () => ({
           type: 'clarification' as const,
           questions: ['What color theme?', 'How many users?'],
+          tokensUsed: 50,
+        })),
+        runProvisioningActor: fromPromise(async () => ({
+          sandboxId: 'sandbox-123',
+          supabaseProjectId: 'supabase-123',
+          supabaseUrl: 'https://test.supabase.co',
+          supabaseAnonKey: 'anon-key',
+          githubCloneUrl: 'https://github.com/test/repo.git',
+          githubHtmlUrl: 'https://github.com/test/repo',
+          repoName: 'test-repo',
           tokensUsed: 50,
         })),
       },
@@ -187,13 +215,12 @@ describe('state transitions', () => {
       userId: 'test-user-123',
     })
 
-    await waitFor(actor, (state) => state.matches('awaitingClarification'), { timeout: 1000 })
-    expect(actor.getSnapshot().value).toBe('awaitingClarification')
+    await waitFor(actor, (state) => state.matches({ preparing: { analysis: 'awaitingClarification' } }), { timeout: 1000 })
     expect(actor.getSnapshot().context.clarificationQuestions).toEqual(['What color theme?', 'How many users?'])
     actor.stop()
   })
 
-  it('transitions awaitingClarification → analyzing on USER_ANSWERED event', async () => {
+  it('transitions awaitingClarification → analysis.running on USER_ANSWERED event', async () => {
     let analysisCallCount = 0
     const testMachine = appGenerationMachine.provide({
       actors: {
@@ -213,10 +240,19 @@ describe('state transitions', () => {
             appName: 'TaskApp',
             appDescription: 'Task tracker',
             contract: { tables: [], enums: [] },
-            designPreferences: null,
             tokensUsed: 80,
           }
         }),
+        runProvisioningActor: fromPromise(async () => ({
+          sandboxId: 'sandbox-123',
+          supabaseProjectId: 'supabase-123',
+          supabaseUrl: 'https://test.supabase.co',
+          supabaseAnonKey: 'anon-key',
+          githubCloneUrl: 'https://github.com/test/repo.git',
+          githubHtmlUrl: 'https://github.com/test/repo',
+          repoName: 'test-repo',
+          tokensUsed: 50,
+        })),
       },
     })
 
@@ -229,21 +265,21 @@ describe('state transitions', () => {
       userId: 'test-user-123',
     })
 
-    await waitFor(actor, (state) => state.matches('awaitingClarification'), { timeout: 1000 })
+    await waitFor(actor, (state) => state.matches({ preparing: { analysis: 'awaitingClarification' } }), { timeout: 1000 })
 
     actor.send({
       type: 'USER_ANSWERED',
       answers: 'Blue theme, unlimited users',
     })
 
-    // Machine will go through analyzing and then to blueprinting since second analysis returns 'done'
+    // After second analysis returns 'done', both regions are final → blueprinting
     await waitFor(actor, (state) => state.matches('blueprinting'), { timeout: 1000 })
     expect(actor.getSnapshot().context.userMessage).toContain('Blue theme, unlimited users')
     expect(analysisCallCount).toBe(2) // Verify it ran analysis twice
     actor.stop()
   })
 
-  it('transitions through full happy path: analyzing → blueprinting → provisioning → generating → validating → reviewing → deploying → complete', async () => {
+  it('transitions through full happy path: preparing → blueprinting → generating → validating → reviewing → deploying → complete', async () => {
     const mockContract: SchemaContract = { tables: [], enums: [] }
     const mockBlueprint: AppBlueprint = {
       name: 'TestApp',
@@ -251,7 +287,6 @@ describe('state transitions', () => {
       features: [],
       pages: [],
       contract: mockContract,
-      designPreferences: null,
     }
 
     const testMachine = appGenerationMachine.provide({
@@ -261,7 +296,6 @@ describe('state transitions', () => {
           appName: 'TestApp',
           appDescription: 'Test app',
           contract: mockContract,
-          designPreferences: null,
           tokensUsed: 100,
         })),
         runBlueprintActor: fromPromise(async () => ({
@@ -308,10 +342,10 @@ describe('state transitions', () => {
       userId: 'test-user-123',
     })
 
-    // Wait for each state in sequence
-    await waitFor(actor, (state) => state.matches('analyzing'), { timeout: 1000 })
+    // Preparing runs analysis + provisioning in parallel
+    await waitFor(actor, (state) => state.matches('preparing'), { timeout: 1000 })
     await waitFor(actor, (state) => state.matches('blueprinting'), { timeout: 1000 })
-    await waitFor(actor, (state) => state.matches('provisioning'), { timeout: 1000 })
+    // No separate provisioning step — it ran inside preparing
     await waitFor(actor, (state) => state.matches('generating'), { timeout: 1000 })
     await waitFor(actor, (state) => state.matches('validating'), { timeout: 1000 })
     await waitFor(actor, (state) => state.matches('reviewing'), { timeout: 1000 })
@@ -337,7 +371,6 @@ describe('validation and repair loop', () => {
       features: [],
       pages: [],
       contract: mockContract,
-      designPreferences: null,
     }
 
     const testMachine = appGenerationMachine.provide({
@@ -347,7 +380,6 @@ describe('validation and repair loop', () => {
           appName: 'TestApp',
           appDescription: 'Test',
           contract: mockContract,
-          designPreferences: null,
           tokensUsed: 100,
         })),
         runBlueprintActor: fromPromise(async () => ({
@@ -397,7 +429,6 @@ describe('validation and repair loop', () => {
       features: [],
       pages: [],
       contract: mockContract,
-      designPreferences: null,
     }
     const mockValidation: ValidationGateResult = {
       tscErrors: ['Type error in file.ts'],
@@ -412,7 +443,6 @@ describe('validation and repair loop', () => {
           appName: 'TestApp',
           appDescription: 'Test',
           contract: mockContract,
-          designPreferences: null,
           tokensUsed: 100,
         })),
         runBlueprintActor: fromPromise(async () => ({
@@ -464,7 +494,6 @@ describe('validation and repair loop', () => {
       features: [],
       pages: [],
       contract: mockContract,
-      designPreferences: null,
     }
     const mockValidation: ValidationGateResult = {
       tscErrors: ['Type error'],
@@ -481,7 +510,6 @@ describe('validation and repair loop', () => {
           appName: 'TestApp',
           appDescription: 'Test',
           contract: mockContract,
-          designPreferences: null,
           tokensUsed: 100,
         })),
         runBlueprintActor: fromPromise(async () => ({
@@ -549,7 +577,6 @@ describe('validation and repair loop', () => {
       features: [],
       pages: [],
       contract: mockContract,
-      designPreferences: null,
     }
 
     let validationCallCount = 0
@@ -561,7 +588,6 @@ describe('validation and repair loop', () => {
           appName: 'TestApp',
           appDescription: 'Test',
           contract: mockContract,
-          designPreferences: null,
           tokensUsed: 100,
         })),
         runBlueprintActor: fromPromise(async () => ({
@@ -625,7 +651,6 @@ describe('validation and repair loop', () => {
       features: [],
       pages: [],
       contract: mockContract,
-      designPreferences: null,
     }
 
     let repairCallCount = 0
@@ -637,7 +662,6 @@ describe('validation and repair loop', () => {
           appName: 'TestApp',
           appDescription: 'Test',
           contract: mockContract,
-          designPreferences: null,
           tokensUsed: 100,
         })),
         runBlueprintActor: fromPromise(async () => ({
@@ -733,8 +757,17 @@ describe('error handling', () => {
           appName: 'TestApp',
           appDescription: 'Test',
           contract: mockContract,
-          designPreferences: null,
           tokensUsed: 100,
+        })),
+        runProvisioningActor: fromPromise(async () => ({
+          sandboxId: 'sandbox-123',
+          supabaseProjectId: 'supabase-123',
+          supabaseUrl: 'https://test.supabase.co',
+          supabaseAnonKey: 'anon-key',
+          githubCloneUrl: 'https://github.com/test/repo.git',
+          githubHtmlUrl: 'https://github.com/test/repo',
+          repoName: 'test-repo',
+          tokensUsed: 50,
         })),
         runBlueprintActor: fromPromise(async () => {
           throw new Error('Blueprint generation failed')
@@ -765,7 +798,6 @@ describe('error handling', () => {
       features: [],
       pages: [],
       contract: mockContract,
-      designPreferences: null,
     }
 
     const testMachine = appGenerationMachine.provide({
@@ -775,7 +807,6 @@ describe('error handling', () => {
           appName: 'TestApp',
           appDescription: 'Test',
           contract: mockContract,
-          designPreferences: null,
           tokensUsed: 100,
         })),
         runBlueprintActor: fromPromise(async () => ({
@@ -812,7 +843,6 @@ describe('error handling', () => {
       features: [],
       pages: [],
       contract: mockContract,
-      designPreferences: null,
     }
 
     const testMachine = appGenerationMachine.provide({
@@ -822,7 +852,6 @@ describe('error handling', () => {
           appName: 'TestApp',
           appDescription: 'Test',
           contract: mockContract,
-          designPreferences: null,
           tokensUsed: 100,
         })),
         runBlueprintActor: fromPromise(async () => ({
@@ -869,7 +898,6 @@ describe('error handling', () => {
       features: [],
       pages: [],
       contract: mockContract,
-      designPreferences: null,
     }
 
     const testMachine = appGenerationMachine.provide({
@@ -879,7 +907,6 @@ describe('error handling', () => {
           appName: 'TestApp',
           appDescription: 'Test',
           contract: mockContract,
-          designPreferences: null,
           tokensUsed: 100,
         })),
         runBlueprintActor: fromPromise(async () => ({
@@ -963,7 +990,6 @@ describe('context updates', () => {
       features: [],
       pages: [],
       contract: mockContract,
-      designPreferences: null,
     }
 
     const testMachine = appGenerationMachine.provide({
@@ -973,7 +999,6 @@ describe('context updates', () => {
           appName: 'TestApp',
           appDescription: 'Test',
           contract: mockContract,
-          designPreferences: null,
           tokensUsed: 100,
         })),
         runBlueprintActor: fromPromise(async () => ({
@@ -1038,8 +1063,17 @@ describe('context updates', () => {
           appName: 'TestApp',
           appDescription: 'Test',
           contract: mockContract,
-          designPreferences: null,
           tokensUsed: 100,
+        })),
+        runProvisioningActor: fromPromise(async () => ({
+          sandboxId: 'sandbox-123',
+          supabaseProjectId: 'supabase-123',
+          supabaseUrl: 'https://test.supabase.co',
+          supabaseAnonKey: 'anon-key',
+          githubCloneUrl: 'https://github.com/test/repo.git',
+          githubHtmlUrl: 'https://github.com/test/repo',
+          repoName: 'test-repo',
+          tokensUsed: 50,
         })),
       },
     })
@@ -1053,6 +1087,7 @@ describe('context updates', () => {
       userId: 'test-user-123',
     })
 
+    // Both analysis and provisioning complete → blueprinting
     await waitFor(actor, (state) => state.matches('blueprinting'), { timeout: 1000 })
     expect(actor.getSnapshot().context.contract).toEqual(mockContract)
     actor.stop()
@@ -1066,7 +1101,6 @@ describe('context updates', () => {
       features: [{ name: 'posts', description: 'Post management' }],
       pages: [],
       contract: mockContract,
-      designPreferences: null,
     }
 
     const testMachine = appGenerationMachine.provide({
@@ -1076,8 +1110,17 @@ describe('context updates', () => {
           appName: 'BlogApp',
           appDescription: 'A blogging platform',
           contract: mockContract,
-          designPreferences: null,
           tokensUsed: 100,
+        })),
+        runProvisioningActor: fromPromise(async () => ({
+          sandboxId: 'sandbox-123',
+          supabaseProjectId: 'supabase-123',
+          supabaseUrl: 'https://test.supabase.co',
+          supabaseAnonKey: 'anon-key',
+          githubCloneUrl: 'https://github.com/test/repo.git',
+          githubHtmlUrl: 'https://github.com/test/repo',
+          repoName: 'test-repo',
+          tokensUsed: 50,
         })),
         runBlueprintActor: fromPromise(async () => ({
           blueprint: mockBlueprint,
@@ -1095,7 +1138,8 @@ describe('context updates', () => {
       userId: 'test-user-123',
     })
 
-    await waitFor(actor, (state) => state.matches('provisioning'), { timeout: 1000 })
+    // blueprinting → generating (no separate provisioning step)
+    await waitFor(actor, (state) => state.matches('generating'), { timeout: 1000 })
     expect(actor.getSnapshot().context.blueprint).toEqual(mockBlueprint)
     actor.stop()
   })
@@ -1108,7 +1152,6 @@ describe('context updates', () => {
       features: [],
       pages: [],
       contract: mockContract,
-      designPreferences: null,
     }
 
     let validationCallCount = 0
@@ -1120,7 +1163,6 @@ describe('context updates', () => {
           appName: 'TestApp',
           appDescription: 'Test',
           contract: mockContract,
-          designPreferences: null,
           tokensUsed: 100,
         })),
         runBlueprintActor: fromPromise(async () => ({
@@ -1190,7 +1232,6 @@ describe('code review state transitions', () => {
       features: [],
       pages: [],
       contract: mockContract,
-      designPreferences: null,
     }
 
     const testMachine = appGenerationMachine.provide({
@@ -1200,7 +1241,6 @@ describe('code review state transitions', () => {
           appName: 'TestApp',
           appDescription: 'Test',
           contract: mockContract,
-          designPreferences: null,
           tokensUsed: 100,
         })),
         runBlueprintActor: fromPromise(async () => ({
@@ -1258,7 +1298,6 @@ describe('code review state transitions', () => {
       features: [],
       pages: [],
       contract: mockContract,
-      designPreferences: null,
     }
 
     const testMachine = appGenerationMachine.provide({
@@ -1268,7 +1307,6 @@ describe('code review state transitions', () => {
           appName: 'TestApp',
           appDescription: 'Test',
           contract: mockContract,
-          designPreferences: null,
           tokensUsed: 100,
         })),
         runBlueprintActor: fromPromise(async () => ({
@@ -1330,7 +1368,6 @@ describe('code review state transitions', () => {
       features: [],
       pages: [],
       contract: mockContract,
-      designPreferences: null,
     }
 
     const testMachine = appGenerationMachine.provide({
@@ -1340,7 +1377,6 @@ describe('code review state transitions', () => {
           appName: 'TestApp',
           appDescription: 'Test',
           contract: mockContract,
-          designPreferences: null,
           tokensUsed: 100,
         })),
         runBlueprintActor: fromPromise(async () => ({
@@ -1396,7 +1432,6 @@ describe('code review state transitions', () => {
       features: [],
       pages: [],
       contract: mockContract,
-      designPreferences: null,
     }
 
     const testMachine = appGenerationMachine.provide({
@@ -1406,7 +1441,6 @@ describe('code review state transitions', () => {
           appName: 'TestApp',
           appDescription: 'Test',
           contract: mockContract,
-          designPreferences: null,
           tokensUsed: 100,
         })),
         runBlueprintActor: fromPromise(async () => ({
@@ -1467,14 +1501,6 @@ describe('code review state transitions', () => {
 describe('userId and cleanup', () => {
   it('passes userId through to provisioning actor', async () => {
     const mockContract: SchemaContract = { tables: [], enums: [] }
-    const mockBlueprint: AppBlueprint = {
-      name: 'TestApp',
-      description: 'Test',
-      features: [],
-      pages: [],
-      contract: mockContract,
-      designPreferences: null,
-    }
 
     let provisioningInput: any = null
 
@@ -1485,12 +1511,7 @@ describe('userId and cleanup', () => {
           appName: 'TestApp',
           appDescription: 'Test',
           contract: mockContract,
-          designPreferences: null,
           tokensUsed: 100,
-        })),
-        runBlueprintActor: fromPromise(async () => ({
-          blueprint: mockBlueprint,
-          tokensUsed: 200,
         })),
         runProvisioningActor: fromPromise(async ({ input }: any) => {
           provisioningInput = input
@@ -1505,10 +1526,6 @@ describe('userId and cleanup', () => {
             tokensUsed: 50,
           }
         }),
-        runCodeGenerationActor: fromPromise(async () => {
-          throw new Error('Stop after provisioning')
-        }),
-        runCleanupActor: fromPromise(async () => ({ errors: [] })),
       },
     })
 
@@ -1521,11 +1538,14 @@ describe('userId and cleanup', () => {
       userId: 'user-456',
     })
 
-    await waitFor(actor, (state) => state.matches('generating') || state.matches('cleanup'), { timeout: 2000 })
+    // Provisioning runs in parallel with analysis during preparing
+    await waitFor(actor, (state) => state.matches('blueprinting'), { timeout: 2000 })
     expect(provisioningInput).toBeDefined()
     expect(provisioningInput.userId).toBe('user-456')
     expect(provisioningInput.projectId).toBe('test-userid')
-    expect(provisioningInput.appName).toBe('TestApp')
+    // appName is not yet available when provisioning starts (runs in parallel with analysis)
+    // so it uses the projectId fallback
+    expect(provisioningInput.appName).toBe('project-test-use')
     actor.stop()
   })
 
@@ -1550,7 +1570,6 @@ describe('userId and cleanup', () => {
       features: [],
       pages: [],
       contract: mockContract,
-      designPreferences: null,
     }
 
     let cleanupInput: any = null
@@ -1562,7 +1581,6 @@ describe('userId and cleanup', () => {
           appName: 'TestApp',
           appDescription: 'Test',
           contract: mockContract,
-          designPreferences: null,
           tokensUsed: 100,
         })),
         runBlueprintActor: fromPromise(async () => ({
@@ -1611,12 +1629,13 @@ describe('userId and cleanup', () => {
 // ============================================================================
 
 describe('state timeouts', () => {
-  it('analyzing state has timeout configured', () => {
-    const analyzingState = appGenerationMachine.config.states?.analyzing
-    const after = analyzingState?.after as any
+  it('analysis.running state has timeout configured', () => {
+    const preparingStates = (appGenerationMachine.config.states?.preparing as any)?.states
+    const runningState = preparingStates?.analysis?.states?.running
+    const after = runningState?.after as any
     expect(after).toBeDefined()
     expect(after).toHaveProperty('180000')
-    expect(after['180000'].target).toBe('failed')
+    expect(after['180000'].target).toBe('#appGeneration.failed')
   })
 
   it('blueprinting state has timeout configured', () => {
@@ -1627,12 +1646,13 @@ describe('state timeouts', () => {
     expect(after['120000'].target).toBe('failed')
   })
 
-  it('provisioning state has timeout configured to cleanup', () => {
-    const provisioningState = appGenerationMachine.config.states?.provisioning
+  it('infrastructure.provisioning state has timeout configured to cleanup', () => {
+    const preparingStates = (appGenerationMachine.config.states?.preparing as any)?.states
+    const provisioningState = preparingStates?.infrastructure?.states?.provisioning
     const after = provisioningState?.after as any
     expect(after).toBeDefined()
     expect(after).toHaveProperty('300000')
-    expect(after['300000'].target).toBe('cleanup')
+    expect(after['300000'].target).toBe('#appGeneration.cleanup')
   })
 
   it('generating state has timeout configured to cleanup', () => {
@@ -1652,11 +1672,12 @@ describe('state timeouts', () => {
   })
 
   it('awaitingClarification state has timeout configured', () => {
-    const awaitingState = appGenerationMachine.config.states?.awaitingClarification
+    const preparingStates = (appGenerationMachine.config.states?.preparing as any)?.states
+    const awaitingState = preparingStates?.analysis?.states?.awaitingClarification
     const after = awaitingState?.after as any
     expect(after).toBeDefined()
     expect(after).toHaveProperty('1800000')
-    expect(after['1800000'].target).toBe('failed')
+    expect(after['1800000'].target).toBe('#appGeneration.failed')
   })
 
   it('repairing state has timeout configured to cleanup', () => {
@@ -1733,7 +1754,6 @@ describe('cleanup ordering', () => {
       features: [],
       pages: [],
       contract: mockContract,
-      designPreferences: null,
     }
 
     const fullMachine = appGenerationMachine.provide({
@@ -1743,7 +1763,6 @@ describe('cleanup ordering', () => {
           appName: 'TestApp',
           appDescription: 'Test',
           contract: mockContract,
-          designPreferences: null,
           tokensUsed: 100,
         })),
         runBlueprintActor: fromPromise(async () => ({
@@ -1807,7 +1826,6 @@ describe('sentry error capture', () => {
       features: [],
       pages: [],
       contract: mockContract,
-      designPreferences: null,
     }
 
     const sandboxError = new Error('Sandbox deletion failed - network timeout')
@@ -1819,7 +1837,6 @@ describe('sentry error capture', () => {
           appName: 'TestApp',
           appDescription: 'Test',
           contract: mockContract,
-          designPreferences: null,
           tokensUsed: 100,
         })),
         runBlueprintActor: fromPromise(async () => ({
@@ -1893,7 +1910,6 @@ describe('code review skip on error', () => {
       features: [],
       pages: [],
       contract: mockContract,
-      designPreferences: null,
     }
 
     const testMachine = appGenerationMachine.provide({
@@ -1903,7 +1919,6 @@ describe('code review skip on error', () => {
           appName: 'TestApp',
           appDescription: 'Test',
           contract: mockContract,
-          designPreferences: null,
           tokensUsed: 100,
         })),
         runBlueprintActor: fromPromise(async () => ({

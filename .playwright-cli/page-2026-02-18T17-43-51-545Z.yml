@@ -1,0 +1,184 @@
+- generic:
+  - generic:
+    - generic:
+      - banner:
+        - navigation:
+          - link:
+            - /url: /
+            - generic: D
+            - generic: DevRemote Board
+          - link:
+            - /url: /jobs
+            - text: Jobs
+          - link:
+            - /url: /tech-tags
+            - text: Tech Tags
+      - main:
+        - generic:
+          - generic:
+            - generic:
+              - heading [level=1]: Jobs
+              - paragraph: 5 total
+            - button:
+              - img
+              - text: New Job
+          - generic:
+            - generic:
+              - generic:
+                - generic:
+                  - text: Job Type
+                  - combobox
+                - generic:
+                  - checkbox
+                  - generic: Is Active
+          - generic:
+            - generic:
+              - table:
+                - rowgroup:
+                  - row:
+                    - columnheader: Title
+                    - columnheader: Location Type
+                    - columnheader: Job Type
+                    - columnheader: Is Active
+                    - columnheader: Salary Min
+                    - columnheader: Salary Max
+                    - columnheader: Actions
+                - rowgroup:
+                  - row:
+                    - cell: Sample jobs
+                    - cell: remote
+                    - cell:
+                      - generic: full_time
+                    - cell:
+                      - generic: "Yes"
+                    - cell
+                    - cell
+                    - cell:
+                      - generic:
+                        - link:
+                          - /url: /jobs/f05eeaab-59fd-4b03-b8d6-3e63a1519cee
+                          - button: View
+                        - button: Delete
+                  - row:
+                    - cell: Sample jobs
+                    - cell: remote
+                    - cell:
+                      - generic: full_time
+                    - cell:
+                      - generic: "Yes"
+                    - cell
+                    - cell
+                    - cell:
+                      - generic:
+                        - link:
+                          - /url: /jobs/4f04a37e-3a7b-4103-8195-baa5bf3444c6
+                          - button: View
+                        - button: Delete
+                  - row:
+                    - cell: Sample jobs
+                    - cell: remote
+                    - cell:
+                      - generic: full_time
+                    - cell:
+                      - generic: "Yes"
+                    - cell
+                    - cell
+                    - cell:
+                      - generic:
+                        - link:
+                          - /url: /jobs/ff8fa674-ff5b-4cd7-8ac1-4fc4736d4bfa
+                          - button: View
+                        - button: Delete
+                  - row:
+                    - cell: Sample jobs
+                    - cell: remote
+                    - cell:
+                      - generic: full_time
+                    - cell:
+                      - generic: "Yes"
+                    - cell
+                    - cell
+                    - cell:
+                      - generic:
+                        - link:
+                          - /url: /jobs/e4677bfc-169a-4bd9-9574-34e978f8a1dd
+                          - button: View
+                        - button: Delete
+                  - row:
+                    - cell: Sample jobs
+                    - cell: remote
+                    - cell:
+                      - generic: full_time
+                    - cell:
+                      - generic: "Yes"
+                    - cell
+                    - cell
+                    - cell:
+                      - generic:
+                        - link:
+                          - /url: /jobs/4191b07d-2db1-4b66-94c9-0aebe46c12ee
+                          - button: View
+                        - button: Delete
+  - dialog "Create Job" [ref=e133]:
+    - generic [ref=e134]:
+      - heading "Create Job" [level=2] [ref=e135]
+      - paragraph [ref=e136]: Fill in the details to create a new Job.
+    - generic [ref=e137]:
+      - generic [ref=e138]:
+        - text: Title
+        - textbox "Title" [active] [ref=e139]:
+          - /placeholder: Enter title
+      - generic [ref=e140]:
+        - text: Company Name
+        - textbox "Company Name" [ref=e141]:
+          - /placeholder: Enter company name
+      - generic [ref=e142]:
+        - text: Location Type
+        - textbox "Location Type" [ref=e143]:
+          - /placeholder: Enter location type
+      - generic [ref=e144]:
+        - text: Job Type
+        - combobox "Job Type" [ref=e145]:
+          - option "Select..." [selected]
+          - option "FullTime"
+          - option "Contract"
+          - option "Freelance"
+      - generic [ref=e146]:
+        - text: Location Text
+        - textbox "Location Text" [ref=e147]:
+          - /placeholder: Enter location text
+      - generic [ref=e148]:
+        - text: Tech Stack
+        - textbox "Tech Stack" [ref=e149]:
+          - /placeholder: Enter tech stack
+      - generic [ref=e150]:
+        - text: Salary Min
+        - spinbutton "Salary Min" [ref=e151]
+      - generic [ref=e152]:
+        - text: Salary Max
+        - spinbutton "Salary Max" [ref=e153]
+      - generic [ref=e154]:
+        - text: Salary Currency
+        - textbox "Salary Currency" [ref=e155]:
+          - /placeholder: Enter salary currency
+      - generic [ref=e156]:
+        - text: Salary Period
+        - textbox "Salary Period" [ref=e157]:
+          - /placeholder: Enter salary period
+      - generic [ref=e158]:
+        - text: Description
+        - textbox "Description" [ref=e159]:
+          - /placeholder: Enter description
+      - generic [ref=e160]:
+        - text: Apply Url
+        - textbox "Apply Url" [ref=e161]:
+          - /placeholder: e.g., https://example.com
+      - generic [ref=e162]:
+        - checkbox "Is Active" [ref=e163]
+        - generic [ref=e164]: Is Active
+      - generic [ref=e165]:
+        - button "Cancel" [ref=e166]
+        - button "Create" [ref=e167]
+    - button "Close" [ref=e168]:
+      - img
+      - generic [ref=e169]: Close

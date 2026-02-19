@@ -1,0 +1,66 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - navigation [ref=e5]:
+      - link "M Meridian" [ref=e6] [cursor=pointer]:
+        - /url: /
+        - generic [ref=e7]: M
+        - generic [ref=e8]: Meridian
+      - link "Collections" [ref=e9] [cursor=pointer]:
+        - /url: /collections
+      - link "Watches" [ref=e10] [cursor=pointer]:
+        - /url: /watches
+      - link "Collection Watches" [ref=e11] [cursor=pointer]:
+        - /url: /collection-watches
+  - main [ref=e13]:
+    - generic [ref=e14]:
+      - generic [ref=e16]:
+        - heading "Collections" [level=1] [ref=e17]
+        - button "New Collections" [ref=e18]:
+          - img
+          - text: New Collections
+      - generic [ref=e19]:
+        - generic [ref=e20]:
+          - generic [ref=e22]: V
+          - link "vulgus vaco" [ref=e25] [cursor=pointer]:
+            - /url: /collections/7b456956-12b2-48cb-a3cd-3e6fa2937089
+          - generic [ref=e26]:
+            - paragraph [ref=e27]: vulgus vaco
+            - paragraph [ref=e28]: "0"
+            - button [ref=e30]:
+              - img
+        - generic [ref=e31]:
+          - generic [ref=e33]: T
+          - link "tres suus" [ref=e36] [cursor=pointer]:
+            - /url: /collections/16ac48ba-6d58-4268-86b8-da44bbc8425d
+          - generic [ref=e37]:
+            - paragraph [ref=e38]: tres suus
+            - paragraph [ref=e39]: "0"
+            - button [ref=e41]:
+              - img
+        - generic [ref=e42]:
+          - generic [ref=e44]: A
+          - link "adimpleo vae" [ref=e47] [cursor=pointer]:
+            - /url: /collections/fb3009ba-5bcd-4e4d-909a-78eadb3f57c2
+          - generic [ref=e48]:
+            - paragraph [ref=e49]: adimpleo vae
+            - paragraph [ref=e50]: "0"
+            - button [ref=e52]:
+              - img
+        - generic [ref=e53]:
+          - generic [ref=e55]: V
+          - link "videlicet amita" [ref=e58] [cursor=pointer]:
+            - /url: /collections/14585bf1-c664-4f83-8011-9b242c71ad1b
+          - generic [ref=e59]:
+            - paragraph [ref=e60]: videlicet amita
+            - paragraph [ref=e61]: "0"
+            - button [ref=e63]:
+              - img
+        - generic [ref=e64]:
+          - generic [ref=e66]: P
+          - link "patior decerno" [ref=e69] [cursor=pointer]:
+            - /url: /collections/366b69e2-f071-40bf-bcf3-e5939e038ed5
+          - generic [ref=e70]:
+            - paragraph [ref=e71]: patior decerno
+            - paragraph [ref=e72]: "0"
+            - button [ref=e74]:
+              - img

@@ -1,0 +1,527 @@
+- generic [ref=e3]:
+  - generic [ref=e7]:
+    - navigation "WordPress.com" [ref=e10]:
+      - menu [ref=e11]:
+        - menuitem "WordPress.com" [ref=e12] [cursor=pointer]:
+          - img [ref=e13]
+          - generic [ref=e28]: WordPress.com
+        - menuitem "Products" [ref=e29] [cursor=pointer]:
+          - text: Products
+          - generic [ref=e30]: ▾
+        - menu:
+          - list:
+            - menuitem: WordPress Hosting
+            - menuitem: WordPress for Agencies
+            - menuitem: Become an Affiliate
+            - menuitem: Domain Names
+            - menuitem: AI Website Builder
+            - menuitem: Website Builder
+            - menuitem: Create a Blog
+            - menuitem: Newsletter
+            - menuitem: Professional Email
+            - menuitem: Website Design Services
+            - menuitem: Commerce
+            - menuitem: WordPress Studio
+          - list:
+            - menuitem: Enterprise WordPress
+        - menuitem "Features" [ref=e31] [cursor=pointer]:
+          - text: Features
+          - generic [ref=e32]: ▾
+        - menu:
+          - list:
+            - menuitem: Overview
+          - list:
+            - menuitem: WordPress Themes
+            - menuitem: WordPress Plugins
+            - menuitem: WordPress Patterns
+            - menuitem: Google Apps
+        - menuitem "Resources" [ref=e33] [cursor=pointer]:
+          - text: Resources
+          - generic [ref=e34]: ▾
+        - menu:
+          - list:
+            - menuitem: WordPress.com Support
+            - menuitem: WordPress News
+            - menuitem: Business Name Generator
+            - menuitem: Logo Maker
+            - menuitem: Discover New Posts
+            - menuitem: Popular Tags
+            - menuitem: Blog Search
+        - menuitem "Plans & Pricing" [ref=e35] [cursor=pointer]
+      - menu [ref=e36]:
+        - menuitem "Log In" [ref=e37] [cursor=pointer]
+        - menuitem "Get Started" [ref=e38] [cursor=pointer]
+    - text: › ›
+  - main [ref=e41]:
+    - list [ref=e45]:
+      - listitem [ref=e46]:
+        - link "Themes" [ref=e47] [cursor=pointer]:
+          - /url: /themes
+      - listitem [ref=e48]:
+        - img [ref=e49]
+        - generic [ref=e51]: Lente Theme
+    - generic [ref=e52]:
+      - generic [ref=e53]:
+        - generic [ref=e54]:
+          - generic [ref=e55]:
+            - generic [ref=e56]:
+              - heading "Available on Premium Lente" [level=1] [ref=e57]:
+                - generic [ref=e59]:
+                  - img [ref=e60]
+                  - generic [ref=e62]: Available on Premium
+                - text: Lente
+              - generic [ref=e63]: by Automattic
+            - generic [ref=e64]:
+              - button "Preview" [ref=e65] [cursor=pointer]
+              - link "Get started" [ref=e66] [cursor=pointer]:
+                - /url: /start/with-theme?ref=calypshowcase&theme=lente&theme_type=premium&intervalType=yearly&premium=true
+          - generic [ref=e69]:
+            - generic [ref=e70]:
+              - heading "Default Style" [level=2] [ref=e72]:
+                - generic [ref=e73]: Default Style
+              - 'button "Style: Default" [ref=e75] [cursor=pointer]':
+                - iframe [ref=e79]:
+                  - generic [ref=f6e2] [cursor=pointer]:
+                    - generic [ref=f6e5]: Aa
+                    - generic:
+                      - generic:
+                        - generic: Default
+            - generic [ref=e80]:
+              - generic [ref=e81]:
+                - heading "Style Variations Upgrade" [level=2] [ref=e82]:
+                  - generic [ref=e83]: Style Variations
+                  - generic [ref=e84]:
+                    - img [ref=e85]
+                    - generic: Upgrade
+                - paragraph [ref=e87]: Preview our style variations for free or pick your own fonts and colors with the Personal plan later on.
+              - generic [ref=e88]:
+                - 'button "Style: Aperture" [ref=e89] [cursor=pointer]':
+                  - iframe [ref=e93]:
+                    - generic [ref=f7e2] [cursor=pointer]:
+                      - generic [ref=f7e5]: Aa
+                      - generic:
+                        - generic:
+                          - generic: Aperture
+                - 'button "Style: Grain" [ref=e94] [cursor=pointer]':
+                  - iframe [ref=e98]:
+                    - generic [ref=f8e2] [cursor=pointer]:
+                      - generic [ref=f8e5]: Aa
+                      - generic:
+                        - generic:
+                          - generic: Grain
+                - 'button "Style: Iso" [ref=e99] [cursor=pointer]':
+                  - iframe [ref=e103]:
+                    - generic [ref=f9e2] [cursor=pointer]:
+                      - generic [ref=f9e5]: Aa
+                      - generic:
+                        - generic:
+                          - generic: Iso
+                - 'button "Style: Sensor" [ref=e104] [cursor=pointer]':
+                  - iframe [ref=e108]:
+                    - generic [ref=f10e2] [cursor=pointer]:
+                      - generic [ref=f10e5]: Aa
+                      - generic:
+                        - generic:
+                          - generic: Sensor
+        - button "Add Review" [ref=e111] [cursor=pointer]
+      - generic [ref=e113]:
+        - generic [ref=e114]:
+          - generic [ref=e116]:
+            - paragraph [ref=e117]: Lente is a magazine theme designed with a clean, flexible layout that adapts effortlessly to a wide range of topics, with a strong focus on imagery. It offers thoughtfully designed single post templates, available both with and without a sidebar, alongside an expressive header section that gives each article a strong introduction.
+            - paragraph [ref=e118]: Modern and vibrant in character, Lente pairs a monospaced font with a refined sans-serif typeface to ensure excellent readability while adding subtle personality to the design. A set of carefully curated color variations allows you to adjust the tone of your publication, making it easy to shape a look that feels distinctly your own.
+          - generic [ref=e120]:
+            - generic [ref=e123]: Features
+            - list [ref=e125]:
+              - listitem [ref=e126]:
+                - link "RTL Language Support" [ref=e127] [cursor=pointer]:
+                  - /url: /themes/all/filter/rtl-language-support/
+              - listitem [ref=e128]:
+                - link "Full Site Editing" [ref=e129] [cursor=pointer]:
+                  - /url: /themes/all/filter/full-site-editing/
+              - listitem [ref=e130]:
+                - link "Block Themes" [ref=e131] [cursor=pointer]:
+                  - /url: /themes/all/filter/block-themes/
+              - listitem [ref=e132]:
+                - link "Translation ready" [ref=e133] [cursor=pointer]:
+                  - /url: /themes/all/filter/translation-ready/
+              - listitem [ref=e134]:
+                - link "Threaded Comments" [ref=e135] [cursor=pointer]:
+                  - /url: /themes/all/filter/threaded-comments/
+        - generic [ref=e136]:
+          - img [ref=e137]
+          - generic [ref=e139]:
+            - text: Learn WordPress
+            - generic [ref=e140]: Follow along with beginner-friendly courses and build your first website or blog.
+          - link "Watch a course" [ref=e141] [cursor=pointer]:
+            - /url: https://wordpress.com/support/courses/
+      - button "Preview demo site Preview" [ref=e143] [cursor=pointer]:
+        - button "Preview demo site" [ref=e144]
+        - iframe [ref=e147]:
+          - generic [active] [ref=f3e1]:
+            - link "Skip to content" [ref=f3e2] [cursor=pointer]:
+              - /url: "#wp--skip-link--target"
+            - generic [ref=f3e3]:
+              - generic [ref=f3e4]:
+                - banner [ref=f3e5]:
+                  - generic [ref=f3e9]:
+                    - heading "Lente Magazine" [level=1] [ref=f3e10]:
+                      - link "Lente Magazine" [ref=f3e11] [cursor=pointer]:
+                        - /url: "#!"
+                    - paragraph [ref=f3e12]: Issue 2
+                    - paragraph [ref=f3e13]:
+                      - text: Joane ralph enes
+                      - text: Masao fukushima
+                      - text: ella moore
+                      - text: igor christensen
+                      - text: leandro vargas
+                      - text: romeo constantin
+                      - text: Willow P. Hensen
+                      - text: Theodore Jones
+                      - text: Garrett Lane
+                      - text: Louise Berger
+                      - link "and more" [ref=f3e14] [cursor=pointer]:
+                        - /url: "#!"
+                - main [ref=f3e15]:
+                  - heading "Issue 2" [level=2] [ref=f3e17]
+                  - generic [ref=f3e18]:
+                    - list [ref=f3e22]:
+                      - listitem [ref=f3e23]:
+                        - figure [ref=f3e24]:
+                          - link "Capturing the beauty and the roughness of everyday life" [ref=f3e25] [cursor=pointer]:
+                            - /url: "#!"
+                            - img "Capturing the beauty and the roughness of everyday life" [ref=f3e26]
+                        - generic [ref=f3e27]:
+                          - generic [ref=f3e28]:
+                            - link "Photography" [ref=f3e31] [cursor=pointer]:
+                              - /url: "#!"
+                            - heading "Capturing the beauty and the roughness of everyday life" [level=2] [ref=f3e33]:
+                              - link "Capturing the beauty and the roughness of everyday life" [ref=f3e34] [cursor=pointer]:
+                                - /url: "#!"
+                          - generic [ref=f3e35]:
+                            - time [ref=f3e38]: 11/25/2025
+                            - generic [ref=f3e39]:
+                              - generic:
+                                - paragraph
+                      - listitem [ref=f3e41]:
+                        - figure [ref=f3e42]:
+                          - link "Masao Fukushima’s fascination with nature’s abstractions" [ref=f3e43] [cursor=pointer]:
+                            - /url: "#!"
+                            - img "Masao Fukushima’s fascination with nature’s abstractions" [ref=f3e44]
+                        - generic [ref=f3e45]:
+                          - generic [ref=f3e46]:
+                            - link "Photography" [ref=f3e49] [cursor=pointer]:
+                              - /url: "#!"
+                            - heading "Masao Fukushima’s fascination with nature’s abstractions" [level=2] [ref=f3e51]:
+                              - link "Masao Fukushima’s fascination with nature’s abstractions" [ref=f3e52] [cursor=pointer]:
+                                - /url: "#!"
+                          - generic [ref=f3e53]:
+                            - time [ref=f3e56]: 11/25/2025
+                            - generic [ref=f3e57]:
+                              - generic:
+                                - paragraph
+                    - list [ref=f3e62]:
+                      - listitem [ref=f3e63]:
+                        - generic [ref=f3e64]:
+                          - figure [ref=f3e65]:
+                            - link "Where community takes shape in small daily rituals" [ref=f3e66] [cursor=pointer]:
+                              - /url: "#!"
+                              - img "Where community takes shape in small daily rituals" [ref=f3e67]
+                          - generic [ref=f3e68]:
+                            - time [ref=f3e71]: 11/25/2025
+                            - generic [ref=f3e72]:
+                              - heading "Where community takes shape in small daily rituals" [level=2] [ref=f3e73]:
+                                - link "Where community takes shape in small daily rituals" [ref=f3e74] [cursor=pointer]:
+                                  - /url: "#!"
+                              - generic:
+                                - paragraph
+                      - listitem [ref=f3e75]:
+                        - generic [ref=f3e76]:
+                          - figure [ref=f3e77]:
+                            - link "Seeing the extraordinary hidden in routine travel" [ref=f3e78] [cursor=pointer]:
+                              - /url: "#!"
+                              - img "Seeing the extraordinary hidden in routine travel" [ref=f3e79]
+                          - generic [ref=f3e80]:
+                            - time [ref=f3e83]: 11/25/2025
+                            - generic [ref=f3e84]:
+                              - heading "Seeing the extraordinary hidden in routine travel" [level=2] [ref=f3e85]:
+                                - link "Seeing the extraordinary hidden in routine travel" [ref=f3e86] [cursor=pointer]:
+                                  - /url: "#!"
+                              - generic:
+                                - paragraph
+                      - listitem [ref=f3e87]:
+                        - generic [ref=f3e88]:
+                          - figure [ref=f3e89]:
+                            - link "Where motion leaves a trace with Romeo Constantin" [ref=f3e90] [cursor=pointer]:
+                              - /url: "#!"
+                              - img "Where motion leaves a trace with Romeo Constantin" [ref=f3e91]
+                          - generic [ref=f3e92]:
+                            - time [ref=f3e95]: 11/25/2025
+                            - generic [ref=f3e96]:
+                              - heading "Where motion leaves a trace with Romeo Constantin" [level=2] [ref=f3e97]:
+                                - link "Where motion leaves a trace with Romeo Constantin" [ref=f3e98] [cursor=pointer]:
+                                  - /url: "#!"
+                              - generic:
+                                - paragraph
+                  - separator [ref=f3e99]
+                  - list [ref=f3e101]:
+                    - listitem [ref=f3e102]:
+                      - generic [ref=f3e105]:
+                        - figure [ref=f3e107]:
+                          - link "Macro shots and micro details" [ref=f3e108] [cursor=pointer]:
+                            - /url: "#!"
+                            - img "Macro shots and micro details" [ref=f3e109]
+                        - generic [ref=f3e111]:
+                          - heading "Macro shots and micro details" [level=2] [ref=f3e112]:
+                            - link "Macro shots and micro details" [ref=f3e113] [cursor=pointer]:
+                              - /url: "#!"
+                          - generic [ref=f3e114]:
+                            - link "Photography" [ref=f3e116] [cursor=pointer]:
+                              - /url: "#!"
+                            - time [ref=f3e118]: 11/28/2025
+                          - generic [ref=f3e119]:
+                            - paragraph [ref=f3e120]: By
+                            - link "Joan Smith" [ref=f3e122] [cursor=pointer]:
+                              - /url: "#!"
+                    - listitem [ref=f3e123]:
+                      - generic [ref=f3e126]:
+                        - figure [ref=f3e128]:
+                          - 'link "‘Through the Lens: A wild journey with Ella Moore on the US West Coast" [ref=f3e129] [cursor=pointer]':
+                            - /url: "#!"
+                            - 'img "‘Through the Lens: A wild journey with Ella Moore on the US West Coast" [ref=f3e130]'
+                        - generic [ref=f3e132]:
+                          - 'heading "‘Through the Lens: A wild journey with Ella Moore on the US West Coast" [level=2] [ref=f3e133]':
+                            - 'link "‘Through the Lens: A wild journey with Ella Moore on the US West Coast" [ref=f3e134] [cursor=pointer]':
+                              - /url: "#!"
+                          - generic [ref=f3e135]:
+                            - generic [ref=f3e136]:
+                              - link "Photography" [ref=f3e137] [cursor=pointer]:
+                                - /url: "#!"
+                              - text: ","
+                              - link "Travel" [ref=f3e138] [cursor=pointer]:
+                                - /url: "#!"
+                            - time [ref=f3e140]: 11/28/2025
+                          - generic [ref=f3e141]:
+                            - paragraph [ref=f3e142]: By
+                            - link "Joan Smith" [ref=f3e144] [cursor=pointer]:
+                              - /url: "#!"
+                    - listitem [ref=f3e145]:
+                      - generic [ref=f3e148]:
+                        - figure [ref=f3e150]:
+                          - 'link "The ideal setup: Leandro Vargas walks us through his lens" [ref=f3e151] [cursor=pointer]':
+                            - /url: "#!"
+                            - 'img "The ideal setup: Leandro Vargas walks us through his lens" [ref=f3e152]'
+                        - generic [ref=f3e154]:
+                          - 'heading "The ideal setup: Leandro Vargas walks us through his lens" [level=2] [ref=f3e155]':
+                            - 'link "The ideal setup: Leandro Vargas walks us through his lens" [ref=f3e156] [cursor=pointer]':
+                              - /url: "#!"
+                          - generic [ref=f3e157]:
+                            - generic [ref=f3e158]:
+                              - link "Interview" [ref=f3e159] [cursor=pointer]:
+                                - /url: "#!"
+                              - text: ","
+                              - link "Photography" [ref=f3e160] [cursor=pointer]:
+                                - /url: "#!"
+                            - time [ref=f3e162]: 11/28/2025
+                          - generic [ref=f3e163]:
+                            - paragraph [ref=f3e164]: By
+                            - link "Joan Smith" [ref=f3e166] [cursor=pointer]:
+                              - /url: "#!"
+                - generic [ref=f3e171]:
+                  - generic [ref=f3e172]:
+                    - paragraph [ref=f3e173]: Sign up to our newsletter and read Lens’ latest Stories in your inbox every week
+                    - generic [ref=f3e176] [cursor=pointer]: Subscribe
+                  - figure [ref=f3e178]
+              - contentinfo [ref=f3e179]:
+                - generic [ref=f3e181]:
+                  - generic [ref=f3e182]:
+                    - heading "Lente Magazine" [level=1] [ref=f3e183]:
+                      - link "Lente Magazine" [ref=f3e184] [cursor=pointer]:
+                        - /url: "#!"
+                    - paragraph [ref=f3e185]: Issue 2
+                  - paragraph [ref=f3e186]:
+                    - link "IG" [ref=f3e187] [cursor=pointer]:
+                      - /url: "#!"
+                    - text: /
+                    - link "X" [ref=f3e188] [cursor=pointer]:
+                      - /url: "#!"
+                    - text: /
+                    - link "TikTok" [ref=f3e189] [cursor=pointer]:
+                      - /url: "#!"
+                  - paragraph [ref=f3e190]:
+                    - link "Blog at WordPress.com." [ref=f3e191] [cursor=pointer]:
+                      - /url: "#!"
+  - generic [ref=e149]:
+    - paragraph [ref=e150]: "As an open source company, we take your privacy seriously and want to be as transparent as possible. So: We use cookies to collect some personal data from you (like your browsing data, IP addresses, and other unique identifiers). Some of these cookies we absolutely need in order to make things work, and others you can choose in order to optimize your experience while using our site and services."
+    - generic [ref=e151]:
+      - button "Customize" [ref=e152] [cursor=pointer]
+      - button "Accept all" [ref=e153] [cursor=pointer]
+  - generic [ref=e155]:
+    - generic [ref=e156]:
+      - generic [ref=e157]:
+        - heading "Products" [level=3] [ref=e158]
+        - list [ref=e159]:
+          - listitem [ref=e160]:
+            - link "WordPress Hosting" [ref=e161] [cursor=pointer]:
+              - /url: https://wordpress.com/hosting/
+          - listitem [ref=e162]:
+            - link "WordPress for Agencies" [ref=e163] [cursor=pointer]:
+              - /url: https://wordpress.com/for-agencies/
+          - listitem [ref=e164]:
+            - link "Become an Affiliate" [ref=e165] [cursor=pointer]:
+              - /url: https://wordpress.com/affiliates/
+          - listitem [ref=e166]:
+            - link "Domain Names" [ref=e167] [cursor=pointer]:
+              - /url: https://wordpress.com/domains/
+          - listitem [ref=e168]:
+            - link "AI Website Builder" [ref=e169] [cursor=pointer]:
+              - /url: https://wordpress.com/ai-website-builder/?ref=footer
+          - listitem [ref=e170]:
+            - link "Website Builder" [ref=e171] [cursor=pointer]:
+              - /url: https://wordpress.com/website-builder/
+          - listitem [ref=e172]:
+            - link "Create a Blog" [ref=e173] [cursor=pointer]:
+              - /url: https://wordpress.com/create-blog/
+          - listitem [ref=e174]:
+            - link "Professional Email" [ref=e175] [cursor=pointer]:
+              - /url: https://wordpress.com/professional-email/
+          - listitem [ref=e176]:
+            - link "Website Design Services" [ref=e177] [cursor=pointer]:
+              - /url: https://wordpress.com/website-design-service/
+          - listitem [ref=e178]:
+            - link "WordPress Studio ↗" [ref=e179] [cursor=pointer]:
+              - /url: https://developer.wordpress.com/studio/
+          - listitem [ref=e180]:
+            - link "WordPress Enterprise ↗" [ref=e181] [cursor=pointer]:
+              - /url: https://wpvip.com/
+      - generic [ref=e182]:
+        - heading "Features" [level=3] [ref=e183]
+        - list [ref=e184]:
+          - listitem [ref=e185]:
+            - link "Overview" [ref=e186] [cursor=pointer]:
+              - /url: https://wordpress.com/features/
+          - listitem [ref=e187]:
+            - link "WordPress Themes" [ref=e188] [cursor=pointer]:
+              - /url: https://wordpress.com/themes/
+          - listitem [ref=e189]:
+            - link "WordPress Plugins" [ref=e190] [cursor=pointer]:
+              - /url: https://wordpress.com/plugins/
+          - listitem [ref=e191]:
+            - link "WordPress Patterns" [ref=e192] [cursor=pointer]:
+              - /url: https://wordpress.com/patterns/
+          - listitem [ref=e193]:
+            - link "Google Apps" [ref=e194] [cursor=pointer]:
+              - /url: https://wordpress.com/google/
+      - generic [ref=e195]:
+        - heading "Resources" [level=3] [ref=e196]
+        - list [ref=e197]:
+          - listitem [ref=e198]:
+            - link "WordPress.com Support" [ref=e199] [cursor=pointer]:
+              - /url: https://wordpress.com/support/
+          - listitem [ref=e200]:
+            - link "WordPress Forums" [ref=e201] [cursor=pointer]:
+              - /url: https://wordpress.com/forums/
+          - listitem [ref=e202]:
+            - link "WordPress News" [ref=e203] [cursor=pointer]:
+              - /url: https://wordpress.com/blog/
+          - listitem [ref=e204]:
+            - link "Business Name Generator" [ref=e205] [cursor=pointer]:
+              - /url: https://wordpress.com/business-name-generator/
+          - listitem [ref=e206]:
+            - link "Logo Maker" [ref=e207] [cursor=pointer]:
+              - /url: https://wordpress.com/logo-maker/
+          - listitem [ref=e208]:
+            - link "Discover New Posts" [ref=e209] [cursor=pointer]:
+              - /url: https://wordpress.com/discover/
+          - listitem [ref=e210]:
+            - link "Popular Tags" [ref=e211] [cursor=pointer]:
+              - /url: https://wordpress.com/tags/
+          - listitem [ref=e212]:
+            - link "Blog Search" [ref=e213] [cursor=pointer]:
+              - /url: https://wordpress.com/reader/search/
+          - listitem [ref=e214]:
+            - link "Developer Resources ↗" [ref=e215] [cursor=pointer]:
+              - /url: https://developer.wordpress.com/
+          - listitem [ref=e216]:
+            - link "Accessibility" [ref=e217] [cursor=pointer]:
+              - /url: https://wordpress.com/accessibility/
+      - generic [ref=e218]:
+        - heading "Company" [level=3] [ref=e219]
+        - list [ref=e220]:
+          - listitem [ref=e221]:
+            - link "About" [ref=e222] [cursor=pointer]:
+              - /url: https://wordpress.com/about/
+          - listitem [ref=e223]:
+            - link "Press ↗" [ref=e224] [cursor=pointer]:
+              - /url: https://automattic.com/press/
+          - listitem [ref=e225]:
+            - link "Terms of Service" [ref=e226] [cursor=pointer]:
+              - /url: https://wordpress.com/tos/
+          - listitem [ref=e227]:
+            - link "Privacy Policy ↗" [ref=e228] [cursor=pointer]:
+              - /url: https://automattic.com/privacy/
+    - generic [ref=e229]:
+      - combobox "Change Language" [ref=e232] [cursor=pointer]:
+        - option "Change Language" [selected]
+        - option "English"
+        - option "Deutsch"
+        - option "Español"
+        - option "Français"
+        - option "Bahasa Indonesia"
+        - option "Italiano"
+        - option "Nederlands"
+        - option "Português do Brasil"
+        - option "Română"
+        - option "Svenska"
+        - option "Türkçe"
+        - option "Русский"
+        - option "Ελληνικά"
+        - option "العربية"
+        - option "עִבְרִית"
+        - option "日本語"
+        - option "한국어"
+        - option "简体中文"
+        - option "繁體中文"
+      - list [ref=e234]:
+        - listitem [ref=e235]:
+          - link "Get it on Google Play" [ref=e236] [cursor=pointer]:
+            - /url: https://play.google.com/store/apps/details?id=org.wordpress.android
+            - generic [ref=e237]:
+              - img [ref=e238]
+              - generic [ref=e243]:
+                - generic [ref=e244]: Get it on
+                - generic [ref=e245]: Google Play
+        - listitem [ref=e246]:
+          - link "Download on the App Store" [ref=e247] [cursor=pointer]:
+            - /url: https://apps.apple.com/us/app/wordpress/id335703880
+            - generic [ref=e248]:
+              - img [ref=e249]
+              - generic [ref=e251]:
+                - generic [ref=e252]: Download on the
+                - generic [ref=e253]: App Store
+      - list [ref=e255]:
+        - listitem [ref=e256]:
+          - link "WordPress.com on X (Twitter)" [ref=e257] [cursor=pointer]:
+            - /url: https://x.com/wordpressdotcom
+            - img [ref=e258]
+        - listitem [ref=e261]:
+          - link "WordPress.com on Facebook" [ref=e262] [cursor=pointer]:
+            - /url: https://www.facebook.com/WordPresscom/
+            - img [ref=e263]
+        - listitem [ref=e266]:
+          - link "WordPress.com on Instagram" [ref=e267] [cursor=pointer]:
+            - /url: https://www.instagram.com/wordpressdotcom/
+            - img [ref=e268]
+        - listitem [ref=e271]:
+          - link "WordPress.com on YouTube" [ref=e272] [cursor=pointer]:
+            - /url: https://www.youtube.com/WordPressdotcom
+            - img [ref=e273]
+  - generic [ref=e276]:
+    - generic [ref=e277]:
+      - link "An production" [ref=e278] [cursor=pointer]:
+        - /url: https://automattic.com/
+        - text: An
+        - img [ref=e279]
+        - text: production
+      - link "Work With Us ↗" [ref=e282] [cursor=pointer]:
+        - /url: https://automattic.com/work-with-us/
+    - text: ↗

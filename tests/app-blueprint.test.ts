@@ -1,5 +1,5 @@
 import { contractToBlueprint } from '@server/lib/app-blueprint'
-import type { SchemaContract, DesignPreferences } from '@server/lib/schema-contract'
+import type { SchemaContract } from '@server/lib/schema-contract'
 import { describe, expect, it } from 'vitest'
 
 describe('contractToBlueprint', () => {
@@ -25,18 +25,11 @@ describe('contractToBlueprint', () => {
     ],
   }
 
-  const designPreferences: DesignPreferences = {
-    style: 'modern',
-    primaryColor: '#3b82f6',
-    fontFamily: 'Inter',
-  }
-
   it('produces a blueprint with meta, features, and fileTree', () => {
     const bp = contractToBlueprint({
       appName: 'MarkNest',
       appDescription: 'A bookmark manager',
       contract,
-      designPreferences,
     })
 
     expect(bp.meta.appName).toBe('MarkNest')
@@ -46,7 +39,7 @@ describe('contractToBlueprint', () => {
   })
 
   it('includes all layer 1 files (supabase client, index.css, index.html)', () => {
-    const bp = contractToBlueprint({ appName: 'Test', appDescription: '', contract, designPreferences })
+    const bp = contractToBlueprint({ appName: 'Test', appDescription: '', contract })
     const paths = bp.fileTree.map((f) => f.path)
     expect(paths).toContain('src/lib/supabase.ts')
     expect(paths).toContain('src/index.css')
@@ -54,7 +47,7 @@ describe('contractToBlueprint', () => {
   })
 
   it('includes .gitignore, .env, and migration (no tRPC routers)', () => {
-    const bp = contractToBlueprint({ appName: 'Test', appDescription: '', contract, designPreferences })
+    const bp = contractToBlueprint({ appName: 'Test', appDescription: '', contract })
     const paths = bp.fileTree.map((f) => f.path)
     expect(paths).toContain('.gitignore')
     expect(paths).toContain('.env')
@@ -64,7 +57,7 @@ describe('contractToBlueprint', () => {
   })
 
   it('.gitignore excludes node_modules, dist, and .env', () => {
-    const bp = contractToBlueprint({ appName: 'Test', appDescription: '', contract, designPreferences })
+    const bp = contractToBlueprint({ appName: 'Test', appDescription: '', contract })
     const gitignore = bp.fileTree.find((f) => f.path === '.gitignore')
     expect(gitignore).toBeDefined()
     expect(gitignore!.content).toContain('node_modules/')
@@ -74,7 +67,7 @@ describe('contractToBlueprint', () => {
   })
 
   it('includes all layer 4 page skeletons', () => {
-    const bp = contractToBlueprint({ appName: 'Test', appDescription: '', contract, designPreferences })
+    const bp = contractToBlueprint({ appName: 'Test', appDescription: '', contract })
     const paths = bp.fileTree.map((f) => f.path)
     expect(paths).toContain('src/routes/_authenticated/bookmarks.tsx')
     expect(paths).toContain('src/routes/_authenticated/bookmarks.$id.tsx')
@@ -82,14 +75,14 @@ describe('contractToBlueprint', () => {
   })
 
   it('includes layer 5 wiring files (main.tsx, app-layout)', () => {
-    const bp = contractToBlueprint({ appName: 'Test', appDescription: '', contract, designPreferences })
+    const bp = contractToBlueprint({ appName: 'Test', appDescription: '', contract })
     const paths = bp.fileTree.map((f) => f.path)
     expect(paths).toContain('src/main.tsx')
     expect(paths).toContain('src/components/app-layout.tsx')
   })
 
   it('marks LLM-filled files with isLLMSlot=true', () => {
-    const bp = contractToBlueprint({ appName: 'Test', appDescription: '', contract, designPreferences })
+    const bp = contractToBlueprint({ appName: 'Test', appDescription: '', contract })
     const pageFile = bp.fileTree.find((f) => f.path === 'src/routes/_authenticated/bookmarks.tsx')
     expect(pageFile?.isLLMSlot).toBe(true)
 
@@ -98,7 +91,7 @@ describe('contractToBlueprint', () => {
   })
 
   it('assigns correct layers to files', () => {
-    const bp = contractToBlueprint({ appName: 'Test', appDescription: '', contract, designPreferences })
+    const bp = contractToBlueprint({ appName: 'Test', appDescription: '', contract })
     const supabaseFile = bp.fileTree.find((f) => f.path === 'src/lib/supabase.ts')
     expect(supabaseFile?.layer).toBe(1)
 
@@ -112,8 +105,8 @@ describe('contractToBlueprint', () => {
     expect(mainFile?.layer).toBe(5)
   })
 
-  it('generates index.css with theme variables from designPreferences', () => {
-    const bp = contractToBlueprint({ appName: 'Test', appDescription: '', contract, designPreferences })
+  it('generates index.css with theme variables', () => {
+    const bp = contractToBlueprint({ appName: 'Test', appDescription: '', contract })
     const cssFile = bp.fileTree.find((f) => f.path === 'src/index.css')
     expect(cssFile?.content).toContain('@import "tailwindcss"')
     expect(cssFile?.content).toContain('@theme')
@@ -121,7 +114,7 @@ describe('contractToBlueprint', () => {
   })
 
   it('generates .env with VITE_ prefixed Supabase credentials', () => {
-    const bp = contractToBlueprint({ appName: 'Test', appDescription: '', contract, designPreferences })
+    const bp = contractToBlueprint({ appName: 'Test', appDescription: '', contract })
     const envFile = bp.fileTree.find((f) => f.path === '.env')
     expect(envFile?.content).toContain('VITE_SUPABASE_URL=')
     expect(envFile?.content).toContain('VITE_SUPABASE_ANON_KEY=')
@@ -131,7 +124,7 @@ describe('contractToBlueprint', () => {
 
   it('does not emit AuthProvider import in main.tsx (C4 fix)', () => {
     // Contract has auth.users FK → features.auth=true, but AuthProvider should not be emitted
-    const bp = contractToBlueprint({ appName: 'Test', appDescription: '', contract, designPreferences })
+    const bp = contractToBlueprint({ appName: 'Test', appDescription: '', contract })
     const mainFile = bp.fileTree.find((f) => f.path === 'src/main.tsx')
     expect(mainFile?.content).not.toContain('AuthProvider')
     expect(mainFile?.content).not.toContain("from '@/lib/auth'")
@@ -143,41 +136,40 @@ describe('contractToBlueprint', () => {
   describe('auth system (features.auth = true)', () => {
     // contract already has auth.users FK → features.auth = true
 
-    it('includes login and callback routes', () => {
-      const bp = contractToBlueprint({ appName: 'Test', appDescription: '', contract, designPreferences })
+    it('includes themed auth routes', () => {
+      const bp = contractToBlueprint({ appName: 'Test', appDescription: '', contract })
       const paths = bp.fileTree.map((f) => f.path)
       expect(paths).toContain('src/routes/auth/login.tsx')
-      expect(paths).toContain('src/routes/auth/callback.tsx')
+      expect(paths).toContain('src/routes/_authenticated/route.tsx')
+      expect(paths).toContain('src/routes/_authenticated/dashboard.tsx')
     })
 
-    it('login page has sign-in/sign-up toggle and supabase.auth calls', () => {
-      const bp = contractToBlueprint({ appName: 'Test', appDescription: '', contract, designPreferences })
+    it('login page has themed sign-in flow with supabase auth', () => {
+      const bp = contractToBlueprint({ appName: 'Test', appDescription: '', contract })
       const login = bp.fileTree.find((f) => f.path === 'src/routes/auth/login.tsx')
       expect(login?.content).toContain("createFileRoute('/auth/login')")
-      expect(login?.content).toContain('supabase.auth.signUp')
       expect(login?.content).toContain('supabase.auth.signInWithPassword')
-      expect(login?.content).toContain("navigate({ to: '/' })")
+      expect(login?.content).toContain("navigate({ to: '/_authenticated/dashboard' })")
     })
 
     it('_authenticated/route.tsx redirects to /auth/login when no session', () => {
-      const bp = contractToBlueprint({ appName: 'Test', appDescription: '', contract, designPreferences })
+      const bp = contractToBlueprint({ appName: 'Test', appDescription: '', contract })
       const route = bp.fileTree.find((f) => f.path === 'src/routes/_authenticated/route.tsx')
       expect(route?.content).toContain('supabase.auth.getSession')
       expect(route?.content).toContain("redirect({ to: '/auth/login' })")
     })
 
-    it('app-layout includes sign out button', () => {
-      const bp = contractToBlueprint({ appName: 'Test', appDescription: '', contract, designPreferences })
+    it('app-layout is a pass-through outlet', () => {
+      const bp = contractToBlueprint({ appName: 'Test', appDescription: '', contract })
       const layout = bp.fileTree.find((f) => f.path === 'src/components/app-layout.tsx')
-      expect(layout?.content).toContain('supabase.auth.signOut')
-      expect(layout?.content).toContain('Sign out')
+      expect(layout?.content).toContain('return <Outlet />')
+      expect(layout?.content).not.toContain('supabase.auth.signOut')
     })
 
     it('routeTree.gen.ts includes auth routes', () => {
-      const bp = contractToBlueprint({ appName: 'Test', appDescription: '', contract, designPreferences })
+      const bp = contractToBlueprint({ appName: 'Test', appDescription: '', contract })
       const tree = bp.fileTree.find((f) => f.path === 'src/routeTree.gen.ts')
       expect(tree?.content).toContain("from './routes/auth/login'")
-      expect(tree?.content).toContain("from './routes/auth/callback'")
       expect(tree?.content).toContain("path: '/auth/login'")
       expect(tree?.content).toContain('AuthLoginRoute,')
     })
@@ -194,22 +186,22 @@ describe('contractToBlueprint', () => {
       }],
     }
 
-    it('omits auth routes when no auth.users FK', () => {
-      const bp = contractToBlueprint({ appName: 'Shop', appDescription: '', contract: noAuthContract, designPreferences })
+    it('keeps themed auth routes under default hybrid posture', () => {
+      const bp = contractToBlueprint({ appName: 'Shop', appDescription: '', contract: noAuthContract })
       const paths = bp.fileTree.map((f) => f.path)
-      expect(paths).not.toContain('src/routes/auth/login.tsx')
-      expect(paths).not.toContain('src/routes/auth/callback.tsx')
+      expect(paths).toContain('src/routes/auth/login.tsx')
+      expect(paths).toContain('src/routes/_authenticated/route.tsx')
     })
 
-    it('_authenticated/route.tsx has no auth guard when no auth', () => {
-      const bp = contractToBlueprint({ appName: 'Shop', appDescription: '', contract: noAuthContract, designPreferences })
+    it('_authenticated/route.tsx keeps auth guard under hybrid posture', () => {
+      const bp = contractToBlueprint({ appName: 'Shop', appDescription: '', contract: noAuthContract })
       const route = bp.fileTree.find((f) => f.path === 'src/routes/_authenticated/route.tsx')
-      expect(route?.content).not.toContain('getSession')
-      expect(route?.content).not.toContain('redirect')
+      expect(route?.content).toContain('getSession')
+      expect(route?.content).toContain('redirect')
     })
 
     it('app-layout has no sign out button when no auth', () => {
-      const bp = contractToBlueprint({ appName: 'Shop', appDescription: '', contract: noAuthContract, designPreferences })
+      const bp = contractToBlueprint({ appName: 'Shop', appDescription: '', contract: noAuthContract })
       const layout = bp.fileTree.find((f) => f.path === 'src/components/app-layout.tsx')
       expect(layout?.content).not.toContain('signOut')
     })

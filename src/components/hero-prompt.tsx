@@ -4,6 +4,7 @@ import { useNavigate } from '@tanstack/react-router'
 import type { PromptInputMessage } from '@/components/ai-elements/prompt-input'
 import { PromptBar } from '@/components/prompt-bar'
 import { useAuth } from '@/lib/auth'
+import { apiFetch } from '@/lib/utils'
 
 const PENDING_PROMPT_KEY = 'vibestack_pending_prompt'
 
@@ -24,7 +25,7 @@ export function HeroPrompt() {
       return
     }
 
-    const res = await fetch('/api/projects', {
+    const res = await apiFetch('/api/projects', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: prompt.slice(0, 80), prompt }),

@@ -210,13 +210,12 @@ async function phase2_blueprint(analysisResult: Extract<Awaited<ReturnType<typeo
   log(`App: ${analysisResult.appName}`)
   log(`Description: ${analysisResult.appDescription}`)
   log(`Tables: ${analysisResult.contract.tables.map(t => t.name).join(', ')}`)
-  log(`Design: style=${analysisResult.designPreferences.style} color=${analysisResult.designPreferences.primaryColor} font=${analysisResult.designPreferences.fontFamily}`)
 
-  const result = runBlueprint({
+  const result = await runBlueprint({
+    userPrompt: TEST_PROMPT,
     appName: analysisResult.appName,
     appDescription: analysisResult.appDescription,
     contract: analysisResult.contract,
-    designPreferences: analysisResult.designPreferences,
   })
 
   log(`Blueprint files: ${result.blueprint.fileTree.length}`)
@@ -585,9 +584,6 @@ ${tableRows}
 
 ${results.analysis ? `- **App Name**: ${results.analysis.appName}
 - **Description**: ${results.analysis.appDescription}
-- **Primary Color**: ${results.analysis.designPreferences?.primaryColor}
-- **Font**: ${results.analysis.designPreferences?.fontFamily}
-- **Style**: ${results.analysis.designPreferences?.style}
 - **Tables**: ${results.analysis.contract?.tables?.map((t: any) => t.name).join(', ')}` : 'Failed'}
 
 ## Blueprint
@@ -639,7 +635,6 @@ ${results.notes.filter((n: string) => n.startsWith('[PERF]')).map((n: string) =>
   const masterEntry = `\n## App ${TEST_CONFIG.id}: ${TEST_CONFIG.name}\n` +
     `- **URL**: ${results.vercelUrl ? results.vercelUrl : 'N/A'}\n` +
     `- **Duration**: ${(totalDuration / 1000).toFixed(1)}s | **Tokens**: ${totalTokens} (~$${estimatedCost})\n` +
-    `- **Color**: ${results.analysis?.designPreferences?.primaryColor} | **Font**: ${results.analysis?.designPreferences?.fontFamily}\n` +
     `- **Tables**: ${results.analysis?.contract?.tables?.map((t: any) => t.name).join(', ')}\n` +
     `- **Status**: ${results.validation?.allPassed ? '✅' : '❌'}\n`
 
@@ -701,7 +696,7 @@ async function main() {
       throw new Error('Analysis failed')
     }
     trackPhase('1. Analysis', d1, tokens1, 'PASS',
-      `${analysisResult.contract.tables.length} tables | ${analysisResult.designPreferences.primaryColor} | ${analysisResult.designPreferences.fontFamily}`)
+      `${analysisResult.contract.tables.length} tables`)
     results.analysis = analysisResult
 
     // --- Phase 2: Blueprint ---
@@ -809,7 +804,6 @@ async function main() {
 
         log(`\n🚀 APP ${TEST_CONFIG.id} LIVE: ${vercelUrl}`)
         log(`   App: ${analysisResult.appName}`)
-        log(`   Color: ${analysisResult.designPreferences.primaryColor} | Font: ${analysisResult.designPreferences.fontFamily}`)
 
         // --- Phase 9.5: Update Supabase Auth SITE_URL ---
         // Must run after Vercel deploy so we know the live URL.

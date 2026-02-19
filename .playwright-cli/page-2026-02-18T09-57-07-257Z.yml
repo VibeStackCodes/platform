@@ -1,0 +1,31 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - navigation [ref=e5]:
+      - link "M Meridian" [ref=e6] [cursor=pointer]:
+        - /url: /
+        - generic [ref=e7]: M
+        - generic [ref=e8]: Meridian
+      - link "Watches" [ref=e9] [cursor=pointer]:
+        - /url: /watches
+      - link "Collections" [ref=e10] [cursor=pointer]:
+        - /url: /collections
+      - link "CollectionWatches" [ref=e11] [cursor=pointer]:
+        - /url: /collection-watches
+  - main [ref=e13]:
+    - generic [ref=e14]:
+      - generic [ref=e15]:
+        - heading "Watches" [level=1] [ref=e17]
+        - button "New Watch" [ref=e18]:
+          - img
+          - text: New Watch
+      - generic [ref=e21]:
+        - generic [ref=e22]:
+          - text: Movement Type
+          - combobox "Movement Type" [ref=e23]:
+            - option "All" [selected]
+            - option "Automatic"
+            - option "Manual"
+            - option "Quartz"
+        - generic [ref=e24]:
+          - checkbox "Is Active" [ref=e25]
+          - generic [ref=e26]: Is Active

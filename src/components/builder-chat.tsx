@@ -2,6 +2,7 @@
 
 import { Bot, CheckCircle2 } from 'lucide-react'
 import { Suspense, useCallback, useEffect, useRef, useState } from 'react'
+import { apiFetch } from '@/lib/utils'
 import { Checkpoint, CheckpointIcon, CheckpointTrigger } from '@/components/ai-elements/checkpoint'
 import {
   Commit,
@@ -317,7 +318,7 @@ export function BuilderChat({
         : { message: text, projectId, model }
 
       try {
-        const response = await fetch(endpoint, {
+        const response = await apiFetch(endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
@@ -433,7 +434,7 @@ export function BuilderChat({
       abortControllerRef.current = abortController
 
       try {
-        const response = await fetch('/api/agent/resume', {
+        const response = await apiFetch('/api/agent/resume', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ runId: resumeRunId, answers: answersText }),
@@ -480,7 +481,7 @@ export function BuilderChat({
       abortControllerRef.current = abortController
 
       try {
-        const response = await fetch('/api/agent', {
+        const response = await apiFetch('/api/agent', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ message: chatPlan.appDescription, projectId, model }),

@@ -1,0 +1,150 @@
+- generic:
+  - generic:
+    - generic:
+      - banner:
+        - navigation:
+          - link:
+            - /url: /
+            - generic: L
+            - generic: La Piazza Manager
+          - link:
+            - /url: /menu-categories
+            - text: Menu Categories
+          - link:
+            - /url: /menu-items
+            - text: Menu Items
+          - link:
+            - /url: /restaurant-tables
+            - text: Restaurant Tables
+          - link:
+            - /url: /reservations
+            - text: Reservations
+          - link:
+            - /url: /orders
+            - text: Orders
+          - link:
+            - /url: /order-items
+            - text: Order Items
+      - main:
+        - generic:
+          - generic:
+            - heading [level=1]: Reservations
+            - button [expanded]:
+              - img
+              - text: New Reservation
+          - generic:
+            - generic:
+              - generic:
+                - generic: S
+              - generic:
+                - generic:
+                  - link:
+                    - /url: /reservations/ac6c6f46-a207-4c6c-8694-33d603dc5499
+                    - text: Sample reservations
+              - generic:
+                - paragraph: Sample reservations
+                - paragraph: pending
+                - paragraph: "1"
+                - generic:
+                  - button:
+                    - img
+            - generic:
+              - generic:
+                - generic: S
+              - generic:
+                - generic:
+                  - link:
+                    - /url: /reservations/b1956750-3833-4aa7-9462-7e4a77563fb3
+                    - text: Sample reservations
+              - generic:
+                - paragraph: Sample reservations
+                - paragraph: pending
+                - paragraph: "2"
+                - generic:
+                  - button:
+                    - img
+            - generic:
+              - generic:
+                - generic: S
+              - generic:
+                - generic:
+                  - link:
+                    - /url: /reservations/2fb37401-6463-4dbe-9292-4acd1f5ba156
+                    - text: Sample reservations
+              - generic:
+                - paragraph: Sample reservations
+                - paragraph: pending
+                - paragraph: "3"
+                - generic:
+                  - button:
+                    - img
+            - generic:
+              - generic:
+                - generic: S
+              - generic:
+                - generic:
+                  - link:
+                    - /url: /reservations/71b914ea-b925-4255-b168-1a931d3e95ed
+                    - text: Sample reservations
+              - generic:
+                - paragraph: Sample reservations
+                - paragraph: pending
+                - paragraph: "4"
+                - generic:
+                  - button:
+                    - img
+            - generic:
+              - generic:
+                - generic: S
+              - generic:
+                - generic:
+                  - link:
+                    - /url: /reservations/c73d1c83-e648-4d35-908b-5db02441df3b
+                    - text: Sample reservations
+              - generic:
+                - paragraph: Sample reservations
+                - paragraph: pending
+                - paragraph: "5"
+                - generic:
+                  - button:
+                    - img
+  - dialog "New Reservation" [ref=e84]:
+    - generic [ref=e85]:
+      - heading "New Reservation" [level=2] [ref=e86]
+      - paragraph [ref=e87]: Create a new Reservation
+    - generic [ref=e88]:
+      - generic [ref=e89]:
+        - text: Guest Name
+        - textbox "Enter guest name" [active] [ref=e90]
+      - generic [ref=e91]:
+        - text: Guest Email
+        - textbox "e.g., name@example.com" [ref=e92]
+      - generic [ref=e93]:
+        - text: Guest Phone
+        - textbox "e.g., (555) 000-1234" [ref=e94]
+      - generic [ref=e95]:
+        - text: Table Id
+        - textbox "Enter table id" [ref=e96]
+      - generic [ref=e97]:
+        - text: Party Size
+        - spinbutton [ref=e98]
+      - generic [ref=e99]:
+        - text: Reservation Date
+        - textbox [ref=e100]
+      - generic [ref=e101]:
+        - text: Reservation Time
+        - textbox "Enter reservation time" [ref=e102]
+      - generic [ref=e103]:
+        - text: Status
+        - combobox [ref=e104]:
+          - option "Select..." [selected]
+          - option "pending"
+          - option "active"
+          - option "completed"
+      - generic [ref=e105]:
+        - text: Special Requests
+        - textbox "Enter special requests" [ref=e106]
+      - button "Create Reservation" [ref=e107]
+    - button "Close" [ref=e108]:
+      - img
+      - generic [ref=e109]: Close

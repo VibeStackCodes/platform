@@ -1,0 +1,136 @@
+- generic:
+  - generic:
+    - generic:
+      - banner:
+        - navigation:
+          - link:
+            - /url: /
+            - generic: L
+            - generic: La Piazza Manager
+          - link:
+            - /url: /menu-categories
+            - text: Menu Categories
+          - link:
+            - /url: /menu-items
+            - text: Menu Items
+          - link:
+            - /url: /restaurant-tables
+            - text: Restaurant Tables
+          - link:
+            - /url: /reservations
+            - text: Reservations
+          - link:
+            - /url: /orders
+            - text: Orders
+          - link:
+            - /url: /order-items
+            - text: Order Items
+      - main:
+        - generic:
+          - generic:
+            - heading [level=1]: Orders
+            - button [expanded]:
+              - img
+              - text: New Order
+          - generic:
+            - generic:
+              - generic:
+                - generic: O
+              - generic:
+                - generic:
+                  - link:
+                    - /url: /orders/414a0aa6-a953-4cf7-a135-70bd5fd84c5f
+                    - text: open
+              - generic:
+                - paragraph: "Total Amount: $0.00"
+                - paragraph: "Ordered At: 18/02/2026"
+                - generic:
+                  - button:
+                    - img
+            - generic:
+              - generic:
+                - generic: O
+              - generic:
+                - generic:
+                  - link:
+                    - /url: /orders/e076da09-a319-462e-824e-d5312ad80282
+                    - text: open
+              - generic:
+                - paragraph: "Total Amount: $0.00"
+                - paragraph: "Ordered At: 18/02/2026"
+                - generic:
+                  - button:
+                    - img
+            - generic:
+              - generic:
+                - generic: O
+              - generic:
+                - generic:
+                  - link:
+                    - /url: /orders/691fb8d7-e2fd-43c6-a73c-2b532db8b9b4
+                    - text: open
+              - generic:
+                - paragraph: "Total Amount: $0.00"
+                - paragraph: "Ordered At: 18/02/2026"
+                - generic:
+                  - button:
+                    - img
+            - generic:
+              - generic:
+                - generic: O
+              - generic:
+                - generic:
+                  - link:
+                    - /url: /orders/b3ec9c28-65b1-47c5-a479-5e4af3975110
+                    - text: open
+              - generic:
+                - paragraph: "Total Amount: $0.00"
+                - paragraph: "Ordered At: 18/02/2026"
+                - generic:
+                  - button:
+                    - img
+            - generic:
+              - generic:
+                - generic: O
+              - generic:
+                - generic:
+                  - link:
+                    - /url: /orders/3b4256d2-43dc-428d-9210-fa199e890d91
+                    - text: open
+              - generic:
+                - paragraph: "Total Amount: $0.00"
+                - paragraph: "Ordered At: 18/02/2026"
+                - generic:
+                  - button:
+                    - img
+  - dialog "New Order" [ref=e79]:
+    - generic [ref=e80]:
+      - heading "New Order" [level=2] [ref=e81]
+      - paragraph [ref=e82]: Create a new Order
+    - generic [ref=e83]:
+      - generic [ref=e84]:
+        - text: Table Id
+        - textbox "Enter table id" [active] [ref=e85]
+      - generic [ref=e86]:
+        - text: Reservation Id
+        - textbox "Enter reservation id" [ref=e87]
+      - generic [ref=e88]:
+        - text: Status
+        - combobox [ref=e89]:
+          - option "Select..." [selected]
+          - option "pending"
+          - option "active"
+          - option "completed"
+      - generic [ref=e90]:
+        - text: Total Amount
+        - spinbutton [ref=e91]
+      - generic [ref=e92]:
+        - text: Notes
+        - textbox "Enter notes" [ref=e93]
+      - generic [ref=e94]:
+        - text: Ordered At
+        - textbox [ref=e95]
+      - button "Create Order" [ref=e96]
+    - button "Close" [ref=e97]:
+      - img
+      - generic [ref=e98]: Close

@@ -1,0 +1,73 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - navigation [ref=e5]:
+      - link "S StudioSprint" [ref=e6] [cursor=pointer]:
+        - /url: /
+        - generic [ref=e7]: S
+        - generic [ref=e8]: StudioSprint
+      - link "Clients" [ref=e9] [cursor=pointer]:
+        - /url: /clients
+      - link "Projects" [ref=e10] [cursor=pointer]:
+        - /url: /projects
+      - link "Deliverables" [ref=e11] [cursor=pointer]:
+        - /url: /deliverables
+      - link "Time Entries" [ref=e12] [cursor=pointer]:
+        - /url: /time-entries
+  - main [ref=e14]:
+    - generic [ref=e15]:
+      - generic [ref=e17]:
+        - heading "Projects" [level=1] [ref=e18]
+        - button "New Project" [ref=e19]:
+          - img
+          - text: New Project
+      - generic [ref=e20]:
+        - generic [ref=e21]:
+          - generic [ref=e23]: S
+          - link "Sample projects" [ref=e26] [cursor=pointer]:
+            - /url: /projects/a6dedd45-e1dd-4f6b-ac09-3b2e25267c44
+          - generic [ref=e27]:
+            - paragraph [ref=e28]: briefing
+            - paragraph [ref=e29]: "Start Date: —"
+            - paragraph [ref=e30]: "Deadline: —"
+            - button [ref=e32]:
+              - img
+        - generic [ref=e33]:
+          - generic [ref=e35]: S
+          - link "Sample projects" [ref=e38] [cursor=pointer]:
+            - /url: /projects/3bf627d5-02e1-412d-8664-b3ce1b9766a3
+          - generic [ref=e39]:
+            - paragraph [ref=e40]: briefing
+            - paragraph [ref=e41]: "Start Date: —"
+            - paragraph [ref=e42]: "Deadline: —"
+            - button [ref=e44]:
+              - img
+        - generic [ref=e45]:
+          - generic [ref=e47]: S
+          - link "Sample projects" [ref=e50] [cursor=pointer]:
+            - /url: /projects/d3b4ba2f-ee12-4c07-bca4-6c4deeb2f3e5
+          - generic [ref=e51]:
+            - paragraph [ref=e52]: briefing
+            - paragraph [ref=e53]: "Start Date: —"
+            - paragraph [ref=e54]: "Deadline: —"
+            - button [ref=e56]:
+              - img
+        - generic [ref=e57]:
+          - generic [ref=e59]: S
+          - link "Sample projects" [ref=e62] [cursor=pointer]:
+            - /url: /projects/f1ca16fc-40c1-4a05-9aee-63af5fe36baa
+          - generic [ref=e63]:
+            - paragraph [ref=e64]: briefing
+            - paragraph [ref=e65]: "Start Date: —"
+            - paragraph [ref=e66]: "Deadline: —"
+            - button [ref=e68]:
+              - img
+        - generic [ref=e69]:
+          - generic [ref=e71]: S
+          - link "Sample projects" [ref=e74] [cursor=pointer]:
+            - /url: /projects/5f0ae917-bcc1-44bd-a13f-62c3e360eb83
+          - generic [ref=e75]:
+            - paragraph [ref=e76]: briefing
+            - paragraph [ref=e77]: "Start Date: —"
+            - paragraph [ref=e78]: "Deadline: —"
+            - button [ref=e80]:
+              - img

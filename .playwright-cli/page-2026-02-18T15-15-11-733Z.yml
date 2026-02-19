@@ -1,0 +1,17 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - navigation [ref=e5]:
+      - link "S StudioPipeline CRM" [ref=e6] [cursor=pointer]:
+        - /url: /
+        - generic [ref=e7]: S
+        - generic [ref=e8]: StudioPipeline CRM
+      - link "Companies" [ref=e9] [cursor=pointer]:
+        - /url: /companies
+      - link "Contacts" [ref=e10] [cursor=pointer]:
+        - /url: /contacts
+      - link "Deals" [ref=e11] [cursor=pointer]:
+        - /url: /deals
+      - link "Activities" [ref=e12] [cursor=pointer]:
+        - /url: /activities
+  - main [ref=e14]:
+    - paragraph [ref=e16]: Loading companies...
