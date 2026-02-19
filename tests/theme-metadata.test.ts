@@ -1,6 +1,10 @@
 // tests/theme-metadata.test.ts
 import { describe, it, expect } from 'vitest'
-import { getThemeMetadata } from '@server/lib/agents/theme-metadata'
+import {
+  getThemeMetadata,
+  findThemeByName,
+  isThemeSuitableFor,
+} from '@server/lib/agents/theme-metadata'
 
 describe('theme-metadata', () => {
   it('returns theme metadata with use case and design type', () => {
@@ -32,5 +36,31 @@ describe('theme-metadata', () => {
       expect(Array.isArray(theme.useCases)).toBe(true)
       expect(Array.isArray(theme.baseTables)).toBe(true)
     })
+  })
+
+  it('findThemeByName returns theme when found', () => {
+    const canape = findThemeByName('canape')
+    expect(canape).toBeDefined()
+    expect(canape?.name).toBe('canape')
+  })
+
+  it('findThemeByName returns undefined for unknown theme', () => {
+    const unknown = findThemeByName('nonexistent')
+    expect(unknown).toBeUndefined()
+  })
+
+  it('isThemeSuitableFor returns true when theme is suitable', () => {
+    const suitable = isThemeSuitableFor('canape', 'restaurant-website')
+    expect(suitable).toBe(true)
+  })
+
+  it('isThemeSuitableFor returns false when theme is NOT suitable', () => {
+    const notSuitable = isThemeSuitableFor('canape', 'staff-management')
+    expect(notSuitable).toBe(false)
+  })
+
+  it('isThemeSuitableFor returns false for unknown theme', () => {
+    const unknown = isThemeSuitableFor('nonexistent', 'any-intent')
+    expect(unknown).toBe(false)
   })
 })
