@@ -20,7 +20,7 @@ describe('theme-selector tool', () => {
 
     expect(result.themeName).toBeTruthy()
     expect(result.reasoning).toBeTruthy()
-    expect(['dashboard', 'corporate']).toContain(result.themeName)
+    expect(result.themeName).toBe('dashboard')
     expect(result.shouldMergeTables).toBe(false)
   })
 
