@@ -7,6 +7,7 @@ import { buildSkillCatalogPrompt, resolveThemeSkillPath } from '../skills/catalo
 import { fetchHeroImages } from '../unsplash'
 import { createAgentModelResolver } from './provider'
 import { getThemeBaseSchema, isThemeSpecificSchema } from '../theme-schemas'
+import { createThemeSelectorTool } from './theme-selector'
 
 const textSlotsSchema = z.object({
   hero_headline: z.string().min(5).describe('One bold sentence that captures the app\'s purpose'),
@@ -23,13 +24,25 @@ const selectionSchema = z.object({
   textSlots: textSlotsSchema,
 })
 
+const themeSelectorTool = createThemeSelectorTool()
+
 const designAgent = new Agent({
   id: 'design-agent',
   name: 'Design Agent',
   model: createAgentModelResolver('orchestrator'),
+  tools: { selectTheme: themeSelectorTool },
   instructions: `You are a design selector for VibeStack. Your job is to pick the BEST MATCHING theme from a catalog and fill text slots for the generated app.
 
-SELECTION RULES:
+THEME SELECTION RULES:
+1. Call the selectTheme tool with the user's prompt and description to determine the appropriate theme type.
+2. The tool will help you evaluate which theme best fits the intended use case (website vs admin vs hybrid).
+3. Website themes (canape, quomi, gallery) are for public-facing apps — never use them for staff or management apps.
+4. Admin themes (dashboard, corporate) are for staff/management apps — never use them for public websites.
+5. Only merge the theme's base tables if the tool indicates shouldMergeTables is true.
+6. After calling selectTheme, still pick the EXACT theme skill name from the skill catalog (starts with "theme-").
+7. Never invent theme names that are not in the catalog list.
+
+CATALOG SELECTION RULES:
 1. Read the "Use when app mentions:" hint in each theme description — these are keyword triggers.
 2. Match the app's DOMAIN first (luxury → premium themes, food → restaurant themes, blog → editorial themes).
 3. Match the app's MOOD second (dark & moody, light & clean, colorful & playful).
@@ -37,8 +50,6 @@ SELECTION RULES:
 5. NEVER pick a blog/editorial theme for a product catalog, e-commerce, or management app.
 6. NEVER pick a dark background theme unless the user explicitly wants dark mode or the domain calls for it (photography, nightlife, etc.).
 7. For product catalogs, shops, or luxury apps: prefer themes with light backgrounds, elevated card styles, and premium typography.
-8. Return the EXACT theme skill name from the catalog (starts with "theme-").
-9. Never invent theme names that are not in the catalog list.
 
 TEXT SLOT RULES:
 1. Write the hero_headline as a compelling, app-specific tagline — NOT generic.
@@ -127,7 +138,32 @@ export async function runDesignAgent(
   contract: SchemaContract,
   appName?: string,
   appDescription?: string,
-): Promise<{ tokens: ThemeTokens; contract: SchemaContract }> {
+): Promise<{
+  tokens: ThemeTokens
+  contract: SchemaContract
+  selectedTheme: string
+  themeReasoning: string
+}> {
+  // Step 1: Use the theme selector tool to determine website vs admin intent.
+  // This is called directly (deterministic keyword scoring) — no extra LLM round-trip.
+  if (!themeSelectorTool.execute) {
+    throw new Error('Theme selector tool is missing execute function')
+  }
+  const selectorRaw = await themeSelectorTool.execute(
+    { userPrompt, appDescription },
+    {},
+  )
+  // execute() returns TSchemaOut | ValidationError — guard against validation failure
+  if ('error' in selectorRaw && selectorRaw.error === true) {
+    throw new Error(`Theme selector validation error: ${selectorRaw.message}`)
+  }
+  const selectorResult = selectorRaw as {
+    themeName: string
+    reasoning: string
+    shouldMergeTables: boolean
+  }
+  const { themeName: selectorThemeName, reasoning: themeReasoning } = selectorResult
+
   const catalogPrompt = await buildSkillCatalogPrompt()
   const entityNames = contract.tables.map((table) => table.name).join(', ')
 
@@ -141,6 +177,8 @@ ${userPrompt}
 
 Schema entities:
 ${entityNames}
+
+Theme selector recommendation: "${selectorThemeName}" — ${themeReasoning}
 
 ${catalogPrompt}`
 
@@ -184,5 +222,10 @@ ${catalogPrompt}`
     }
   }
 
-  return { tokens, contract: finalContract }
+  return {
+    tokens,
+    contract: finalContract,
+    selectedTheme: themeName,
+    themeReasoning,
+  }
 }
