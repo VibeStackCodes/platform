@@ -365,6 +365,7 @@ function generateRouteTree(contract: SchemaContract, features: InferredFeatures,
     lines.push("import { Route as AuthenticatedImport } from './routes/_authenticated/route'")
     lines.push("import { Route as DashboardImport } from './routes/_authenticated/dashboard'")
     lines.push("import { Route as AuthLoginImport } from './routes/auth/login'")
+    lines.push("import { Route as AuthSignupImport } from './routes/auth/signup'")
   }
 
   for (const table of publicTables) {
@@ -392,6 +393,7 @@ function generateRouteTree(contract: SchemaContract, features: InferredFeatures,
     lines.push("const AuthenticatedRoute = AuthenticatedImport.update({ id: '/_authenticated', getParentRoute: () => rootRoute } as any)")
     lines.push("const DashboardRoute = DashboardImport.update({ path: '/dashboard', getParentRoute: () => AuthenticatedRoute } as any)")
     lines.push("const AuthLoginRoute = AuthLoginImport.update({ path: '/auth/login', getParentRoute: () => rootRoute } as any)")
+    lines.push("const AuthSignupRoute = AuthSignupImport.update({ path: '/auth/signup', getParentRoute: () => rootRoute } as any)")
   }
 
   lines.push('')
@@ -426,6 +428,7 @@ function generateRouteTree(contract: SchemaContract, features: InferredFeatures,
   lines.push(...publicChildren)
   if (authRequired) {
     lines.push('  AuthLoginRoute,')
+    lines.push('  AuthSignupRoute,')
     lines.push('  AuthenticatedRoute.addChildren([')
     lines.push('    DashboardRoute,')
     lines.push(...privateChildren)

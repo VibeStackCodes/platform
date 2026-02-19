@@ -18,6 +18,7 @@ interface CanapeRouteContext {
   allPublicMeta: FeatureSchema['publicMeta']
   siteEmail?: string
   heroImages: string[]
+  hasAuth: boolean
 }
 
 // ============================================================================
@@ -85,12 +86,12 @@ export function renderCanapeHomepage(
   meta: FeatureSchema['publicMeta'][0],
   context: CanapeRouteContext
 ): string {
-  return `
+  return `import { createFileRoute, Link } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { useState } from 'react'
 
-export const Route = createFileRoute('/')(
+export const Route = createFileRoute('/')({
   component: Home
 })
 
@@ -135,6 +136,17 @@ function Home() {
 
   return (
     <main>
+      {/* Navigation Header */}
+      <nav className="max-w-4xl mx-auto px-8 py-6 flex justify-between items-center border-b">
+        <div className="text-xl font-serif font-bold uppercase tracking-widest">${context.appName}</div>
+        <div className="flex gap-6 text-sm uppercase tracking-widest items-center">
+          <Link to="/menu" className="hover:underline">Menu</Link>
+          <Link to="/news" className="hover:underline">News</Link>
+          <Link to="/reservations" className="hover:underline">Reservations</Link>
+          ${context.hasAuth ? '<Link to="/auth/login" className="bg-gray-900 text-white px-3 py-1 rounded hover:bg-gray-800">Sign in</Link>' : ''}
+        </div>
+      </nav>
+
       {/* Hero Section */}
       <div
         className="w-full h-[530px] bg-cover bg-center bg-black/40 flex items-center justify-center"

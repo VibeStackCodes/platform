@@ -682,9 +682,54 @@ function ${pascal}DetailPage() {
 `
 }
 
+function signupRoute(tokens: ThemeTokens): string {
+  return `import { useState } from 'react'
+import { createFileRoute, useNavigate, Link } from '@tanstack/react-router'
+import { useMutation } from '@tanstack/react-query'
+import { supabase } from '@/lib/supabase'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+
+export const Route = createFileRoute('/auth/signup')({
+  component: SignupPage,
+})
+
+function SignupPage() {
+  const navigate = useNavigate()
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+
+  const signup = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.auth.signUp({ email, password })
+      if (error) throw error
+    },
+    onSuccess: () => navigate({ to: '/_authenticated/dashboard' }),
+  })
+
+  return (
+    <div className="min-h-screen flex items-center justify-center p-6 bg-background text-foreground">
+      <Card className="w-full max-w-md ${cardClass(tokens)} ${motionCardClass(tokens)}">
+        <CardHeader><CardTitle>Create account</CardTitle></CardHeader>
+        <CardContent className="space-y-3">
+          <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" />
+          <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" />
+          <Button className="w-full ${motionButtonClass(tokens)}" onClick={() => signup.mutate()}>{signup.isPending ? 'Creating account…' : 'Sign up'}</Button>
+          <div className="text-center text-sm">
+            Already have an account? <Link to="/auth/login" className="underline">Sign in</Link>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+`
+}
+
 function loginRoute(tokens: ThemeTokens): string {
   return `import { useState } from 'react'
-import { createFileRoute, useNavigate } from '@tanstack/react-router'
+import { createFileRoute, useNavigate, Link } from '@tanstack/react-router'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
@@ -718,6 +763,9 @@ function LoginPage() {
           <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" />
           <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" />
           <Button className="w-full ${motionButtonClass(tokens)}" onClick={() => login.mutate()}>{login.isPending ? 'Signing in…' : 'Sign in'}</Button>
+          <div className="text-center text-sm">
+            Don't have an account? <Link to="/auth/signup" className="underline">Sign up</Link>
+          </div>
         </CardContent>
       </Card>
     </div>
@@ -839,6 +887,7 @@ export function generateThemedApp(contract: SchemaContract, tokens: ThemeTokens,
       allPublicMeta,
       siteEmail: tokens.textSlots?.about_paragraph || '',
       heroImages: tokens.heroImages,
+      hasAuth: tokens.authPosture !== 'public',
     }
 
     // Homepage
@@ -855,6 +904,7 @@ export function generateThemedApp(contract: SchemaContract, tokens: ThemeTokens,
     // Auth routes
     if (tokens.authPosture !== 'public') {
       files['src/routes/auth/login.tsx'] = loginRoute(tokens)
+      files['src/routes/auth/signup.tsx'] = signupRoute(tokens)
       files['src/routes/_authenticated/route.tsx'] = authenticatedRoute(tokens)
       files['src/routes/_authenticated/dashboard.tsx'] = dashboardRoute(metas.find((meta) => meta.isPrivate) ?? metas[0] ?? null, tokens)
 
@@ -872,12 +922,14 @@ export function generateThemedApp(contract: SchemaContract, tokens: ThemeTokens,
       allPublicMeta,
       featured: publicMeta,
       ctaPath,
+      hasAuth: tokens.authPosture !== 'public',
     })
     files['src/routes/about.tsx'] = aboutRoute(tokens, appName)
     files['src/routes/contact.tsx'] = contactRoute(tokens)
 
     if (tokens.authPosture !== 'public') {
       files['src/routes/auth/login.tsx'] = loginRoute(tokens)
+      files['src/routes/auth/signup.tsx'] = signupRoute(tokens)
       files['src/routes/_authenticated/route.tsx'] = authenticatedRoute(tokens)
       files['src/routes/_authenticated/dashboard.tsx'] = dashboardRoute(metas.find((meta) => meta.isPrivate) ?? metas[0] ?? null, tokens)
     }
@@ -894,12 +946,14 @@ export function generateThemedApp(contract: SchemaContract, tokens: ThemeTokens,
           tokens,
           appName,
           allPublicMeta,
+          hasAuth: tokens.authPosture !== 'public',
         })
         files[`${meta.folderPrefix}/$id.tsx`] = renderPublicDetail(archetype!, {
           meta,
           tokens,
           appName,
           allPublicMeta,
+          hasAuth: tokens.authPosture !== 'public',
         })
       }
     }

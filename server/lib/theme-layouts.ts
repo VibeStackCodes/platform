@@ -25,10 +25,12 @@ type CommonInput = {
 type HomepageInput = CommonInput & {
   featured: RouteMetaLite | null
   ctaPath: string
+  hasAuth: boolean
 }
 
 type PublicInput = CommonInput & {
   meta: RouteMetaLite
+  hasAuth: boolean
 }
 
 function spacingClass(spacing: ThemeTokens['style']['spacing']): string {
@@ -156,7 +158,12 @@ function HomePage() {
     <div className="min-h-screen bg-background text-foreground">
       <header className="border-b py-5 text-center">
         <h2 className="text-2xl font-semibold font-[family-name:var(--font-display)]">${appName}</h2>
-        <div className="mt-2 flex justify-center gap-6 text-sm"><Link to="/">Home</Link><Link to="/about">About</Link>${links}</div>
+        <div className="mt-2 flex justify-center gap-6 text-sm flex-wrap items-center">
+          <Link to="/">Home</Link>
+          <Link to="/about">About</Link>
+          ${links}
+          ${input.hasAuth ? '<Link to="/auth/login"><Button variant="ghost" size="sm">Sign in</Button></Link>' : ''}
+        </div>
       </header>
       <section className="relative h-[70vh] overflow-hidden">
         <img src="${hero?.url ?? 'https://picsum.photos/seed/editorial-hero/1800/1000'}" alt="${hero?.alt ?? 'Hero'}" className="h-full w-full object-cover" />
@@ -228,7 +235,11 @@ function HomePage() {
     <div className="min-h-screen bg-background text-foreground">
       <header className="border-b py-4 px-6 flex items-center justify-between">
         <h2 className="font-semibold">${appName}</h2>
-        <div className="flex gap-4 text-sm"><Link to="/">Home</Link>${links}</div>
+        <div className="flex gap-4 text-sm items-center">
+          <Link to="/">Home</Link>
+          ${links}
+          ${input.hasAuth ? '<Link to="/auth/login"><Button variant="ghost" size="sm">Sign in</Button></Link>' : ''}
+        </div>
       </header>
       <section className="relative h-screen overflow-hidden">
         <img src="${hero?.url ?? 'https://picsum.photos/seed/gallery-hero/1800/1200'}" alt="${hero?.alt ?? 'Hero'}" className="h-full w-full object-cover" />
@@ -295,7 +306,11 @@ function HomePage() {
     <div className="min-h-screen bg-background text-foreground">
       <header className="border-b py-4 px-6 flex items-center justify-between">
         <h2 className="font-semibold font-[family-name:var(--font-display)]">${appName}</h2>
-        <div className="flex gap-4 text-sm"><Link to="/about">About</Link>${links}</div>
+        <div className="flex gap-4 text-sm items-center">
+          <Link to="/about">About</Link>
+          ${links}
+          ${input.hasAuth ? '<Link to="/auth/login"><Button variant="ghost" size="sm">Sign in</Button></Link>' : ''}
+        </div>
       </header>
       <section className="mx-auto max-w-6xl ${spacingClass(tokens.style.spacing)} py-16 grid md:grid-cols-2 gap-10 items-center">
         <div>
@@ -362,7 +377,11 @@ function HomePage() {
     <div className="min-h-screen bg-background text-foreground">
       <header className="border-b py-5 text-center">
         <h2 className="text-2xl font-semibold font-[family-name:var(--font-display)]">${appName}</h2>
-        <div className="mt-2 flex justify-center gap-6 text-sm"><Link to="/about">About</Link>${links}</div>
+        <div className="mt-2 flex justify-center gap-6 text-sm flex-wrap items-center">
+          <Link to="/about">About</Link>
+          ${links}
+          ${input.hasAuth ? '<Link to="/auth/login"><Button variant="ghost" size="sm">Sign in</Button></Link>' : ''}
+        </div>
       </header>
       <section className="mx-auto max-w-5xl ${spacingClass(tokens.style.spacing)} py-24 text-center">
         <h1 className="text-5xl font-[family-name:var(--font-display)]">${tokens.textSlots.hero_headline}</h1>
@@ -430,6 +449,7 @@ function HomePage() {
         <Link to="/">Home</Link>
         <Link to="/_authenticated/dashboard">Dashboard</Link>
         ${links}
+        ${input.hasAuth ? '<Link to="/auth/login"><Button variant="ghost" size="sm" className="justify-start px-0">Sign in</Button></Link>' : ''}
       </aside>
       <main className="flex-1 ${spacingClass(tokens.style.spacing)} space-y-6">
         <div className="flex items-center justify-between">
@@ -477,6 +497,7 @@ function editorialPublicList(input: PublicInput): string {
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
@@ -493,7 +514,11 @@ function ${pascal}Page() {
     <div className="min-h-screen bg-background text-foreground">
       <header className="border-b py-5 text-center">
         <h2 className="text-2xl font-semibold font-[family-name:var(--font-display)]">${appName}</h2>
-        <div className="mt-2 flex justify-center gap-6 text-sm"><Link to="/">Home</Link>${links}</div>
+        <div className="mt-2 flex justify-center gap-6 text-sm flex-wrap items-center">
+          <Link to="/">Home</Link>
+          ${links}
+          ${input.hasAuth ? '<Link to="/auth/login"><Button variant="ghost" size="sm">Sign in</Button></Link>' : ''}
+        </div>
       </header>
       <main className="mx-auto max-w-6xl ${spacingClass(tokens.style.spacing)} py-12">
         <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -533,6 +558,7 @@ function galleryPublicList(input: PublicInput): string {
   return `import { createFileRoute, Link } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
+import { Button } from '@/components/ui/button'
 
 export const Route = createFileRoute('${routePath}')({
   component: ${pascal}Page,
@@ -545,7 +571,11 @@ function ${pascal}Page() {
     <div className="min-h-screen bg-background text-foreground">
       <header className="border-b py-4 px-6 flex items-center justify-between">
         <h2 className="font-semibold">${appName}</h2>
-        <div className="flex gap-4 text-sm"><Link to="/">Home</Link>${links}</div>
+        <div className="flex gap-4 text-sm items-center">
+          <Link to="/">Home</Link>
+          ${links}
+          ${input.hasAuth ? '<Link to="/auth/login"><Button variant="ghost" size="sm">Sign in</Button></Link>' : ''}
+        </div>
       </header>
       <main className="mx-auto max-w-7xl ${spacingClass(tokens.style.spacing)} py-10">
         <h1 className="mb-6 text-xl uppercase tracking-wide text-muted-foreground">${meta.pluralTitle}</h1>
@@ -584,6 +614,7 @@ function corporatePublicList(input: PublicInput): string {
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
@@ -600,7 +631,11 @@ function ${pascal}Page() {
     <div className="min-h-screen bg-background text-foreground">
       <header className="border-b py-4 px-6 flex items-center justify-between">
         <h2 className="font-semibold font-[family-name:var(--font-display)]">${appName}</h2>
-        <div className="flex gap-4 text-sm"><Link to="/">Home</Link>${links}</div>
+        <div className="flex gap-4 text-sm items-center">
+          <Link to="/">Home</Link>
+          ${links}
+          ${input.hasAuth ? '<Link to="/auth/login"><Button variant="ghost" size="sm">Sign in</Button></Link>' : ''}
+        </div>
       </header>
       <main className="mx-auto max-w-6xl ${spacingClass(tokens.style.spacing)} py-12">
         <div className="mb-8 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
@@ -643,6 +678,7 @@ function softPublicList(input: PublicInput): string {
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent } from '@/components/ui/card'
 
@@ -659,7 +695,11 @@ function ${pascal}Page() {
     <div className="min-h-screen bg-background text-foreground">
       <header className="border-b py-5 text-center">
         <h2 className="text-2xl font-semibold font-[family-name:var(--font-display)]">${appName}</h2>
-        <div className="mt-2 flex justify-center gap-6 text-sm"><Link to="/">Home</Link>${links}</div>
+        <div className="mt-2 flex justify-center gap-6 text-sm flex-wrap items-center">
+          <Link to="/">Home</Link>
+          ${links}
+          ${input.hasAuth ? '<Link to="/auth/login"><Button variant="ghost" size="sm">Sign in</Button></Link>' : ''}
+        </div>
       </header>
       <main className="mx-auto max-w-6xl ${spacingClass(tokens.style.spacing)} py-12">
         <div className="mb-8 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
@@ -698,6 +738,7 @@ function dashboardPublicList(input: PublicInput): string {
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent } from '@/components/ui/card'
 
@@ -716,6 +757,7 @@ function ${pascal}Page() {
         <h2 className="text-xl font-semibold">${appName}</h2>
         <Link to="/">Home</Link>
         ${links}
+        ${input.hasAuth ? '<Link to="/auth/login"><Button variant="ghost" size="sm" className="justify-start px-0">Sign in</Button></Link>' : ''}
       </aside>
       <main className="flex-1 ${spacingClass(tokens.style.spacing)} space-y-6">
         <div className="flex items-center justify-between">
@@ -778,7 +820,11 @@ function ${pascal}DetailPage() {
     <div className="min-h-screen bg-background text-foreground">
       <header className="border-b py-5 text-center">
         <h2 className="text-2xl font-semibold font-[family-name:var(--font-display)]">${appName}</h2>
-        <div className="mt-2 flex justify-center gap-6 text-sm"><Link to="/">Home</Link>${links}</div>
+        <div className="mt-2 flex justify-center gap-6 text-sm flex-wrap items-center">
+          <Link to="/">Home</Link>
+          ${links}
+          ${input.hasAuth ? '<Link to="/auth/login"><Button variant="ghost" size="sm">Sign in</Button></Link>' : ''}
+        </div>
       </header>
       <article className="mx-auto max-w-3xl ${spacingClass(tokens.style.spacing)} py-12 space-y-8">
         ${imgField ? `{Boolean(row.${imgField}) && <img src={String(row.${imgField})} alt={String(row.${meta.spec.detailPage.headerField} ?? '')} className="w-full max-h-[70vh] object-cover rounded-[var(--radius)]" />}` : ''}
@@ -803,6 +849,7 @@ function galleryPublicDetail(input: PublicInput): string {
   return `import { createFileRoute, Link } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
+import { Button } from '@/components/ui/button'
 
 export const Route = createFileRoute('${routePath}')({
   component: ${pascal}DetailPage,
@@ -868,7 +915,11 @@ function ${pascal}DetailPage() {
     <div className="min-h-screen bg-background text-foreground">
       <header className="border-b py-4 px-6 flex items-center justify-between">
         <h2 className="font-semibold font-[family-name:var(--font-display)]">${appName}</h2>
-        <div className="flex gap-4 text-sm"><Link to="/">Home</Link>${links}</div>
+        <div className="flex gap-4 text-sm items-center">
+          <Link to="/">Home</Link>
+          ${links}
+          ${input.hasAuth ? '<Link to="/auth/login"><Button variant="ghost" size="sm">Sign in</Button></Link>' : ''}
+        </div>
       </header>
       <main className="mx-auto max-w-6xl ${spacingClass(tokens.style.spacing)} py-12 space-y-6">
         ${imgField ? `{Boolean(row.${imgField}) && <img src={String(row.${imgField})} alt={String(row.${meta.spec.detailPage.headerField} ?? '')} className="w-full max-h-96 object-cover rounded-[var(--radius)]" />}` : ''}
@@ -904,6 +955,7 @@ function softPublicDetail(input: PublicInput): string {
   return `import { createFileRoute, Link } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
+import { Button } from '@/components/ui/button'
 
 export const Route = createFileRoute('${routePath}')({
   component: ${pascal}DetailPage,
@@ -921,7 +973,11 @@ function ${pascal}DetailPage() {
     <div className="min-h-screen bg-background text-foreground">
       <header className="border-b py-5 text-center">
         <h2 className="text-2xl font-semibold font-[family-name:var(--font-display)]">${appName}</h2>
-        <div className="mt-2 flex justify-center gap-6 text-sm"><Link to="/">Home</Link>${links}</div>
+        <div className="mt-2 flex justify-center gap-6 text-sm flex-wrap items-center">
+          <Link to="/">Home</Link>
+          ${links}
+          ${input.hasAuth ? '<Link to="/auth/login"><Button variant="ghost" size="sm">Sign in</Button></Link>' : ''}
+        </div>
       </header>
       <main className="mx-auto max-w-4xl ${spacingClass(tokens.style.spacing)} py-12 space-y-6">
         ${imgField ? `{Boolean(row.${imgField}) && <img src={String(row.${imgField})} alt={String(row.${meta.spec.detailPage.headerField} ?? '')} className="w-full max-h-96 object-cover rounded-2xl" />}` : ''}
@@ -954,6 +1010,7 @@ function dashboardPublicDetail(input: PublicInput): string {
   return `import { createFileRoute, Link } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
+import { Button } from '@/components/ui/button'
 
 export const Route = createFileRoute('${routePath}')({
   component: ${pascal}DetailPage,
@@ -973,6 +1030,7 @@ function ${pascal}DetailPage() {
         <h2 className="text-xl font-semibold">${appName}</h2>
         <Link to="/">Home</Link>
         ${links}
+        ${input.hasAuth ? '<Link to="/auth/login"><Button variant="ghost" size="sm" className="justify-start px-0">Sign in</Button></Link>' : ''}
       </aside>
       <main className="flex-1 ${spacingClass(tokens.style.spacing)} space-y-6">
         <div className="flex items-center justify-between">
