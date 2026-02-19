@@ -82,3 +82,59 @@ export async function renderDetailSkill(skillName: string, props: SkillProps): P
       return '' // use legacy assembleDetailPage
   }
 }
+
+// ── Theme skills registry ────────────────────────────────────────────────────
+
+/**
+ * Import theme skills
+ * Each theme skill is a complete package: schema + routes + seed data + validation
+ */
+import { canapeThemeSkill } from './canape'
+
+export { canapeThemeSkill }
+
+/**
+ * Theme skills registry
+ * Maps theme IDs to their skill definitions for discovery and dispatch
+ */
+export const THEME_SKILLS = {
+  'theme-canape': canapeThemeSkill,
+  // Future themes will be added here
+  // 'theme-quomi': quomiThemeSkill,
+  // 'theme-clune': cluneThemeSkill,
+} as const
+
+/**
+ * Get theme skill by ID
+ */
+export function getThemeSkill(themeId: string) {
+  return THEME_SKILLS[themeId as keyof typeof THEME_SKILLS]
+}
+
+/**
+ * Get all available theme skills with metadata
+ */
+export function getAllThemeSkills() {
+  return Object.entries(THEME_SKILLS).map(([id, skill]) => ({
+    id,
+    name: skill.name,
+    description: skill.description,
+    version: skill.version,
+    domain: skill.metadata?.domain,
+    tags: skill.metadata?.tags,
+  }))
+}
+
+/**
+ * Filter theme skills by domain (e.g., 'restaurant', 'ecommerce', 'blog')
+ */
+export function getThemeSkillsByDomain(domain: string) {
+  return Object.entries(THEME_SKILLS)
+    .filter(([, skill]) => skill.metadata?.domain === domain)
+    .map(([id, skill]) => ({
+      id,
+      name: skill.name,
+      description: skill.description,
+      version: skill.version,
+    }))
+}
