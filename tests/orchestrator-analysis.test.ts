@@ -23,6 +23,7 @@ describe('runAnalysis', () => {
               input: {
                 appName: 'TaskFlow',
                 appDescription: 'Task management app',
+                selectedCapabilities: ['auth'],
                 contract: {
                   tables: [{ name: 'task', columns: [{ name: 'id', type: 'uuid', primaryKey: true }] }],
                 },
@@ -42,7 +43,9 @@ describe('runAnalysis', () => {
     expect(result.type).toBe('done')
     if (result.type === 'done') {
       expect(result.appName).toBe('TaskFlow')
-      expect(result.contract.tables).toHaveLength(1)
+      expect(result.capabilityManifest).toContain('auth')
+      expect(result.contract.tables.map((t) => t.name)).toContain('task')
+      expect(result.contract.tables.map((t) => t.name)).toContain('profiles')
       expect(result.tokensUsed).toBe(500)
     }
   })

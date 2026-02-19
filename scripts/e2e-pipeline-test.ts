@@ -15,11 +15,19 @@
 
 import { writeFileSync, appendFileSync, existsSync } from 'node:fs'
 
+type E2ETestPrompt = {
+  id: number
+  name: string
+  prompt: string
+  hint: string
+  expectedCapabilities?: string[]
+}
+
 // ============================================================================
 // Config
 // ============================================================================
 
-const TEST_PROMPTS = [
+const TEST_PROMPTS: E2ETestPrompt[] = [
   {
     id: 1,
     name: 'Recipe App (ultra-vague)',
@@ -127,6 +135,13 @@ Order items: order (FK), menu_item (FK), quantity, unit_price, special_instructi
 
 Staff sign in to manage reservations and orders. The reservation list defaults to today's date.`,
     hint: 'Auth app — warm terracotta/cream Italian restaurant aesthetic',
+  },
+  {
+    id: 11,
+    name: 'Recipe Website + Blog (capability composition)',
+    prompt: 'Build a recipe website with a public blog and authoring admin.',
+    hint: 'Capability composition: auth + public-website + recipes + blog',
+    expectedCapabilities: ['auth', 'public-website', 'recipes', 'blog'],
   },
 ]
 
@@ -654,7 +669,7 @@ ${results.notes.filter((n: string) => n.startsWith('[PERF]')).map((n: string) =>
 // ============================================================================
 
 async function main() {
-  log(`=== VibeStack E2E Pipeline — App ${TEST_CONFIG.id}/10: ${TEST_CONFIG.name} ===`)
+  log(`=== VibeStack E2E Pipeline — App ${TEST_CONFIG.id}/${TEST_PROMPTS.length}: ${TEST_CONFIG.name} ===`)
   log(`Prompt: "${TEST_PROMPT.slice(0, 80)}..."`)
   log('')
 
@@ -695,8 +710,18 @@ async function main() {
       trackPhase('1. Analysis', d1, tokens1, 'FAIL', 'Analyst did not produce requirements')
       throw new Error('Analysis failed')
     }
+
+    if (TEST_CONFIG.expectedCapabilities?.length) {
+      const missing = TEST_CONFIG.expectedCapabilities.filter(
+        (name) => !analysisResult.capabilityManifest.includes(name),
+      )
+      if (missing.length > 0) {
+        throw new Error(`Capability selection mismatch. Missing: ${missing.join(', ')}. Got: ${analysisResult.capabilityManifest.join(', ')}`)
+      }
+    }
+
     trackPhase('1. Analysis', d1, tokens1, 'PASS',
-      `${analysisResult.contract.tables.length} tables`)
+      `${analysisResult.contract.tables.length} tables, capabilities: ${analysisResult.capabilityManifest.join(', ') || 'none'}`)
     results.analysis = analysisResult
 
     // --- Phase 2: Blueprint ---

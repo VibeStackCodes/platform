@@ -3,6 +3,7 @@ import type { ActorOptions } from 'xstate'
 import * as Sentry from '@sentry/node'
 import type { AppBlueprint } from '../app-blueprint'
 import type { SchemaContract } from '../schema-contract'
+import type { AssemblyResult } from '../capabilities/assembler'
 import type { ValidationGateResult } from './validation'
 import type { CodeReviewResult } from './code-review'
 import type { AnalysisResult } from './orchestrator'
@@ -21,6 +22,8 @@ export interface MachineContext {
   appName: string
   appDescription: string
   contract: SchemaContract | null
+  capabilityManifest: string[]
+  assembly: AssemblyResult | null
 
   // Clarification
   clarificationQuestions: unknown[] | null
@@ -109,7 +112,7 @@ export const appGenerationMachine = setup({
       async ({
         input,
       }: {
-        input: { userPrompt?: string; appName: string; appDescription: string; contract: SchemaContract }
+        input: { userPrompt?: string; appName: string; appDescription: string; contract: SchemaContract; assembly?: AssemblyResult | null }
       }) => {
         const { runBlueprint } = await import('./orchestrator')
         return runBlueprint(input)
@@ -212,6 +215,8 @@ export const appGenerationMachine = setup({
     appName: '',
     appDescription: '',
     contract: null,
+    capabilityManifest: [],
+    assembly: null,
     clarificationQuestions: null,
     blueprint: null,
     sandboxId: null,
@@ -281,6 +286,8 @@ export const appGenerationMachine = setup({
                       appName: ({ event }) => (event.output as Extract<AnalysisResult, { type: 'done' }>).appName,
                       appDescription: ({ event }) => (event.output as Extract<AnalysisResult, { type: 'done' }>).appDescription,
                       contract: ({ event }) => (event.output as Extract<AnalysisResult, { type: 'done' }>).contract,
+                      capabilityManifest: ({ event }) => (event.output as Extract<AnalysisResult, { type: 'done' }>).capabilityManifest,
+                      assembly: ({ event }) => (event.output as Extract<AnalysisResult, { type: 'done' }>).assembly,
                       totalTokens: ({ context, event }) => context.totalTokens + event.output.tokensUsed,
                     }),
                   },
@@ -390,6 +397,7 @@ export const appGenerationMachine = setup({
           appName: context.appName ?? '',
           appDescription: context.appDescription ?? '',
           contract: context.contract!,
+          assembly: context.assembly,
         }),
         onDone: {
           target: 'generating',

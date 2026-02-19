@@ -7,6 +7,8 @@ import type { SchemaContract } from '../schema-contract'
 import { SchemaContractSchema, validateContract } from '../schema-contract'
 import type { AppBlueprint } from '../app-blueprint'
 import { contractToBlueprintWithDesignAgent } from '../app-blueprint'
+import { assembleCapabilities, type AssemblyResult } from '../capabilities/assembler'
+import { loadCoreRegistry } from '../capabilities/catalog'
 import type { ValidationGateResult } from './validation'
 import { runValidationGate } from './validation'
 import { buildRepairPrompt } from './repair'
@@ -21,6 +23,8 @@ export type AnalysisResult =
       appName: string
       appDescription: string
       contract: SchemaContract
+      capabilityManifest: string[]
+      assembly: AssemblyResult | null
       tokensUsed: number
     }
   | {
@@ -71,6 +75,14 @@ export interface DeploymentResult {
 // Analysis handler (Task 6 + E1 jsonrepair)
 // ============================================================================
 
+function mergeExtraTables(base: SchemaContract, extraTables: SchemaContract['tables']): SchemaContract {
+  const tableMap = new Map(base.tables.map((table) => [table.name, table]))
+  for (const table of extraTables) {
+    if (!tableMap.has(table.name)) tableMap.set(table.name, table)
+  }
+  return { tables: [...tableMap.values()] }
+}
+
 export async function runAnalysis(input: {
   userMessage: string
   projectId: string
@@ -105,11 +117,30 @@ export async function runAnalysis(input: {
           throw new Error(`Analyst produced invalid contract: ${contractValidation.errors.join('; ')}`)
         }
 
+        const selectedCapabilities = Array.isArray(part.input.selectedCapabilities)
+          ? part.input.selectedCapabilities
+          : []
+
+        let assembly: AssemblyResult | null = null
+        let finalContract = contractParsed.data
+        let capabilityManifest: string[] = []
+
+        if (selectedCapabilities.length > 0) {
+          const registry = loadCoreRegistry()
+          const resolved = registry.resolve(selectedCapabilities)
+          const assembled = assembleCapabilities(resolved)
+          finalContract = mergeExtraTables(assembled.contract, contractParsed.data.tables)
+          assembly = { ...assembled, contract: finalContract }
+          capabilityManifest = assembled.capabilityManifest
+        }
+
         return {
           type: 'done',
           appName: part.input.appName,
           appDescription: part.input.appDescription,
-          contract: contractParsed.data,
+          contract: finalContract,
+          capabilityManifest,
+          assembly,
           tokensUsed,
         }
       }
@@ -136,6 +167,7 @@ export async function runBlueprint(input: {
   appName: string
   appDescription: string
   contract: SchemaContract
+  assembly?: AssemblyResult | null
 }): Promise<BlueprintResult> {
   const blueprint = await contractToBlueprintWithDesignAgent(input)
   return { blueprint, tokensUsed: 0 }

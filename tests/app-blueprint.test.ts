@@ -1,5 +1,6 @@
 import { contractToBlueprint } from '@server/lib/app-blueprint'
 import type { SchemaContract } from '@server/lib/schema-contract'
+import type { AssemblyResult } from '@server/lib/capabilities/assembler'
 import { describe, expect, it } from 'vitest'
 
 describe('contractToBlueprint', () => {
@@ -120,6 +121,29 @@ describe('contractToBlueprint', () => {
     expect(envFile?.content).toContain('VITE_SUPABASE_ANON_KEY=')
     // No DATABASE_URL in PostgREST architecture
     expect(envFile?.content).not.toContain('DATABASE_URL=')
+  })
+
+  it('uses AssemblyResult pages for routeTree when provided', () => {
+    const assembly: AssemblyResult = {
+      contract,
+      pages: [
+        { path: '/', type: 'static', template: 'landing' },
+        { path: '/about', type: 'static', template: 'about' },
+        { path: '/contact', type: 'static', template: 'contact' },
+        { path: '/blog', type: 'public-list', entity: 'tag' },
+      ],
+      components: [],
+      navEntries: [{ label: 'Blog', path: '/blog', position: 'main', order: 1 }],
+      npmDependencies: {},
+      designHints: {},
+      capabilityManifest: ['public-website', 'blog'],
+      hasAuth: false,
+    }
+
+    const bp = contractToBlueprint({ appName: 'Test', appDescription: '', contract, assembly })
+    const tree = bp.fileTree.find((f) => f.path === 'src/routeTree.gen.ts')
+    expect(tree?.content).toContain("path: '/blog'")
+    expect(tree?.content).not.toContain("path: '/tags/'")
   })
 
   it('does not emit AuthProvider import in main.tsx (C4 fix)', () => {

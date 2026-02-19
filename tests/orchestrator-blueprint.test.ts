@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { SchemaContract } from '@server/lib/schema-contract'
 import type { AppBlueprint } from '@server/lib/app-blueprint'
+import type { AssemblyResult } from '@server/lib/capabilities/assembler'
 
 vi.mock('@server/lib/app-blueprint', () => ({
   contractToBlueprintWithDesignAgent: vi.fn(async (input) => ({
@@ -15,6 +16,7 @@ vi.mock('@server/lib/app-blueprint', () => ({
 }))
 
 import { runBlueprint } from '@server/lib/agents/orchestrator'
+import { contractToBlueprintWithDesignAgent } from '@server/lib/app-blueprint'
 
 describe('runBlueprint', () => {
   it('generates AppBlueprint from contract', async () => {
@@ -47,5 +49,32 @@ describe('runBlueprint', () => {
     expect(result.blueprint.fileTree.some((f) => f.path.startsWith('server/'))).toBe(false)
     // No LLM calls — tokensUsed is 0
     expect(result.tokensUsed).toBe(0)
+  })
+
+  it('passes assembly result through to blueprint builder', async () => {
+    const contract: SchemaContract = {
+      tables: [{ name: 'task', columns: [{ name: 'id', type: 'uuid', primaryKey: true }] }],
+    }
+    const assembly: AssemblyResult = {
+      contract,
+      pages: [{ path: '/tasks', type: 'public-list', entity: 'task' }],
+      components: [],
+      navEntries: [{ label: 'Tasks', path: '/tasks', position: 'main' }],
+      npmDependencies: {},
+      designHints: {},
+      capabilityManifest: ['tasks'],
+      hasAuth: false,
+    }
+
+    await runBlueprint({
+      appName: 'TaskFlow',
+      appDescription: 'Task management',
+      contract,
+      assembly,
+    })
+
+    expect(vi.mocked(contractToBlueprintWithDesignAgent)).toHaveBeenCalledWith(
+      expect.objectContaining({ assembly }),
+    )
   })
 })

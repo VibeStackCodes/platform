@@ -20,6 +20,7 @@ import { SchemaContractSchema } from '../schema-contract'
 export const AnalystOutputSchema = z.object({
   appName: z.string().describe('Short application name (e.g., "TaskFlow")'),
   appDescription: z.string().describe('One-line app description'),
+  selectedCapabilities: z.array(z.string()).default([]).describe('Capability names selected from the core catalog'),
   contract: SchemaContractSchema.describe('Database schema contract'),
 })
 
