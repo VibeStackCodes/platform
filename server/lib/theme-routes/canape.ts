@@ -24,19 +24,6 @@ interface CanapeRouteContext {
 // SHARED UTILITIES
 // ============================================================================
 
-function escapeJsx(str: string): string {
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
-}
-
-function imageryFallback(url?: string, index: number = 0): string {
-  return url || `https://picsum.photos/1200/600?random=${index}`
-}
-
 // Sidebar components - rendered on most pages
 function renderSidebar(): string {
   return `
@@ -300,7 +287,7 @@ function TestimonialsCarousel({ items }) {
 /**
  * Menu archive - displays all menu items grouped by category
  */
-export function renderCanapeMenuArchive(context: CanapeRouteContext): string {
+export function renderCanapeMenuArchive(_context: CanapeRouteContext): string {
   return `
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
@@ -388,7 +375,7 @@ function MenuArchive() {
 /**
  * Menu category detail - filtered menu items for a specific category
  */
-export function renderCanapeMenuCategory(context: CanapeRouteContext): string {
+export function renderCanapeMenuCategory(_context: CanapeRouteContext): string {
   return `
 import { useQuery } from '@tanstack/react-query'
 import { useParams } from '@tanstack/react-router'
@@ -448,7 +435,7 @@ function MenuCategory() {
 /**
  * News/blog archive with pagination
  */
-export function renderCanapeNewsArchive(context: CanapeRouteContext): string {
+export function renderCanapeNewsArchive(_context: CanapeRouteContext): string {
   return `
 import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
@@ -537,7 +524,7 @@ function NewsArchive() {
 /**
  * Individual blog post with multi-page support
  */
-export function renderCanapePost(context: CanapeRouteContext): string {
+export function renderCanapePost(_context: CanapeRouteContext): string {
   return `
 import { useQuery } from '@tanstack/react-query'
 import { useParams } from '@tanstack/react-router'
@@ -625,7 +612,7 @@ function NewsPost() {
 /**
  * Generic page renderer for static pages (catering, private chef services, etc)
  */
-export function renderCanapePage(context: CanapeRouteContext): string {
+export function renderCanapePage(_context: CanapeRouteContext): string {
   return `
 import { useQuery } from '@tanstack/react-query'
 import { useParams } from '@tanstack/react-router'
@@ -683,7 +670,7 @@ function Page() {
 /**
  * Reservations page with contact form
  */
-export function renderCanapeReservations(context: CanapeRouteContext): string {
+export function renderCanapeReservations(_context: CanapeRouteContext): string {
   return `
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
@@ -860,7 +847,7 @@ function Reservations() {
 /**
  * Admin list page for entities with CRUD operations
  */
-export function renderCanapeAdminEntities(context: CanapeRouteContext): string {
+export function renderCanapeAdminEntities(_context: CanapeRouteContext): string {
   return `
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { useState } from 'react'
@@ -993,7 +980,7 @@ function AdminEntities() {
 /**
  * Admin list page for menu items
  */
-export function renderCanapeAdminMenuItems(context: CanapeRouteContext): string {
+export function renderCanapeAdminMenuItems(_context: CanapeRouteContext): string {
   return `
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { useState } from 'react'

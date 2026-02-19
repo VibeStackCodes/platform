@@ -121,13 +121,29 @@ export async function runAnalysis(input: {
           ? part.input.selectedCapabilities
           : []
 
+        // Filter to only valid registered capability names
+        const registry = loadCoreRegistry()
+        const validNames = new Set(registry.list().map((c) => c.name))
+        const validatedCapabilities = selectedCapabilities.filter((name: string) => validNames.has(name))
+
+        if (validatedCapabilities.length !== selectedCapabilities.length) {
+          console.warn(
+            '[analysis] Analyst selected unknown capabilities:',
+            selectedCapabilities.filter((name: string) => !validNames.has(name)),
+          )
+        }
+
+        // Ensure 'public-website' is always included if any capabilities selected
+        if (validatedCapabilities.length > 0 && !validatedCapabilities.includes('public-website')) {
+          validatedCapabilities.unshift('public-website')
+        }
+
         let assembly: AssemblyResult | null = null
         let finalContract = contractParsed.data
         let capabilityManifest: string[] = []
 
-        if (selectedCapabilities.length > 0) {
-          const registry = loadCoreRegistry()
-          const resolved = registry.resolve(selectedCapabilities)
+        if (validatedCapabilities.length > 0) {
+          const resolved = registry.resolve(validatedCapabilities)
           const assembled = assembleCapabilities(resolved)
           finalContract = mergeExtraTables(assembled.contract, contractParsed.data.tables)
           assembly = { ...assembled, contract: finalContract }

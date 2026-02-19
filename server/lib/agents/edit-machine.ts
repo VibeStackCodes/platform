@@ -1,6 +1,7 @@
 import { assign, fromPromise, setup } from 'xstate'
 import type { SchemaContract } from '../schema-contract'
-import type { AppBlueprint } from '../app-blueprint'
+import type { AppBlueprint, BlueprintFile } from '../app-blueprint'
+import { loadCoreRegistry } from '../capabilities/catalog'
 import type { InjectAnalysis } from '../capabilities/inject'
 import type { AdditiveResult } from '../capabilities/additive'
 
@@ -125,9 +126,33 @@ export const editMachine = setup({
   },
   actors: {
     runAnalystActor: fromPromise(
-      async ({ input }: { input: { userMessage: string; projectId: string } }) => {
+      async ({
+        input,
+      }: {
+        input: { userMessage: string; projectId: string; existingManifest: string[] }
+      }) => {
         const { runAnalysis } = await import('./orchestrator')
-        return runAnalysis(input)
+
+        // Prepend classification instructions to the user message
+        const classificationPrompt = `
+You are classifying a user's edit request for their existing app.
+
+The app currently has these capabilities installed: ${input.existingManifest.join(', ') || 'none'}
+
+Classify the request:
+1. VISUAL EDIT — changes to styling, text, layout of existing pages (e.g., "make the header blue", "change the font")
+2. STRUCTURAL EDIT — changes to existing component structure (e.g., "add a search bar to the recipes page")
+3. CAPABILITY INJECTION — adding entirely new features/sections (e.g., "add a blog", "I want to sell products")
+
+For CAPABILITY INJECTION, return the full capability list (existing + new) in selectedCapabilities.
+For VISUAL/STRUCTURAL edits, return the existing capability list unchanged in selectedCapabilities.
+
+User request: ${input.userMessage}
+`
+        return runAnalysis({
+          userMessage: classificationPrompt,
+          projectId: input.projectId,
+        })
       },
     ),
     loadProjectActor: fromPromise(
@@ -612,6 +637,7 @@ export const editMachine = setup({
         input: ({ context }) => ({
           userMessage: context.userMessage,
           projectId: context.projectId,
+          existingManifest: context.capabilityManifest,
         }),
         onDone: [
           {
@@ -619,13 +645,30 @@ export const editMachine = setup({
             guard: ({ context, event }) => {
               if (event.output.type !== 'done') return false
               const requested = event.output.capabilityManifest ?? []
+
+              // Filter to valid names
+              const registry = loadCoreRegistry()
+              const validNames = new Set(registry.list().map((c) => c.name))
+              const validated = requested.filter((name: string) => validNames.has(name))
+
               const existing = new Set(context.capabilityManifest)
-              return requested.some((cap: string) => !existing.has(cap))
+              return validated.some((cap: string) => !existing.has(cap))
             },
             target: 'injecting',
             actions: assign({
               editTier: () => 3 as any, // Tier 3 = Injection
-              requestedCapabilities: ({ event }) => event.output.capabilityManifest ?? [],
+              requestedCapabilities: ({ event }) => {
+                const requested = event.output.capabilityManifest ?? []
+                const registry = loadCoreRegistry()
+                const validNames = new Set(registry.list().map((c) => c.name))
+                const validated = requested.filter((name: string) => validNames.has(name))
+
+                // Ensure 'public-website' if any selected
+                if (validated.length > 0 && !validated.includes('public-website')) {
+                  validated.unshift('public-website')
+                }
+                return validated
+              },
               totalTokens: ({ context, event }) => context.totalTokens + event.output.tokensUsed,
             }),
           },
@@ -633,7 +676,13 @@ export const editMachine = setup({
             // No new capabilities -> visual edit flow
             target: 'editing',
             actions: assign({
-              requestedCapabilities: ({ event }) => event.output.capabilityManifest ?? [],
+              requestedCapabilities: ({ event }) => {
+                const requested = event.output.capabilityManifest ?? []
+                const registry = loadCoreRegistry()
+                const validNames = new Set(registry.list().map((c) => c.name))
+                const validated = requested.filter((name: string) => validNames.has(name))
+                return validated
+              },
               totalTokens: ({ context, event }) => context.totalTokens + event.output.tokensUsed,
             }),
           },

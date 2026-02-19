@@ -1,5 +1,6 @@
 import { Agent } from '@mastra/core/agent'
 import { RequestContext } from '@mastra/core/di'
+import { loadCoreRegistry } from '../capabilities/catalog'
 import { createAgentModelResolver } from './provider'
 import {
   askClarifyingQuestionsTool,
@@ -33,6 +34,23 @@ const editModel = createAgentModelResolver('edit')                 // gpt-5.2-co
 // 5. repairAgent: Fixes validation errors (TypeScript, lint, build)
 // 6. Deployment: Push to GitHub + Vercel
 
+function capabilityCatalogPrompt(): string {
+  const registry = loadCoreRegistry()
+  const caps = registry.list()
+  const lines = caps.map((cap) => {
+    return `- **${cap.name}**: ${cap.description}`
+  })
+  return `## Available Capabilities
+
+Select capabilities that match the user's request. Each capability provides pre-built schema tables, pages, and navigation.
+
+Always select 'public-website'. Select 'auth' when the app has user accounts or per-user data. Select additional capabilities that match the app's domain.
+
+${lines.join('\n')}
+
+Pass selected names in the \`selectedCapabilities\` array of your submitRequirements tool call.`
+}
+
 export const analystAgent = new Agent({
   id: 'analyst',
   name: 'Analyst',
@@ -54,6 +72,8 @@ Smart defaults when unspecified:
 - Auth: Supabase Auth with email/password. Include user_id FK on tables that should be user-owned, with RLS policy using auth.uid()
 - Database: PostgreSQL via Supabase, RLS enabled on all user-owned tables
 - Every table gets id (uuid, default gen_random_uuid()), created_at, updated_at columns
+
+${capabilityCatalogPrompt()}
 
 When using askClarifyingQuestions:
 - 1-4 questions, 2-4 options each

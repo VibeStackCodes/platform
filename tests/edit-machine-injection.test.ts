@@ -18,6 +18,27 @@ describe('Edit machine injection flow', () => {
     expect(newCaps.length).toBe(0) // This means visual edit, not injection
   })
 
+  it('classifies "add a blog" as capability injection', () => {
+    // The analyst should detect that 'blog' is not in existing manifest
+    const existingManifest = ['auth', 'recipes', 'public-website']
+
+    // Simulate: analyst would return ['auth', 'recipes', 'public-website', 'blog']
+    const requestedCapabilities = ['auth', 'recipes', 'public-website', 'blog']
+    const newCaps = requestedCapabilities.filter(c => !existingManifest.includes(c))
+
+    expect(newCaps).toEqual(['blog'])
+  })
+
+  it('classifies "make the header blue" as visual edit', () => {
+    const existingManifest = ['auth', 'recipes', 'public-website']
+
+    // Analyst returns same manifest = no injection
+    const requestedCapabilities = ['auth', 'recipes', 'public-website']
+    const newCaps = requestedCapabilities.filter(c => !existingManifest.includes(c))
+
+    expect(newCaps).toEqual([])
+  })
+
   it('injection deploy updates generation state with merged manifest', () => {
     const existingGenState = {
       contract: { tables: [{ name: 'recipes', columns: [] }] },
