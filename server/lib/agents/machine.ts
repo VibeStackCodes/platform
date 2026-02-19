@@ -395,6 +395,7 @@ export const appGenerationMachine = setup({
           target: 'generating',
           actions: assign({
             blueprint: ({ event }) => event.output.blueprint,
+            contract: ({ event }) => event.output.blueprint.contract,
             totalTokens: ({ context, event }) => context.totalTokens + event.output.tokensUsed,
           }),
         },

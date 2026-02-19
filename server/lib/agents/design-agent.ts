@@ -6,6 +6,7 @@ import { type ThemeTokens, DEFAULT_TEXT_SLOTS } from '../themed-code-engine'
 import { buildSkillCatalogPrompt, resolveThemeSkillPath } from '../skills/catalog-loader'
 import { fetchHeroImages } from '../unsplash'
 import { createAgentModelResolver } from './provider'
+import { getThemeBaseSchema, isThemeSpecificSchema } from '../theme-schemas'
 
 const textSlotsSchema = z.object({
   hero_headline: z.string().min(5).describe('One bold sentence that captures the app\'s purpose'),
@@ -126,7 +127,7 @@ export async function runDesignAgent(
   contract: SchemaContract,
   appName?: string,
   appDescription?: string,
-): Promise<ThemeTokens> {
+): Promise<{ tokens: ThemeTokens; contract: SchemaContract }> {
   const catalogPrompt = await buildSkillCatalogPrompt()
   const entityNames = contract.tables.map((table) => table.name).join(', ')
 
@@ -168,5 +169,20 @@ ${catalogPrompt}`
   tokens.heroImages = await fetchHeroImages(selection.heroImageQuery, 3)
   tokens.textSlots = selection.textSlots
 
-  return tokens
+  // If theme has a base schema (theme-specific like Canape), merge it with user contract
+  let finalContract = contract
+  if (isThemeSpecificSchema(themeName)) {
+    const baseSchema = getThemeBaseSchema(themeName)
+    if (baseSchema) {
+      // Merge: keep base schema tables, add any extra user-requested tables
+      const baseTableNames = new Set(baseSchema.tables.map((t) => t.name))
+      const extraUserTables = contract.tables.filter((t) => !baseTableNames.has(t.name))
+      finalContract = {
+        ...baseSchema,
+        tables: [...baseSchema.tables, ...extraUserTables],
+      }
+    }
+  }
+
+  return { tokens, contract: finalContract }
 }

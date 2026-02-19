@@ -3,6 +3,7 @@ import type { SchemaContract, TableDef } from './schema-contract'
 import { inferPageConfig, derivePageFeatureSpec, type PageFeatureSpec } from './agents/feature-schema'
 import { pluralize, singularize, snakeToKebab, snakeToPascal, snakeToTitle } from './naming-utils'
 import { deriveArchetype, renderHomepage, renderPublicDetail, renderPublicList } from './theme-layouts'
+import { getThemeRoutes, type ThemeName } from './theme-routes'
 
 export interface TextSlots {
   hero_headline: string
@@ -793,9 +794,18 @@ function DashboardPage() {
 `
 }
 
+/**
+ * Check if theme should use theme-specific (1:1 clone) routes vs. archetype-based layouts
+ */
+function isThemeSpecific(themeName: string): themeName is ThemeName {
+  return themeName === 'canape' || themeName === 'quomi' || themeName === 'clune'
+}
+
 export function generateThemedApp(contract: SchemaContract, tokens: ThemeTokens, appName: string): Record<string, string> {
   const files: Record<string, string> = {}
-  const archetype = deriveArchetype(tokens)
+  const useThemeSpecific = isThemeSpecific(tokens.name)
+  const archetype = !useThemeSpecific ? deriveArchetype(tokens) : null
+  const themeRoutes = useThemeSpecific ? getThemeRoutes(tokens.name as ThemeName) : null
 
   const metas: RouteMeta[] = contract.tables.map((table) => {
     const spec = derivePageFeatureSpec(inferPageConfig(table, contract), contract)
@@ -819,41 +829,79 @@ export function generateThemedApp(contract: SchemaContract, tokens: ThemeTokens,
   const ctaPath = publicMeta ? `/${publicMeta.pluralKebab}/` : (tokens.authPosture === 'public' ? '/' : '/auth/login')
 
   files['src/index.css'] = themeCss(tokens)
-  files['src/routes/index.tsx'] = renderHomepage(archetype, {
-    tokens,
-    appName,
-    allPublicMeta,
-    featured: publicMeta,
-    ctaPath,
-  })
-  files['src/routes/about.tsx'] = aboutRoute(tokens, appName)
-  files['src/routes/contact.tsx'] = contactRoute(tokens)
 
-  if (tokens.authPosture !== 'public') {
-    files['src/routes/auth/login.tsx'] = loginRoute(tokens)
-    files['src/routes/_authenticated/route.tsx'] = authenticatedRoute(tokens)
-    files['src/routes/_authenticated/dashboard.tsx'] = dashboardRoute(metas.find((meta) => meta.isPrivate) ?? metas[0] ?? null, tokens)
-  }
+  // For theme-specific themes like Canape, generate specialized routes
+  // Otherwise, generate archetype-based generic routes
+  if (useThemeSpecific && themeRoutes) {
+    // Theme-specific route generation (Canape has menu, news, reservations, etc.)
+    const themeContext = {
+      appName,
+      allPublicMeta,
+      siteEmail: tokens.textSlots?.about_paragraph || '',
+      heroImages: tokens.heroImages,
+    }
 
-  for (const meta of metas) {
-    if (meta.isPrivate) {
-      // Private pages: CRUD admin table with create/edit/delete
-      files[`${meta.folderPrefix}/index.tsx`] = buildEntityListRoute(meta, tokens)
-      files[`${meta.folderPrefix}/$id.tsx`] = buildEntityDetailRoute(meta, tokens)
-    } else {
-      // Public pages: archetype-specific visual clone layouts
-      files[`${meta.folderPrefix}/index.tsx`] = renderPublicList(archetype, {
-        meta,
-        tokens,
-        appName,
-        allPublicMeta,
-      })
-      files[`${meta.folderPrefix}/$id.tsx`] = renderPublicDetail(archetype, {
-        meta,
-        tokens,
-        appName,
-        allPublicMeta,
-      })
+    // Homepage
+    files['src/routes/index.tsx'] = themeRoutes.homepage(publicMeta ?? null, themeContext)
+
+    // Canape-specific public routes
+    files['src/routes/menu/index.tsx'] = themeRoutes.menuArchive(themeContext)
+    files['src/routes/menu/$category/index.tsx'] = themeRoutes.menuCategory(themeContext)
+    files['src/routes/news/index.tsx'] = themeRoutes.newsArchive(themeContext)
+    files['src/routes/news/$slug/index.tsx'] = themeRoutes.post(themeContext)
+    files['src/routes/$slug/index.tsx'] = themeRoutes.page(themeContext)
+    files['src/routes/reservations/index.tsx'] = themeRoutes.reservations(themeContext)
+
+    // Auth routes
+    if (tokens.authPosture !== 'public') {
+      files['src/routes/auth/login.tsx'] = loginRoute(tokens)
+      files['src/routes/_authenticated/route.tsx'] = authenticatedRoute(tokens)
+      files['src/routes/_authenticated/dashboard.tsx'] = dashboardRoute(metas.find((meta) => meta.isPrivate) ?? metas[0] ?? null, tokens)
+
+      // Canape-specific admin routes
+      files['src/routes/_authenticated/admin/entities/index.tsx'] = themeRoutes.adminEntities(themeContext)
+      files['src/routes/_authenticated/admin/entities/$id.tsx'] = themeRoutes.adminEntities(themeContext)
+      files['src/routes/_authenticated/admin/menu-items/index.tsx'] = themeRoutes.adminMenuItems(themeContext)
+      files['src/routes/_authenticated/admin/menu-items/$id.tsx'] = themeRoutes.adminMenuItems(themeContext)
+    }
+  } else {
+    // Archetype-based generic route generation
+    files['src/routes/index.tsx'] = renderHomepage(archetype!, {
+      tokens,
+      appName,
+      allPublicMeta,
+      featured: publicMeta,
+      ctaPath,
+    })
+    files['src/routes/about.tsx'] = aboutRoute(tokens, appName)
+    files['src/routes/contact.tsx'] = contactRoute(tokens)
+
+    if (tokens.authPosture !== 'public') {
+      files['src/routes/auth/login.tsx'] = loginRoute(tokens)
+      files['src/routes/_authenticated/route.tsx'] = authenticatedRoute(tokens)
+      files['src/routes/_authenticated/dashboard.tsx'] = dashboardRoute(metas.find((meta) => meta.isPrivate) ?? metas[0] ?? null, tokens)
+    }
+
+    for (const meta of metas) {
+      if (meta.isPrivate) {
+        // Private pages: CRUD admin table with create/edit/delete
+        files[`${meta.folderPrefix}/index.tsx`] = buildEntityListRoute(meta, tokens)
+        files[`${meta.folderPrefix}/$id.tsx`] = buildEntityDetailRoute(meta, tokens)
+      } else {
+        // Public pages: archetype-specific visual clone layouts
+        files[`${meta.folderPrefix}/index.tsx`] = renderPublicList(archetype!, {
+          meta,
+          tokens,
+          appName,
+          allPublicMeta,
+        })
+        files[`${meta.folderPrefix}/$id.tsx`] = renderPublicDetail(archetype!, {
+          meta,
+          tokens,
+          appName,
+          allPublicMeta,
+        })
+      }
     }
   }
 
