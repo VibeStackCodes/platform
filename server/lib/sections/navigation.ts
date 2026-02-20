@@ -6,13 +6,26 @@
  * complete route files.
  *
  * Visual taxonomy:
- *   navTopbar    — sticky horizontal top bar, hamburger on mobile
- *   navSidebar   — fixed left sidebar, collapsible on mobile
- *   navEditorial — minimal transparent editorial bar, magazine-style
- *   navMega      — top bar with full-width mega-menu dropdown on hover
+ *   navTopbar    — sticky horizontal top bar, hamburger on mobile (shadcn Sheet)
+ *   navSidebar   — fixed left sidebar, collapsible on mobile (overlay pattern)
+ *   navEditorial — minimal transparent editorial bar, magazine-style (shadcn Sheet)
+ *   navMega      — top bar with full-width mega-menu dropdown on hover (shadcn Sheet mobile)
+ *
+ * Upgrade summary (v2):
+ *   - shadcn <Button> for all nav links and CTAs
+ *   - shadcn <Sheet> for mobile drawers (navTopbar, navEditorial, navMega)
+ *   - shadcn <Separator> between nav sections
+ *   - Lucide icons: Menu, X, ChevronDown
+ *   - Scroll-aware sticky background via scrollAwareHook() (navTopbar, navMega)
+ *   - h-16 md:h-[72px] height per design spec
+ *   - backdrop-blur-md on sticky/scrolled state
+ *   - Touch targets min-h-[44px] min-w-[44px] on all interactive elements
+ *   - Skip-to-content link on ALL navs
+ *   - aria-label on all <nav> elements
  */
 
 import type { SectionRenderer, SectionOutput, SectionContext } from './types'
+import { scrollAwareHook } from './primitives'
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -25,76 +38,84 @@ function publicNavLinks(ctx: SectionContext): Array<{ label: string; path: strin
     .map((e) => ({ label: e.pluralTitle, path: e.pluralKebab }))
 }
 
-/** Entrance animation class when motion is enabled */
-function entranceClass(ctx: SectionContext): string {
-  return ctx.tokens.style.motion !== 'none' ? 'transition-all duration-300 ease-out' : ''
+/** Transition class when motion is enabled — used for smooth hover/focus states */
+function transitionClass(ctx: SectionContext): string {
+  return ctx.tokens.style.motion !== 'none' ? 'transition-colors duration-200' : ''
 }
 
 // ---------------------------------------------------------------------------
 // 1. navTopbar — sticky horizontal top bar, logo left, links center, auth right
+//    Mobile: shadcn Sheet from the right
+//    Scroll-aware: transparent → bg-background/95 + backdrop-blur-md + shadow-sm
 // ---------------------------------------------------------------------------
 
 export const navTopbar: SectionRenderer = (ctx: SectionContext): SectionOutput => {
   const links = publicNavLinks(ctx)
   const radius = ctx.tokens.style.borderRadius
-  const motion = entranceClass(ctx)
+  const transition = transitionClass(ctx)
+  const scroll = scrollAwareHook()
 
-  const linkItems = links
+  // Desktop nav link items using shadcn Button ghost
+  const desktopLinkItems = links
     .map(
       (l) =>
         `              <li>
-                <Link
-                  to="/${l.path}"
-                  className="text-sm font-medium text-muted-foreground hover:text-foreground ${motion} focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none rounded-sm px-1"
-                >
-                  ${l.label}
-                </Link>
+                <Button variant="ghost" asChild className="text-sm font-medium text-muted-foreground hover:text-foreground min-h-[44px] ${transition} focus-visible:ring-2 focus-visible:ring-ring">
+                  <Link to="/${l.path}">${l.label}</Link>
+                </Button>
               </li>`,
     )
     .join('\n')
 
-  const mobileLinks = links
+  // Sheet (mobile drawer) nav links
+  const sheetLinkItems = links
     .map(
       (l) =>
         `              <li>
-                <Link
-                  to="/${l.path}"
-                  onClick={() => setMobileOpen(false)}
-                  className="block w-full py-2 px-4 text-sm font-medium text-foreground hover:bg-muted rounded-[${radius}] ${motion} focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                >
-                  ${l.label}
-                </Link>
+                <Button variant="ghost" asChild className="w-full justify-start text-sm font-medium text-foreground hover:bg-muted rounded-[${radius}] min-h-[44px] ${transition} focus-visible:ring-2 focus-visible:ring-ring">
+                  <Link to="/${l.path}">${l.label}</Link>
+                </Button>
               </li>`,
     )
     .join('\n')
 
-  const authButton = ctx.hasAuth
+  const sheetAuthSection = ctx.hasAuth
     ? `
-              <Link
-                to="/auth/login"
-                className="inline-flex items-center px-4 py-1.5 text-sm font-medium bg-primary text-primary-foreground rounded-[${radius}] hover:opacity-90 ${motion} focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-              >
-                Sign In
-              </Link>`
+              <li className="pt-2">
+                <Separator className="mb-3" />
+                <Button asChild className="w-full min-h-[44px] focus-visible:ring-2 focus-visible:ring-ring">
+                  <Link to="/auth/login">Sign In</Link>
+                </Button>
+              </li>`
+    : ''
+
+  const desktopAuthButton = ctx.hasAuth
+    ? `
+              <Button asChild className="min-h-[44px] focus-visible:ring-2 focus-visible:ring-ring">
+                <Link to="/auth/login">Sign In</Link>
+              </Button>`
     : ''
 
   return {
     jsx: `
-      <header className="sticky top-0 z-50 bg-background/95 backdrop-blur-sm border-b border-border" role="banner">
+      <header
+        className={\`sticky top-0 z-50 border-b border-border h-16 md:h-[72px] \${isScrolled ? 'bg-background/95 backdrop-blur-md shadow-sm' : 'bg-transparent'} transition-all duration-300\`}
+        role="banner"
+      >
         {/* Skip to main content for keyboard users */}
         <a
           href="#main-content"
-          className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-[100] focus:px-4 focus:py-2 focus:bg-primary focus:text-primary-foreground focus:rounded-[${radius}] focus:text-sm focus:font-medium"
+          className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-[100] focus:px-4 focus:py-2 focus:bg-primary focus:text-primary-foreground focus:rounded-[${radius}] focus:text-sm focus:font-medium focus:outline-none"
         >
           Skip to content
         </a>
 
-        <div className="container mx-auto px-4 h-16 flex items-center justify-between gap-6">
+        <div className="container mx-auto px-4 h-full flex items-center justify-between gap-6">
 
           {/* Logo / App name */}
           <Link
             to="/"
-            className="flex-shrink-0 text-lg font-bold text-foreground font-[family-name:var(--font-display)] hover:opacity-80 ${motion} focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none rounded-sm"
+            className="flex-shrink-0 text-lg font-bold text-foreground font-[family-name:var(--font-display)] hover:opacity-80 ${transition} focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none rounded-sm min-h-[44px] flex items-center"
             aria-label="${ctx.appName} — home"
           >
             ${ctx.appName}
@@ -102,92 +123,84 @@ export const navTopbar: SectionRenderer = (ctx: SectionContext): SectionOutput =
 
           {/* Center nav links — hidden on mobile */}
           <nav className="hidden md:flex flex-1 justify-center" aria-label="Main navigation">
-            <ul className="flex items-center gap-6 list-none m-0 p-0">
-${linkItems}
+            <ul className="flex items-center gap-1 list-none m-0 p-0">
+${desktopLinkItems}
             </ul>
           </nav>
 
-          {/* Right side — auth + mobile toggle */}
-          <div className="flex items-center gap-3">
-            <div className="hidden md:flex items-center">
-${authButton}
+          {/* Right side — auth (desktop) + Sheet trigger (mobile) */}
+          <div className="flex items-center gap-2">
+            <div className="hidden md:flex items-center gap-2">
+${desktopAuthButton}
             </div>
 
-            {/* Mobile hamburger */}
-            <button
-              type="button"
-              onClick={() => setMobileOpen((o) => !o)}
-              className="md:hidden inline-flex items-center justify-center w-9 h-9 rounded-[${radius}] text-muted-foreground hover:bg-muted hover:text-foreground ${motion} focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-              aria-expanded={mobileOpen}
-              aria-controls="mobile-menu"
-              aria-label={mobileOpen ? 'Close menu' : 'Open menu'}
-            >
-              {mobileOpen ? (
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              ) : (
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-                </svg>
-              )}
-            </button>
+            {/* Mobile Sheet drawer */}
+            <Sheet>
+              <SheetTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="md:hidden min-h-[44px] min-w-[44px] focus-visible:ring-2 focus-visible:ring-ring"
+                  aria-label="Open navigation menu"
+                >
+                  <Menu className="size-5" />
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="right" className="w-[280px] sm:w-[320px]">
+                <SheetHeader>
+                  <SheetTitle className="text-left font-[family-name:var(--font-display)]">
+                    ${ctx.appName}
+                  </SheetTitle>
+                </SheetHeader>
+                <nav className="mt-6" aria-label="Mobile navigation">
+                  <ul className="flex flex-col gap-1 list-none m-0 p-0">
+${sheetLinkItems}
+${sheetAuthSection}
+                  </ul>
+                </nav>
+              </SheetContent>
+            </Sheet>
           </div>
         </div>
-
-        {/* Mobile drawer */}
-        {mobileOpen && (
-          <nav
-            id="mobile-menu"
-            className="md:hidden border-t border-border bg-background"
-            aria-label="Mobile navigation"
-          >
-            <ul className="flex flex-col list-none m-0 p-0 py-2">
-${mobileLinks}
-              {${ctx.hasAuth} && (
-                <li className="px-3 pt-2 pb-1 border-t border-border mt-2">
-                  <Link
-                    to="/auth/login"
-                    onClick={() => setMobileOpen(false)}
-                    className="block w-full py-2 px-4 text-sm font-medium bg-primary text-primary-foreground rounded-[${radius}] text-center ${motion} focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                  >
-                    Sign In
-                  </Link>
-                </li>
-              )}
-            </ul>
-          </nav>
-        )}
       </header>`,
     imports: [
-      "import { useState } from 'react'",
+      scroll.import,
       "import { Link } from '@tanstack/react-router'",
+      "import { Button } from '@/components/ui/button'",
+      "import { Separator } from '@/components/ui/separator'",
+      "import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'",
+      "import { Menu } from 'lucide-react'",
     ],
-    hooks: ['const [mobileOpen, setMobileOpen] = useState(false)'],
+    hooks: [scroll.hook],
   }
 }
 
 // ---------------------------------------------------------------------------
 // 2. navSidebar — fixed left sidebar w-64, collapsible on mobile
+//    Uses aside + overlay pattern (Sheet doesn't apply for persistent sidebar nav)
+//    Lucide Menu/X icons for toggle, shadcn Button for links
 // ---------------------------------------------------------------------------
 
 export const navSidebar: SectionRenderer = (ctx: SectionContext): SectionOutput => {
   const links = publicNavLinks(ctx)
   const radius = ctx.tokens.style.borderRadius
-  const motion = entranceClass(ctx)
+  const transition = transitionClass(ctx)
 
   const linkItems = links
     .map(
       (l) =>
         `              <li>
-                <Link
-                  to="/${l.path}"
+                <Button
+                  variant="ghost"
+                  asChild
+                  className="w-full justify-start gap-3 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted rounded-[${radius}] min-h-[44px] ${transition} focus-visible:ring-2 focus-visible:ring-ring"
                   onClick={() => setSidebarOpen(false)}
-                  className="flex items-center gap-3 px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted rounded-[${radius}] ${motion} focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                 >
-                  <span className="w-1.5 h-1.5 rounded-full bg-current opacity-40" aria-hidden="true" />
-                  ${l.label}
-                </Link>
+                  <Link to="/${l.path}">
+                    <span className="w-1.5 h-1.5 rounded-full bg-current opacity-40 flex-shrink-0" aria-hidden="true" />
+                    ${l.label}
+                  </Link>
+                </Button>
               </li>`,
     )
     .join('\n')
@@ -195,13 +208,11 @@ export const navSidebar: SectionRenderer = (ctx: SectionContext): SectionOutput 
   const authSection = ctx.hasAuth
     ? `
             {/* Auth */}
-            <div className="border-t border-border pt-4 mt-4">
-              <Link
-                to="/auth/login"
-                className="flex items-center justify-center gap-2 w-full px-3 py-2 text-sm font-medium bg-primary text-primary-foreground rounded-[${radius}] hover:opacity-90 ${motion} focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-              >
-                Sign In
-              </Link>
+            <div className="pt-4">
+              <Separator className="mb-4" />
+              <Button asChild className="w-full min-h-[44px] focus-visible:ring-2 focus-visible:ring-ring">
+                <Link to="/auth/login">Sign In</Link>
+              </Button>
             </div>`
     : ''
 
@@ -211,7 +222,7 @@ export const navSidebar: SectionRenderer = (ctx: SectionContext): SectionOutput 
         {/* Skip to main content for keyboard users */}
         <a
           href="#main-content"
-          className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[200] focus:px-4 focus:py-2 focus:bg-primary focus:text-primary-foreground focus:rounded-[${radius}] focus:text-sm focus:font-medium"
+          className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[200] focus:px-4 focus:py-2 focus:bg-primary focus:text-primary-foreground focus:rounded-[${radius}] focus:text-sm focus:font-medium focus:outline-none"
         >
           Skip to content
         </a>
@@ -219,46 +230,40 @@ export const navSidebar: SectionRenderer = (ctx: SectionContext): SectionOutput 
         {/* Mobile overlay backdrop */}
         {sidebarOpen && (
           <div
-            className="fixed inset-0 z-30 bg-black/40 md:hidden"
+            className="fixed inset-0 z-30 bg-black/50 backdrop-blur-sm md:hidden"
             onClick={() => setSidebarOpen(false)}
             aria-hidden="true"
           />
         )}
 
         {/* Mobile toggle button */}
-        <button
-          type="button"
+        <Button
+          variant="ghost"
+          size="icon"
           onClick={() => setSidebarOpen((o) => !o)}
-          className="fixed top-4 left-4 z-50 md:hidden inline-flex items-center justify-center w-9 h-9 bg-card border border-border rounded-[${radius}] text-foreground shadow-sm ${motion} focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+          className="fixed top-4 left-4 z-50 md:hidden min-h-[44px] min-w-[44px] bg-card border border-border shadow-sm rounded-[${radius}] focus-visible:ring-2 focus-visible:ring-ring"
           aria-expanded={sidebarOpen}
           aria-controls="sidebar-nav"
           aria-label={sidebarOpen ? 'Close sidebar' : 'Open sidebar'}
         >
           {sidebarOpen ? (
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
+            <X className="size-5" aria-hidden="true" />
           ) : (
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-            </svg>
+            <Menu className="size-5" aria-hidden="true" />
           )}
-        </button>
+        </Button>
 
         {/* Sidebar */}
         <aside
           id="sidebar-nav"
-          className={\`fixed top-0 left-0 z-40 h-screen w-64 bg-card border-r border-border flex flex-col
-            ${motion} transform
-            md:translate-x-0
-            \${sidebarOpen ? 'translate-x-0 shadow-xl' : '-translate-x-full md:translate-x-0'}\`}
+          className={\`fixed top-0 left-0 z-40 h-screen w-64 bg-card border-r border-border flex flex-col transition-transform duration-300 ease-out md:translate-x-0 \${sidebarOpen ? 'translate-x-0 shadow-xl' : '-translate-x-full'}\`}
           aria-label="Sidebar navigation"
         >
           {/* App name / logo */}
-          <div className="flex items-center h-16 px-4 border-b border-border flex-shrink-0">
+          <div className="flex items-center h-16 md:h-[72px] px-4 border-b border-border flex-shrink-0">
             <Link
               to="/"
-              className="text-lg font-bold text-foreground font-[family-name:var(--font-display)] hover:opacity-80 ${motion} focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none rounded-sm"
+              className="text-lg font-bold text-foreground font-[family-name:var(--font-display)] hover:opacity-80 ${transition} focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none rounded-sm min-h-[44px] flex items-center"
               aria-label="${ctx.appName} — home"
             >
               ${ctx.appName}
@@ -281,6 +286,9 @@ ${authSection}
     imports: [
       "import { useState } from 'react'",
       "import { Link } from '@tanstack/react-router'",
+      "import { Button } from '@/components/ui/button'",
+      "import { Separator } from '@/components/ui/separator'",
+      "import { Menu, X } from 'lucide-react'",
     ],
     hooks: ['const [sidebarOpen, setSidebarOpen] = useState(false)'],
   }
@@ -288,316 +296,324 @@ ${authSection}
 
 // ---------------------------------------------------------------------------
 // 3. navEditorial — minimal transparent editorial bar, magazine serif logo
+//    Desktop: uppercase tracking-wider links as ghost Buttons + outline Sign In
+//    Mobile: shadcn Sheet from the right (no manual state needed)
+//    No scroll-aware hook — editorial bars stay transparent by design
 // ---------------------------------------------------------------------------
 
 export const navEditorial: SectionRenderer = (ctx: SectionContext): SectionOutput => {
   const links = publicNavLinks(ctx).slice(0, 3) // editorial: keep it sparse
-  const motion = entranceClass(ctx)
+  const transition = transitionClass(ctx)
   const radius = ctx.tokens.style.borderRadius
 
-  const linkItems = links
+  // Desktop links — uppercase, tracked, ghost buttons
+  const desktopLinkItems = links
     .map(
       (l) =>
         `            <li>
-              <Link
-                to="/${l.path}"
-                className="text-xs font-semibold tracking-[0.1em] uppercase text-muted-foreground hover:text-foreground ${motion} focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none rounded-sm px-1"
+              <Button
+                variant="ghost"
+                asChild
+                className="text-xs font-semibold tracking-[0.1em] uppercase text-muted-foreground hover:text-foreground hover:bg-transparent min-h-[44px] px-2 ${transition} focus-visible:ring-2 focus-visible:ring-ring"
               >
-                ${l.label}
-              </Link>
+                <Link to="/${l.path}">${l.label}</Link>
+              </Button>
             </li>`,
     )
     .join('\n')
 
-  const mobileLinks = links
+  const desktopAuthItem = ctx.hasAuth
+    ? `
+            <li>
+              <Button
+                variant="outline"
+                asChild
+                className="text-xs font-semibold tracking-[0.1em] uppercase min-h-[44px] px-4 ${transition} focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <Link to="/auth/login">Sign In</Link>
+              </Button>
+            </li>`
+    : ''
+
+  // Sheet (mobile) links
+  const sheetLinkItems = links
     .map(
       (l) =>
         `              <li>
-                <Link
-                  to="/${l.path}"
-                  onClick={() => setEditorialOpen(false)}
-                  className="block py-2 text-sm font-semibold tracking-wide uppercase text-foreground hover:text-muted-foreground ${motion} focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                <Button
+                  variant="ghost"
+                  asChild
+                  className="w-full justify-start text-sm font-semibold tracking-wide uppercase text-foreground hover:bg-muted rounded-[${radius}] min-h-[44px] ${transition} focus-visible:ring-2 focus-visible:ring-ring"
                 >
-                  ${l.label}
-                </Link>
+                  <Link to="/${l.path}">${l.label}</Link>
+                </Button>
               </li>`,
     )
     .join('\n')
 
-  const authLink = ctx.hasAuth
+  const sheetAuthItem = ctx.hasAuth
     ? `
-            <li>
-              <Link
-                to="/auth/login"
-                className="text-xs font-semibold tracking-[0.1em] uppercase text-foreground border border-foreground/30 px-3 py-1 hover:border-foreground ${motion} focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none rounded-sm"
-              >
-                Sign In
-              </Link>
-            </li>`
+              <li className="pt-2">
+                <Separator className="mb-3" />
+                <Button
+                  asChild
+                  className="w-full min-h-[44px] text-xs font-semibold tracking-[0.1em] uppercase focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <Link to="/auth/login">Sign In</Link>
+                </Button>
+              </li>`
     : ''
 
   return {
     jsx: `
-      <header className="border-b border-border/50 bg-transparent" role="banner">
+      <header className="border-b border-border/50 bg-transparent h-16 md:h-[72px] flex items-center" role="banner">
         {/* Skip to main content for keyboard users */}
         <a
           href="#main-content"
-          className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-[100] focus:px-4 focus:py-2 focus:bg-foreground focus:text-background focus:text-sm focus:font-medium focus:rounded-sm"
+          className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-[100] focus:px-4 focus:py-2 focus:bg-foreground focus:text-background focus:text-sm focus:font-medium focus:rounded-sm focus:outline-none"
         >
           Skip to content
         </a>
 
-        <div className="container mx-auto px-6 h-14 flex items-center justify-between gap-8">
+        <div className="container mx-auto px-6 w-full flex items-center justify-between gap-8">
 
-          {/* Serif logo */}
+          {/* Italic serif logo */}
           <Link
             to="/"
-            className="flex-shrink-0 text-xl font-bold italic text-foreground font-[family-name:var(--font-display)] hover:opacity-70 ${motion} focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none rounded-sm tracking-tight"
+            className="flex-shrink-0 text-xl font-bold italic tracking-tight text-foreground font-[family-name:var(--font-display)] hover:opacity-70 ${transition} focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none rounded-sm min-h-[44px] flex items-center"
             aria-label="${ctx.appName} — home"
           >
             ${ctx.appName}
           </Link>
 
-          {/* Right side — links + auth */}
+          {/* Right side — uppercase links + auth (desktop) */}
           <nav className="hidden md:flex items-center" aria-label="Editorial navigation">
-            <ul className="flex items-center gap-6 list-none m-0 p-0">
-${linkItems}
-${authLink}
+            <ul className="flex items-center gap-2 list-none m-0 p-0">
+${desktopLinkItems}
+${desktopAuthItem}
             </ul>
           </nav>
 
-          {/* Mobile hamburger */}
-          <button
-            type="button"
-            onClick={() => setEditorialOpen((o) => !o)}
-            className="md:hidden inline-flex items-center justify-center w-8 h-8 text-foreground hover:opacity-70 ${motion} focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none rounded-sm"
-            aria-expanded={editorialOpen}
-            aria-controls="editorial-menu"
-            aria-label={editorialOpen ? 'Close menu' : 'Open menu'}
-          >
-            {editorialOpen ? (
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            ) : (
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 7h16M4 12h10M4 17h16" />
-              </svg>
-            )}
-          </button>
+          {/* Mobile Sheet drawer */}
+          <Sheet>
+            <SheetTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="md:hidden min-h-[44px] min-w-[44px] focus-visible:ring-2 focus-visible:ring-ring"
+                aria-label="Open navigation menu"
+              >
+                <Menu className="size-5" />
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="right" className="w-[280px] sm:w-[320px]">
+              <SheetHeader>
+                <SheetTitle className="text-left italic font-[family-name:var(--font-display)] tracking-tight">
+                  ${ctx.appName}
+                </SheetTitle>
+              </SheetHeader>
+              <nav className="mt-6" aria-label="Mobile editorial navigation">
+                <ul className="flex flex-col gap-1 list-none m-0 p-0">
+${sheetLinkItems}
+${sheetAuthItem}
+                </ul>
+              </nav>
+            </SheetContent>
+          </Sheet>
         </div>
-
-        {/* Mobile drawer */}
-        {editorialOpen && (
-          <nav
-            id="editorial-menu"
-            className="md:hidden border-t border-border/50 px-6 py-4"
-            aria-label="Mobile editorial navigation"
-          >
-            <ul className="flex flex-col gap-3 list-none m-0 p-0">
-${mobileLinks}
-              {${ctx.hasAuth} && (
-                <li className="pt-2 border-t border-border/50">
-                  <Link
-                    to="/auth/login"
-                    onClick={() => setEditorialOpen(false)}
-                    className="block py-2 text-sm font-semibold uppercase tracking-wide text-foreground hover:text-muted-foreground ${motion} focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none rounded-[${radius}]"
-                  >
-                    Sign In
-                  </Link>
-                </li>
-              )}
-            </ul>
-          </nav>
-        )}
       </header>`,
     imports: [
-      "import { useState } from 'react'",
       "import { Link } from '@tanstack/react-router'",
+      "import { Button } from '@/components/ui/button'",
+      "import { Separator } from '@/components/ui/separator'",
+      "import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'",
+      "import { Menu } from 'lucide-react'",
     ],
-    hooks: ['const [editorialOpen, setEditorialOpen] = useState(false)'],
+    hooks: [],
   }
 }
 
 // ---------------------------------------------------------------------------
 // 4. navMega — top bar with full-width mega-menu dropdown on hover
+//    Desktop: category trigger buttons with ChevronDown, mega panel on hover/focus
+//    Mobile: shadcn Sheet with flat link list
+//    Scroll-aware: transparent → bg-background/95 + backdrop-blur-md + shadow-sm
 // ---------------------------------------------------------------------------
 
 export const navMega: SectionRenderer = (ctx: SectionContext): SectionOutput => {
   const links = publicNavLinks(ctx)
   const radius = ctx.tokens.style.borderRadius
-  const motion = entranceClass(ctx)
+  const transition = transitionClass(ctx)
+  const scroll = scrollAwareHook()
 
-  // Build dropdown link columns (group in pairs for layout)
-  const dropdownLinks = links
-    .map(
-      (l) =>
-        `                  <li>
-                    <Link
-                      to="/${l.path}"
-                      onClick={() => setActiveMenu(null)}
-                      className="block px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-muted rounded-[${radius}] ${motion} focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                    >
-                      ${l.label}
-                    </Link>
-                  </li>`,
-    )
-    .join('\n')
-
-  const topbarLinks = links
+  // Desktop trigger buttons — each opens the mega panel
+  const topbarLinkItems = links
     .map(
       (l) =>
         `              <li>
-                <button
+                <Button
+                  variant="ghost"
                   type="button"
                   onMouseEnter={() => setActiveMenu('${l.path}')}
                   onFocus={() => setActiveMenu('${l.path}')}
-                  className="text-sm font-medium text-muted-foreground hover:text-foreground ${motion} focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none rounded-sm px-2 py-1 flex items-center gap-1"
+                  className="text-sm font-medium text-muted-foreground hover:text-foreground gap-1 min-h-[44px] ${transition} focus-visible:ring-2 focus-visible:ring-ring"
                   aria-expanded={activeMenu === '${l.path}'}
                   aria-haspopup="true"
                 >
                   ${l.label}
-                  <svg className="w-3 h-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </button>
+                  <ChevronDown className="size-3.5 opacity-60" aria-hidden="true" />
+                </Button>
               </li>`,
     )
     .join('\n')
 
-  const mobileLinks = links
+  // Mega panel dropdown links (desktop)
+  const dropdownLinks = links
+    .map(
+      (l) =>
+        `                  <li>
+                    <Button
+                      variant="ghost"
+                      asChild
+                      className="w-full justify-start text-sm text-muted-foreground hover:text-foreground hover:bg-muted rounded-[${radius}] min-h-[44px] ${transition} focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      <Link to="/${l.path}" onClick={() => setActiveMenu(null)}>
+                        ${l.label}
+                      </Link>
+                    </Button>
+                  </li>`,
+    )
+    .join('\n')
+
+  // Sheet (mobile drawer) links
+  const sheetLinkItems = links
     .map(
       (l) =>
         `              <li>
-                <Link
-                  to="/${l.path}"
-                  onClick={() => setMegaMobileOpen(false)}
-                  className="block w-full py-2 px-4 text-sm font-medium text-foreground hover:bg-muted rounded-[${radius}] ${motion} focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                <Button
+                  variant="ghost"
+                  asChild
+                  className="w-full justify-start text-sm font-medium text-foreground hover:bg-muted rounded-[${radius}] min-h-[44px] ${transition} focus-visible:ring-2 focus-visible:ring-ring"
                 >
-                  ${l.label}
-                </Link>
+                  <Link to="/${l.path}">${l.label}</Link>
+                </Button>
               </li>`,
     )
     .join('\n')
 
-  const authButton = ctx.hasAuth
+  const desktopAuthButton = ctx.hasAuth
     ? `
-              <Link
-                to="/auth/login"
-                className="inline-flex items-center px-4 py-1.5 text-sm font-medium bg-primary text-primary-foreground rounded-[${radius}] hover:opacity-90 ${motion} focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-              >
-                Sign In
-              </Link>`
+              <Button asChild className="min-h-[44px] focus-visible:ring-2 focus-visible:ring-ring">
+                <Link to="/auth/login">Sign In</Link>
+              </Button>`
+    : ''
+
+  const sheetAuthSection = ctx.hasAuth
+    ? `
+              <li className="pt-2">
+                <Separator className="mb-3" />
+                <Button asChild className="w-full min-h-[44px] focus-visible:ring-2 focus-visible:ring-ring">
+                  <Link to="/auth/login">Sign In</Link>
+                </Button>
+              </li>`
     : ''
 
   return {
     jsx: `
       <header
-        className="sticky top-0 z-50 bg-background/95 backdrop-blur-sm border-b border-border"
+        className={\`sticky top-0 z-50 border-b border-border h-16 md:h-[72px] \${isScrolled ? 'bg-background/95 backdrop-blur-md shadow-sm' : 'bg-transparent'} transition-all duration-300\`}
         role="banner"
         onMouseLeave={() => setActiveMenu(null)}
       >
         {/* Skip to main content for keyboard users */}
         <a
           href="#main-content"
-          className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-[100] focus:px-4 focus:py-2 focus:bg-primary focus:text-primary-foreground focus:rounded-[${radius}] focus:text-sm focus:font-medium"
+          className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-[100] focus:px-4 focus:py-2 focus:bg-primary focus:text-primary-foreground focus:rounded-[${radius}] focus:text-sm focus:font-medium focus:outline-none"
         >
           Skip to content
         </a>
 
-        <div className="container mx-auto px-4 h-16 flex items-center justify-between gap-6">
+        <div className="container mx-auto px-4 h-full flex items-center justify-between gap-6">
 
           {/* Logo */}
           <Link
             to="/"
-            className="flex-shrink-0 text-lg font-bold text-foreground font-[family-name:var(--font-display)] hover:opacity-80 ${motion} focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none rounded-sm"
+            className="flex-shrink-0 text-lg font-bold text-foreground font-[family-name:var(--font-display)] hover:opacity-80 ${transition} focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none rounded-sm min-h-[44px] flex items-center"
             aria-label="${ctx.appName} — home"
           >
             ${ctx.appName}
           </Link>
 
-          {/* Category nav buttons — desktop */}
+          {/* Category trigger buttons — desktop only */}
           <nav className="hidden md:flex flex-1 justify-center" aria-label="Main navigation">
-            <ul className="flex items-center gap-2 list-none m-0 p-0">
-${topbarLinks}
+            <ul className="flex items-center gap-1 list-none m-0 p-0">
+${topbarLinkItems}
             </ul>
           </nav>
 
-          {/* Auth + mobile toggle */}
-          <div className="flex items-center gap-3">
-            <div className="hidden md:flex items-center">
-${authButton}
+          {/* Auth + mobile Sheet trigger */}
+          <div className="flex items-center gap-2">
+            <div className="hidden md:flex items-center gap-2">
+${desktopAuthButton}
             </div>
 
-            {/* Mobile hamburger */}
-            <button
-              type="button"
-              onClick={() => setMegaMobileOpen((o) => !o)}
-              className="md:hidden inline-flex items-center justify-center w-9 h-9 rounded-[${radius}] text-muted-foreground hover:bg-muted hover:text-foreground ${motion} focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-              aria-expanded={megaMobileOpen}
-              aria-controls="mega-mobile-menu"
-              aria-label={megaMobileOpen ? 'Close menu' : 'Open menu'}
-            >
-              {megaMobileOpen ? (
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              ) : (
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-                </svg>
-              )}
-            </button>
+            {/* Mobile Sheet drawer */}
+            <Sheet>
+              <SheetTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="md:hidden min-h-[44px] min-w-[44px] focus-visible:ring-2 focus-visible:ring-ring"
+                  aria-label="Open navigation menu"
+                >
+                  <Menu className="size-5" />
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="right" className="w-[280px] sm:w-[320px]">
+                <SheetHeader>
+                  <SheetTitle className="text-left font-[family-name:var(--font-display)]">
+                    ${ctx.appName}
+                  </SheetTitle>
+                </SheetHeader>
+                <nav className="mt-6" aria-label="Mobile navigation">
+                  <ul className="flex flex-col gap-1 list-none m-0 p-0">
+${sheetLinkItems}
+${sheetAuthSection}
+                  </ul>
+                </nav>
+              </SheetContent>
+            </Sheet>
           </div>
         </div>
 
         {/* Mega dropdown panel — desktop only */}
         {activeMenu !== null && (
           <div
-            className="hidden md:block absolute left-0 w-full bg-card border-b border-border shadow-lg z-40"
+            className="hidden md:block absolute left-0 w-full bg-card/95 backdrop-blur-md border-b border-border shadow-lg z-40"
             role="region"
             aria-label="Navigation dropdown"
             onMouseEnter={() => setActiveMenu(activeMenu)}
           >
-            <div className="container mx-auto px-4 py-6">
+            <div className="container mx-auto px-4 py-5">
               <ul className="grid grid-cols-3 md:grid-cols-4 gap-1 list-none m-0 p-0">
 ${dropdownLinks}
               </ul>
             </div>
           </div>
         )}
-
-        {/* Mobile drawer */}
-        {megaMobileOpen && (
-          <nav
-            id="mega-mobile-menu"
-            className="md:hidden border-t border-border bg-background"
-            aria-label="Mobile navigation"
-          >
-            <ul className="flex flex-col list-none m-0 p-0 py-2">
-${mobileLinks}
-              {${ctx.hasAuth} && (
-                <li className="px-3 pt-2 pb-1 border-t border-border mt-2">
-                  <Link
-                    to="/auth/login"
-                    onClick={() => setMegaMobileOpen(false)}
-                    className="block w-full py-2 px-4 text-sm font-medium bg-primary text-primary-foreground rounded-[${radius}] text-center ${motion} focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                  >
-                    Sign In
-                  </Link>
-                </li>
-              )}
-            </ul>
-          </nav>
-        )}
       </header>`,
     imports: [
+      scroll.import,
       "import { useState } from 'react'",
       "import { Link } from '@tanstack/react-router'",
+      "import { Button } from '@/components/ui/button'",
+      "import { Separator } from '@/components/ui/separator'",
+      "import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'",
+      "import { Menu, ChevronDown } from 'lucide-react'",
     ],
     hooks: [
+      scroll.hook,
       'const [activeMenu, setActiveMenu] = useState<string | null>(null)',
-      'const [megaMobileOpen, setMegaMobileOpen] = useState(false)',
     ],
   }
 }

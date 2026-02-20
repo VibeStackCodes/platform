@@ -13,12 +13,23 @@
  *   contentTestimonialsWall      — 3-column grid of quote cards
  *   contentStats                 — 4-box statistics/counter bar
  *   contentTimeline              — vertical alternating-sides timeline
- *   contentFaq                   — native <details> accordion FAQ
- *   contentFeatures              — icon + title + description grid
- *   contentTeam                  — avatar/initials + name + role grid
+ *   contentFaq                   — shadcn Accordion FAQ
+ *   contentFeatures              — Lucide icon + title + description grid
+ *   contentTeam                  — Avatar/initials + name + role grid
+ *
+ * Upgrade notes (v2):
+ *   - All cards use shadcn <Card> / <CardContent>
+ *   - contentFeatured adds <Badge> for category + <Skeleton> loading state
+ *   - Testimonials use <Avatar> with <AvatarFallback> initials + <Quote> icon
+ *   - contentStats adds tw-animate-css staggered entrance animations
+ *   - contentTimeline adds tw-animate-css staggered slide-in animations
+ *   - contentFaq replaces <details>/<summary> with shadcn <Accordion>
+ *   - contentFeatures replaces letter blobs with Lucide icons + stagger animations
+ *   - contentTeam uses <Avatar className="size-20"> with <Card> wrapper
  */
 
 import type { SectionRenderer, SectionOutput, SectionContext } from './types'
+import { animateEntrance, staggerChildren, cardHoverClass, cardClasses } from './primitives'
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -30,18 +41,6 @@ function cardMotion(ctx: SectionContext): string {
   return 'transition-all duration-300'
 }
 
-/** Card style class derived from theme cardStyle token */
-function cardStyle(ctx: SectionContext): string {
-  const radius = ctx.tokens.style.borderRadius
-  const base = `rounded-[${radius}]`
-  if (ctx.tokens.style.cardStyle === 'flat') return base
-  if (ctx.tokens.style.cardStyle === 'bordered') return `${base} border border-border`
-  if (ctx.tokens.style.cardStyle === 'glass')
-    return `${base} border border-border/70 bg-card/70 backdrop-blur-md`
-  // elevated (default)
-  return `${base} border border-border shadow-sm`
-}
-
 /** Typed array coercion — extracts a typed array from config or returns [] */
 function configArray<T>(ctx: SectionContext, key: string): T[] {
   const val = ctx.config[key]
@@ -50,7 +49,7 @@ function configArray<T>(ctx: SectionContext, key: string): T[] {
 }
 
 // ---------------------------------------------------------------------------
-// Testimonial data types (internal)
+// Internal data types
 // ---------------------------------------------------------------------------
 
 interface TestimonialItem {
@@ -94,8 +93,9 @@ export const contentFeatured: SectionRenderer = (ctx: SectionContext): SectionOu
   const displayCol = ctx.displayColumn ?? 'name'
   const imageCol = ctx.imageColumn ?? null
   const entityTitle = ctx.entityName ?? 'Featured'
-  const radius = ctx.tokens.style.borderRadius
   const motion = cardMotion(ctx)
+  const hover = cardHoverClass(ctx)
+  const cardCls = cardClasses(ctx)
   const headline = (ctx.config.headline as string) || `Featured ${entityTitle}`
 
   const imageBlock = imageCol
@@ -104,7 +104,7 @@ export const contentFeatured: SectionRenderer = (ctx: SectionContext): SectionOu
             <img
               src={String(featured.${imageCol})}
               alt={String(featured.${displayCol} ?? '')}
-              className="w-full h-64 md:h-80 object-cover rounded-t-[${radius}]"
+              className="w-full h-64 md:h-80 object-cover rounded-t-lg"
             />
           )}`
     : ''
@@ -117,38 +117,59 @@ export const contentFeatured: SectionRenderer = (ctx: SectionContext): SectionOu
             ${headline}
           </h2>
 
-          {featured ? (
-            <div className="max-w-3xl ${cardStyle(ctx)} ${motion} overflow-hidden bg-card">
-              ${imageBlock}
-              <div className="p-6 md:p-8 flex flex-col gap-4">
-                <h3 className="text-xl md:text-2xl font-bold text-foreground">
-                  {String(featured.${displayCol} ?? '')}
-                </h3>
-                {!!featured.excerpt && (
-                  <p className="text-muted-foreground leading-relaxed line-clamp-4">
-                    {String(featured.excerpt)}
-                  </p>
-                )}
-                {!featured.excerpt && !!featured.description && (
-                  <p className="text-muted-foreground leading-relaxed line-clamp-4">
-                    {String(featured.description)}
-                  </p>
-                )}
-                <div className="pt-2">
-                  <Link
-                    to={\`/${ctx.entitySlug ?? table}/\${featured.id}\`}
-                    className="inline-flex items-center gap-2 text-sm font-semibold text-primary hover:underline"
-                  >
-                    View {String(featured.${displayCol} ?? '')}
-                    <span aria-hidden="true">→</span>
-                  </Link>
-                </div>
-              </div>
+          {featured === undefined ? (
+            <div className="max-w-3xl">
+              <Card className="overflow-hidden">
+                <Skeleton className="h-64 md:h-80 w-full rounded-none" />
+                <CardContent className="p-6 md:p-8 flex flex-col gap-4">
+                  <Skeleton className="h-7 w-2/3" />
+                  <Skeleton className="h-4 w-full" />
+                  <Skeleton className="h-4 w-5/6" />
+                  <Skeleton className="h-4 w-1/3" />
+                </CardContent>
+              </Card>
+            </div>
+          ) : featured ? (
+            <div className="max-w-3xl">
+              <Card className={\`overflow-hidden ${motion} ${hover} ${cardCls}\`}>
+                ${imageBlock}
+                <CardContent className="p-6 md:p-8 flex flex-col gap-4">
+                  {!!featured.category && (
+                    <Badge variant="secondary" className="w-fit">
+                      {String(featured.category)}
+                    </Badge>
+                  )}
+                  <h3 className="text-xl md:text-2xl font-bold text-foreground">
+                    {String(featured.${displayCol} ?? '')}
+                  </h3>
+                  {!!featured.excerpt && (
+                    <p className="text-muted-foreground leading-relaxed line-clamp-4">
+                      {String(featured.excerpt)}
+                    </p>
+                  )}
+                  {!featured.excerpt && !!featured.description && (
+                    <p className="text-muted-foreground leading-relaxed line-clamp-4">
+                      {String(featured.description)}
+                    </p>
+                  )}
+                  <div className="pt-2">
+                    <Link
+                      to={\`/${ctx.entitySlug ?? table}/\${featured.id}\`}
+                      className="inline-flex items-center gap-2 text-sm font-semibold text-primary hover:underline"
+                    >
+                      View {String(featured.${displayCol} ?? '')}
+                      <span aria-hidden="true">→</span>
+                    </Link>
+                  </div>
+                </CardContent>
+              </Card>
             </div>
           ) : (
-            <div className="${cardStyle(ctx)} p-8 bg-muted/30 text-center text-muted-foreground">
-              No featured item found.
-            </div>
+            <Card className="max-w-3xl">
+              <CardContent className="p-8 text-center text-muted-foreground">
+                No featured item found.
+              </CardContent>
+            </Card>
           )}
         </div>
       </section>`,
@@ -156,6 +177,9 @@ export const contentFeatured: SectionRenderer = (ctx: SectionContext): SectionOu
       "import { useQuery } from '@tanstack/react-query'",
       "import { supabase } from '@/lib/supabase'",
       "import { Link } from '@tanstack/react-router'",
+      "import { Card, CardContent } from '@/components/ui/card'",
+      "import { Badge } from '@/components/ui/badge'",
+      "import { Skeleton } from '@/components/ui/skeleton'",
     ],
     hooks: [
       `const { data: featured } = useQuery({
@@ -181,8 +205,9 @@ export const contentFeatured: SectionRenderer = (ctx: SectionContext): SectionOu
 export const contentTestimonialsCarousel: SectionRenderer = (
   ctx: SectionContext,
 ): SectionOutput => {
-  const motion = cardMotion(ctx)
   const items = configArray<TestimonialItem>(ctx, 'testimonials')
+  const hover = cardHoverClass(ctx)
+  const cardCls = cardClasses(ctx)
 
   const testimonials: TestimonialItem[] =
     items.length > 0
@@ -203,40 +228,55 @@ export const contentTestimonialsCarousel: SectionRenderer = (
         ]
 
   const cards = testimonials
-    .map(
-      (t) => `
-            <div
-              className="snap-center shrink-0 w-[280px] sm:w-[320px] ${cardStyle(ctx)} ${motion} p-6 bg-card flex flex-col gap-4"
-            >
-              <span className="text-5xl leading-none text-primary/30 font-serif select-none" aria-hidden="true">
-                &ldquo;
-              </span>
-              <blockquote className="text-foreground text-sm leading-relaxed flex-1">
-                ${t.quote}
-              </blockquote>
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                — ${t.author}
-              </p>
-            </div>`,
-    )
+    .map((t) => {
+      const initial = t.author.charAt(0).toUpperCase()
+      return `
+            <li className="snap-center shrink-0 w-[280px] sm:w-[320px]">
+              <Card className={\`h-full shadow-lg hover:shadow-xl ${hover} ${cardCls}\`}>
+                <CardContent className="p-6 flex flex-col gap-4 h-full">
+                  <Quote className="size-8 text-primary/30" aria-hidden="true" />
+                  <blockquote className="text-foreground text-sm leading-relaxed flex-1">
+                    ${t.quote}
+                  </blockquote>
+                  <div className="flex items-center gap-3 pt-2">
+                    <Avatar className="size-8">
+                      <AvatarFallback className="text-xs font-bold bg-primary/10 text-primary">
+                        ${initial}
+                      </AvatarFallback>
+                    </Avatar>
+                    <p className="text-xs font-semibold text-muted-foreground">
+                      ${t.author}
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            </li>`
+    })
     .join('\n')
 
   return {
     jsx: `
       <section className="py-16 px-4" aria-label="Testimonials">
         <div className="max-w-7xl mx-auto">
-          <h2 className="text-2xl md:text-3xl font-bold text-foreground font-[family-name:var(--font-display)] mb-8 text-center">
-            What people are saying
-          </h2>
-          <div
-            className="flex gap-4 overflow-x-auto snap-x snap-mandatory pb-4 -mx-4 px-4 scroll-smooth"
-            role="list"
+          <div className="flex items-center justify-center gap-3 mb-8">
+            <Quote className="size-6 text-primary/60" aria-hidden="true" />
+            <h2 className="text-2xl md:text-3xl font-bold text-foreground font-[family-name:var(--font-display)] text-center">
+              What people are saying
+            </h2>
+          </div>
+          <ul
+            className="flex gap-4 overflow-x-auto snap-x snap-mandatory pb-4 -mx-4 px-4 scroll-smooth list-none"
             aria-label="Testimonial quotes"
           >
             ${cards}
-          </div>
+          </ul>
         </div>
       </section>`,
+    imports: [
+      "import { Card, CardContent } from '@/components/ui/card'",
+      "import { Avatar, AvatarFallback } from '@/components/ui/avatar'",
+      "import { Quote } from 'lucide-react'",
+    ],
   }
 }
 
@@ -245,8 +285,9 @@ export const contentTestimonialsCarousel: SectionRenderer = (
 // ---------------------------------------------------------------------------
 
 export const contentTestimonialsWall: SectionRenderer = (ctx: SectionContext): SectionOutput => {
-  const motion = cardMotion(ctx)
   const items = configArray<TestimonialItem>(ctx, 'testimonials')
+  const hover = cardHoverClass(ctx)
+  const cardCls = cardClasses(ctx)
 
   const testimonials: TestimonialItem[] =
     items.length > 0
@@ -279,31 +320,29 @@ export const contentTestimonialsWall: SectionRenderer = (ctx: SectionContext): S
         ]
 
   const cards = testimonials
-    .map((t, _i) => {
+    .map((t) => {
       const initial = t.author.charAt(0).toUpperCase()
       return `
-            <div
-              className="${cardStyle(ctx)} ${motion} p-6 bg-card flex flex-col gap-4"
-              role="listitem"
-            >
-              <span className="text-4xl leading-none text-primary/25 font-serif select-none" aria-hidden="true">
-                &ldquo;
-              </span>
-              <blockquote className="text-foreground text-sm leading-relaxed flex-1">
-                ${t.quote}
-              </blockquote>
-              <div className="flex items-center gap-3 pt-2">
-                <div
-                  className="w-8 h-8 rounded-full bg-primary/15 text-primary flex items-center justify-center text-xs font-bold shrink-0"
-                  aria-hidden="true"
-                >
-                  ${initial}
-                </div>
-                <p className="text-xs font-semibold text-muted-foreground">
-                  ${t.author}
-                </p>
-              </div>
-            </div>`
+            <li role="listitem">
+              <Card className={\`h-full shadow-lg hover:shadow-xl rounded-xl ${hover} ${cardCls}\`}>
+                <CardContent className="p-6 flex flex-col gap-4 h-full">
+                  <Quote className="size-6 text-primary/25" aria-hidden="true" />
+                  <blockquote className="text-foreground text-sm leading-relaxed flex-1">
+                    ${t.quote}
+                  </blockquote>
+                  <div className="flex items-center gap-3 pt-2">
+                    <Avatar className="size-8">
+                      <AvatarFallback className="text-xs font-bold bg-primary/10 text-primary">
+                        ${initial}
+                      </AvatarFallback>
+                    </Avatar>
+                    <p className="text-xs font-semibold text-muted-foreground">
+                      ${t.author}
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            </li>`
     })
     .join('\n')
 
@@ -311,28 +350,35 @@ export const contentTestimonialsWall: SectionRenderer = (ctx: SectionContext): S
     jsx: `
       <section className="py-16 px-4 bg-muted/20" aria-label="Testimonials">
         <div className="max-w-7xl mx-auto">
-          <h2 className="text-2xl md:text-3xl font-bold text-foreground font-[family-name:var(--font-display)] mb-10 text-center">
-            Trusted by people like you
-          </h2>
-          <div
-            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
-            role="list"
+          <div className="flex items-center justify-center gap-3 mb-10">
+            <Quote className="size-6 text-primary/60" aria-hidden="true" />
+            <h2 className="text-2xl md:text-3xl font-bold text-foreground font-[family-name:var(--font-display)] text-center">
+              Trusted by people like you
+            </h2>
+          </div>
+          <ul
+            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 list-none"
             aria-label="Testimonial wall"
           >
             ${cards}
-          </div>
+          </ul>
         </div>
       </section>`,
+    imports: [
+      "import { Card, CardContent } from '@/components/ui/card'",
+      "import { Avatar, AvatarFallback } from '@/components/ui/avatar'",
+      "import { Quote } from 'lucide-react'",
+    ],
   }
 }
 
 // ---------------------------------------------------------------------------
-// 4. contentStats — 4-box statistics counter bar
+// 4. contentStats — 4-box statistics counter bar with staggered entrance
 // ---------------------------------------------------------------------------
 
 export const contentStats: SectionRenderer = (ctx: SectionContext): SectionOutput => {
-  const motion = cardMotion(ctx)
   const items = configArray<StatItem>(ctx, 'stats')
+  const delays = staggerChildren(4, 0, 100)
 
   const stats: StatItem[] =
     items.length > 0
@@ -344,46 +390,54 @@ export const contentStats: SectionRenderer = (ctx: SectionContext): SectionOutpu
           { label: 'Uptime', value: '99.9%' },
         ]
 
+  // Pre-compute animation classes for up to 4 stat boxes
+  const animCls = stats.map((_, i) => {
+    const base = animateEntrance(ctx, { durationMs: 500 })
+    return base ? `${base} ${delays[i] ?? 'delay-0'}` : ''
+  })
+
   const boxes = stats
-    .map(
-      (s) => `
-          <div
-            className="flex flex-col items-center gap-1 px-6 py-8 ${motion}"
-            role="listitem"
-          >
-            <span className="text-4xl md:text-5xl font-bold text-foreground font-[family-name:var(--font-display)]">
-              ${s.value}
-            </span>
-            <span className="text-sm text-muted-foreground uppercase tracking-widest">
-              ${s.label}
-            </span>
-          </div>`,
-    )
+    .map((s, i) => {
+      const anim = animCls[i] ?? ''
+      return `
+            <li role="listitem">
+              <Card className={\`h-full border-0 shadow-none rounded-none bg-transparent\`}>
+                <CardContent className={\`flex flex-col items-center gap-1 px-6 py-8 ${anim}\`}>
+                  <span className="text-4xl md:text-5xl font-bold text-foreground font-[family-name:var(--font-display)]">
+                    ${s.value}
+                  </span>
+                  <span className="text-sm text-muted-foreground uppercase tracking-widest">
+                    ${s.label}
+                  </span>
+                </CardContent>
+              </Card>
+            </li>`
+    })
     .join('\n')
 
   return {
     jsx: `
       <section className="py-12 px-4 bg-muted/50" aria-label="Statistics">
         <div className="max-w-7xl mx-auto">
-          <div
-            className="grid grid-cols-2 md:grid-cols-4 divide-x divide-border"
-            role="list"
+          <ul
+            className="grid grid-cols-2 md:grid-cols-4 divide-x divide-border list-none"
             aria-label="${ctx.appName} statistics"
           >
             ${boxes}
-          </div>
+          </ul>
         </div>
       </section>`,
+    imports: [
+      "import { Card, CardContent } from '@/components/ui/card'",
+    ],
   }
 }
 
 // ---------------------------------------------------------------------------
-// 5. contentTimeline — vertical alternating-sides timeline
+// 5. contentTimeline — vertical alternating-sides timeline with stagger
 // ---------------------------------------------------------------------------
 
 export const contentTimeline: SectionRenderer = (ctx: SectionContext): SectionOutput => {
-  const radius = ctx.tokens.style.borderRadius
-  const motion = cardMotion(ctx)
   const items = configArray<MilestoneItem>(ctx, 'milestones')
 
   const milestones: MilestoneItem[] =
@@ -412,29 +466,38 @@ export const contentTimeline: SectionRenderer = (ctx: SectionContext): SectionOu
           },
         ]
 
+  const delays = staggerChildren(milestones.length, 0, 150)
+
   const items_jsx = milestones
     .map((m, i) => {
       const isLeft = i % 2 === 0
+      const anim = animateEntrance(ctx, { direction: 'bottom', distance: 4, durationMs: 500 })
+      const animWithDelay = anim ? `${anim} ${delays[i] ?? 'delay-0'}` : ''
+
       return `
           {/* Milestone ${i + 1} — ${isLeft ? 'left' : 'right'} */}
           <div className="relative flex items-start ${isLeft ? 'md:flex-row' : 'md:flex-row-reverse'} flex-row gap-6 md:gap-0">
             {/* Timeline dot */}
-            <div className="absolute left-4 md:left-1/2 top-3 -translate-x-1/2 w-4 h-4 rounded-full bg-primary border-2 border-background z-10 shrink-0" aria-hidden="true" />
+            <div className="absolute left-4 md:left-1/2 top-4 -translate-x-1/2 w-4 h-4 rounded-full bg-primary border-2 border-background z-10 shrink-0" aria-hidden="true" />
 
             {/* Spacer for opposite side on desktop */}
             <div className="hidden md:block flex-1" />
 
             {/* Content card */}
-            <div className="ml-12 md:ml-0 md:w-5/12 ${cardStyle(ctx)} ${motion} p-5 bg-card ${isLeft ? 'md:mr-8' : 'md:ml-8'}">
-              <span className="inline-block text-xs font-bold text-primary bg-primary/10 px-2.5 py-1 rounded-[${radius}] mb-2">
-                ${m.date}
-              </span>
-              <h3 className="text-base font-bold text-foreground mb-1">
-                ${m.title}
-              </h3>
-              <p className="text-sm text-muted-foreground leading-relaxed">
-                ${m.description}
-              </p>
+            <div className="ml-12 md:ml-0 md:w-5/12 ${isLeft ? 'md:mr-8' : 'md:ml-8'} ${animWithDelay}">
+              <Card className="shadow-md">
+                <CardContent className="p-5 flex flex-col gap-2">
+                  <Badge variant="secondary" className="w-fit text-xs font-bold">
+                    ${m.date}
+                  </Badge>
+                  <h3 className="text-base font-bold text-foreground">
+                    ${m.title}
+                  </h3>
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    ${m.description}
+                  </p>
+                </CardContent>
+              </Card>
             </div>
           </div>`
     })
@@ -463,11 +526,15 @@ export const contentTimeline: SectionRenderer = (ctx: SectionContext): SectionOu
           </div>
         </div>
       </section>`,
+    imports: [
+      "import { Card, CardContent } from '@/components/ui/card'",
+      "import { Badge } from '@/components/ui/badge'",
+    ],
   }
 }
 
 // ---------------------------------------------------------------------------
-// 6. contentFaq — native <details> accordion FAQ
+// 6. contentFaq — shadcn Accordion FAQ (replaces native <details>/<summary>)
 // ---------------------------------------------------------------------------
 
 export const contentFaq: SectionRenderer = (ctx: SectionContext): SectionOutput => {
@@ -483,7 +550,7 @@ export const contentFaq: SectionRenderer = (ctx: SectionContext): SectionOutput 
           },
           {
             question: `How do I get started with ${ctx.appName}?`,
-            answer: 'Create an account, follow the onboarding steps, and you\'ll be up and running in minutes. No technical expertise required.',
+            answer: "Create an account, follow the onboarding steps, and you'll be up and running in minutes. No technical expertise required.",
           },
           {
             question: `Is ${ctx.appName} suitable for teams?`,
@@ -495,29 +562,17 @@ export const contentFaq: SectionRenderer = (ctx: SectionContext): SectionOutput 
           },
         ]
 
-  const entries = faqs
+  const accordionItems = faqs
     .map(
-      (f, _i) => `
-          <details
-            className="group border-b border-border last:border-b-0"
-            name="faq-${ctx.appName.toLowerCase().replace(/\s+/g, '-')}"
-          >
-            <summary
-              className="flex items-center justify-between gap-4 py-4 cursor-pointer list-none font-semibold text-foreground hover:text-primary transition-colors"
-              aria-expanded="false"
-            >
-              <span>${f.question}</span>
-              <span
-                className="shrink-0 text-muted-foreground group-open:rotate-45 transition-transform duration-200"
-                aria-hidden="true"
-              >
-                +
-              </span>
-            </summary>
-            <div className="pb-4 text-sm text-muted-foreground leading-relaxed">
+      (f, i) => `
+          <AccordionItem value="faq-${i}">
+            <AccordionTrigger className="text-left font-semibold text-foreground hover:text-primary">
+              ${f.question}
+            </AccordionTrigger>
+            <AccordionContent className="text-sm text-muted-foreground leading-relaxed">
               ${f.answer}
-            </div>
-          </details>`,
+            </AccordionContent>
+          </AccordionItem>`,
     )
     .join('\n')
 
@@ -528,24 +583,29 @@ export const contentFaq: SectionRenderer = (ctx: SectionContext): SectionOutput 
           <h2 className="text-2xl md:text-3xl font-bold text-foreground font-[family-name:var(--font-display)] mb-10 text-center">
             Frequently Asked Questions
           </h2>
-          <div className="rounded-[${ctx.tokens.style.borderRadius}] border border-border bg-card divide-y divide-border overflow-hidden px-6">
-            ${entries}
-          </div>
+          <Accordion type="single" collapsible className="w-full">
+            ${accordionItems}
+          </Accordion>
         </div>
       </section>`,
+    imports: [
+      "import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'",
+    ],
   }
 }
 
 // ---------------------------------------------------------------------------
-// 7. contentFeatures — feature icons grid (marketing/SaaS style)
+// 7. contentFeatures — Lucide icon + title + description grid with stagger
 // ---------------------------------------------------------------------------
 
-export const contentFeatures: SectionRenderer = (ctx: SectionContext): SectionOutput => {
-  const motion = cardMotion(ctx)
-  const items = configArray<FeatureItem>(ctx, 'features')
+// Rotating set of Lucide icon names for feature cards
+const FEATURE_ICONS = ['Zap', 'Shield', 'Clock', 'Sparkles', 'Settings', 'Headphones'] as const
+type FeatureIcon = (typeof FEATURE_ICONS)[number]
 
-  // Distinct accent colors for icon blobs (rotated modulo count)
-  const COLORS = ['bg-primary/15', 'bg-accent/20', 'bg-muted', 'bg-secondary/20', 'bg-primary/10', 'bg-accent/15']
+export const contentFeatures: SectionRenderer = (ctx: SectionContext): SectionOutput => {
+  const items = configArray<FeatureItem>(ctx, 'features')
+  const hover = cardHoverClass(ctx)
+  const cardCls = cardClasses(ctx)
 
   const features: FeatureItem[] =
     items.length > 0
@@ -559,30 +619,42 @@ export const contentFeatures: SectionRenderer = (ctx: SectionContext): SectionOu
           { title: 'Great Support', description: `The ${ctx.appName} team is here when you need us — fast responses guaranteed.` },
         ]
 
+  const delays = staggerChildren(features.length, 0, 100)
+  // Collect only the icons actually needed (deduplicated by index mod)
+  const usedIconIndices = features.map((_, i) => i % FEATURE_ICONS.length)
+  const uniqueIcons: FeatureIcon[] = [...new Set(usedIconIndices)].map(
+    (idx) => FEATURE_ICONS[idx],
+  )
+
   const cards = features
     .map((f, i) => {
-      const color = COLORS[i % COLORS.length]
-      const initial = f.title.charAt(0).toUpperCase()
+      const icon: FeatureIcon = FEATURE_ICONS[i % FEATURE_ICONS.length]
+      const anim = animateEntrance(ctx, { direction: 'bottom', distance: 4, durationMs: 500 })
+      const animWithDelay = anim ? `${anim} ${delays[i] ?? 'delay-0'}` : ''
+
       return `
-            <div
-              className="${cardStyle(ctx)} ${motion} p-6 bg-card flex flex-col gap-3"
-              role="listitem"
-            >
-              <div
-                className="w-10 h-10 ${color} rounded-[${ctx.tokens.style.borderRadius}] flex items-center justify-center text-primary font-bold text-sm shrink-0"
-                aria-hidden="true"
-              >
-                ${initial}
-              </div>
-              <h3 className="text-base font-bold text-foreground">
-                ${f.title}
-              </h3>
-              <p className="text-sm text-muted-foreground leading-relaxed">
-                ${f.description}
-              </p>
-            </div>`
+            <li role="listitem" className="${animWithDelay}">
+              <Card className={\`h-full ${hover} ${cardCls}\`}>
+                <CardContent className="p-6 flex flex-col gap-3">
+                  <div
+                    className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center shrink-0"
+                    aria-hidden="true"
+                  >
+                    <${icon} className="size-5 text-primary" aria-hidden="true" />
+                  </div>
+                  <h3 className="text-base font-bold text-foreground">
+                    ${f.title}
+                  </h3>
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    ${f.description}
+                  </p>
+                </CardContent>
+              </Card>
+            </li>`
     })
     .join('\n')
+
+  const iconImport = `import { ${uniqueIcons.join(', ')} } from 'lucide-react'`
 
   return {
     jsx: `
@@ -596,25 +668,29 @@ export const contentFeatures: SectionRenderer = (ctx: SectionContext): SectionOu
               Everything you need to get the job done, beautifully packaged in one place.
             </p>
           </div>
-          <div
-            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
-            role="list"
+          <ul
+            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 list-none"
             aria-label="${ctx.appName} feature highlights"
           >
             ${cards}
-          </div>
+          </ul>
         </div>
       </section>`,
+    imports: [
+      "import { Card, CardContent } from '@/components/ui/card'",
+      iconImport,
+    ],
   }
 }
 
 // ---------------------------------------------------------------------------
-// 8. contentTeam — team member avatar + name + role grid
+// 8. contentTeam — Avatar + name + role, each wrapped in a Card
 // ---------------------------------------------------------------------------
 
 export const contentTeam: SectionRenderer = (ctx: SectionContext): SectionOutput => {
-  const motion = cardMotion(ctx)
   const items = configArray<TeamMember>(ctx, 'team')
+  const hover = cardHoverClass(ctx)
+  const cardCls = cardClasses(ctx)
 
   const members: TeamMember[] =
     items.length > 0
@@ -636,22 +712,21 @@ export const contentTeam: SectionRenderer = (ctx: SectionContext): SectionOutput
           : words[0].charAt(0).toUpperCase()
 
       return `
-            <div
-              className="flex flex-col items-center gap-3 text-center ${motion}"
-              role="listitem"
-            >
-              {/* Avatar circle with initials fallback */}
-              <div
-                className="w-20 h-20 rounded-full bg-primary/10 border-2 border-border flex items-center justify-center text-primary font-bold text-xl shrink-0"
-                aria-label="${m.name}"
-              >
-                ${initials}
-              </div>
-              <div>
-                <p className="font-semibold text-foreground text-sm">${m.name}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">${m.role}</p>
-              </div>
-            </div>`
+            <li role="listitem">
+              <Card className={\`h-full ${hover} ${cardCls}\`}>
+                <CardContent className="p-6 flex flex-col items-center gap-4 text-center">
+                  <Avatar className="size-20">
+                    <AvatarFallback className="text-xl font-bold bg-primary/10 text-primary">
+                      ${initials}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <p className="font-semibold text-foreground text-sm">${m.name}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">${m.role}</p>
+                  </div>
+                </CardContent>
+              </Card>
+            </li>`
     })
     .join('\n')
 
@@ -662,14 +737,17 @@ export const contentTeam: SectionRenderer = (ctx: SectionContext): SectionOutput
           <h2 className="text-2xl md:text-3xl font-bold text-foreground font-[family-name:var(--font-display)] mb-10 text-center">
             Meet the Team
           </h2>
-          <div
-            className="grid grid-cols-2 md:grid-cols-4 gap-8"
-            role="list"
+          <ul
+            className="grid grid-cols-2 md:grid-cols-4 gap-6 list-none"
             aria-label="${ctx.appName} team members"
           >
             ${cards}
-          </div>
+          </ul>
         </div>
       </section>`,
+    imports: [
+      "import { Card, CardContent } from '@/components/ui/card'",
+      "import { Avatar, AvatarFallback } from '@/components/ui/avatar'",
+    ],
   }
 }

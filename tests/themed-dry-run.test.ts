@@ -739,9 +739,9 @@ describe('Themed Dry-Run Pipeline', () => {
         style: { ...gourmettroTokens.style, navStyle: 'minimal', heroLayout: 'fullbleed' },
       }
       const homepage = generateThemedApp(restaurantContract, tokens, 'Test Restaurant')['src/routes/index.tsx']
-      // Fullbleed hero has h-[70vh] with dark overlay
-      expect(homepage).toContain('h-[70vh]')
-      expect(homepage).toContain('bg-black/45')
+      // Fullbleed hero uses min-h-screen with gradient overlay
+      expect(homepage).toContain('min-h-screen')
+      expect(homepage).toContain('from-black/70')
       expect(homepage).toContain('font-[family-name:var(--font-display)]')
     })
 

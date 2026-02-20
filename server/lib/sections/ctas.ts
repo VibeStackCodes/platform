@@ -11,20 +11,38 @@
  *   ctaPricing         — 3-tier pricing cards, middle card highlighted
  *   ctaDownload        — full-width primary-colour download banner
  *   ctaContact         — centered contact form with all accessible labels
+ *
+ * shadcn components used:
+ *   Input, Label, Button, Card/CardContent/CardFooter/CardHeader/CardTitle,
+ *   Badge, Separator, (Textarea via shadcn-style classes on raw <textarea>)
+ *
+ * Lucide icons used:
+ *   Mail, ArrowRight, Check, Send
+ *
+ * Animations:
+ *   tw-animate-css — animate-in fade-in slide-in-from-bottom-4, staggered on
+ *   pricing cards. All conditioned on ctx.tokens.style.motion !== 'none'.
  */
 
 import type { SectionRenderer, SectionOutput, SectionContext } from './types'
+import { animateEntrance, staggerChildren } from './primitives'
 
 // ---------------------------------------------------------------------------
-// Internal helpers
+// Shared import sets — returned in SectionOutput.imports so the page assembler
+// deduplicates and hoists them to the top of the generated .tsx file.
 // ---------------------------------------------------------------------------
 
-/** Entrance animation class when motion is enabled */
-function entranceClass(ctx: SectionContext): string {
-  return ctx.tokens.style.motion !== 'none'
-    ? 'transition-all duration-700 ease-out'
-    : ''
-}
+const IMPORT_BUTTON = "import { Button } from '@/components/ui/button'"
+const IMPORT_INPUT = "import { Input } from '@/components/ui/input'"
+const IMPORT_LABEL = "import { Label } from '@/components/ui/label'"
+const IMPORT_CARD =
+  "import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'"
+const IMPORT_BADGE = "import { Badge } from '@/components/ui/badge'"
+const IMPORT_SEPARATOR = "import { Separator } from '@/components/ui/separator'"
+const IMPORT_ICONS_NEWSLETTER = "import { Mail, ArrowRight } from 'lucide-react'"
+const IMPORT_ICONS_PRICING = "import { Check, ArrowRight } from 'lucide-react'"
+const IMPORT_ICONS_DOWNLOAD = "import { ArrowRight } from 'lucide-react'"
+const IMPORT_ICONS_CONTACT = "import { Send } from 'lucide-react'"
 
 // ---------------------------------------------------------------------------
 // 1. ctaNewsletter — centered newsletter signup with bg-muted/30 background
@@ -36,8 +54,9 @@ export const ctaNewsletter: SectionRenderer = (ctx: SectionContext): SectionOutp
     (ctx.config.description as string) ||
     `Get the latest from ${ctx.appName} delivered to your inbox.`
   const buttonLabel = (ctx.config.buttonLabel as string) || ctx.tokens.textSlots.cta_label
-  const radius = ctx.tokens.style.borderRadius
-  const motion = entranceClass(ctx)
+
+  const entrance = animateEntrance(ctx, { direction: 'bottom', distance: 4, durationMs: 700 })
+  const entranceClass = entrance ? ` ${entrance}` : ''
 
   return {
     jsx: `
@@ -46,7 +65,7 @@ export const ctaNewsletter: SectionRenderer = (ctx: SectionContext): SectionOutp
         aria-label="Newsletter signup"
       >
         <div className="container mx-auto px-4 py-16 md:py-20">
-          <div className="max-w-lg mx-auto text-center ${motion}">
+          <div className="max-w-lg mx-auto text-center${entranceClass}">
             <h2 className="text-2xl md:text-3xl font-bold text-foreground font-[family-name:var(--font-display)] mb-3">
               ${headline}
             </h2>
@@ -58,28 +77,34 @@ export const ctaNewsletter: SectionRenderer = (ctx: SectionContext): SectionOutp
               className="flex flex-col sm:flex-row gap-3"
               aria-label="Newsletter subscription form"
             >
-              <label htmlFor="newsletter-email" className="sr-only">
+              <Label htmlFor="newsletter-email" className="sr-only">
                 Email address
-              </label>
-              <input
-                id="newsletter-email"
-                type="email"
-                name="email"
-                autoComplete="email"
-                placeholder="you@example.com"
-                required
-                className="flex-1 rounded-[${radius}] border border-border bg-background px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-              />
-              <button
-                type="submit"
-                className="shrink-0 rounded-[${radius}] bg-primary px-6 py-2.5 text-sm font-semibold text-primary-foreground hover:opacity-90 active:scale-95 transition-all"
-              >
+              </Label>
+              <div className="relative flex-1">
+                <Mail
+                  className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none"
+                  aria-hidden="true"
+                />
+                <Input
+                  id="newsletter-email"
+                  type="email"
+                  name="email"
+                  autoComplete="email"
+                  placeholder="you@example.com"
+                  required
+                  aria-required="true"
+                  className="pl-9 focus-visible:ring-2 focus-visible:ring-primary"
+                />
+              </div>
+              <Button type="submit" size="lg" className="shrink-0 gap-2">
                 ${buttonLabel}
-              </button>
+                <ArrowRight className="size-4" aria-hidden="true" />
+              </Button>
             </form>
           </div>
         </div>
       </section>`,
+    imports: [IMPORT_BUTTON, IMPORT_INPUT, IMPORT_LABEL, IMPORT_ICONS_NEWSLETTER],
   }
 }
 
@@ -93,8 +118,9 @@ export const ctaNewsletterSplit: SectionRenderer = (ctx: SectionContext): Sectio
     (ctx.config.description as string) ||
     `Join the ${ctx.appName} community and never miss an update.`
   const buttonLabel = (ctx.config.buttonLabel as string) || ctx.tokens.textSlots.cta_label
-  const radius = ctx.tokens.style.borderRadius
-  const motion = entranceClass(ctx)
+
+  const entrance = animateEntrance(ctx, { direction: 'bottom', distance: 4, durationMs: 700 })
+  const entranceClass = entrance ? ` ${entrance}` : ''
 
   return {
     jsx: `
@@ -103,7 +129,7 @@ export const ctaNewsletterSplit: SectionRenderer = (ctx: SectionContext): Sectio
         aria-label="Newsletter signup"
       >
         <div className="container mx-auto px-4 py-14 md:py-18">
-          <div className="grid md:grid-cols-2 gap-10 items-center ${motion}">
+          <div className="grid md:grid-cols-2 gap-10 items-center${entranceClass}">
 
             {/* Left — text column */}
             <div>
@@ -122,30 +148,36 @@ export const ctaNewsletterSplit: SectionRenderer = (ctx: SectionContext): Sectio
                 className="flex flex-col sm:flex-row gap-3"
                 aria-label="Newsletter subscription form"
               >
-                <label htmlFor="newsletter-split-email" className="sr-only">
+                <Label htmlFor="newsletter-split-email" className="sr-only">
                   Email address
-                </label>
-                <input
-                  id="newsletter-split-email"
-                  type="email"
-                  name="email"
-                  autoComplete="email"
-                  placeholder="you@example.com"
-                  required
-                  className="flex-1 rounded-[${radius}] border border-border bg-background px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                />
-                <button
-                  type="submit"
-                  className="shrink-0 rounded-[${radius}] bg-primary px-6 py-2.5 text-sm font-semibold text-primary-foreground hover:opacity-90 active:scale-95 transition-all"
-                >
+                </Label>
+                <div className="relative flex-1">
+                  <Mail
+                    className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none"
+                    aria-hidden="true"
+                  />
+                  <Input
+                    id="newsletter-split-email"
+                    type="email"
+                    name="email"
+                    autoComplete="email"
+                    placeholder="you@example.com"
+                    required
+                    aria-required="true"
+                    className="pl-9 focus-visible:ring-2 focus-visible:ring-primary"
+                  />
+                </div>
+                <Button type="submit" size="lg" className="shrink-0 gap-2">
                   ${buttonLabel}
-                </button>
+                  <ArrowRight className="size-4" aria-hidden="true" />
+                </Button>
               </form>
             </div>
 
           </div>
         </div>
       </section>`,
+    imports: [IMPORT_BUTTON, IMPORT_INPUT, IMPORT_LABEL, IMPORT_ICONS_NEWSLETTER],
   }
 }
 
@@ -206,53 +238,82 @@ export const ctaPricing: SectionRenderer = (ctx: SectionContext): SectionOutput 
   const subtext =
     (ctx.config.subtext as string) || 'Choose the plan that fits your needs.'
   const plans = (ctx.config.plans as PricingPlan[] | undefined) ?? defaultPlans()
-  const radius = ctx.tokens.style.borderRadius
-  const motion = entranceClass(ctx)
+
+  const headerEntrance = animateEntrance(ctx, {
+    direction: 'bottom',
+    distance: 4,
+    durationMs: 700,
+  })
+  const headerEntranceClass = headerEntrance ? ` ${headerEntrance}` : ''
+
+  // Stagger delays for pricing card entrances
+  const staggerDelays = staggerChildren(plans.length, 0, 150)
 
   const planCards = plans
-    .map((plan) => {
+    .map((plan, idx) => {
+      const delay = staggerDelays[idx] ?? 'delay-0'
+      const cardEntrance = animateEntrance(ctx, {
+        direction: 'bottom',
+        distance: 4,
+        durationMs: 600,
+      })
+      const cardEntranceClass = cardEntrance ? ` ${cardEntrance} ${delay}` : ''
+
       const highlightClasses = plan.highlighted
-        ? 'border-primary ring-2 ring-primary shadow-lg scale-[1.02]'
-        : 'border-border'
+        ? 'ring-2 ring-primary shadow-xl scale-[1.02]'
+        : 'hover:shadow-xl transition-shadow'
+
       const featureItems = plan.features
         .map(
           (f) => `
-              <li className="flex items-start gap-2 text-sm text-muted-foreground">
-                <span className="mt-0.5 text-primary" aria-hidden="true">✓</span>
-                <span>${f}</span>
-              </li>`,
+                <li className="flex items-start gap-2 text-sm text-muted-foreground">
+                  <Check className="size-4 text-primary mt-0.5 shrink-0" aria-hidden="true" />
+                  <span>${f}</span>
+                </li>`,
         )
         .join('')
 
+      const badgeJsx = plan.highlighted
+        ? `
+              <Badge className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-0.5 text-[10px] font-semibold uppercase tracking-wide">
+                Most popular
+              </Badge>`
+        : ''
+
+      const buttonVariant = plan.highlighted ? 'default' : 'outline'
+
       return `
-            <div
-              className="relative flex flex-col rounded-[${radius}] border bg-background px-6 py-8 ${highlightClasses} ${motion}"
+            <Card
+              className="relative flex flex-col${cardEntranceClass} ${highlightClasses}"
               ${plan.highlighted ? 'aria-label="Recommended plan"' : ''}
             >
-              ${
-                plan.highlighted
-                  ? `<span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-primary px-3 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary-foreground">
-                Most popular
-              </span>`
-                  : ''
-              }
-              <h3 className="text-lg font-bold text-foreground font-[family-name:var(--font-display)] mb-1">
-                ${plan.name}
-              </h3>
-              <div className="mb-6">
-                <span className="text-3xl font-extrabold text-foreground">${plan.price}</span>
-                ${plan.period ? `<span className="ml-1 text-sm text-muted-foreground">${plan.period}</span>` : ''}
-              </div>
-              <ul className="flex flex-col gap-2 mb-8 flex-1" aria-label="${plan.name} plan features">
-                ${featureItems}
-              </ul>
-              <button
-                type="button"
-                className="w-full rounded-[${radius}] ${plan.highlighted ? 'bg-primary text-primary-foreground' : 'border border-border bg-background text-foreground hover:bg-muted/50'} px-4 py-2.5 text-sm font-semibold transition-all hover:opacity-90 active:scale-95"
-              >
-                ${plan.cta}
-              </button>
-            </div>`
+              ${badgeJsx}
+              <CardHeader className="pb-2">
+                <CardTitle className="text-lg font-bold font-[family-name:var(--font-display)]">
+                  ${plan.name}
+                </CardTitle>
+                <div className="mt-1">
+                  <span className="text-3xl font-extrabold text-foreground">${plan.price}</span>
+                  ${plan.period ? `<span className="ml-1 text-sm text-muted-foreground">${plan.period}</span>` : ''}
+                </div>
+              </CardHeader>
+              <CardContent className="flex-1">
+                <ul className="flex flex-col gap-2 mt-2" aria-label="${plan.name} plan features">
+                  ${featureItems}
+                </ul>
+              </CardContent>
+              <CardFooter className="pt-4">
+                <Button
+                  type="button"
+                  variant="${buttonVariant}"
+                  size="default"
+                  className="w-full gap-2"
+                >
+                  ${plan.cta}
+                  <ArrowRight className="size-4" aria-hidden="true" />
+                </Button>
+              </CardFooter>
+            </Card>`
     })
     .join('')
 
@@ -263,7 +324,7 @@ export const ctaPricing: SectionRenderer = (ctx: SectionContext): SectionOutput 
         aria-label="Pricing plans"
       >
         <div className="container mx-auto px-4 py-16 md:py-24">
-          <div className="text-center mb-12 ${motion}">
+          <div className="text-center mb-12${headerEntranceClass}">
             <h2 className="text-3xl md:text-4xl font-bold text-foreground font-[family-name:var(--font-display)] mb-3">
               ${headline}
             </h2>
@@ -276,6 +337,7 @@ export const ctaPricing: SectionRenderer = (ctx: SectionContext): SectionOutput 
           </div>
         </div>
       </section>`,
+    imports: [IMPORT_BUTTON, IMPORT_CARD, IMPORT_BADGE, IMPORT_ICONS_PRICING],
   }
 }
 
@@ -290,8 +352,9 @@ export const ctaDownload: SectionRenderer = (ctx: SectionContext): SectionOutput
     'Start for free. No credit card required. Cancel anytime.'
   const buttonLabel = (ctx.config.buttonLabel as string) || ctx.tokens.textSlots.cta_label
   const buttonHref = (ctx.config.buttonHref as string) || '#'
-  const radius = ctx.tokens.style.borderRadius
-  const motion = entranceClass(ctx)
+
+  const entrance = animateEntrance(ctx, { direction: 'bottom', distance: 4, durationMs: 700 })
+  const entranceClass = entrance ? ` ${entrance}` : ''
 
   return {
     jsx: `
@@ -299,21 +362,27 @@ export const ctaDownload: SectionRenderer = (ctx: SectionContext): SectionOutput
         className="bg-primary text-primary-foreground"
         aria-label="Download or get started"
       >
-        <div className="container mx-auto px-4 py-14 md:py-20 text-center ${motion}">
+        <div className="container mx-auto px-4 py-14 md:py-20 text-center${entranceClass}">
           <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold font-[family-name:var(--font-display)] mb-4 leading-tight">
             ${headline}
           </h2>
           <p className="text-primary-foreground/80 text-base md:text-lg mb-8 max-w-xl mx-auto leading-relaxed">
             ${subtitle}
           </p>
-          <a
-            href="${buttonHref}"
-            className="inline-flex items-center gap-2 rounded-[${radius}] bg-background text-foreground px-8 py-3 text-sm font-semibold hover:opacity-90 active:scale-95 transition-all shadow-sm"
+          <Button
+            asChild
+            size="lg"
+            variant="secondary"
+            className="gap-2 shadow-sm hover:opacity-90 active:scale-95 transition-all"
           >
-            ${buttonLabel}
-          </a>
+            <a href="${buttonHref}">
+              ${buttonLabel}
+              <ArrowRight className="size-4" aria-hidden="true" />
+            </a>
+          </Button>
         </div>
       </section>`,
+    imports: [IMPORT_BUTTON, IMPORT_ICONS_DOWNLOAD],
   }
 }
 
@@ -326,12 +395,11 @@ export const ctaContact: SectionRenderer = (ctx: SectionContext): SectionOutput 
   const contactEmail = (ctx.config.email as string) || ''
   const contactInfo =
     contactEmail ||
-    (ctx.tokens.textSlots.about_paragraph
-      ? ctx.tokens.textSlots.about_paragraph
-      : '')
-  const radius = ctx.tokens.style.borderRadius
-  const motion = entranceClass(ctx)
+    (ctx.tokens.textSlots.about_paragraph ? ctx.tokens.textSlots.about_paragraph : '')
   const submitLabel = (ctx.config.submitLabel as string) || 'Send message'
+
+  const entrance = animateEntrance(ctx, { direction: 'bottom', distance: 4, durationMs: 700 })
+  const entranceClass = entrance ? ` ${entrance}` : ''
 
   return {
     jsx: `
@@ -340,7 +408,7 @@ export const ctaContact: SectionRenderer = (ctx: SectionContext): SectionOutput 
         aria-label="Contact us"
       >
         <div className="container mx-auto px-4 py-16 md:py-24">
-          <div className="max-w-2xl mx-auto ${motion}">
+          <div className="max-w-2xl mx-auto${entranceClass}">
             <h2 className="text-3xl md:text-4xl font-bold text-foreground font-[family-name:var(--font-display)] mb-3 text-center">
               ${headline}
             </h2>
@@ -351,6 +419,7 @@ export const ctaContact: SectionRenderer = (ctx: SectionContext): SectionOutput 
             </p>`
                 : '<div className="mb-8" />'
             }
+            <Separator className="mb-8" />
             <form
               onSubmit={e => e.preventDefault()}
               className="flex flex-col gap-5"
@@ -358,58 +427,74 @@ export const ctaContact: SectionRenderer = (ctx: SectionContext): SectionOutput 
             >
               <div className="grid sm:grid-cols-2 gap-5">
                 <div className="flex flex-col gap-1.5">
-                  <label htmlFor="contact-name" className="text-sm font-medium text-foreground">
+                  <Label htmlFor="contact-name">
                     Full name
-                  </label>
-                  <input
+                  </Label>
+                  <Input
                     id="contact-name"
                     type="text"
                     name="name"
                     autoComplete="name"
                     placeholder="Jane Smith"
                     required
-                    className="rounded-[${radius}] border border-border bg-background px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                    aria-required="true"
+                    className="focus-visible:ring-2 focus-visible:ring-primary"
                   />
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  <label htmlFor="contact-email" className="text-sm font-medium text-foreground">
+                  <Label htmlFor="contact-email">
                     Email address
-                  </label>
-                  <input
+                  </Label>
+                  <Input
                     id="contact-email"
                     type="email"
                     name="email"
                     autoComplete="email"
                     placeholder="jane@example.com"
                     required
-                    className="rounded-[${radius}] border border-border bg-background px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                    aria-required="true"
+                    className="focus-visible:ring-2 focus-visible:ring-primary"
                   />
                 </div>
               </div>
               <div className="flex flex-col gap-1.5">
-                <label htmlFor="contact-message" className="text-sm font-medium text-foreground">
+                <Label htmlFor="contact-subject">
+                  Subject
+                </Label>
+                <Input
+                  id="contact-subject"
+                  type="text"
+                  name="subject"
+                  placeholder="How can we help?"
+                  required
+                  aria-required="true"
+                  className="focus-visible:ring-2 focus-visible:ring-primary"
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="contact-message">
                   Message
-                </label>
+                </Label>
                 <textarea
                   id="contact-message"
                   name="message"
                   rows={5}
                   placeholder="Tell us how we can help…"
                   required
-                  className="rounded-[${radius}] border border-border bg-background px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary resize-y"
+                  aria-required="true"
+                  className="flex min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-y"
                 />
               </div>
               <div className="flex justify-end">
-                <button
-                  type="submit"
-                  className="rounded-[${radius}] bg-primary px-8 py-2.5 text-sm font-semibold text-primary-foreground hover:opacity-90 active:scale-95 transition-all"
-                >
+                <Button type="submit" size="lg" className="gap-2">
                   ${submitLabel}
-                </button>
+                  <Send className="size-4" aria-hidden="true" />
+                </Button>
               </div>
             </form>
           </div>
         </div>
       </section>`,
+    imports: [IMPORT_BUTTON, IMPORT_INPUT, IMPORT_LABEL, IMPORT_SEPARATOR, IMPORT_ICONS_CONTACT],
   }
 }

@@ -17,6 +17,8 @@
   "scroll-area": { "deps": { "radix-ui": "^1.1.0" } },
   "select": { "deps": { "radix-ui": "^1.1.0" } },
   "separator": { "deps": { "radix-ui": "^1.1.0" } },
+  "sheet": { "deps": { "radix-ui": "^1.1.0" } },
+  "skeleton": { "deps": {} },
   "switch": { "deps": { "radix-ui": "^1.1.0" } },
   "table": { "deps": {} },
   "tabs": { "deps": { "radix-ui": "^1.1.0", "class-variance-authority": "^0.7.1" } },

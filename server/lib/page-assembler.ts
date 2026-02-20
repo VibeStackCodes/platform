@@ -139,6 +139,71 @@ function buildSectionContext(
 }
 
 // ---------------------------------------------------------------------------
+// Import merging
+// ---------------------------------------------------------------------------
+
+/**
+ * Regex to match:  import { Foo, Bar } from 'some-module'
+ * Groups: (1) named specifiers, (2) module path
+ */
+const NAMED_IMPORT_RE = /^import\s*\{\s*([^}]+)\s*\}\s*from\s*['"]([^'"]+)['"]\s*;?$/
+
+/**
+ * Merge import statements that share the same source module.
+ *
+ * When two sections both import from 'react' with different specifiers
+ * (e.g. `import { useState } from 'react'` and
+ *       `import { useState, useEffect } from 'react'`),
+ * this produces a single merged import:
+ *       `import { useEffect, useState } from 'react'`
+ *
+ * Non-named imports (default, namespace, side-effect) are kept as-is
+ * and deduplicated by exact string match.
+ */
+function mergeImports(rawImports: string[]): string[] {
+  // source module → Set of specifier names
+  const namedByModule = new Map<string, Set<string>>()
+  // Preserve insertion order of modules
+  const moduleOrder: string[] = []
+  // Non-named imports (deduplicated by exact match)
+  const otherImports = new Set<string>()
+
+  for (const imp of rawImports) {
+    const match = imp.match(NAMED_IMPORT_RE)
+    if (match) {
+      const specifiers = match[1]
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
+      const modulePath = match[2]
+
+      if (!namedByModule.has(modulePath)) {
+        namedByModule.set(modulePath, new Set())
+        moduleOrder.push(modulePath)
+      }
+      const set = namedByModule.get(modulePath)!
+      for (const s of specifiers) set.add(s)
+    } else {
+      otherImports.add(imp)
+    }
+  }
+
+  // Reconstruct merged named imports in insertion order
+  const result: string[] = []
+  for (const mod of moduleOrder) {
+    const specifiers = [...namedByModule.get(mod)!].sort()
+    result.push(`import { ${specifiers.join(', ')} } from '${mod}'`)
+  }
+
+  // Append other imports
+  for (const imp of otherImports) {
+    result.push(imp)
+  }
+
+  return result
+}
+
+// ---------------------------------------------------------------------------
 // Route file builder
 // ---------------------------------------------------------------------------
 
@@ -152,15 +217,19 @@ function buildRouteFile(
   routeId: string,
   componentName: string,
 ): string {
-  // Deduplicate imports — createFileRoute is always first
-  const allImports = new Set<string>()
-  allImports.add("import { createFileRoute } from '@tanstack/react-router'")
+  // Collect all raw import strings from sections
+  const rawImports: string[] = [
+    "import { createFileRoute } from '@tanstack/react-router'",
+  ]
 
   for (const s of sections) {
     for (const imp of s.imports ?? []) {
-      allImports.add(imp)
+      rawImports.push(imp)
     }
   }
+
+  // Smart import merging: group named imports by source module, merge specifiers
+  const allImports = mergeImports(rawImports)
 
   // Collect hooks
   const allHooks = sections.flatMap((s) => s.hooks ?? [])
@@ -170,7 +239,7 @@ function buildRouteFile(
 
   const jsxBody = sections.map((s) => s.jsx).join('\n      ')
 
-  return `${[...allImports].join('\n')}
+  return `${allImports.join('\n')}
 
 export const Route = createFileRoute('${routeId}')({
   component: ${componentName},
