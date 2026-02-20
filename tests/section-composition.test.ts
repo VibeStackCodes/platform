@@ -131,8 +131,8 @@ const entityCtx: SectionContext = {
 // ---------------------------------------------------------------------------
 
 describe('Section Registry', () => {
-  it('SECTION_CATALOG has 46 entries', () => {
-    expect(SECTION_CATALOG).toHaveLength(46)
+  it('SECTION_CATALOG has 50 entries', () => {
+    expect(SECTION_CATALOG).toHaveLength(50)
   })
 
   it('every section has required fields that are non-empty', () => {
@@ -175,11 +175,11 @@ describe('Section Registry', () => {
     const utils = getSectionsByCategory('utility')
 
     expect(heroes).toHaveLength(6)
-    expect(grids).toHaveLength(8)
+    expect(grids).toHaveLength(10) // 8 generic + 2 domain-restaurant (menu-archive, menu-category)
     expect(navs).toHaveLength(4)
     expect(details).toHaveLength(5)
-    expect(content).toHaveLength(8)
-    expect(ctas).toHaveLength(5)
+    expect(content).toHaveLength(9) // 8 generic + 1 domain-restaurant (services-list)
+    expect(ctas).toHaveLength(6) // 5 generic + 1 domain-restaurant (reservation-form)
     expect(footers).toHaveLength(4)
     expect(utils).toHaveLength(6)
   })

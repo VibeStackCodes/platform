@@ -375,6 +375,40 @@ export const SECTION_CATALOG: SectionMeta[] = [
   },
 
   // -------------------------------------------------------------------------
+  // Domain: Restaurant (4)
+  // -------------------------------------------------------------------------
+  {
+    id: 'domain-menu-archive',
+    category: 'grid',
+    description: 'Menu items grouped by category with prices — restaurant theme.',
+    requiresEntity: true,
+    requiredColumns: ['text'],
+    tags: ['restaurant', 'food', 'menu', 'domain-specific'],
+  },
+  {
+    id: 'domain-menu-category',
+    category: 'grid',
+    description: 'Menu items filtered by URL category parameter — restaurant theme.',
+    requiresEntity: true,
+    requiredColumns: ['text'],
+    tags: ['restaurant', 'food', 'menu', 'domain-specific'],
+  },
+  {
+    id: 'domain-reservation-form',
+    category: 'cta',
+    description: 'Table reservation form with party size, date, time — restaurant theme.',
+    requiresEntity: true,
+    tags: ['restaurant', 'booking', 'form', 'domain-specific'],
+  },
+  {
+    id: 'domain-services-list',
+    category: 'content',
+    description: 'Services/offerings list with links — restaurant theme.',
+    requiresEntity: true,
+    tags: ['restaurant', 'services', 'domain-specific'],
+  },
+
+  // -------------------------------------------------------------------------
   // Utility (6)
   // -------------------------------------------------------------------------
   {

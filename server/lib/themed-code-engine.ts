@@ -2,8 +2,6 @@ import { formatCss, oklch as toOklch, parse as parseColor } from 'culori'
 import type { SchemaContract, TableDef } from './schema-contract'
 import { inferPageConfig, derivePageFeatureSpec, type PageFeatureSpec } from './agents/feature-schema'
 import { pluralize, singularize, snakeToKebab, snakeToPascal, snakeToTitle } from './naming-utils'
-// theme-layouts still exports deriveArchetype + render* for direct use; section composition supersedes them here
-import { getThemeRoutes, type ThemeName } from './theme-routes'
 import { fallbackCompositionPlan } from './page-composer'
 import { assemblePages } from './page-assembler'
 import type { EntityMeta } from './sections/types'
@@ -975,17 +973,8 @@ function DashboardPage() {
 `
 }
 
-/**
- * Check if theme should use theme-specific (1:1 clone) routes vs. archetype-based layouts
- */
-function isThemeSpecific(themeName: string): themeName is ThemeName {
-  return themeName === 'canape' || themeName === 'quomi' || themeName === 'clune'
-}
-
 export function generateThemedApp(contract: SchemaContract, tokens: ThemeTokens, appName: string): Record<string, string> {
   const files: Record<string, string> = {}
-  const useThemeSpecific = isThemeSpecific(tokens.name)
-  const themeRoutes = useThemeSpecific ? getThemeRoutes(tokens.name as ThemeName) : null
 
   const metas: RouteMeta[] = contract.tables.map((table) => {
     const spec = derivePageFeatureSpec(inferPageConfig(table, contract), contract)
@@ -1004,71 +993,30 @@ export function generateThemedApp(contract: SchemaContract, tokens: ThemeTokens,
     }
   })
 
-  const allPublicMeta = metas.filter((meta) => !meta.isPrivate)
-  const publicMeta = allPublicMeta[0] ?? null
-
   files['src/index.css'] = themeCss(tokens)
 
-  // For theme-specific themes like Canape, generate specialized routes
-  // Otherwise, generate archetype-based generic routes
-  if (useThemeSpecific && themeRoutes) {
-    // Theme-specific route generation (Canape has menu, news, reservations, etc.)
-    const themeContext = {
-      appName,
-      allPublicMeta,
-      siteEmail: tokens.textSlots?.about_paragraph || '',
-      heroImages: tokens.heroImages,
-      hasAuth: tokens.authPosture !== 'public',
-    }
+  // Section composition — deterministic plan from theme tokens
+  const entities = metas.map(routeMetaToEntityMeta)
+  const plan = fallbackCompositionPlan(entities, tokens)
+  const composedFiles = assemblePages(plan, entities, tokens, appName)
+  Object.assign(files, composedFiles)
 
-    // Homepage
-    files['src/routes/index.tsx'] = themeRoutes.homepage(publicMeta ?? null, themeContext)
+  // Static pages (not composed)
+  files['src/routes/about.tsx'] = aboutRoute(tokens, appName)
+  files['src/routes/contact.tsx'] = contactRoute(tokens)
 
-    // Canape-specific public routes
-    files['src/routes/menu/index.tsx'] = themeRoutes.menuArchive(themeContext)
-    files['src/routes/menu/$category/index.tsx'] = themeRoutes.menuCategory(themeContext)
-    files['src/routes/news/index.tsx'] = themeRoutes.newsArchive(themeContext)
-    files['src/routes/news/$slug/index.tsx'] = themeRoutes.post(themeContext)
-    files['src/routes/$slug/index.tsx'] = themeRoutes.page(themeContext)
-    files['src/routes/reservations/index.tsx'] = themeRoutes.reservations(themeContext)
+  if (tokens.authPosture !== 'public') {
+    files['src/routes/auth/login.tsx'] = loginRoute(tokens, appName)
+    files['src/routes/auth/signup.tsx'] = signupRoute(tokens)
+    files['src/routes/_authenticated/route.tsx'] = authenticatedRoute(tokens)
+    files['src/routes/_authenticated/dashboard.tsx'] = dashboardRoute(metas.find((meta) => meta.isPrivate) ?? metas[0] ?? null, tokens)
+  }
 
-    // Auth routes
-    if (tokens.authPosture !== 'public') {
-      files['src/routes/auth/login.tsx'] = loginRoute(tokens, appName)
-      files['src/routes/auth/signup.tsx'] = signupRoute(tokens)
-      files['src/routes/_authenticated/route.tsx'] = authenticatedRoute(tokens)
-      files['src/routes/_authenticated/dashboard.tsx'] = dashboardRoute(metas.find((meta) => meta.isPrivate) ?? metas[0] ?? null, tokens)
-
-      // Canape-specific admin routes (list + detail)
-      files['src/routes/_authenticated/admin/entities/index.tsx'] = themeRoutes.adminEntities(themeContext)
-      files['src/routes/_authenticated/admin/entities/$id.tsx'] = themeRoutes.adminEntityDetail(themeContext)
-      files['src/routes/_authenticated/admin/menu-items/index.tsx'] = themeRoutes.adminMenuItems(themeContext)
-      files['src/routes/_authenticated/admin/menu-items/$id.tsx'] = themeRoutes.adminMenuItemDetail(themeContext)
-    }
-  } else {
-    // Section composition — deterministic plan from theme tokens
-    const entities = metas.map(routeMetaToEntityMeta)
-    const plan = fallbackCompositionPlan(entities, tokens)
-    const composedFiles = assemblePages(plan, entities, tokens, appName)
-    Object.assign(files, composedFiles)
-
-    // Static pages (not composed)
-    files['src/routes/about.tsx'] = aboutRoute(tokens, appName)
-    files['src/routes/contact.tsx'] = contactRoute(tokens)
-
-    if (tokens.authPosture !== 'public') {
-      files['src/routes/auth/login.tsx'] = loginRoute(tokens, appName)
-      files['src/routes/auth/signup.tsx'] = signupRoute(tokens)
-      files['src/routes/_authenticated/route.tsx'] = authenticatedRoute(tokens)
-      files['src/routes/_authenticated/dashboard.tsx'] = dashboardRoute(metas.find((meta) => meta.isPrivate) ?? metas[0] ?? null, tokens)
-    }
-
-    // Private CRUD routes (not composed — admin tables stay generic)
-    for (const meta of metas) {
-      if (meta.isPrivate) {
-        files[`${meta.folderPrefix}/index.tsx`] = buildEntityListRoute(meta, tokens)
-        files[`${meta.folderPrefix}/$id.tsx`] = buildEntityDetailRoute(meta, tokens)
-      }
+  // Private CRUD routes (not composed — admin tables stay generic)
+  for (const meta of metas) {
+    if (meta.isPrivate) {
+      files[`${meta.folderPrefix}/index.tsx`] = buildEntityListRoute(meta, tokens)
+      files[`${meta.folderPrefix}/$id.tsx`] = buildEntityDetailRoute(meta, tokens)
     }
   }
 

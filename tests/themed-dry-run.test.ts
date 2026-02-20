@@ -1,19 +1,24 @@
 /**
  * Themed Dry-Run Pipeline Integration Test
  *
- * Exercises the NEW themed pipeline (no assembler, no old DesignSpec):
- *   SchemaContract + ThemeTokens → contractToBlueprint() → all themed files
+ * Exercises the unified section composition pipeline (all themes):
+ *   SchemaContract + ThemeTokens → generateThemedApp() → all themed files
  *   → write to tmpdir → tsc --noEmit
  *
- * Tests 3 scenarios:
+ * Tests 4 scenarios:
  *   1. Restaurant Menu (public, editorial nav, food colors, FKs)
  *   2. SaaS Dashboard (private, sidebar nav, business colors, multi-entity)
  *   3. Blog Platform (hybrid, minimal nav, typography-focused)
+ *   4. Canape theme (domain-specific routes via section composition)
  *
  * Each verifies:
  *   - Themed files generated (homepage, about, contact, entity list/detail)
  *   - Auth posture routes correct (public vs private vs hybrid)
  *   - Generated TypeScript compiles (tsc --noEmit)
+ *
+ * NOTE: There is no longer a two-track system. ALL themes (including Canape)
+ * go through fallbackCompositionPlan() → assemblePages(). The old Canape-
+ * specific hand-crafted route generators have been removed.
  */
 
 import { describe, it, expect } from 'vitest'
@@ -540,6 +545,168 @@ describe('Themed Dry-Run Pipeline', () => {
         console.error('Scaffold errors:', result.errors)
       }
       expect(result.passed).toBe(true)
+    })
+  })
+
+  describe('Test 4: Canape theme (domain-specific routes via section composition)', () => {
+    const canapeTokens: ThemeTokens = {
+      name: 'canape',
+      fonts: {
+        display: 'Playfair Display',
+        body: 'Source Sans Pro',
+        googleFontsUrl: 'https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Source+Sans+Pro:wght@400;600&display=swap',
+      },
+      colors: {
+        background: '#ffffff',
+        foreground: '#1a1a1a',
+        primary: '#2563eb',
+        primaryForeground: '#ffffff',
+        secondary: '#f3f4f6',
+        accent: '#dc2626',
+        muted: '#f3f4f6',
+        border: '#e5e7eb',
+      },
+      style: {
+        borderRadius: '0.375rem',
+        cardStyle: 'elevated',
+        navStyle: 'editorial',
+        heroLayout: 'editorial',
+        spacing: 'generous' as 'normal',
+        motion: 'subtle',
+        imagery: 'photography-heavy',
+      },
+      authPosture: 'public',
+      heroImages: [],
+      heroQuery: 'fine dining restaurant',
+      textSlots: {
+        hero_headline: 'A Taste of Excellence',
+        hero_subtext: 'Seasonal menus, artisan techniques, and warm hospitality.',
+        about_paragraph: 'We source the finest local ingredients for each dish.',
+        cta_label: 'Make a reservation',
+        empty_state: 'Nothing here yet.',
+        footer_tagline: 'Crafted with passion.',
+      },
+    }
+
+    const canapeContract = {
+      tables: [
+        {
+          name: 'entities',
+          columns: [
+            { name: 'id', type: 'uuid' as const, primaryKey: true, default: 'gen_random_uuid()' },
+            { name: 'name', type: 'text' as const, nullable: false },
+            { name: 'image_url', type: 'text' as const },
+          ],
+        },
+        {
+          name: 'menu_items',
+          columns: [
+            { name: 'id', type: 'uuid' as const, primaryKey: true, default: 'gen_random_uuid()' },
+            { name: 'name', type: 'text' as const, nullable: false },
+            { name: 'category', type: 'text' as const, nullable: false },
+            { name: 'price', type: 'numeric' as const, nullable: false },
+          ],
+        },
+        {
+          name: 'posts',
+          columns: [
+            { name: 'id', type: 'uuid' as const, primaryKey: true, default: 'gen_random_uuid()' },
+            { name: 'title', type: 'text' as const, nullable: false },
+            { name: 'slug', type: 'text' as const, nullable: false },
+            { name: 'content', type: 'text' as const },
+          ],
+        },
+        {
+          name: 'pages',
+          columns: [
+            { name: 'id', type: 'uuid' as const, primaryKey: true, default: 'gen_random_uuid()' },
+            { name: 'title', type: 'text' as const, nullable: false },
+            { name: 'slug', type: 'text' as const, nullable: false },
+            { name: 'content', type: 'text' as const },
+          ],
+        },
+        {
+          name: 'reservations',
+          columns: [
+            { name: 'id', type: 'uuid' as const, primaryKey: true, default: 'gen_random_uuid()' },
+            { name: 'name', type: 'text' as const, nullable: false },
+            { name: 'email', type: 'text' as const, nullable: false },
+          ],
+        },
+        {
+          name: 'services_page',
+          columns: [
+            { name: 'id', type: 'uuid' as const, primaryKey: true, default: 'gen_random_uuid()' },
+            { name: 'name', type: 'text' as const, nullable: false },
+            { name: 'url', type: 'text' as const, nullable: false },
+            { name: 'order_index', type: 'integer' as const, nullable: false, default: '0' },
+          ],
+        },
+        {
+          name: 'testimonials',
+          columns: [
+            { name: 'id', type: 'uuid' as const, primaryKey: true, default: 'gen_random_uuid()' },
+            { name: 'quote', type: 'text' as const, nullable: false },
+            { name: 'author_name', type: 'text' as const, nullable: false },
+          ],
+        },
+      ],
+    }
+
+    const canapeFiles = generateThemedApp(canapeContract, canapeTokens, 'TestRestaurant')
+
+    it('canape theme produces a homepage via section composition', () => {
+      expect(canapeFiles).toHaveProperty('src/routes/index.tsx')
+      expect(canapeFiles['src/routes/index.tsx']).toContain('createFileRoute')
+    })
+
+    it('canape theme produces menu archive route at /menu/index.tsx', () => {
+      expect(canapeFiles).toHaveProperty('src/routes/menu/index.tsx')
+      expect(canapeFiles['src/routes/menu/index.tsx']).toContain('menu_items')
+    })
+
+    it('canape theme produces menu category route at /menu/$category.tsx (not /index.tsx)', () => {
+      // routePathToFilePath('/menu/$category') → src/routes/menu/$category.tsx
+      expect(canapeFiles).toHaveProperty('src/routes/menu/$category.tsx')
+      expect(canapeFiles).not.toHaveProperty('src/routes/menu/$category/index.tsx')
+    })
+
+    it('canape theme produces news archive route at /news/index.tsx', () => {
+      expect(canapeFiles).toHaveProperty('src/routes/news/index.tsx')
+    })
+
+    it('canape theme produces news slug route at /news/$slug.tsx (not /index.tsx)', () => {
+      // routePathToFilePath('/news/$slug') → src/routes/news/$slug.tsx
+      expect(canapeFiles).toHaveProperty('src/routes/news/$slug.tsx')
+      expect(canapeFiles).not.toHaveProperty('src/routes/news/$slug/index.tsx')
+    })
+
+    it('canape theme produces slug route at /$slug.tsx (not /$slug/index.tsx)', () => {
+      // routePathToFilePath('/$slug') → src/routes/$slug.tsx
+      expect(canapeFiles).toHaveProperty('src/routes/$slug.tsx')
+      expect(canapeFiles).not.toHaveProperty('src/routes/$slug/index.tsx')
+    })
+
+    it('canape theme produces reservations route at /reservations/index.tsx', () => {
+      expect(canapeFiles).toHaveProperty('src/routes/reservations/index.tsx')
+      expect(canapeFiles['src/routes/reservations/index.tsx']).toContain('reservations')
+    })
+
+    it('canape does NOT generate the old two-track hand-crafted routes', () => {
+      // Verify old path patterns (with /index.tsx for param routes) are gone
+      expect(canapeFiles).not.toHaveProperty('src/routes/menu/$category/index.tsx')
+      expect(canapeFiles).not.toHaveProperty('src/routes/news/$slug/index.tsx')
+      expect(canapeFiles).not.toHaveProperty('src/routes/$slug/index.tsx')
+    })
+
+    it('canape homepage does not use JSON.stringify (data is live, not hardcoded)', () => {
+      const homepage = canapeFiles['src/routes/index.tsx']
+      expect(homepage).not.toContain('JSON.stringify')
+    })
+
+    it('canape theme does not generate auth routes for public posture', () => {
+      expect(canapeFiles).not.toHaveProperty('src/routes/auth/login.tsx')
+      expect(canapeFiles).not.toHaveProperty('src/routes/_authenticated/route.tsx')
     })
   })
 

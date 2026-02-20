@@ -186,6 +186,68 @@ export function validateCompositionPlan(
 }
 
 /**
+ * Fixed composition plan for Canape (restaurant) theme.
+ * Maps Canape's domain-specific routes to a mix of generic + domain sections.
+ * Admin/private CRUD routes are handled separately by the engine.
+ */
+function canapeCompositionPlan(
+  entities: EntityMeta[],
+  _tokens: ThemeTokens,
+): PageCompositionPlan {
+  // Canape has fixed routes regardless of entity names
+  // The "primary" entity is the one used for homepage featured content
+  const primaryEntity = entities.find((e) => !e.isPrivate)?.tableName ?? 'entities'
+
+  const nav = 'nav-editorial'
+  const footer = 'footer-minimal'
+
+  const pages: Record<string, SectionSlot[]> = {
+    '/': [
+      { sectionId: nav },
+      { sectionId: 'hero-fullbleed' },
+      { sectionId: 'content-featured', entityBinding: primaryEntity },
+      { sectionId: 'content-testimonials-carousel' },
+      { sectionId: 'domain-services-list', entityBinding: 'services_page' },
+      { sectionId: 'cta-newsletter' },
+      { sectionId: footer },
+    ],
+    '/menu/': [
+      { sectionId: nav },
+      { sectionId: 'domain-menu-archive', entityBinding: 'menu_items' },
+      { sectionId: footer },
+    ],
+    '/menu/$category': [
+      { sectionId: nav },
+      { sectionId: 'domain-menu-category', entityBinding: 'menu_items', config: { paramName: 'category' } },
+      { sectionId: footer },
+    ],
+    '/news/': [
+      { sectionId: nav },
+      { sectionId: 'grid-list-editorial', entityBinding: 'posts' },
+      { sectionId: 'util-pagination', entityBinding: 'posts' },
+      { sectionId: footer },
+    ],
+    '/news/$slug': [
+      { sectionId: nav },
+      { sectionId: 'detail-article', entityBinding: 'posts' },
+      { sectionId: footer },
+    ],
+    '/$slug': [
+      { sectionId: nav },
+      { sectionId: 'detail-article', entityBinding: 'pages' },
+      { sectionId: footer },
+    ],
+    '/reservations/': [
+      { sectionId: nav },
+      { sectionId: 'domain-reservation-form', entityBinding: 'reservations' },
+      { sectionId: footer },
+    ],
+  }
+
+  return { pages }
+}
+
+/**
  * Deterministic fallback when LLM composition fails.
  * Selects sections based on theme token signals — no randomness.
  */
@@ -193,6 +255,11 @@ export function fallbackCompositionPlan(
   entities: EntityMeta[],
   tokens: ThemeTokens,
 ): PageCompositionPlan {
+  // Canape has a fixed route structure — delegate to domain-specific plan
+  if (tokens.name === 'canape') {
+    return canapeCompositionPlan(entities, tokens)
+  }
+
   const publicEntities = entities.filter((e) => !e.isPrivate)
 
   const hero: string =

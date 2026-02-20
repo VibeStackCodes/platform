@@ -107,6 +107,17 @@ import {
 } from './utility'
 
 // ---------------------------------------------------------------------------
+// Domain: Restaurant (Canape) renderers
+// ---------------------------------------------------------------------------
+
+import {
+  domainMenuArchive,
+  domainMenuCategory,
+  domainReservationForm,
+  domainServicesList,
+} from './domain-restaurant'
+
+// ---------------------------------------------------------------------------
 // RENDERERS map — keyed by canonical section ID
 // ---------------------------------------------------------------------------
 
@@ -172,6 +183,12 @@ const RENDERERS: Record<string, SectionRenderer> = {
   [SECTION_IDS.UTIL_FILTER_TABS]: utilFilterTabs,
   [SECTION_IDS.UTIL_EMPTY_STATE]: utilEmptyState,
   [SECTION_IDS.UTIL_PAGINATION]: utilPagination,
+
+  // Domain: Restaurant (Canape)
+  [SECTION_IDS.DOMAIN_MENU_ARCHIVE]: domainMenuArchive,
+  [SECTION_IDS.DOMAIN_MENU_CATEGORY]: domainMenuCategory,
+  [SECTION_IDS.DOMAIN_RESERVATION_FORM]: domainReservationForm,
+  [SECTION_IDS.DOMAIN_SERVICES_LIST]: domainServicesList,
 }
 
 // ---------------------------------------------------------------------------

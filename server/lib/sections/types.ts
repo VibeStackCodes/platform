@@ -179,6 +179,12 @@ export const SECTION_IDS = {
   UTIL_FILTER_TABS: 'util-filter-tabs',
   UTIL_EMPTY_STATE: 'util-empty-state',
   UTIL_PAGINATION: 'util-pagination',
+
+  // Domain: Restaurant (4)
+  DOMAIN_MENU_ARCHIVE: 'domain-menu-archive',
+  DOMAIN_MENU_CATEGORY: 'domain-menu-category',
+  DOMAIN_RESERVATION_FORM: 'domain-reservation-form',
+  DOMAIN_SERVICES_LIST: 'domain-services-list',
 } as const
 
 export type SectionId = (typeof SECTION_IDS)[keyof typeof SECTION_IDS]
