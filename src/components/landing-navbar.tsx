@@ -2,13 +2,6 @@ import { Link } from '@tanstack/react-router'
 import { useAuth } from '@/lib/auth'
 import { Button } from '@/components/ui/button'
 
-const navLinks = [
-  { label: 'Features', href: '#features' },
-  { label: 'Pricing', href: '#pricing' },
-  { label: 'Company', href: '#company' },
-  { label: 'Contacts', href: '#contacts' },
-]
-
 export function LandingNavbar() {
   const { user } = useAuth()
 
@@ -21,15 +14,6 @@ export function LandingNavbar() {
           <span className="text-lg font-semibold tracking-tight">VibeStack</span>
         </Link>
 
-        {/* Center: Nav links — hidden on mobile */}
-        <div className="hidden items-center gap-1 md:flex" role="navigation" aria-label="Main navigation">
-          {navLinks.map((link) => (
-            <Button key={link.label} variant="ghost" size="sm" asChild>
-              <a href={link.href}>{link.label}</a>
-            </Button>
-          ))}
-        </div>
-
         {/* Right: Auth actions */}
         <div className="flex items-center gap-2">
           {user ? (
@@ -37,14 +21,9 @@ export function LandingNavbar() {
               <Link to="/dashboard">Dashboard</Link>
             </Button>
           ) : (
-            <>
-              <Button variant="ghost" size="sm" asChild>
-                <Link to="/auth/login">Log In</Link>
-              </Button>
-              <Button variant="default" size="sm" className="rounded-full" asChild>
-                <Link to="/auth/login">Create Free Account</Link>
-              </Button>
-            </>
+            <Button variant="default" size="sm" className="rounded-full" asChild>
+              <Link to="/auth/login">Create Free Account</Link>
+            </Button>
           )}
         </div>
       </div>

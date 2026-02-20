@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "vite-client",
+      "runtimeExecutable": "bun",
+      "runtimeArgs": ["vite"],
+      "port": 3000
+    },
+    {
+      "name": "hono-api",
+      "runtimeExecutable": "bun",
+      "runtimeArgs": ["--watch", "server/index.ts"],
+      "port": 8787
+    }
+  ]
+}
