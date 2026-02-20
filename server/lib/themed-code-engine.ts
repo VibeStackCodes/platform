@@ -2,8 +2,11 @@ import { formatCss, oklch as toOklch, parse as parseColor } from 'culori'
 import type { SchemaContract, TableDef } from './schema-contract'
 import { inferPageConfig, derivePageFeatureSpec, type PageFeatureSpec } from './agents/feature-schema'
 import { pluralize, singularize, snakeToKebab, snakeToPascal, snakeToTitle } from './naming-utils'
-import { deriveArchetype, renderHomepage, renderPublicDetail, renderPublicList } from './theme-layouts'
+// theme-layouts still exports deriveArchetype + render* for direct use; section composition supersedes them here
 import { getThemeRoutes, type ThemeName } from './theme-routes'
+import { fallbackCompositionPlan } from './page-composer'
+import { assemblePages } from './page-assembler'
+import type { EntityMeta } from './sections/types'
 
 export interface TextSlots {
   hero_headline: string
@@ -69,6 +72,26 @@ type FormFieldMeta = {
   placeholder?: string
   options: string[]
   refTable?: string
+}
+
+const AUTO_COLS = new Set(['id', 'created_at', 'updated_at', 'user_id'])
+const IMAGE_RE = /image|photo|avatar|thumbnail|cover/
+
+function routeMetaToEntityMeta(meta: RouteMeta): EntityMeta {
+  const headerField = meta.spec.detailPage.headerField
+  return {
+    tableName: meta.table.name,
+    pluralKebab: meta.pluralKebab,
+    singularTitle: meta.singularTitle,
+    pluralTitle: meta.pluralTitle,
+    displayColumn: headerField,
+    imageColumn: meta.table.columns.find((c) => IMAGE_RE.test(c.name))?.name ?? null,
+    metadataColumns: meta.table.columns
+      .map((c) => c.name)
+      .filter((n) => !AUTO_COLS.has(n) && n !== headerField)
+      .slice(0, 3),
+    isPrivate: meta.isPrivate,
+  }
 }
 
 function spacingClass(spacing: ThemeTokens['style']['spacing']): string {
@@ -962,7 +985,6 @@ function isThemeSpecific(themeName: string): themeName is ThemeName {
 export function generateThemedApp(contract: SchemaContract, tokens: ThemeTokens, appName: string): Record<string, string> {
   const files: Record<string, string> = {}
   const useThemeSpecific = isThemeSpecific(tokens.name)
-  const archetype = !useThemeSpecific ? deriveArchetype(tokens) : null
   const themeRoutes = useThemeSpecific ? getThemeRoutes(tokens.name as ThemeName) : null
 
   const metas: RouteMeta[] = contract.tables.map((table) => {
@@ -984,7 +1006,6 @@ export function generateThemedApp(contract: SchemaContract, tokens: ThemeTokens,
 
   const allPublicMeta = metas.filter((meta) => !meta.isPrivate)
   const publicMeta = allPublicMeta[0] ?? null
-  const ctaPath = publicMeta ? `/${publicMeta.pluralKebab}/` : (tokens.authPosture === 'public' ? '/' : '/auth/login')
 
   files['src/index.css'] = themeCss(tokens)
 
@@ -1025,15 +1046,13 @@ export function generateThemedApp(contract: SchemaContract, tokens: ThemeTokens,
       files['src/routes/_authenticated/admin/menu-items/$id.tsx'] = themeRoutes.adminMenuItemDetail(themeContext)
     }
   } else {
-    // Archetype-based generic route generation
-    files['src/routes/index.tsx'] = renderHomepage(archetype!, {
-      tokens,
-      appName,
-      allPublicMeta,
-      featured: publicMeta,
-      ctaPath,
-      hasAuth: tokens.authPosture !== 'public',
-    })
+    // Section composition — deterministic plan from theme tokens
+    const entities = metas.map(routeMetaToEntityMeta)
+    const plan = fallbackCompositionPlan(entities, tokens)
+    const composedFiles = assemblePages(plan, entities, tokens, appName)
+    Object.assign(files, composedFiles)
+
+    // Static pages (not composed)
     files['src/routes/about.tsx'] = aboutRoute(tokens, appName)
     files['src/routes/contact.tsx'] = contactRoute(tokens)
 
@@ -1044,27 +1063,11 @@ export function generateThemedApp(contract: SchemaContract, tokens: ThemeTokens,
       files['src/routes/_authenticated/dashboard.tsx'] = dashboardRoute(metas.find((meta) => meta.isPrivate) ?? metas[0] ?? null, tokens)
     }
 
+    // Private CRUD routes (not composed — admin tables stay generic)
     for (const meta of metas) {
       if (meta.isPrivate) {
-        // Private pages: CRUD admin table with create/edit/delete
         files[`${meta.folderPrefix}/index.tsx`] = buildEntityListRoute(meta, tokens)
         files[`${meta.folderPrefix}/$id.tsx`] = buildEntityDetailRoute(meta, tokens)
-      } else {
-        // Public pages: archetype-specific visual clone layouts
-        files[`${meta.folderPrefix}/index.tsx`] = renderPublicList(archetype!, {
-          meta,
-          tokens,
-          appName,
-          allPublicMeta,
-          hasAuth: tokens.authPosture !== 'public',
-        })
-        files[`${meta.folderPrefix}/$id.tsx`] = renderPublicDetail(archetype!, {
-          meta,
-          tokens,
-          appName,
-          allPublicMeta,
-          hasAuth: tokens.authPosture !== 'public',
-        })
       }
     }
   }

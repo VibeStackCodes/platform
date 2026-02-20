@@ -100,10 +100,10 @@ export const contentFeatured: SectionRenderer = (ctx: SectionContext): SectionOu
 
   const imageBlock = imageCol
     ? `
-          {featured.${imageCol} && (
+          {!!featured.${imageCol} && (
             <img
-              src={featured.${imageCol}}
-              alt={featured.${displayCol} ?? ''}
+              src={String(featured.${imageCol})}
+              alt={String(featured.${displayCol} ?? '')}
               className="w-full h-64 md:h-80 object-cover rounded-t-[${radius}]"
             />
           )}`
@@ -122,25 +122,24 @@ export const contentFeatured: SectionRenderer = (ctx: SectionContext): SectionOu
               ${imageBlock}
               <div className="p-6 md:p-8 flex flex-col gap-4">
                 <h3 className="text-xl md:text-2xl font-bold text-foreground">
-                  {featured.${displayCol}}
+                  {String(featured.${displayCol} ?? '')}
                 </h3>
-                {featured.excerpt && (
+                {!!featured.excerpt && (
                   <p className="text-muted-foreground leading-relaxed line-clamp-4">
-                    {featured.excerpt}
+                    {String(featured.excerpt)}
                   </p>
                 )}
-                {!featured.excerpt && featured.description && (
+                {!featured.excerpt && !!featured.description && (
                   <p className="text-muted-foreground leading-relaxed line-clamp-4">
-                    {featured.description}
+                    {String(featured.description)}
                   </p>
                 )}
                 <div className="pt-2">
                   <Link
-                    to="/${ctx.entitySlug ?? table}/$id"
-                    params={{ id: String(featured.id) }}
+                    to={\`/${ctx.entitySlug ?? table}/\${featured.id}\`}
                     className="inline-flex items-center gap-2 text-sm font-semibold text-primary hover:underline"
                   >
-                    View {featured.${displayCol}}
+                    View {String(featured.${displayCol} ?? '')}
                     <span aria-hidden="true">→</span>
                   </Link>
                 </div>
@@ -153,7 +152,11 @@ export const contentFeatured: SectionRenderer = (ctx: SectionContext): SectionOu
           )}
         </div>
       </section>`,
-    imports: ["import { Link } from '@tanstack/react-router'"],
+    imports: [
+      "import { useQuery } from '@tanstack/react-query'",
+      "import { supabase } from '@/lib/supabase'",
+      "import { Link } from '@tanstack/react-router'",
+    ],
     hooks: [
       `const { data: featured } = useQuery({
     queryKey: ['${table}', 'featured'],

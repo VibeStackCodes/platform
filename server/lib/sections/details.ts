@@ -16,6 +16,16 @@
 import type { SectionContext, SectionOutput, SectionRenderer } from './types'
 
 // ---------------------------------------------------------------------------
+// Shared imports for detail pages (useQuery + supabase + Link + Route)
+// ---------------------------------------------------------------------------
+
+const DETAIL_IMPORTS = [
+  "import { useQuery } from '@tanstack/react-query'",
+  "import { supabase } from '@/lib/supabase'",
+  "import { Link } from '@tanstack/react-router'",
+]
+
+// ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
 
@@ -171,12 +181,12 @@ export const detailHeroOverlay: SectionRenderer = (ctx: SectionContext): Section
           {/* Below-hero content */}
           <div className="max-w-3xl mx-auto px-6 lg:px-8 py-12">
             ${metaDl ? `${metaDl}` : ''}
-            {(${itemVar} as Record<string, unknown>).description && (
+            {!!(${itemVar} as Record<string, unknown>).description && (
               <p className="mt-8 text-lg leading-relaxed text-foreground/80">
                 {String((${itemVar} as Record<string, unknown>).description)}
               </p>
             )}
-            {(${itemVar} as Record<string, unknown>).content && (
+            {!!(${itemVar} as Record<string, unknown>).content && (
               <div className="mt-8 prose prose-neutral dark:prose-invert max-w-none">
                 <p className="leading-relaxed">{String((${itemVar} as Record<string, unknown>).content)}</p>
               </div>
@@ -188,7 +198,7 @@ export const detailHeroOverlay: SectionRenderer = (ctx: SectionContext): Section
 
   return {
     jsx,
-    imports: [],
+    imports: DETAIL_IMPORTS,
     hooks: [buildDetailHook(ctx)],
   }
 }
@@ -235,12 +245,12 @@ export const detailSplitSidebar: SectionRenderer = (ctx: SectionContext): Sectio
                   {String(${itemVar}.${displayCol} ?? 'Untitled')}
                 </h1>
               </div>
-              {(${itemVar} as Record<string, unknown>).description && (
+              {!!(${itemVar} as Record<string, unknown>).description && (
                 <p className="text-lg leading-relaxed text-foreground/80">
                   {String((${itemVar} as Record<string, unknown>).description)}
                 </p>
               )}
-              {(${itemVar} as Record<string, unknown>).content && (
+              {!!(${itemVar} as Record<string, unknown>).content && (
                 <div className="prose prose-neutral dark:prose-invert max-w-none">
                   <p className="leading-relaxed">{String((${itemVar} as Record<string, unknown>).content)}</p>
                 </div>
@@ -266,7 +276,7 @@ export const detailSplitSidebar: SectionRenderer = (ctx: SectionContext): Sectio
 
   return {
     jsx,
-    imports: [],
+    imports: DETAIL_IMPORTS,
     hooks: [buildDetailHook(ctx)],
   }
 }
@@ -333,17 +343,17 @@ export const detailArticle: SectionRenderer = (ctx: SectionContext): SectionOutp
             </div>
 
             {/* Body */}
-            {(${itemVar} as Record<string, unknown>).excerpt && (
+            {!!(${itemVar} as Record<string, unknown>).excerpt && (
               <p className="text-xl font-medium text-foreground/70 leading-relaxed mb-8">
                 {String((${itemVar} as Record<string, unknown>).excerpt)}
               </p>
             )}
-            {(${itemVar} as Record<string, unknown>).description && (
+            {!!(${itemVar} as Record<string, unknown>).description && (
               <p className="text-lg leading-relaxed text-foreground/80 mb-6">
                 {String((${itemVar} as Record<string, unknown>).description)}
               </p>
             )}
-            {(${itemVar} as Record<string, unknown>).content && (
+            {!!(${itemVar} as Record<string, unknown>).content && (
               <div className="prose prose-neutral dark:prose-invert max-w-none">
                 <p className="leading-relaxed">{String((${itemVar} as Record<string, unknown>).content)}</p>
               </div>
@@ -355,7 +365,7 @@ export const detailArticle: SectionRenderer = (ctx: SectionContext): SectionOutp
 
   return {
     jsx,
-    imports: [],
+    imports: DETAIL_IMPORTS,
     hooks: [buildDetailHook(ctx)],
   }
 }
@@ -423,7 +433,7 @@ export const detailDataDense: SectionRenderer = (ctx: SectionContext): SectionOu
               ${createdCard}
             </div>
 
-            {(${itemVar} as Record<string, unknown>).description && (
+            {!!(${itemVar} as Record<string, unknown>).description && (
               <div className="mt-8 rounded-lg border border-border bg-card p-6 shadow-sm">
                 <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-3">Description</p>
                 <p className="text-sm leading-relaxed">{String((${itemVar} as Record<string, unknown>).description)}</p>
@@ -436,7 +446,7 @@ export const detailDataDense: SectionRenderer = (ctx: SectionContext): SectionOu
 
   return {
     jsx,
-    imports: [],
+    imports: DETAIL_IMPORTS,
     hooks: [buildDetailHook(ctx)],
   }
 }
@@ -482,7 +492,7 @@ export const detailGallery: SectionRenderer = (ctx: SectionContext): SectionOutp
               <h1 className="text-3xl md:text-4xl font-bold font-[family-name:var(--font-display)] leading-tight mb-4">
                 {String(${itemVar}.${displayCol} ?? 'Untitled')}
               </h1>
-              {(${itemVar} as Record<string, unknown>).description && (
+              {!!(${itemVar} as Record<string, unknown>).description && (
                 <p className="text-base leading-relaxed text-foreground/80">
                   {String((${itemVar} as Record<string, unknown>).description)}
                 </p>
@@ -496,7 +506,7 @@ export const detailGallery: SectionRenderer = (ctx: SectionContext): SectionOutp
             <h1 className="text-3xl md:text-4xl font-bold font-[family-name:var(--font-display)] leading-tight mb-4">
               {String(${itemVar}.${displayCol} ?? 'Untitled')}
             </h1>
-            {(${itemVar} as Record<string, unknown>).description && (
+            {!!(${itemVar} as Record<string, unknown>).description && (
               <p className="mt-4 text-lg leading-relaxed text-foreground/80">
                 {String((${itemVar} as Record<string, unknown>).description)}
               </p>
@@ -524,7 +534,7 @@ export const detailGallery: SectionRenderer = (ctx: SectionContext): SectionOutp
 
   return {
     jsx,
-    imports: [],
+    imports: DETAIL_IMPORTS,
     hooks: [buildDetailHook(ctx)],
   }
 }

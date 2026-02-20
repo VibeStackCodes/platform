@@ -65,13 +65,13 @@ function itemLink(ctx: SectionContext): string {
 function ariaLabel(ctx: SectionContext): string {
   const col = ctx.displayColumn ?? 'id'
   const item = ctx.itemVar ?? 'item'
-  return `{String(${item}.${col} ?? '')}`
+  return `String(${item}.${col} ?? '')`
 }
 
 /** Shared import lines every grid needs */
 const BASE_IMPORTS = [
   "import { useQuery } from '@tanstack/react-query'",
-  "import { supabase } from '../lib/supabase'",
+  "import { supabase } from '@/lib/supabase'",
   "import { Link } from '@tanstack/react-router'",
 ]
 

@@ -370,7 +370,7 @@ describe('Themed Dry-Run Pipeline', () => {
       expect(homepage).toContain('Savor Every Moment')
       expect(homepage).toContain('Discover our curated menu')
       expect(homepage).toContain('View menu')
-      expect(homepage).toContain('No dishes yet')
+      // Footer tagline appears in homepage footer section
       expect(homepage).toContain('Crafted with passion')
 
       const about = themedFiles['src/routes/about.tsx']
@@ -386,8 +386,9 @@ describe('Themed Dry-Run Pipeline', () => {
 
     it('dish list page is a public gallery layout', () => {
       const dishList = themedFiles['src/routes/dishes/index.tsx']
-      // Public pages use card gallery layout, not CRUD admin table
-      expect(dishList).toContain('grid')
+      // Public pages use composed section layout, not CRUD admin table
+      // Photography-heavy imagery → masonry grid (CSS columns) or grid-based layout
+      expect(dishList).toMatch(/columns-|grid/)
       expect(dishList).toContain('Search')
       // Should NOT have CRUD forms on public pages
       expect(dishList).not.toContain('createMutation')
@@ -551,57 +552,63 @@ describe('Themed Dry-Run Pipeline', () => {
       expect(deriveArchetype({ ...gourmettroTokens, style: { ...gourmettroTokens.style, navStyle: 'top-bar', heroLayout: 'split' } })).toBe('corporate')
     })
 
-    it('editorial homepage contains editorial markers', () => {
+    it('editorial tokens produce editorial-nav + editorial-hero sections', () => {
       const tokens: ThemeTokens = {
         ...gourmettroTokens,
         style: { ...gourmettroTokens.style, navStyle: 'editorial', heroLayout: 'editorial' },
       }
       const homepage = generateThemedApp(restaurantContract, tokens, 'Test Restaurant')['src/routes/index.tsx']
-      expect(homepage).toContain('h-[80vh]')
-      expect(homepage).toContain('bg-black/40')
+      // Editorial hero uses serif split layout with grid-cols-[3fr_2fr]
+      expect(homepage).toContain('md:grid-cols-[3fr_2fr]')
+      // Editorial nav
+      expect(homepage).toContain('Editorial navigation')
+      // Display font
       expect(homepage).toContain('font-[family-name:var(--font-display)]')
     })
 
-    it('gallery homepage contains gallery markers', () => {
+    it('fullbleed tokens produce fullbleed-hero with dark overlay', () => {
       const tokens: ThemeTokens = {
         ...gourmettroTokens,
         style: { ...gourmettroTokens.style, navStyle: 'minimal', heroLayout: 'fullbleed' },
       }
       const homepage = generateThemedApp(restaurantContract, tokens, 'Test Restaurant')['src/routes/index.tsx']
-      expect(homepage).toContain('h-screen')
-      expect(homepage).toContain('columns-1 md:columns-2 lg:columns-3')
-      expect(homepage).toContain('group-hover:opacity-100')
+      // Fullbleed hero has h-[70vh] with dark overlay
+      expect(homepage).toContain('h-[70vh]')
+      expect(homepage).toContain('bg-black/45')
+      expect(homepage).toContain('font-[family-name:var(--font-display)]')
     })
 
-    it('corporate homepage contains corporate markers', () => {
+    it('split hero tokens produce two-column grid layout', () => {
       const tokens: ThemeTokens = {
         ...gourmettroTokens,
         style: { ...gourmettroTokens.style, navStyle: 'top-bar', heroLayout: 'split' },
       }
       const homepage = generateThemedApp(restaurantContract, tokens, 'Test Restaurant')['src/routes/index.tsx']
+      // Split hero uses grid 2-col
       expect(homepage).toContain('md:grid-cols-2')
-      expect(homepage).toContain('shadow-sm hover:shadow-2xl')
+      expect(homepage).toContain('font-[family-name:var(--font-display)]')
     })
 
-    it('soft homepage contains soft markers', () => {
+    it('centered hero tokens produce centered text layout', () => {
       const tokens: ThemeTokens = {
         ...gourmettroTokens,
         style: { ...gourmettroTokens.style, navStyle: 'centered', heroLayout: 'centered' },
       }
       const homepage = generateThemedApp(restaurantContract, tokens, 'Test Restaurant')['src/routes/index.tsx']
+      // Centered hero uses text-center
       expect(homepage).toContain('text-center')
-      expect(homepage).toContain('rounded-3xl')
-      expect(homepage).toContain('bg-accent/5')
+      expect(homepage).toContain('font-[family-name:var(--font-display)]')
     })
 
-    it('dashboard homepage contains dashboard markers', () => {
+    it('sidebar nav tokens produce persistent sidebar layout', () => {
       const tokens: ThemeTokens = {
         ...gourmettroTokens,
         style: { ...gourmettroTokens.style, navStyle: 'sidebar', heroLayout: 'split' },
       }
       const homepage = generateThemedApp(restaurantContract, tokens, 'Test Restaurant')['src/routes/index.tsx']
-      expect(homepage).toContain('md:w-72')
-      expect(homepage).toContain('backdrop-blur-md')
+      // Sidebar nav has h-screen fixed sidebar with w-64
+      expect(homepage).toContain('h-screen')
+      expect(homepage).toContain('w-64')
     })
   })
 })
