@@ -5,33 +5,35 @@ export function PerspectiveGrid() {
       className="pointer-events-none absolute inset-0 overflow-hidden"
       style={{
         background: [
-          // Far sky - soft peachy-blue at top
-          'linear-gradient(180deg, oklch(0.95 0.04 40 / 80%) 0%, oklch(0.88 0.08 320 / 40%) 15%, transparent 35%)',
-          // Mid-sky clouds - soft purple haze
-          'radial-gradient(ellipse 120% 60% at 50% 5%, oklch(0.85 0.06 280 / 50%) 0%, transparent 50%)',
-          // Left mountain pass - deep purple valley
-          'radial-gradient(ellipse 80% 100% at -20% 60%, oklch(0.60 0.12 290 / 70%) 0%, oklch(0.55 0.14 310 / 50%) 30%, transparent 70%)',
-          // Center valley - atmospheric perspective
-          'radial-gradient(ellipse 100% 80% at 50% 70%, oklch(0.65 0.11 300 / 60%) 0%, oklch(0.58 0.13 320 / 40%) 40%, transparent 80%)',
-          // Right landscape - lavender mountains
-          'radial-gradient(ellipse 90% 110% at 110% 65%, oklch(0.62 0.10 310 / 65%) 0%, oklch(0.54 0.12 330 / 45%) 35%, transparent 75%)',
-          // Foreground accent - warm lavender bloom
-          'radial-gradient(ellipse 70% 120% at 20% 100%, oklch(0.68 0.08 310 / 40%) 0%, transparent 60%)',
-          // Right foreground - soft green accent
-          'radial-gradient(ellipse 60% 100% at 95% 105%, oklch(0.70 0.06 130 / 25%) 0%, transparent 55%)',
-          // Soft light overlay - gradient from warm to cool
-          'linear-gradient(135deg, oklch(0.96 0.01 50 / 40%) 0%, oklch(0.92 0.03 280 / 20%) 50%, oklch(0.88 0.04 310 / 30%) 100%)',
-          // Base warm neutral
-          'linear-gradient(to bottom, oklch(0.94 0.02 60) 0%, oklch(0.90 0.03 280) 100%)',
+          // Radial gradient: dark navy/charcoal at top-left corner (the "sun" position)
+          'radial-gradient(ellipse 100% 100% at 20% 10%, rgb(15, 23, 42) 0%, transparent 50%)',
+          // Deep blue core in upper left quadrant
+          'radial-gradient(ellipse 120% 100% at 0% 0%, rgb(30, 58, 138) 0%, transparent 45%)',
+          // Electric blue accent in upper center - bright and saturated
+          'radial-gradient(ellipse 90% 80% at 35% -5%, rgb(59, 130, 246) 0%, transparent 55%)',
+          // Vibrant purple transition - bridges blue to magenta
+          'radial-gradient(ellipse 110% 90% at 50% 15%, rgb(147, 51, 234) 0%, transparent 50%)',
+          // Hot magenta/pink - the heart of the gradient (saturated and punchy)
+          'radial-gradient(ellipse 130% 120% at 55% 40%, rgb(236, 72, 153) 0%, rgb(244, 63, 94) 25%, transparent 65%)',
+          // Deep red accent bleeding toward bottom-right
+          'radial-gradient(ellipse 100% 110% at 75% 55%, rgb(239, 68, 68) 0%, transparent 50%)',
+          // Orange/amber glow in bottom-right corner
+          'radial-gradient(ellipse 80% 90% at 100% 85%, rgb(251, 146, 60) 0%, rgb(249, 115, 22) 20%, transparent 60%)',
+          // Deep red/maroon base at bottom for richness
+          'radial-gradient(ellipse 120% 100% at 80% 100%, rgb(127, 29, 29) 0%, transparent 50%)',
+          // Dark navy sweep across bottom
+          'linear-gradient(180deg, transparent 60%, rgba(15, 23, 42, 0.4) 100%)',
+          // Diagonal overlay for directional flow (top-left to bottom-right)
+          'linear-gradient(135deg, rgba(0, 0, 0, 0.1) 0%, transparent 50%, rgba(0, 0, 0, 0.05) 100%)',
         ].join(', '),
       }}
     >
-      {/* Subtle noise texture overlay for atmospheric depth */}
+      {/* Subtle grain texture for refinement */}
       <div
-        className="absolute inset-0 opacity-[0.03]"
+        className="absolute inset-0 opacity-[0.02]"
         style={{
-          backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' seed='2' /%3E%3C/filter%3E%3Crect width='200' height='200' fill='%23000' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")`,
-          backgroundSize: '200px 200px',
+          backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.7' numOctaves='4' seed='42' /%3E%3C/filter%3E%3Crect width='400' height='400' fill='%23fff' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")`,
+          backgroundSize: '400px 400px',
         }}
       />
     </div>

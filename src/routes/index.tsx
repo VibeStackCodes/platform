@@ -15,12 +15,12 @@ const fadeUp = {
 
 function LandingPage() {
   return (
-    <div className="relative min-h-screen overflow-hidden bg-gradient-to-b from-amber-50/50 to-slate-100/40">
-      {/* Landscape background */}
+    <div className="relative min-h-screen overflow-hidden bg-black">
+      {/* Gradient background */}
       <PerspectiveGrid />
 
-      {/* Soft light overlay for text readability */}
-      <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-transparent via-white/5 to-white/10" />
+      {/* Radial overlay for depth and readability */}
+      <div className="pointer-events-none absolute inset-0 bg-radial-gradient from-transparent via-transparent to-black/20" />
 
       {/* Content layer */}
       <div className="relative z-10 flex flex-col min-h-screen">
@@ -34,36 +34,32 @@ function LandingPage() {
 
         <main className="flex-1 container mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-center">
           <div className="flex flex-col items-center text-center max-w-4xl mx-auto py-12">
-            {/* Preheading - subtle accent */}
+            {/* Preheading - bright accent */}
             <motion.div
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.4, delay: 0.1 }}
               className="mb-6"
             >
-              <span className="inline-block text-xs sm:text-sm font-medium tracking-widest uppercase text-slate-600/70 backdrop-blur-sm px-3 py-1.5 rounded-full border border-slate-300/30">
+              <span className="inline-block text-xs sm:text-sm font-medium tracking-widest uppercase text-white/70 backdrop-blur-sm px-3 py-1.5 rounded-full border border-white/20">
                 AI Agent Platform
               </span>
             </motion.div>
 
-            {/* Headline with gradient text */}
+            {/* Headline - bold white */}
             <motion.h1
               {...fadeUp}
               transition={{ duration: 0.5, delay: 0.2 }}
-              className="mt-4 max-w-5xl font-display text-5xl sm:text-6xl md:text-7xl lg:text-8xl font-bold tracking-tighter leading-tight text-slate-900"
+              className="mt-4 max-w-5xl font-display text-5xl sm:text-6xl md:text-7xl lg:text-8xl font-bold tracking-tighter leading-tight text-white drop-shadow-lg"
             >
-              <span className="bg-gradient-to-r from-slate-900 via-purple-800 to-slate-900 bg-clip-text text-transparent">
-                Unleash
-              </span>
-              <br />
-              <span className="text-slate-800">the agents.</span>
+              Unleash the agents.
             </motion.h1>
 
             {/* Subheading */}
             <motion.p
               {...fadeUp}
               transition={{ duration: 0.4, delay: 0.3 }}
-              className="mt-6 max-w-2xl text-lg sm:text-xl text-slate-700/80 leading-relaxed"
+              className="mt-6 max-w-2xl text-lg sm:text-xl text-white/80 leading-relaxed"
             >
               Build AI-powered apps by describing what you want. Watch agents handle the design, development, and deployment — all in real time.
             </motion.p>
