@@ -1,68 +1,86 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { Eye, Rocket, Sparkles } from 'lucide-react'
+import { motion } from 'motion/react'
+import { Sparkles } from 'lucide-react'
 import { HeroPrompt } from '@/components/hero-prompt'
-import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { LandingNavbar } from '@/components/landing-navbar'
+import { PerspectiveGrid } from '@/components/perspective-grid'
+import { Badge } from '@/components/ui/badge'
 
-export const Route = createFileRoute('/')({
+export const Route = createFileRoute('/')(  {
   component: LandingPage,
 })
 
+const fadeUp = {
+  initial: { opacity: 0, y: 20 },
+  animate: { opacity: 1, y: 0 },
+}
+
 function LandingPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-b from-black to-zinc-900">
-      <div className="container mx-auto px-4 py-16 sm:px-6 sm:py-24 lg:px-8">
-        <div className="flex flex-col items-center text-center">
-          <h1 className="max-w-4xl text-4xl font-bold tracking-tight text-white sm:text-5xl md:text-6xl lg:text-7xl">
-            Build apps with AI
-          </h1>
-          <p className="mt-6 max-w-2xl text-lg text-zinc-400 sm:text-xl">
-            Transform your ideas into production-ready applications. Generate, preview, and
-            deploy—all powered by artificial intelligence.
-          </p>
+    <div className="relative min-h-screen overflow-hidden bg-background">
+      {/* Gradient mesh + perspective grid */}
+      <PerspectiveGrid />
 
-          <HeroPrompt />
-        </div>
+      {/* Content layer */}
+      <div className="relative z-10">
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.3 }}
+        >
+          <LandingNavbar />
+        </motion.div>
 
-        <div className="mt-24 grid gap-8 md:grid-cols-3">
-          <Card className="border-zinc-800 bg-zinc-900/50 backdrop-blur">
-            <CardHeader>
-              <div className="mb-4 flex size-12 items-center justify-center rounded-lg bg-primary/10">
-                <Sparkles className="size-6 text-primary" />
-              </div>
-              <CardTitle className="text-white">AI Generation</CardTitle>
-              <CardDescription className="text-zinc-400">
-                Describe your app in plain English and watch AI build it for you. From concept to
-                code in minutes.
-              </CardDescription>
-            </CardHeader>
-          </Card>
+        <main className="container mx-auto px-4 pt-24 sm:px-6 sm:pt-32 lg:px-8">
+          <div className="flex flex-col items-center text-center">
+            {/* Badge pill */}
+            <motion.div
+              {...fadeUp}
+              transition={{ duration: 0.35, delay: 0.1 }}
+            >
+              <Badge
+                variant="secondary"
+                className="gap-1.5 border border-border/60 bg-background/80 px-3 py-1 text-sm font-medium backdrop-blur"
+              >
+                <Sparkles className="size-3.5 text-primary" />
+                AI-powered app builder
+              </Badge>
+            </motion.div>
 
-          <Card className="border-zinc-800 bg-zinc-900/50 backdrop-blur">
-            <CardHeader>
-              <div className="mb-4 flex size-12 items-center justify-center rounded-lg bg-primary/10">
-                <Eye className="size-6 text-primary" />
-              </div>
-              <CardTitle className="text-white">Live Preview</CardTitle>
-              <CardDescription className="text-zinc-400">
-                See your application come to life in real-time. Make changes and watch them update
-                instantly.
-              </CardDescription>
-            </CardHeader>
-          </Card>
+            {/* Headline */}
+            <motion.h1
+              {...fadeUp}
+              transition={{ duration: 0.4, delay: 0.2 }}
+              className="mt-8 max-w-4xl font-display text-5xl tracking-tight text-foreground sm:text-6xl md:text-7xl lg:text-8xl"
+            >
+              Build Smart.
+              <br />
+              Design Fast.
+              <br />
+              Launch Beautifully.
+            </motion.h1>
 
-          <Card className="border-zinc-800 bg-zinc-900/50 backdrop-blur">
-            <CardHeader>
-              <div className="mb-4 flex size-12 items-center justify-center rounded-lg bg-primary/10">
-                <Rocket className="size-6 text-primary" />
-              </div>
-              <CardTitle className="text-white">One-Click Deploy</CardTitle>
-              <CardDescription className="text-zinc-400">
-                Go from idea to production in seconds. Deploy your app with a single click, no
-                DevOps required.
-              </CardDescription>
-            </CardHeader>
-          </Card>
-        </div>
+            {/* Subtitle */}
+            <motion.p
+              {...fadeUp}
+              transition={{ duration: 0.35, delay: 0.35 }}
+              className="mt-6 max-w-2xl text-lg text-muted-foreground sm:text-xl"
+            >
+              Describe your app in plain English. Watch AI build, preview, and deploy it — all in
+              one place.
+            </motion.p>
+
+            {/* Prompt bar */}
+            <motion.div
+              initial={{ opacity: 0, y: 20, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              transition={{ duration: 0.4, delay: 0.5 }}
+              className="mt-10 w-full max-w-2xl"
+            >
+              <HeroPrompt />
+            </motion.div>
+          </div>
+        </main>
       </div>
     </div>
   )

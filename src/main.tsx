@@ -46,7 +46,7 @@ function App() {
   }
 
   return (
-    <ThemeProvider defaultTheme="dark">
+    <ThemeProvider defaultTheme="light">
       <QueryClientProvider client={queryClient}>
         <RouterProvider router={router} context={{ auth, queryClient }} />
         <Toaster />

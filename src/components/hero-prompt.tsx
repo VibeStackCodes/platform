@@ -1,8 +1,7 @@
 'use client'
 
 import { useNavigate } from '@tanstack/react-router'
-import type { PromptInputMessage } from '@/components/ai-elements/prompt-input'
-import { PromptBar } from '@/components/prompt-bar'
+import { LandingPromptBar, type PromptInputMessage } from '@/components/landing-prompt-bar'
 import { useAuth } from '@/lib/auth'
 import { apiFetch } from '@/lib/utils'
 
@@ -12,10 +11,7 @@ export function HeroPrompt() {
   const navigate = useNavigate()
   const { user } = useAuth()
 
-  async function handleSubmit(
-    message: PromptInputMessage,
-    _options?: { model: string; webSearch: boolean },
-  ) {
+  async function handleSubmit(message: PromptInputMessage) {
     const prompt = message.text.trim()
     if (!prompt) return
 
@@ -40,9 +36,5 @@ export function HeroPrompt() {
     navigate({ to: '/project/$id', params: { id: project.id } })
   }
 
-  return (
-    <div className="mt-10 w-full max-w-2xl">
-      <PromptBar onSubmit={handleSubmit} />
-    </div>
-  )
+  return <LandingPromptBar onSubmit={handleSubmit} />
 }
