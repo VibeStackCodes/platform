@@ -47,3 +47,6 @@ yarn-error.log*
 # firecrawl cache
 .firecrawl/
 .worktrees/
+
+# playwright-cli snapshots
+.playwright-cli/

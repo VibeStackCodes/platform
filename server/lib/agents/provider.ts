@@ -137,6 +137,7 @@ export const PIPELINE_MODELS = {
   repair: 'gpt-5.2-codex',
   edit: 'gpt-5.2-codex',
   seed: 'gpt-5-mini',
+  composer: 'gpt-5-nano',
 } as const
 
 export type PipelineRole = keyof typeof PIPELINE_MODELS

@@ -1,5 +1,0 @@
-[     766ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://teamboard-tasks-2j2oy7q4y-vibe-stack-team.vercel.app/favicon.ico:0
-[    1130ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://farnkckkxpjunmzvgecy.supabase.co/rest/v1/profile?select=*&order=created_at.desc&offset=0&limit=20:0
-[    2434ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://farnkckkxpjunmzvgecy.supabase.co/rest/v1/profile?select=*&order=created_at.desc&offset=0&limit=20:0
-[    4555ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://farnkckkxpjunmzvgecy.supabase.co/rest/v1/profile?select=*&order=created_at.desc&offset=0&limit=20:0
-[    8676ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://farnkckkxpjunmzvgecy.supabase.co/rest/v1/profile?select=*&order=created_at.desc&offset=0&limit=20:0

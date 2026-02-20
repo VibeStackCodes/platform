@@ -34,3 +34,20 @@ export const ThemeSelectorOutputSchema = z.object({
   reasoning: z.string().describe('Why this theme was selected'),
   shouldMergeTables: z.boolean().describe('Whether to merge theme base tables with user schema'),
 })
+
+// ---------------------------------------------------------------------------
+// Section Composition — Page Composer output schemas
+// ---------------------------------------------------------------------------
+
+export const SectionSlotSchema = z.object({
+  sectionId: z.string().min(1).describe('Section renderer ID (e.g., "hero-fullbleed", "grid-masonry")'),
+  entityBinding: z.string().optional().describe('Entity table name this section displays (e.g., "recipes")'),
+  config: z.record(z.string(), z.unknown()).optional().describe('Per-section overrides (headline, limit, etc.)'),
+})
+
+export const PageCompositionPlanSchema = z.object({
+  pages: z.record(
+    z.string().describe('Route path (e.g., "/", "/recipes", "/recipes/$slug")'),
+    z.array(SectionSlotSchema).min(1).describe('Ordered list of sections on this page'),
+  ).describe('Map of route path → section slots'),
+})
