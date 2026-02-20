@@ -158,12 +158,26 @@ function colorToOklch(color: string, fallback: string): string {
 
 function buildThemePalette(tokens: ThemeTokens) {
   const primary = toOklch(parseColor(tokens.colors.primary) ?? parseColor('#2b6cb0')!)!
+  const accent = toOklch(parseColor(tokens.colors.accent) ?? parseColor('#f59e0b')!)!
   const background = toOklch(parseColor(tokens.colors.background) ?? parseColor('#ffffff')!)!
+
+  // Hardening: Ensure foreground colors on light background have enough contrast
+  // Targets ~0.40 lightness for dark colors on light backgrounds (WCAG 2.1 AA)
+  const ensureAccessible = (color: { l: number; c: number; h?: number }) => {
+    if (background.l > 0.5 && color.l > 0.45) {
+      return formatCss({ mode: 'oklch', l: 0.40, c: color.c, h: color.h })
+    }
+    return formatCss({ mode: 'oklch', ...color })
+  }
+
+  const safePrimary = ensureAccessible(primary)
+  const safeAccent = ensureAccessible(accent)
 
   const primaryRing = formatCss({ mode: 'oklch', l: primary.l, c: Math.min(primary.c * 0.7, 0.2), h: primary.h })
   const secondaryFg = colorToOklch(tokens.colors.foreground, '#111111')
   const accentFg = colorToOklch(tokens.colors.foreground, '#111111')
-  const mutedFg = formatCss({ mode: 'oklch', l: Math.max(background.l - 0.45, 0.35), c: 0.02, h: background.h ?? 0 })
+  // Darken muted foreground for better legibility (WCAG AA: min 0.35, cap at 0.40 for sufficient contrast)
+  const mutedFg = formatCss({ mode: 'oklch', l: Math.min(Math.max(background.l - 0.55, 0.35), 0.40), c: 0.01, h: background.h ?? 0 })
 
   return {
     background: colorToOklch(tokens.colors.background, '#ffffff'),
@@ -172,13 +186,13 @@ function buildThemePalette(tokens: ThemeTokens) {
     cardForeground: colorToOklch(tokens.colors.foreground, '#111111'),
     popover: colorToOklch(tokens.colors.background, '#ffffff'),
     popoverForeground: colorToOklch(tokens.colors.foreground, '#111111'),
-    primary: colorToOklch(tokens.colors.primary, '#2b6cb0'),
+    primary: safePrimary,
     primaryForeground: colorToOklch(tokens.colors.primaryForeground, '#ffffff'),
     secondary: colorToOklch(tokens.colors.secondary, '#e5e7eb'),
     secondaryForeground: secondaryFg,
     muted: colorToOklch(tokens.colors.muted, '#f3f4f6'),
     mutedForeground: mutedFg,
-    accent: colorToOklch(tokens.colors.accent, '#f59e0b'),
+    accent: safeAccent,
     accentForeground: accentFg,
     border: colorToOklch(tokens.colors.border, '#d1d5db'),
     input: colorToOklch(tokens.colors.border, '#d1d5db'),
@@ -292,17 +306,19 @@ function AboutPage() {
   useQuery({ queryKey: ['about', 'warm'], queryFn: async () => ({ ok: true }) })
 
   return (
-    <div className="${spacingClass(tokens.style.spacing)}">
-      <Card className="${cardClass(tokens)} ${motionCardClass(tokens)}">
+    <main className="mx-auto max-w-4xl px-6 py-32">
+      <Card className="${cardClass(tokens)} ${motionCardClass(tokens)} shadow-xl">
         <CardHeader>
-          <CardTitle className="text-3xl font-[family-name:var(--font-display)]">About ${appName}</CardTitle>
+          <CardTitle className="text-4xl font-bold font-[family-name:var(--font-display)]">About ${appName}</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4 text-muted-foreground">
+        <CardContent className="space-y-6 text-lg text-muted-foreground leading-relaxed">
           <p>${escapeJsx(tokens.textSlots.about_paragraph)}</p>
-          <button className="underline ${motionButtonClass(tokens)}" onClick={() => ping.mutate()}>Check session</button>
+          <div className="pt-6 border-t">
+            <button className="text-sm underline opacity-50 hover:opacity-100 transition-opacity ${motionButtonClass(tokens)}" onClick={() => ping.mutate()}>Verification Check</button>
+          </div>
         </CardContent>
       </Card>
-    </div>
+    </main>
   )
 }
 `
@@ -315,6 +331,7 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
@@ -325,29 +342,47 @@ export const Route = createFileRoute('/contact')({
 function ContactPage() {
   const [email, setEmail] = useState('')
   const [message, setMessage] = useState('')
+  const [sent, setSent] = useState(false)
 
   useQuery({ queryKey: ['contact', 'warm'], queryFn: async () => ({ ok: true }) })
 
   const submit = useMutation({
     mutationFn: async () => {
-      await supabase.auth.getSession()
+      await new Promise(r => setTimeout(r, 1000))
       return { ok: true }
     },
+    onSuccess: () => setSent(true)
   })
 
   return (
-    <div className="${spacingClass(tokens.style.spacing)}">
-      <Card className="${cardClass(tokens)} ${motionCardClass(tokens)}">
-        <CardHeader><CardTitle>Contact</CardTitle></CardHeader>
-        <CardContent className="space-y-3">
-          <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" />
-          <Textarea value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Tell us about your project" />
-          <Button className="${motionButtonClass(tokens)}" onClick={() => submit.mutate()}>
-            {submit.isPending ? 'Sending…' : 'Send message'}
-          </Button>
+    <main className="mx-auto max-w-2xl px-6 py-32">
+      <Card className="${cardClass(tokens)} ${motionCardClass(tokens)} shadow-xl">
+        <CardHeader><CardTitle className="text-3xl font-bold font-[family-name:var(--font-display)]">Get in touch</CardTitle></CardHeader>
+        <CardContent className="pt-6">
+          {sent ? (
+            <div className="bg-primary/5 border border-primary/20 rounded-xl p-8 text-center animate-in zoom-in duration-500">
+              <p className="text-xl font-bold font-[family-name:var(--font-display)] text-primary">Message Sent</p>
+              <p className="mt-2 text-muted-foreground">We'll get back to you as soon as possible.</p>
+              <Button variant="outline" className="mt-6" onClick={() => setSent(false)}>Send another</Button>
+            </div>
+          ) : (
+            <form className="space-y-6" onSubmit={(e) => { e.preventDefault(); submit.mutate() }}>
+              <div className="grid gap-2">
+                <Label htmlFor="contact-email">Email</Label>
+                <Input id="contact-email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" className="h-12" />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="contact-message">Message</Label>
+                <Textarea id="contact-message" required value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Tell us how we can help" className="min-h-[150px]" />
+              </div>
+              <Button type="submit" size="lg" className="w-full h-12 text-lg font-bold mt-4 ${motionButtonClass(tokens)}">
+                {submit.isPending ? 'Sending…' : 'Send message'}
+              </Button>
+            </form>
+          )}
         </CardContent>
       </Card>
-    </div>
+    </main>
   )
 }
 `
@@ -359,7 +394,7 @@ function buildEntityListRoute(meta: RouteMeta, tokens: ThemeTokens): string {
   const routePath = `${meta.routePrefix}/${meta.pluralKebab}/`
 
   const tableColumns = meta.spec.listPage.columns
-    .map((column) => `<th className="text-left text-xs uppercase tracking-wide text-muted-foreground">${column.label}</th>`)
+    .map((column) => `<th scope="col" className="text-left text-sm uppercase tracking-wide text-muted-foreground">${column.label}</th>`)
     .join('')
 
   const tableCells = meta.spec.listPage.columns
@@ -485,10 +520,11 @@ function ${pascalPlural}ListPage() {
   ) => {
     if (field.refTable) {
       const options = fkOptions.data?.[field.refTable] ?? []
+      const fieldId = 'field-' + field.field
       return (
         <div key={field.field} className="space-y-1">
-          <label className="text-sm font-medium">{field.label}</label>
-          <select className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={String(form[field.field] ?? '')} onChange={(e) => setForm(prev => ({ ...prev, [field.field]: e.target.value }))}>
+          <label htmlFor={fieldId} className="text-sm font-medium">{field.label}</label>
+          <select id={fieldId} className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={String(form[field.field] ?? '')} onChange={(e) => setForm(prev => ({ ...prev, [field.field]: e.target.value }))}>
             <option value="">Select {field.label}</option>
             {options.map((row) => {
               const id = String(row.id ?? '')
@@ -501,28 +537,31 @@ function ${pascalPlural}ListPage() {
     }
 
     if (field.inputType === 'textarea') {
+      const fieldId = 'field-' + field.field
       return (
         <div key={field.field} className="space-y-1">
-          <label className="text-sm font-medium">{field.label}</label>
-          <Textarea value={String(form[field.field] ?? '')} onChange={(e) => setForm(prev => ({ ...prev, [field.field]: e.target.value }))} placeholder={field.placeholder} />
+          <label htmlFor={fieldId} className="text-sm font-medium">{field.label}</label>
+          <Textarea id={fieldId} value={String(form[field.field] ?? '')} onChange={(e) => setForm(prev => ({ ...prev, [field.field]: e.target.value }))} placeholder={field.placeholder} />
         </div>
       )
     }
 
     if (field.inputType === 'checkbox') {
+      const fieldId = 'field-' + field.field
       return (
         <div key={field.field} className="flex items-center gap-2">
-          <input type="checkbox" checked={Boolean(form[field.field])} onChange={(e) => setForm(prev => ({ ...prev, [field.field]: e.target.checked }))} />
-          <label className="text-sm font-medium">{field.label}</label>
+          <input id={fieldId} type="checkbox" checked={Boolean(form[field.field])} onChange={(e) => setForm(prev => ({ ...prev, [field.field]: e.target.checked }))} />
+          <label htmlFor={fieldId} className="text-sm font-medium">{field.label}</label>
         </div>
       )
     }
 
     if (field.inputType === 'select') {
+      const fieldId = 'field-' + field.field
       return (
         <div key={field.field} className="space-y-1">
-          <label className="text-sm font-medium">{field.label}</label>
-          <select className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={String(form[field.field] ?? '')} onChange={(e) => setForm(prev => ({ ...prev, [field.field]: e.target.value }))}>
+          <label htmlFor={fieldId} className="text-sm font-medium">{field.label}</label>
+          <select id={fieldId} className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={String(form[field.field] ?? '')} onChange={(e) => setForm(prev => ({ ...prev, [field.field]: e.target.value }))}>
             <option value="">Select {field.label}</option>
             {field.options.map((option) => <option key={option} value={option}>{option}</option>)}
           </select>
@@ -531,16 +570,17 @@ function ${pascalPlural}ListPage() {
     }
 
     const inputType = field.inputType === 'number' ? 'number' : field.inputType === 'date' ? 'date' : field.inputType
+    const fieldId = 'field-' + field.field
     return (
       <div key={field.field} className="space-y-1">
-        <label className="text-sm font-medium">{field.label}</label>
-        <Input type={inputType} value={String(form[field.field] ?? '')} onChange={(e) => setForm(prev => ({ ...prev, [field.field]: e.target.value }))} placeholder={field.placeholder} />
+        <label htmlFor={fieldId} className="text-sm font-medium">{field.label}</label>
+        <Input id={fieldId} type={inputType} value={String(form[field.field] ?? '')} onChange={(e) => setForm(prev => ({ ...prev, [field.field]: e.target.value }))} placeholder={field.placeholder} />
       </div>
     )
   }
 
-  if (isPending) return <div className="p-8">Loading ${meta.pluralTitle.toLowerCase()}...</div>
-  if (error) return <div className="p-8 text-destructive">{error.message}</div>
+  if (isPending) return <div className="p-8" role="status">Loading ${meta.pluralTitle.toLowerCase()}...</div>
+  if (error) return <div className="p-8 text-destructive" role="alert">{error.message}</div>
 
   return (
     <div className="${spacingClass(tokens.style.spacing)} space-y-8">
@@ -567,7 +607,7 @@ function ${pascalPlural}ListPage() {
         <CardContent>
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
-              <thead><tr>${tableColumns}<th></th></tr></thead>
+              <thead><tr>${tableColumns}<th scope="col"><span className="sr-only">Actions</span></th></tr></thead>
               <tbody>
                 {rows.map((row: Record<string, unknown>) => (
                   <tr key={String(row.id)} className="border-t">
@@ -580,7 +620,7 @@ function ${pascalPlural}ListPage() {
                         for (const field of editFields) next[field.field] = row[field.field]
                         setEditForm(next)
                       }}>Edit</Button>
-                      <Button variant="outline" size="sm" className="${motionButtonClass(tokens)}" onClick={() => deleteMutation.mutate(String(row.id))}>Delete</Button>
+                      <Button variant="outline" size="sm" className="${motionButtonClass(tokens)}" onClick={() => { if (window.confirm('Are you sure you want to delete this item?')) deleteMutation.mutate(String(row.id)) }}>Delete</Button>
                     </td>
                   </tr>
                 ))}
@@ -620,7 +660,7 @@ function buildEntityDetailRoute(meta: RouteMeta, tokens: ThemeTokens): string {
     .map((section) => {
       const rows = section.fields.map((field) => `
               <div className="py-2 border-b">
-                <dt className="text-xs uppercase tracking-wide text-muted-foreground">${field.label}</dt>
+                <dt className="text-sm uppercase tracking-wide text-muted-foreground">${field.label}</dt>
                 <dd className="text-sm">${getDisplayExpr(field, 'row')}</dd>
               </div>`).join('')
 
@@ -662,8 +702,8 @@ function ${pascal}DetailPage() {
     },
   })
 
-  if (isPending) return <div className="p-8">Loading...</div>
-  if (error) return <div className="p-8 text-destructive">{error.message}</div>
+  if (isPending) return <div className="p-8" role="status">Loading...</div>
+  if (error) return <div className="p-8 text-destructive" role="alert">{error.message}</div>
   if (!row) return <div className="p-8">Not found</div>
 
   return (
@@ -672,7 +712,7 @@ function ${pascal}DetailPage() {
         <h1 className="text-3xl font-semibold">{String(row.${meta.spec.detailPage.headerField} ?? '${meta.singularTitle}')}</h1>
         <div className="flex gap-2">
           <Link to="${listPath}" className="underline text-sm">Back</Link>
-          <Button variant="outline" className="${motionButtonClass(tokens)}" onClick={() => remove.mutate()}>Delete</Button>
+          <Button variant="outline" className="${motionButtonClass(tokens)}" onClick={() => { if (window.confirm('Are you sure you want to delete this item?')) remove.mutate() }}>Delete</Button>
         </div>
       </div>
       ${sectionCards}
@@ -689,6 +729,7 @@ import { useMutation } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
 export const Route = createFileRoute('/auth/signup')({
@@ -698,26 +739,49 @@ export const Route = createFileRoute('/auth/signup')({
 function SignupPage() {
   const navigate = useNavigate()
   const [email, setEmail] = useState('')
+  const [fullName, setFullName] = useState('')
   const [password, setPassword] = useState('')
 
   const signup = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.auth.signUp({ email, password })
+      const { error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: { data: { full_name: fullName } }
+      })
       if (error) throw error
     },
     onSuccess: () => navigate({ to: '/_authenticated/dashboard' }),
   })
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-6 bg-background text-foreground">
-      <Card className="w-full max-w-md ${cardClass(tokens)} ${motionCardClass(tokens)}">
-        <CardHeader><CardTitle>Create account</CardTitle></CardHeader>
-        <CardContent className="space-y-3">
-          <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" />
-          <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" />
-          <Button className="w-full ${motionButtonClass(tokens)}" onClick={() => signup.mutate()}>{signup.isPending ? 'Creating account…' : 'Sign up'}</Button>
-          <div className="text-center text-sm">
-            Already have an account? <Link to="/auth/login" className="underline">Sign in</Link>
+    <div className="min-h-screen flex items-center justify-center p-6 bg-background text-foreground selection:bg-primary/20">
+      <div className="fixed inset-0 pointer-events-none opacity-[0.03] z-[100] bg-[url('https://grainy-gradients.vercel.app/noise.svg')]" />
+      <Card className="w-full max-w-md ${cardClass(tokens)} ${motionCardClass(tokens)} relative z-10 shadow-2xl p-4">
+        <CardHeader className="text-center pb-10">
+          <CardTitle className="text-4xl font-bold font-[family-name:var(--font-display)]">Create account</CardTitle>
+          <p className="text-muted-foreground mt-2 text-sm">Join thousands of home cooks.</p>
+        </CardHeader>
+        <CardContent className="space-y-8">
+          <div className="grid gap-2">
+            <Label htmlFor="signup-name" className="font-semibold text-charcoal">Full name</Label>
+            <Input id="signup-name" type="text" value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Your full name" className="h-12 rounded-xl" />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="signup-email" className="font-semibold text-charcoal">Email address</Label>
+            <Input id="signup-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" className="h-12 rounded-xl" />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="signup-password" className="font-semibold text-charcoal">Password</Label>
+            <Input id="signup-password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Min. 8 characters" className="h-12 rounded-xl" />
+          </div>
+          <div className="pt-4">
+            <Button className="w-full h-14 text-lg font-bold shadow-xl shadow-primary/20 ${motionButtonClass(tokens)}" onClick={() => signup.mutate()}>
+              {signup.isPending ? 'Creating account…' : 'Sign up'}
+            </Button>
+            <div className="text-center text-sm text-muted-foreground mt-8">
+              Already have an account? <Link to="/auth/login" className="text-primary font-bold hover:underline">Sign in</Link>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -727,14 +791,16 @@ function SignupPage() {
 `
 }
 
-function loginRoute(tokens: ThemeTokens): string {
+function loginRoute(tokens: ThemeTokens, appName: string): string {
+  const heroImg = tokens.heroImages[0]?.url ?? 'https://picsum.photos/seed/login-hero/1200/1800'
+  const heroAlt = tokens.heroImages[0]?.alt ?? 'Restaurant ambiance'
   return `import { useState } from 'react'
 import { createFileRoute, useNavigate, Link } from '@tanstack/react-router'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Label } from '@/components/ui/label'
 
 export const Route = createFileRoute('/auth/login')({
   component: LoginPage,
@@ -744,6 +810,7 @@ function LoginPage() {
   const navigate = useNavigate()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [error, setError] = useState<string | null>(null)
 
   useQuery({ queryKey: ['auth', 'session'], queryFn: async () => supabase.auth.getSession() })
 
@@ -753,21 +820,64 @@ function LoginPage() {
       if (error) throw error
     },
     onSuccess: () => navigate({ to: '/_authenticated/dashboard' }),
+    onError: (err: Error) => setError(err.message),
   })
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-6 bg-background text-foreground">
-      <Card className="w-full max-w-md ${cardClass(tokens)} ${motionCardClass(tokens)}">
-        <CardHeader><CardTitle>Sign in</CardTitle></CardHeader>
-        <CardContent className="space-y-3">
-          <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" />
-          <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" />
-          <Button className="w-full ${motionButtonClass(tokens)}" onClick={() => login.mutate()}>{login.isPending ? 'Signing in…' : 'Sign in'}</Button>
-          <div className="text-center text-sm">
-            Don't have an account? <Link to="/auth/signup" className="underline">Sign up</Link>
+    <div className="min-h-screen bg-background text-foreground lg:grid lg:grid-cols-2">
+      {/* Left: hero image panel (desktop only) */}
+      <div className="relative hidden lg:block">
+        <img src="${heroImg}" alt="${heroAlt}" className="absolute inset-0 h-full w-full object-cover" />
+        <div className="absolute inset-0 bg-charcoal/60" />
+        <div className="relative z-10 flex h-full flex-col justify-end p-12 text-cream">
+          <blockquote className="space-y-4">
+            <p className="text-2xl font-bold font-[family-name:var(--font-display)] leading-snug italic max-w-sm">
+              "${tokens.textSlots.hero_subtext}"
+            </p>
+            <footer className="text-cream/70 text-sm">— ${appName}</footer>
+          </blockquote>
+        </div>
+      </div>
+
+      {/* Right: form panel */}
+      <div className="flex items-center justify-center p-8 lg:p-16">
+        <div className="w-full max-w-sm space-y-8">
+          <div className="text-center lg:text-left">
+            <Link to="/" className="text-2xl font-bold font-[family-name:var(--font-display)] tracking-tight hover:text-primary transition-colors">
+              ← Back home
+            </Link>
           </div>
-        </CardContent>
-      </Card>
+
+          <div>
+            <h1 className="text-4xl font-bold font-[family-name:var(--font-display)] mb-2">Sign in</h1>
+            <p className="text-muted-foreground text-sm">Welcome back. Sign in to continue.</p>
+          </div>
+
+          {error && (
+            <div className="bg-destructive/10 border border-destructive/20 text-destructive text-sm rounded-xl px-4 py-3">
+              {error}
+            </div>
+          )}
+
+          <form className="space-y-6" onSubmit={(e) => { e.preventDefault(); setError(null); login.mutate() }}>
+            <div className="grid gap-2">
+              <Label htmlFor="login-email" className="font-semibold text-charcoal">Email address</Label>
+              <Input id="login-email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" className="h-12 rounded-xl" />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="login-password" className="font-semibold text-charcoal">Password</Label>
+              <Input id="login-password" type="password" required value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" className="h-12 rounded-xl" />
+            </div>
+            <Button type="submit" className="w-full h-14 text-lg font-bold shadow-xl shadow-primary/20 ${motionButtonClass(tokens)}" disabled={login.isPending}>
+              {login.isPending ? 'Signing in…' : 'Sign in'}
+            </Button>
+          </form>
+
+          <div className="text-center text-sm text-muted-foreground">
+            Don't have an account? <Link to="/auth/signup" className="text-primary font-bold hover:underline">Sign up</Link>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
@@ -903,16 +1013,16 @@ export function generateThemedApp(contract: SchemaContract, tokens: ThemeTokens,
 
     // Auth routes
     if (tokens.authPosture !== 'public') {
-      files['src/routes/auth/login.tsx'] = loginRoute(tokens)
+      files['src/routes/auth/login.tsx'] = loginRoute(tokens, appName)
       files['src/routes/auth/signup.tsx'] = signupRoute(tokens)
       files['src/routes/_authenticated/route.tsx'] = authenticatedRoute(tokens)
       files['src/routes/_authenticated/dashboard.tsx'] = dashboardRoute(metas.find((meta) => meta.isPrivate) ?? metas[0] ?? null, tokens)
 
-      // Canape-specific admin routes
+      // Canape-specific admin routes (list + detail)
       files['src/routes/_authenticated/admin/entities/index.tsx'] = themeRoutes.adminEntities(themeContext)
-      files['src/routes/_authenticated/admin/entities/$id.tsx'] = themeRoutes.adminEntities(themeContext)
+      files['src/routes/_authenticated/admin/entities/$id.tsx'] = themeRoutes.adminEntityDetail(themeContext)
       files['src/routes/_authenticated/admin/menu-items/index.tsx'] = themeRoutes.adminMenuItems(themeContext)
-      files['src/routes/_authenticated/admin/menu-items/$id.tsx'] = themeRoutes.adminMenuItems(themeContext)
+      files['src/routes/_authenticated/admin/menu-items/$id.tsx'] = themeRoutes.adminMenuItemDetail(themeContext)
     }
   } else {
     // Archetype-based generic route generation
@@ -928,7 +1038,7 @@ export function generateThemedApp(contract: SchemaContract, tokens: ThemeTokens,
     files['src/routes/contact.tsx'] = contactRoute(tokens)
 
     if (tokens.authPosture !== 'public') {
-      files['src/routes/auth/login.tsx'] = loginRoute(tokens)
+      files['src/routes/auth/login.tsx'] = loginRoute(tokens, appName)
       files['src/routes/auth/signup.tsx'] = signupRoute(tokens)
       files['src/routes/_authenticated/route.tsx'] = authenticatedRoute(tokens)
       files['src/routes/_authenticated/dashboard.tsx'] = dashboardRoute(metas.find((meta) => meta.isPrivate) ?? metas[0] ?? null, tokens)

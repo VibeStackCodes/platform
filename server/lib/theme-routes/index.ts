@@ -5,16 +5,17 @@
  * Each theme produces 1:1 visual clones with public + admin routes.
  */
 
-import type { FeatureSchema } from '../feature-schema'
+import type { RouteMetaLite } from '../theme-layouts'
 import { CanapeRoutes } from './canape'
 
 export type ThemeName = 'canape' | 'quomi' | 'clune' | 'default'
 
 export interface ThemeRouteContext {
   appName: string
-  allPublicMeta: FeatureSchema['publicMeta']
+  allPublicMeta: RouteMetaLite[]
   siteEmail?: string
-  heroImages: string[]
+  heroImages: Array<{ url: string; alt: string; photographer: string }>
+  hasAuth: boolean
 }
 
 /**
@@ -40,7 +41,7 @@ export function getThemeRoutes(themeName: ThemeName) {
  */
 export function renderThemeHomepage(
   themeName: ThemeName,
-  meta: FeatureSchema['publicMeta'][0],
+  meta: RouteMetaLite[][0],
   context: ThemeRouteContext
 ): string {
   const routes = getThemeRoutes(themeName)
@@ -133,6 +134,28 @@ export function renderThemeAdminMenuItems(
 ): string {
   const routes = getThemeRoutes(themeName)
   return routes.adminMenuItems(context)
+}
+
+/**
+ * Dispatch to theme-specific admin entity detail generator
+ */
+export function renderThemeAdminEntityDetail(
+  themeName: ThemeName,
+  context: ThemeRouteContext
+): string {
+  const routes = getThemeRoutes(themeName)
+  return routes.adminEntityDetail(context)
+}
+
+/**
+ * Dispatch to theme-specific admin menu item detail generator
+ */
+export function renderThemeAdminMenuItemDetail(
+  themeName: ThemeName,
+  context: ThemeRouteContext
+): string {
+  const routes = getThemeRoutes(themeName)
+  return routes.adminMenuItemDetail(context)
 }
 
 export { CanapeRoutes }

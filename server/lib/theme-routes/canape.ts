@@ -7,7 +7,7 @@
  * - Styling: Serif fonts, max-w-4xl containers, py-16 spacing
  */
 
-import type { FeatureSchema } from './feature-schema'
+import type { RouteMetaLite } from '../theme-layouts'
 
 // ============================================================================
 // TYPES
@@ -15,9 +15,9 @@ import type { FeatureSchema } from './feature-schema'
 
 interface CanapeRouteContext {
   appName: string
-  allPublicMeta: FeatureSchema['publicMeta']
+  allPublicMeta: RouteMetaLite[]
   siteEmail?: string
-  heroImages: string[]
+  heroImages: Array<{ url: string; alt: string; photographer: string }>
   hasAuth: boolean
 }
 
@@ -39,7 +39,7 @@ function renderSidebar(): string {
             123 Restaurant Street<br />City, State 12345
           </a>
           <p className="text-gray-700 mb-2">1-555-123-4567</p>
-          <p className="text-sm text-gray-600">
+          <p className="text-sm text-gray-700">
             <strong>Lunch:</strong> 11am - 2pm<br />
             <strong>Dinner:</strong> M-Th 5pm - 11pm<br />Fri-Sat: 5pm - 1am
           </p>
@@ -56,7 +56,7 @@ function renderSidebar(): string {
         {/* About */}
         <section>
           <h3 className="text-lg font-serif font-bold mb-3">About</h3>
-          <p className="text-sm text-gray-600">
+          <p className="text-sm text-gray-700">
             Canapé is a bold and refined theme, designed to help you create a beautiful
             online presence for your restaurant. Integrated with food menus, testimonials,
             and the Open Table widget, it's the perfect choice for any food-related business.
@@ -68,7 +68,7 @@ function renderSidebar(): string {
 
 function renderFooter(): string {
   return `
-      <footer className="border-t mt-16 py-8 text-center text-sm text-gray-600">
+      <footer className="border-t mt-16 py-8 text-center text-sm text-gray-700">
         <p>{appName}</p>
         <p>A bold and refined restaurant theme</p>
       </footer>
@@ -83,7 +83,7 @@ function renderFooter(): string {
  * Homepage with featured items, testimonials carousel, services, email signup
  */
 export function renderCanapeHomepage(
-  meta: FeatureSchema['publicMeta'][0],
+  meta: RouteMetaLite[][0],
   context: CanapeRouteContext
 ): string {
   return `import { createFileRoute, Link } from '@tanstack/react-router'
@@ -95,8 +95,14 @@ export const Route = createFileRoute('/')({
   component: Home
 })
 
+function imageryFallback(url?: string | null, seed?: number): string {
+  if (url) return url
+  return \`https://picsum.photos/seed/canape-\${seed ?? Math.floor(Math.random() * 1000)}/1200/800\`
+}
+
 function Home() {
   const [email, setEmail] = useState('')
+  const [subscribed, setSubscribed] = useState(false)
 
   // Fetch featured entities
   const { data: featured } = useQuery({
@@ -136,6 +142,14 @@ function Home() {
 
   return (
     <main>
+      {/* F1: Skip to main content link */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-[200] focus:px-4 focus:py-2 focus:bg-white focus:text-gray-900 focus:rounded focus:ring-2 focus:ring-blue-500"
+      >
+        Skip to main content
+      </a>
+
       {/* Navigation Header */}
       <nav className="max-w-4xl mx-auto px-8 py-6 flex justify-between items-center border-b">
         <div className="text-xl font-serif font-bold uppercase tracking-widest">${context.appName}</div>
@@ -147,8 +161,10 @@ function Home() {
         </div>
       </nav>
 
-      {/* Hero Section */}
+      {/* F12: Hero Section — has text content inside, use role="img" */}
       <div
+        role="img"
+        aria-label="${context.appName} hero banner"
         className="w-full h-[530px] bg-cover bg-center bg-black/40 flex items-center justify-center"
         style={{
           backgroundImage: \`url('\${imageryFallback(featured?.[0]?.image_url, 1)}')\`,
@@ -161,8 +177,8 @@ function Home() {
         </div>
       </div>
 
-      {/* Welcome Section */}
-      <section className="max-w-4xl mx-auto px-8 py-16">
+      {/* F1: id="main-content" on first content section after hero */}
+      <section id="main-content" className="max-w-4xl mx-auto px-8 py-16">
         <h2 className="text-5xl font-serif text-gray-900 mb-4">Welcome</h2>
         <p className="text-lg text-gray-700 leading-relaxed">
           Join us for an unforgettable culinary experience. Our expert chefs create
@@ -187,7 +203,8 @@ function Home() {
                   className="w-full aspect-square object-cover mb-4 group-hover:opacity-90 transition-opacity"
                 />
                 <h3 className="text-xl font-serif text-gray-900 mb-2">{item.name}</h3>
-                <p className="text-gray-600">{item.description}</p>
+                {/* F15: body paragraph text uses text-gray-700 for contrast */}
+                <p className="text-gray-700">{item.description}</p>
               </a>
             ))}
           </div>
@@ -232,30 +249,40 @@ function Home() {
       {/* Email Subscription */}
       <section className="max-w-4xl mx-auto px-8 py-16 text-center">
         <h3 className="text-2xl font-serif text-gray-900 mb-4">Stay Updated</h3>
-        <p className="text-gray-600 mb-4">Subscribe to our newsletter for updates and special offers</p>
-        <form
-          onSubmit={(e) => {
-            e.preventDefault()
-            // Handle subscription
-            setEmail('')
-          }}
-          className="flex flex-col sm:flex-row gap-2 justify-center"
-        >
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="Email Address"
-            className="px-4 py-2 border border-gray-300 rounded flex-1 sm:flex-none"
-            required
-          />
-          <button
-            type="submit"
-            className="px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+        {/* F15: newsletter description is metadata-level, text-gray-700 is fine */}
+        <p className="text-gray-700 mb-4">Subscribe to our newsletter for updates and special offers</p>
+        {subscribed ? (
+          <div className="bg-green-50 border border-green-200 text-green-700 p-6 rounded-lg">
+            <p className="text-lg font-semibold">&#10003; Thank you for subscribing!</p>
+            <p className="mt-1">We'll keep you posted on new recipes and stories.</p>
+          </div>
+        ) : (
+          <form
+            onSubmit={(e) => {
+              e.preventDefault()
+              setSubscribed(true)
+              setEmail('')
+            }}
+            className="flex flex-col sm:flex-row gap-2 justify-center"
           >
-            Subscribe
-          </button>
-        </form>
+            <label htmlFor="newsletter-email" className="sr-only">Email Address</label>
+            <input
+              id="newsletter-email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="Email Address"
+              className="px-4 py-2 border border-gray-300 rounded flex-1 sm:flex-none"
+              required
+            />
+            <button
+              type="submit"
+              className="px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+            >
+              Subscribe
+            </button>
+          </form>
+        )}
       </section>
 
       ${renderFooter()}
@@ -335,8 +362,18 @@ function MenuArchive() {
 
   return (
     <main>
-      {/* Hero */}
+      {/* F1: Skip to main content */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-[200] focus:px-4 focus:py-2 focus:bg-white focus:text-gray-900 focus:rounded focus:ring-2 focus:ring-blue-500"
+      >
+        Skip to main content
+      </a>
+
+      {/* F12: Decorative hero — role="presentation" aria-hidden="true" */}
       <div
+        role="presentation"
+        aria-hidden="true"
         className="w-full h-[530px] bg-cover bg-center bg-black/40"
         style={{
           backgroundImage: \`url('https://picsum.photos/1200/600?random=2')\`,
@@ -344,8 +381,8 @@ function MenuArchive() {
         }}
       />
 
-      {/* Title & Intro */}
-      <section className="max-w-4xl mx-auto px-8 py-16">
+      {/* F1: id="main-content" on first content section */}
+      <section id="main-content" className="max-w-4xl mx-auto px-8 py-16">
         <h1 className="text-5xl font-serif text-gray-900 mb-4">Menu</h1>
         <p className="text-lg text-gray-700">
           Explore our carefully curated selection of fine dishes, featuring
@@ -358,7 +395,8 @@ function MenuArchive() {
         {categories?.map((category) => (
           <div key={category.name} className="mb-12">
             <h2 className="text-3xl font-serif text-gray-900 mb-2">{category.name}</h2>
-            <p className="text-gray-600 italic mb-6">
+            {/* F15: metadata-level text kept at text-gray-700 for sufficient contrast */}
+            <p className="text-gray-700 italic mb-6">
               A selection of {category.items.length} items
             </p>
 
@@ -366,7 +404,7 @@ function MenuArchive() {
               {category.items.map((item) => (
                 <div key={item.id}>
                   <h3 className="text-xl font-serif text-gray-900">{item.name}</h3>
-                  <p className="text-gray-600">{item.description}</p>
+                  <p className="text-gray-700">{item.description}</p>
                   <p className="text-lg font-bold text-gray-900 mt-1">
                     \$${item.price}
                   </p>
@@ -423,7 +461,7 @@ function MenuCategory() {
           {items?.map((item) => (
             <div key={item.id}>
               <h3 className="text-xl font-serif text-gray-900">{item.name}</h3>
-              <p className="text-gray-600">{item.description}</p>
+              <p className="text-gray-700">{item.description}</p>
               <p className="text-lg font-bold text-gray-900 mt-1">\$${item.price}</p>
             </div>
           ))}
@@ -475,8 +513,17 @@ function NewsArchive() {
 
   return (
     <main>
-      <section className="max-w-4xl mx-auto px-8 py-16">
-        <h1 className="text-4xl font-serif text-gray-900 mb-8">News & Updates</h1>
+      {/* F1: Skip to main content */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-[200] focus:px-4 focus:py-2 focus:bg-white focus:text-gray-900 focus:rounded focus:ring-2 focus:ring-blue-500"
+      >
+        Skip to main content
+      </a>
+
+      {/* F1: id="main-content" on first content section */}
+      <section id="main-content" className="max-w-4xl mx-auto px-8 py-16">
+        <h1 className="text-4xl font-serif text-gray-900 mb-8">News &amp; Updates</h1>
 
         {posts?.map((post) => (
           <article key={post.id} className="mb-12 pb-12 border-b">
@@ -492,7 +539,8 @@ function NewsArchive() {
               <a href={\`/news/\${post.slug}\`}>{post.title}</a>
             </h2>
 
-            <div className="text-sm text-gray-600 mb-4">
+            {/* F15: small metadata text — text-gray-700 for sufficient contrast */}
+            <div className="text-sm text-gray-700 mb-4">
               {post.featured && <span className="mr-4 font-semibold">Featured</span>}
               {post.comment_count > 0 && (
                 <a href={\`/news/\${post.slug}#comments\`}>
@@ -512,7 +560,7 @@ function NewsArchive() {
               onClick={() => setPage(page - 1)}
               className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-50"
             >
-              ← Newer Posts
+              &#8592; Newer Posts
             </button>
           )}
           {posts && posts.length === postsPerPage && (
@@ -520,7 +568,7 @@ function NewsArchive() {
               onClick={() => setPage(page + 1)}
               className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-50"
             >
-              Older Posts →
+              Older Posts &#8594;
             </button>
           )}
         </div>
@@ -573,8 +621,10 @@ function NewsPost() {
     <main className="max-w-4xl mx-auto px-8 py-16">
       <h1 className="text-4xl font-serif text-gray-900 mb-4">{post.title}</h1>
 
-      <div className="text-sm text-gray-600 mb-8">
-        <time>{new Date(post.published_at).toLocaleDateString()}</time>
+      {/* F15: metadata-level text — text-gray-700 for sufficient contrast */}
+      <div className="text-sm text-gray-700 mb-8">
+        {/* F11: <time> element with dateTime attribute */}
+        <time dateTime={post.published_at}>{new Date(post.published_at).toLocaleDateString()}</time>
         {post.comment_count > 0 && (
           <a href="#comments" className="ml-4">
             {post.comment_count} {post.comment_count === 1 ? 'Comment' : 'Comments'}
@@ -601,6 +651,8 @@ function NewsPost() {
             <button
               key={i}
               onClick={() => setCurrentPage(i + 1)}
+              aria-label={\`Go to page \${i + 1}\`}
+              aria-current={i + 1 === currentPage ? 'page' : undefined}
               className={\`w-8 h-8 border rounded \${
                 i + 1 === currentPage
                   ? 'bg-gray-900 text-white'
@@ -653,7 +705,18 @@ function Page() {
 
   return (
     <main>
+      {/* F1: Skip to main content */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-[200] focus:px-4 focus:py-2 focus:bg-white focus:text-gray-900 focus:rounded focus:ring-2 focus:ring-blue-500"
+      >
+        Skip to main content
+      </a>
+
+      {/* F14: Decorative page hero — role="presentation" aria-hidden="true" */}
       <div
+        role="presentation"
+        aria-hidden="true"
         className="w-full h-[530px] bg-cover bg-center bg-black/40"
         style={{
           backgroundImage: \`url('https://picsum.photos/1200/600?random=3')\`,
@@ -661,7 +724,8 @@ function Page() {
         }}
       />
 
-      <section className="max-w-4xl mx-auto px-8 py-16">
+      {/* F1: id="main-content" on first content section */}
+      <section id="main-content" className="max-w-4xl mx-auto px-8 py-16">
         <h1 className="text-4xl font-serif text-gray-900 mb-8">{page.title}</h1>
         <article className="prose prose-lg max-w-none mb-12">
           {page.content}
@@ -729,7 +793,18 @@ function Reservations() {
 
   return (
     <main>
+      {/* F1: Skip to main content */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-[200] focus:px-4 focus:py-2 focus:bg-white focus:text-gray-900 focus:rounded focus:ring-2 focus:ring-blue-500"
+      >
+        Skip to main content
+      </a>
+
+      {/* F14: Decorative reservations hero — role="presentation" aria-hidden="true" */}
       <div
+        role="presentation"
+        aria-hidden="true"
         className="w-full h-[530px] bg-cover bg-center bg-black/40"
         style={{
           backgroundImage: \`url('https://picsum.photos/1200/600?random=4')\`,
@@ -737,7 +812,8 @@ function Reservations() {
         }}
       />
 
-      <section className="max-w-4xl mx-auto px-8 py-16">
+      {/* F1: id="main-content" on first content section */}
+      <section id="main-content" className="max-w-4xl mx-auto px-8 py-16">
         <h1 className="text-4xl font-serif text-gray-900 mb-8">Reservations</h1>
 
         <p className="text-lg text-gray-700 mb-8">
@@ -746,14 +822,16 @@ function Reservations() {
 
         {submitted ? (
           <div className="bg-green-50 border border-green-200 text-green-700 p-4 rounded mb-8">
-            ✓ Thank you for your reservation! We'll confirm shortly.
+            &#10003; Thank you for your reservation! We'll confirm shortly.
           </div>
         ) : null}
 
+        {/* F5: Reservations form with htmlFor/id label associations */}
         <form onSubmit={handleSubmit} className="space-y-6 mb-12">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+            <label htmlFor="res-name" className="block text-sm font-medium text-gray-700 mb-1">Name</label>
             <input
+              id="res-name"
               type="text"
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
@@ -763,8 +841,9 @@ function Reservations() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+            <label htmlFor="res-email" className="block text-sm font-medium text-gray-700 mb-1">Email</label>
             <input
+              id="res-email"
               type="email"
               value={formData.email}
               onChange={(e) => setFormData({ ...formData, email: e.target.value })}
@@ -775,8 +854,9 @@ function Reservations() {
 
           <div className="grid md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Party Size</label>
+              <label htmlFor="res-party-size" className="block text-sm font-medium text-gray-700 mb-1">Party Size</label>
               <select
+                id="res-party-size"
                 value={formData.partySize}
                 onChange={(e) => setFormData({ ...formData, partySize: e.target.value })}
                 className="w-full px-4 py-2 border border-gray-300 rounded"
@@ -788,8 +868,9 @@ function Reservations() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+              <label htmlFor="res-phone" className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
               <input
+                id="res-phone"
                 type="tel"
                 value={formData.phone}
                 onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
@@ -800,8 +881,9 @@ function Reservations() {
 
           <div className="grid md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+              <label htmlFor="res-date" className="block text-sm font-medium text-gray-700 mb-1">Date</label>
               <input
+                id="res-date"
                 type="date"
                 value={formData.date}
                 onChange={(e) => setFormData({ ...formData, date: e.target.value })}
@@ -811,8 +893,9 @@ function Reservations() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Time</label>
+              <label htmlFor="res-time" className="block text-sm font-medium text-gray-700 mb-1">Time</label>
               <input
+                id="res-time"
                 type="time"
                 value={formData.time}
                 onChange={(e) => setFormData({ ...formData, time: e.target.value })}
@@ -823,8 +906,9 @@ function Reservations() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Special Requests</label>
+            <label htmlFor="res-requests" className="block text-sm font-medium text-gray-700 mb-1">Special Requests</label>
             <textarea
+              id="res-requests"
               value={formData.requests}
               onChange={(e) => setFormData({ ...formData, requests: e.target.value })}
               className="w-full px-4 py-2 border border-gray-300 rounded"
@@ -925,6 +1009,7 @@ function AdminEntities() {
       </div>
 
       {showForm && (
+        {/* F6: Admin entities form with explicit labels for all inputs */}
         <form
           onSubmit={(e) => {
             e.preventDefault()
@@ -932,27 +1017,39 @@ function AdminEntities() {
           }}
           className="bg-gray-50 p-6 rounded mb-8 space-y-4"
         >
-          <input
-            type="text"
-            placeholder="Name"
-            value={formData.name}
-            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-            className="w-full px-4 py-2 border rounded"
-            required
-          />
-          <textarea
-            placeholder="Description"
-            value={formData.description}
-            onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-            className="w-full px-4 py-2 border rounded"
-          />
-          <input
-            type="url"
-            placeholder="Image URL"
-            value={formData.image_url}
-            onChange={(e) => setFormData({ ...formData, image_url: e.target.value })}
-            className="w-full px-4 py-2 border rounded"
-          />
+          <div>
+            <label htmlFor="admin-ent-name" className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+            <input
+              id="admin-ent-name"
+              type="text"
+              placeholder="Name"
+              value={formData.name}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              className="w-full px-4 py-2 border rounded"
+              required
+            />
+          </div>
+          <div>
+            <label htmlFor="admin-ent-description" className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+            <textarea
+              id="admin-ent-description"
+              placeholder="Description"
+              value={formData.description}
+              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              className="w-full px-4 py-2 border rounded"
+            />
+          </div>
+          <div>
+            <label htmlFor="admin-ent-image-url" className="block text-sm font-medium text-gray-700 mb-1">Image URL</label>
+            <input
+              id="admin-ent-image-url"
+              type="url"
+              placeholder="Image URL"
+              value={formData.image_url}
+              onChange={(e) => setFormData({ ...formData, image_url: e.target.value })}
+              className="w-full px-4 py-2 border rounded"
+            />
+          </div>
           <button type="submit" className="px-4 py-2 bg-green-600 text-white rounded">
             Save
           </button>
@@ -964,7 +1061,7 @@ function AdminEntities() {
           <div key={entity.id} className="border rounded p-4 flex justify-between items-start">
             <div className="flex-1">
               <h3 className="font-bold text-lg">{entity.name}</h3>
-              <p className="text-gray-600">{entity.description}</p>
+              <p className="text-gray-700">{entity.description}</p>
               {entity.image_url && (
                 <img src={entity.image_url} alt={entity.name} className="mt-2 h-20 object-cover rounded" />
               )}
@@ -1056,6 +1153,7 @@ function AdminMenuItems() {
       </div>
 
       {showForm && (
+        {/* F6: Admin menu items form with explicit labels for all inputs */}
         <form
           onSubmit={(e) => {
             e.preventDefault()
@@ -1063,39 +1161,55 @@ function AdminMenuItems() {
           }}
           className="bg-gray-50 p-6 rounded mb-8 space-y-4"
         >
-          <input
-            type="text"
-            placeholder="Item Name"
-            value={formData.name}
-            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-            className="w-full px-4 py-2 border rounded"
-            required
-          />
-          <textarea
-            placeholder="Description"
-            value={formData.description}
-            onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-            className="w-full px-4 py-2 border rounded"
-          />
-          <select
-            value={formData.category}
-            onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-            className="w-full px-4 py-2 border rounded"
-          >
-            <option>Appetizers</option>
-            <option>Mains</option>
-            <option>Desserts</option>
-            <option>Beverages</option>
-          </select>
-          <input
-            type="number"
-            placeholder="Price"
-            value={formData.price}
-            onChange={(e) => setFormData({ ...formData, price: e.target.value })}
-            className="w-full px-4 py-2 border rounded"
-            step="0.01"
-            required
-          />
+          <div>
+            <label htmlFor="admin-menu-name" className="block text-sm font-medium text-gray-700 mb-1">Item Name</label>
+            <input
+              id="admin-menu-name"
+              type="text"
+              placeholder="Item Name"
+              value={formData.name}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              className="w-full px-4 py-2 border rounded"
+              required
+            />
+          </div>
+          <div>
+            <label htmlFor="admin-menu-description" className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+            <textarea
+              id="admin-menu-description"
+              placeholder="Description"
+              value={formData.description}
+              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              className="w-full px-4 py-2 border rounded"
+            />
+          </div>
+          <div>
+            <label htmlFor="admin-menu-category" className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+            <select
+              id="admin-menu-category"
+              value={formData.category}
+              onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+              className="w-full px-4 py-2 border rounded"
+            >
+              <option>Appetizers</option>
+              <option>Mains</option>
+              <option>Desserts</option>
+              <option>Beverages</option>
+            </select>
+          </div>
+          <div>
+            <label htmlFor="admin-menu-price" className="block text-sm font-medium text-gray-700 mb-1">Price</label>
+            <input
+              id="admin-menu-price"
+              type="number"
+              placeholder="Price"
+              value={formData.price}
+              onChange={(e) => setFormData({ ...formData, price: e.target.value })}
+              className="w-full px-4 py-2 border rounded"
+              step="0.01"
+              required
+            />
+          </div>
           <button type="submit" className="px-4 py-2 bg-green-600 text-white rounded">
             Save Item
           </button>
@@ -1107,7 +1221,7 @@ function AdminMenuItems() {
           <div key={item.id} className="border rounded p-4 flex justify-between">
             <div className="flex-1">
               <h3 className="font-bold">{item.name}</h3>
-              <p className="text-sm text-gray-600">{item.description}</p>
+              <p className="text-sm text-gray-700">{item.description}</p>
               <div className="flex gap-4 mt-2 text-sm">
                 <span className="bg-gray-100 px-2 py-1 rounded">{item.category}</span>
                 <span className="font-semibold">\${item.price}</span>
@@ -1128,6 +1242,226 @@ function AdminMenuItems() {
   `
 }
 
+/**
+ * Admin detail/edit page for a single entity (by $id param)
+ */
+export function renderCanapeAdminEntityDetail(_context: CanapeRouteContext): string {
+  return `
+import { createFileRoute, Link } from '@tanstack/react-router'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useState, useEffect } from 'react'
+import { supabase } from '@/lib/supabase'
+
+export const Route = createFileRoute('/_authenticated/admin/entities/$id')({
+  component: AdminEntityDetail
+})
+
+function AdminEntityDetail() {
+  const { id } = Route.useParams()
+  const queryClient = useQueryClient()
+  const [formData, setFormData] = useState({ name: '', description: '', image_url: '' })
+
+  const { data: entity, isPending, error } = useQuery({
+    queryKey: ['admin', 'entities', id],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('entities').select('*').eq('id', id).single()
+      if (error) throw error
+      return data
+    }
+  })
+
+  useEffect(() => {
+    if (entity) {
+      setFormData({
+        name: entity.name ?? '',
+        description: entity.description ?? '',
+        image_url: entity.image_url ?? ''
+      })
+    }
+  }, [entity])
+
+  const updateMutation = useMutation({
+    mutationFn: async (data) => {
+      const { error } = await supabase.from('entities').update(data).eq('id', id)
+      if (error) throw error
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'entities'] })
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.from('entities').delete().eq('id', id)
+      if (error) throw error
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'entities'] })
+      window.history.back()
+    }
+  })
+
+  if (isPending) return <div className="p-8" role="status">Loading...</div>
+  if (error) return <div className="p-8 text-red-600" role="alert">{error.message}</div>
+  if (!entity) return <div className="p-8">Not found</div>
+
+  return (
+    <main className="max-w-3xl mx-auto px-8 py-16">
+      <div className="flex items-center justify-between mb-8">
+        <h1 className="text-3xl font-bold">Edit: {entity.name}</h1>
+        <Link to="/_authenticated/admin/entities" className="text-blue-600 hover:underline text-sm">&larr; Back to list</Link>
+      </div>
+
+      <form
+        onSubmit={(e) => { e.preventDefault(); updateMutation.mutate(formData) }}
+        className="space-y-6"
+      >
+        <div>
+          <label htmlFor="edit-ent-name" className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+          <input id="edit-ent-name" type="text" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} className="w-full px-4 py-2 border rounded" required />
+        </div>
+        <div>
+          <label htmlFor="edit-ent-description" className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+          <textarea id="edit-ent-description" value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} className="w-full px-4 py-2 border rounded" rows={4} />
+        </div>
+        <div>
+          <label htmlFor="edit-ent-image-url" className="block text-sm font-medium text-gray-700 mb-1">Image URL</label>
+          <input id="edit-ent-image-url" type="url" value={formData.image_url} onChange={(e) => setFormData({ ...formData, image_url: e.target.value })} className="w-full px-4 py-2 border rounded" />
+        </div>
+
+        {entity.image_url && (
+          <img src={entity.image_url} alt={entity.name} className="h-32 object-cover rounded" />
+        )}
+
+        <div className="flex gap-4 pt-4 border-t">
+          <button type="submit" className="px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700" disabled={updateMutation.isPending}>
+            {updateMutation.isPending ? 'Saving...' : 'Save Changes'}
+          </button>
+          <button type="button" onClick={() => { if (window.confirm('Delete this item permanently?')) deleteMutation.mutate() }} className="px-6 py-2 bg-red-50 text-red-600 rounded hover:bg-red-100">
+            Delete
+          </button>
+        </div>
+
+        {updateMutation.isSuccess && <p className="text-green-600 text-sm" role="status">Changes saved successfully.</p>}
+        {updateMutation.isError && <p className="text-red-600 text-sm" role="alert">Error saving changes.</p>}
+      </form>
+    </main>
+  )
+}
+  `
+}
+
+/**
+ * Admin detail/edit page for a single menu item (by $id param)
+ */
+export function renderCanapeAdminMenuItemDetail(_context: CanapeRouteContext): string {
+  return `
+import { createFileRoute, Link } from '@tanstack/react-router'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useState, useEffect } from 'react'
+import { supabase } from '@/lib/supabase'
+
+export const Route = createFileRoute('/_authenticated/admin/menu-items/$id')({
+  component: AdminMenuItemDetail
+})
+
+function AdminMenuItemDetail() {
+  const { id } = Route.useParams()
+  const queryClient = useQueryClient()
+  const [formData, setFormData] = useState({ name: '', description: '', category: 'Appetizers', price: '0' })
+
+  const { data: item, isPending, error } = useQuery({
+    queryKey: ['admin', 'menu-items', id],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('menu_items').select('*').eq('id', id).single()
+      if (error) throw error
+      return data
+    }
+  })
+
+  useEffect(() => {
+    if (item) {
+      setFormData({
+        name: item.name ?? '',
+        description: item.description ?? '',
+        category: item.category ?? 'Appetizers',
+        price: String(item.price ?? '0')
+      })
+    }
+  }, [item])
+
+  const updateMutation = useMutation({
+    mutationFn: async (data) => {
+      const { error } = await supabase.from('menu_items').update({ ...data, price: parseFloat(data.price) }).eq('id', id)
+      if (error) throw error
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'menu-items'] })
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.from('menu_items').delete().eq('id', id)
+      if (error) throw error
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'menu-items'] })
+      window.history.back()
+    }
+  })
+
+  if (isPending) return <div className="p-8" role="status">Loading...</div>
+  if (error) return <div className="p-8 text-red-600" role="alert">{error.message}</div>
+  if (!item) return <div className="p-8">Not found</div>
+
+  return (
+    <main className="max-w-3xl mx-auto px-8 py-16">
+      <div className="flex items-center justify-between mb-8">
+        <h1 className="text-3xl font-bold">Edit: {item.name}</h1>
+        <Link to="/_authenticated/admin/menu-items" className="text-blue-600 hover:underline text-sm">&larr; Back to list</Link>
+      </div>
+
+      <form
+        onSubmit={(e) => { e.preventDefault(); updateMutation.mutate(formData) }}
+        className="space-y-6"
+      >
+        <div>
+          <label htmlFor="edit-menu-name" className="block text-sm font-medium text-gray-700 mb-1">Item Name</label>
+          <input id="edit-menu-name" type="text" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} className="w-full px-4 py-2 border rounded" required />
+        </div>
+        <div>
+          <label htmlFor="edit-menu-description" className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+          <textarea id="edit-menu-description" value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} className="w-full px-4 py-2 border rounded" rows={4} />
+        </div>
+        <div>
+          <label htmlFor="edit-menu-category" className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+          <select id="edit-menu-category" value={formData.category} onChange={(e) => setFormData({ ...formData, category: e.target.value })} className="w-full px-4 py-2 border rounded">
+            <option>Appetizers</option>
+            <option>Mains</option>
+            <option>Desserts</option>
+            <option>Beverages</option>
+          </select>
+        </div>
+        <div>
+          <label htmlFor="edit-menu-price" className="block text-sm font-medium text-gray-700 mb-1">Price</label>
+          <input id="edit-menu-price" type="number" value={formData.price} onChange={(e) => setFormData({ ...formData, price: e.target.value })} className="w-full px-4 py-2 border rounded" step="0.01" required />
+        </div>
+
+        <div className="flex gap-4 pt-4 border-t">
+          <button type="submit" className="px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700" disabled={updateMutation.isPending}>
+            {updateMutation.isPending ? 'Saving...' : 'Save Changes'}
+          </button>
+          <button type="button" onClick={() => { if (window.confirm('Delete this menu item permanently?')) deleteMutation.mutate() }} className="px-6 py-2 bg-red-50 text-red-600 rounded hover:bg-red-100">
+            Delete
+          </button>
+        </div>
+
+        {updateMutation.isSuccess && <p className="text-green-600 text-sm" role="status">Changes saved successfully.</p>}
+        {updateMutation.isError && <p className="text-red-600 text-sm" role="alert">Error saving changes.</p>}
+      </form>
+    </main>
+  )
+}
+  `
+}
+
 // Export all routes
 export const CanapeRoutes = {
   homepage: renderCanapeHomepage,
@@ -1138,5 +1472,7 @@ export const CanapeRoutes = {
   page: renderCanapePage,
   reservations: renderCanapeReservations,
   adminEntities: renderCanapeAdminEntities,
-  adminMenuItems: renderCanapeAdminMenuItems
+  adminMenuItems: renderCanapeAdminMenuItems,
+  adminEntityDetail: renderCanapeAdminEntityDetail,
+  adminMenuItemDetail: renderCanapeAdminMenuItemDetail
 }

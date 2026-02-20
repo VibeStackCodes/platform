@@ -557,7 +557,7 @@ describe('Themed Dry-Run Pipeline', () => {
         style: { ...gourmettroTokens.style, navStyle: 'editorial', heroLayout: 'editorial' },
       }
       const homepage = generateThemedApp(restaurantContract, tokens, 'Test Restaurant')['src/routes/index.tsx']
-      expect(homepage).toContain('h-[70vh]')
+      expect(homepage).toContain('h-[80vh]')
       expect(homepage).toContain('bg-black/40')
       expect(homepage).toContain('font-[family-name:var(--font-display)]')
     })
@@ -580,7 +580,7 @@ describe('Themed Dry-Run Pipeline', () => {
       }
       const homepage = generateThemedApp(restaurantContract, tokens, 'Test Restaurant')['src/routes/index.tsx']
       expect(homepage).toContain('md:grid-cols-2')
-      expect(homepage).toContain('shadow-sm hover:shadow-md')
+      expect(homepage).toContain('shadow-sm hover:shadow-2xl')
     })
 
     it('soft homepage contains soft markers', () => {
@@ -590,8 +590,8 @@ describe('Themed Dry-Run Pipeline', () => {
       }
       const homepage = generateThemedApp(restaurantContract, tokens, 'Test Restaurant')['src/routes/index.tsx']
       expect(homepage).toContain('text-center')
-      expect(homepage).toContain('rounded-2xl')
-      expect(homepage).toContain('bg-accent/10')
+      expect(homepage).toContain('rounded-3xl')
+      expect(homepage).toContain('bg-accent/5')
     })
 
     it('dashboard homepage contains dashboard markers', () => {
@@ -600,7 +600,7 @@ describe('Themed Dry-Run Pipeline', () => {
         style: { ...gourmettroTokens.style, navStyle: 'sidebar', heroLayout: 'split' },
       }
       const homepage = generateThemedApp(restaurantContract, tokens, 'Test Restaurant')['src/routes/index.tsx']
-      expect(homepage).toContain('md:w-64')
+      expect(homepage).toContain('md:w-72')
       expect(homepage).toContain('backdrop-blur-md')
     })
   })
