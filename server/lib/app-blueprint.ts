@@ -685,16 +685,18 @@ export async function contractToBlueprintCreative(input: BlueprintInput): Promis
     contract: mergedContract,
     tokens,
   }
-  const spec = await runCreativeDirector(creativeDirectorInput)
+  const cdResult = await runCreativeDirector(creativeDirectorInput)
+  const spec = cdResult.spec
   console.log(`[blueprint:creative] CreativeSpec archetype: ${spec.archetype}, pages: ${spec.sitemap.length}`)
 
   // 3. Generate pages in parallel
-  const generatedPages = await generatePages({
+  const pageResult = await generatePages({
     spec,
     contract: mergedContract,
     supabaseUrl: '__PLACEHOLDER__',
     supabaseAnonKey: '__PLACEHOLDER__',
   })
+  const generatedPages = pageResult.pages
   console.log(`[blueprint:creative] Generated ${generatedPages.length} pages`)
 
   // 4. Assemble deterministic files

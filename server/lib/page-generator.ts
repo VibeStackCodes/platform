@@ -54,14 +54,30 @@ const PAGE_GEN_MODEL = PIPELINE_MODELS.pageGen
  * Generate all page route files in parallel.
  * Each page in spec.sitemap becomes one GeneratedPage with a complete .tsx file.
  */
-export async function generatePages(input: PageGeneratorInput): Promise<GeneratedPage[]> {
+export interface PageGeneratorResult {
+  pages: GeneratedPage[]
+  usage: { inputTokens: number; outputTokens: number }
+}
+
+export async function generatePages(input: PageGeneratorInput): Promise<PageGeneratorResult> {
   const { spec, contract } = input
 
   const results = await Promise.all(
     spec.sitemap.map((page) => generateSinglePage(page, spec, contract)),
   )
 
-  return results
+  const usage = results.reduce(
+    (acc, r) => ({
+      inputTokens: acc.inputTokens + r.inputTokens,
+      outputTokens: acc.outputTokens + r.outputTokens,
+    }),
+    { inputTokens: 0, outputTokens: 0 },
+  )
+
+  return {
+    pages: results.map(({ inputTokens: _i, outputTokens: _o, ...page }) => page),
+    usage,
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -72,7 +88,7 @@ async function generateSinglePage(
   page: CreativeSpec['sitemap'][number],
   spec: CreativeSpec,
   contract: SchemaContract,
-): Promise<GeneratedPage> {
+): Promise<GeneratedPage & { inputTokens: number; outputTokens: number }> {
   const systemPrompt = buildPageGenSystemPrompt(spec)
   const userPrompt = buildPageGenUserPrompt(page, spec, contract)
 
@@ -92,6 +108,8 @@ async function generateSinglePage(
     componentName: page.componentName,
     content,
     route: page.route,
+    inputTokens: result.usage?.inputTokens ?? 0,
+    outputTokens: result.usage?.outputTokens ?? 0,
   }
 }
 

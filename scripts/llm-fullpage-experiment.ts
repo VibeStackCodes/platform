@@ -158,14 +158,15 @@ async function main() {
   const { runCreativeDirector } = await import('../server/lib/creative-director')
 
   const t3 = Date.now()
-  const spec = await runCreativeDirector({
+  const cdResult = await runCreativeDirector({
     userPrompt,
     appName: analysisResult.appName,
     appDescription: analysisResult.appDescription,
     contract: mergedContract,
     tokens,
   })
-  trackUsage('creative-director', 'gpt-5.2', 0, 0, Date.now() - t3)
+  const spec = cdResult.spec
+  trackUsage('creative-director', 'gpt-5.2', cdResult.usage.inputTokens, cdResult.usage.outputTokens, Date.now() - t3)
 
   log(`  Archetype: ${spec.archetype}`)
   log(`  Pages in sitemap: ${spec.sitemap.length}`)
@@ -176,24 +177,15 @@ async function main() {
   const { generatePages } = await import('../server/lib/page-generator')
 
   const t4 = Date.now()
-  const generatedPages = await generatePages({
+  const pageResult = await generatePages({
     spec,
     contract: mergedContract,
     supabaseUrl: 'https://placeholder.supabase.co',
     supabaseAnonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.placeholder',
   })
-  const pageDuration = Date.now() - t4
-
-  // page-generator runs parallel LLM calls — log timing only (no per-token breakdown)
-  tokenLog.push({
-    phase: 'page-generation',
-    model: 'gpt-5.2-codex',
-    inputTokens: 0,
-    outputTokens: 0,
-    cost: 0,
-    durationMs: pageDuration,
-  })
-  log(`  Generated ${generatedPages.length} pages in ${(pageDuration / 1000).toFixed(1)}s`)
+  const generatedPages = pageResult.pages
+  trackUsage('page-generation', 'gpt-5.2-codex', pageResult.usage.inputTokens, pageResult.usage.outputTokens, Date.now() - t4)
+  log(`  Generated ${generatedPages.length} pages in ${((Date.now() - t4) / 1000).toFixed(1)}s`)
   for (const page of generatedPages) {
     log(`    ${page.route} → src/${page.fileName} (${page.content.length} chars)`)
   }

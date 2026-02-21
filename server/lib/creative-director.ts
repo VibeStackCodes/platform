@@ -208,7 +208,12 @@ Think through the visual identity and every page thoroughly before settling on y
  *
  * Throws on invalid output — no fallbacks, no retry loops.
  */
-export async function runCreativeDirector(input: CreativeDirectorInput): Promise<CreativeSpec> {
+export interface CreativeDirectorResult {
+  spec: CreativeSpec
+  usage: { inputTokens: number; outputTokens: number }
+}
+
+export async function runCreativeDirector(input: CreativeDirectorInput): Promise<CreativeDirectorResult> {
   const userMessage = buildUserPrompt(input)
 
   // Stage 1: Free-form reasoning — let the agent think deeply
@@ -234,5 +239,15 @@ FORMAT INTO: CreativeSpec with fields: archetype, visualDna (typography, palette
   // Parse — throws if LLM returned invalid structure
   const spec = CreativeSpecSchema.parse(stage2.object ?? stage2)
 
-  return spec
+  // Aggregate token usage from both stages
+  const s1u = stage1.usage ?? { inputTokens: 0, outputTokens: 0 }
+  const s2u = stage2.usage ?? { inputTokens: 0, outputTokens: 0 }
+
+  return {
+    spec,
+    usage: {
+      inputTokens: (s1u.inputTokens ?? 0) + (s2u.inputTokens ?? 0),
+      outputTokens: (s1u.outputTokens ?? 0) + (s2u.outputTokens ?? 0),
+    },
+  }
 }
