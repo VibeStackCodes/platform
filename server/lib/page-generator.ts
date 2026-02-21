@@ -16,88 +16,9 @@
 
 import { generateText } from 'ai'
 import { createHeliconeProvider, PIPELINE_MODELS } from './agents/provider'
+import type { CreativeSpec } from './agents/schemas'
 import { getCondensedDesignRules } from './design-knowledge'
 import type { SchemaContract } from './schema-contract'
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-export interface VisualDna {
-  typography: {
-    displayFont: string
-    bodyFont: string
-    googleFontsUrl: string
-    headlineStyle: string
-    bodyStyle: string
-  }
-  palette: {
-    background: string
-    foreground: string
-    primary: string
-    primaryForeground: string
-    accent: string
-    muted: string
-    mutedForeground: string
-    border: string
-    card: string
-    destructive: string
-  }
-  motionPreset: 'none' | 'subtle' | 'expressive'
-  borderRadius: string
-  cardStyle: 'elevated' | 'flat' | 'glass' | 'bordered'
-  imagery: 'photography-heavy' | 'illustration' | 'minimal' | 'icon-focused'
-  visualTexture: string
-  moodBoard: string
-}
-
-export interface SitemapEntry {
-  route: string
-  fileName: string
-  componentName: string
-  purpose: string
-  dataRequirements: 'none' | 'read-only' | 'read-write'
-  entities?: string[]
-  brief: {
-    sections: string[]
-    copyDirection: string
-    keyInteractions: string
-    lucideIcons: string[]
-    shadcnComponents: string[]
-  }
-}
-
-export interface NavConfig {
-  style: string
-  logo: string
-  links: Array<{ label: string; href: string }>
-  cta?: { label: string; href: string }
-  mobileStyle: string
-}
-
-export interface FooterConfig {
-  style: string
-  columns?: Array<{ heading: string; links: Array<{ label: string; href: string }> }>
-  showNewsletter: boolean
-  socialLinks: string[]
-  copyright: string
-}
-
-export interface AuthConfig {
-  required: boolean
-  publicRoutes: string[]
-  privateRoutes: string[]
-  loginRoute: string
-}
-
-export interface CreativeSpec {
-  archetype: 'static' | 'content' | 'crud'
-  visualDna: VisualDna
-  sitemap: SitemapEntry[]
-  nav: NavConfig
-  footer: FooterConfig
-  auth: AuthConfig
-}
 
 export interface GeneratedPage {
   /** e.g. "routes/index.tsx" */
@@ -148,7 +69,7 @@ export async function generatePages(input: PageGeneratorInput): Promise<Generate
 // ---------------------------------------------------------------------------
 
 async function generateSinglePage(
-  page: SitemapEntry,
+  page: CreativeSpec['sitemap'][number],
   spec: CreativeSpec,
   contract: SchemaContract,
 ): Promise<GeneratedPage> {
@@ -245,7 +166,7 @@ ${spec.visualDna.moodBoard}
 // ---------------------------------------------------------------------------
 
 function buildPageGenUserPrompt(
-  page: SitemapEntry,
+  page: CreativeSpec['sitemap'][number],
   spec: CreativeSpec,
   contract: SchemaContract,
 ): string {

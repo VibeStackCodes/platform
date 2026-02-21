@@ -188,7 +188,7 @@ export const CreativeSpecSchema = z.object({
         purpose: z.string().describe('1-2 sentence page description'),
         dataRequirements: z.enum(['none', 'read-only', 'read-write']).describe('Data access pattern'),
         entities: z
-          .preprocess(toStringArray, z.array(z.string()).optional())
+          .preprocess(toStringArray, z.array(z.string()).default([]))
           .describe('Table names for data-driven pages'),
         brief: z.object({
           sections: z.array(z.string()).describe('Section descriptions for this page'),
@@ -221,8 +221,9 @@ export const CreativeSpecSchema = z.object({
         label: z.string(),
         href: z.string(),
       })
-      .optional()
-      .describe('Optional CTA button in nav'),
+      .nullable()
+      .default(null)
+      .describe('Optional CTA button in nav (null if none)'),
     mobileStyle: z.enum(['sheet', 'fullscreen', 'dropdown']).describe('Mobile navigation style'),
   }),
 
@@ -240,7 +241,7 @@ export const CreativeSpecSchema = z.object({
           ),
         }),
       )
-      .optional()
+      .default([])
       .describe('Footer columns with links'),
     showNewsletter: z.boolean().describe('Whether to show newsletter signup'),
     socialLinks: z
