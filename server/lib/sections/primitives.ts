@@ -655,3 +655,65 @@ export function emptyState(opts: {
 function capitalize(str: string): string {
   return str.charAt(0).toUpperCase() + str.slice(1)
 }
+
+// ===========================================================================
+// 7. V2 visual config resolvers (SectionVisualSpec → Tailwind classes)
+// ===========================================================================
+
+/** Background enum → Tailwind class(es) */
+export function resolveBg(config: Record<string, unknown>): string {
+  const bg = (config.background as string) ?? 'default'
+  switch (bg) {
+    case 'muted': return 'bg-muted/30'
+    case 'muted-strong': return 'bg-muted/50'
+    case 'accent': return 'bg-primary/10'
+    case 'dark': return 'bg-foreground text-background'
+    case 'dark-overlay': return 'relative bg-black/70'
+    case 'gradient-down': return 'bg-gradient-to-b from-background to-muted/30'
+    case 'gradient-up': return 'bg-gradient-to-t from-muted/30 to-background'
+    default: return 'bg-background'
+  }
+}
+
+/** Spacing enum → Tailwind padding classes */
+export function resolveSpacing(config: Record<string, unknown>): string {
+  const spacing = (config.spacing as string) ?? 'normal'
+  switch (spacing) {
+    case 'compact': return 'py-8 md:py-12'
+    case 'generous': return 'py-16 md:py-24 lg:py-32'
+    default: return 'py-12 md:py-16'
+  }
+}
+
+/** Card variant enum → Tailwind card classes */
+export function resolveCardVariant(config: Record<string, unknown>): string {
+  const variant = (config.cardVariant as string) ?? 'elevated'
+  switch (variant) {
+    case 'flat': return 'border border-border rounded-lg'
+    case 'glass': return 'bg-card/70 backdrop-blur-md border border-border/50 rounded-lg'
+    case 'image-overlay': return 'relative overflow-hidden rounded-xl'
+    default: return 'shadow-lg hover:shadow-xl rounded-xl'
+  }
+}
+
+/** Grid columns enum → Tailwind grid-cols class */
+export function resolveGridCols(config: Record<string, unknown>): string {
+  const cols = (config.gridColumns as string) ?? '3'
+  switch (cols) {
+    case '2': return 'grid-cols-1 sm:grid-cols-2'
+    case '4': return 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4'
+    default: return 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'
+  }
+}
+
+/** Image aspect enum → Tailwind aspect class */
+export function resolveImageAspect(config: Record<string, unknown>): string {
+  const aspect = (config.imageAspect as string) ?? 'video'
+  switch (aspect) {
+    case 'square': return 'aspect-square'
+    case '4/3': return 'aspect-[4/3]'
+    case '3/2': return 'aspect-[3/2]'
+    case '21/9': return 'aspect-[21/9]'
+    default: return 'aspect-video'
+  }
+}

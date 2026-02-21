@@ -14,7 +14,8 @@
  * This catches template-level bugs BEFORE burning $0.50 on an E2E run.
  */
 
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
+import type { PageCompositionPlan, PageCompositionPlanV2, SectionVisualSpec } from '@server/lib/sections/types'
 import { contractToBlueprint } from '@server/lib/app-blueprint'
 import { assembleListPage, assembleDetailPage } from '@server/lib/agents/assembler'
 import { derivePageFeatureSpec } from '@server/lib/agents/feature-schema'
@@ -27,6 +28,34 @@ import { snakeToKebab, pluralize } from '@server/lib/naming-utils'
 import { join } from 'node:path'
 import { execFileSync } from 'node:child_process'
 
+// Mock composeSectionsV2 — deterministic plan from fallbackCompositionPlan (V1→V2 conversion)
+vi.mock('@server/lib/page-composer', async (importOriginal) => {
+  const mod = await importOriginal<typeof import('@server/lib/page-composer')>()
+  return {
+    ...mod,
+    composeSectionsV2: vi.fn(async (entities: any[], tokens: any, _appDescription: string) => {
+      const v1Plan = mod.fallbackCompositionPlan(entities, tokens)
+      return v1ToV2(v1Plan)
+    }),
+  }
+})
+
+function v1ToV2(plan: PageCompositionPlan): PageCompositionPlanV2 {
+  return {
+    routes: Object.entries(plan.pages).map(([path, slots]) => ({
+      path,
+      sections: slots.map((slot): SectionVisualSpec => ({
+        sectionId: slot.sectionId as SectionVisualSpec['sectionId'],
+        entityBinding: slot.entityBinding,
+        background: 'default',
+        spacing: 'normal',
+        showBadges: true,
+        showMetadata: true,
+      })),
+    })),
+  }
+}
+
 // ============================================================================
 // Shared helpers
 // ============================================================================
@@ -36,13 +65,13 @@ import { execFileSync } from 'node:child_process'
  * In production, inferPageConfig() generates these from the column classifier.
  * Here we test with explicit configs to exercise specific assembler paths.
  */
-function runFullPipeline(
+async function runFullPipeline(
   appName: string,
   contract: SchemaContract,
   pageConfigs: PageConfig[],
 ) {
   // 1. Blueprint
-  const blueprint = contractToBlueprint({
+  const blueprint = await contractToBlueprint({
     appName,
     appDescription: `${appName} app`,
     contract,
@@ -82,7 +111,7 @@ function runFullPipeline(
  */
 function typeCheckFiles(
   testName: string,
-  blueprint: ReturnType<typeof contractToBlueprint>,
+  blueprint: Awaited<ReturnType<typeof contractToBlueprint>>,
   assembledFiles: Array<{ path: string; content: string }>,
 ) {
   const tmpDir = join('/tmp', `vibestack-dryrun-${testName}-${Date.now()}`)
@@ -406,9 +435,8 @@ const financePageConfigs: PageConfig[] = [
 
 describe('Dry-Run Pipeline Integration', () => {
   describe('Test 1: Bookmarks Manager', () => {
-    const result = runFullPipeline('BookmarkNest', bookmarkContract, bookmarkPageConfigs)
-
-    it('blueprint generates expected files', () => {
+    it('blueprint generates expected files', async () => {
+      const result = await runFullPipeline('BookmarkNest', bookmarkContract, bookmarkPageConfigs)
       const paths = result.blueprint.fileTree.map((f) => f.path)
       expect(paths).toContain('src/lib/supabase.ts')
       expect(paths).toContain('src/main.tsx')
@@ -418,7 +446,8 @@ describe('Dry-Run Pipeline Integration', () => {
       expect(paths.some((p) => p.startsWith('server/'))).toBe(false)
     })
 
-    it('SQL migration is valid', () => {
+    it('SQL migration is valid', async () => {
+      const result = await runFullPipeline('BookmarkNest', bookmarkContract, bookmarkPageConfigs)
       expect(result.sql).toContain('CREATE TABLE IF NOT EXISTS "bookmark"')
       expect(result.sql).toContain('CREATE TABLE IF NOT EXISTS "tag"')
       expect(result.sql).toContain('CREATE TABLE IF NOT EXISTS "bookmark_tag"')
@@ -426,17 +455,20 @@ describe('Dry-Run Pipeline Integration', () => {
       expect(result.sql).toContain('REFERENCES "auth"."users"("id")')
     })
 
-    it('assembles all entity pages', () => {
+    it('assembles all entity pages', async () => {
+      const result = await runFullPipeline('BookmarkNest', bookmarkContract, bookmarkPageConfigs)
       expect(result.assembledFiles).toHaveLength(6) // 3 entities × 2 pages
     })
 
-    it('list pages have no SLOT markers', () => {
+    it('list pages have no SLOT markers', async () => {
+      const result = await runFullPipeline('BookmarkNest', bookmarkContract, bookmarkPageConfigs)
       for (const file of result.assembledFiles) {
         expect(file.content).not.toContain('SLOT')
       }
     })
 
-    it('assembled file paths match blueprint SLOT paths', () => {
+    it('assembled file paths match blueprint SLOT paths', async () => {
+      const result = await runFullPipeline('BookmarkNest', bookmarkContract, bookmarkPageConfigs)
       // Guard against double-pluralization: orchestrator must write to the same
       // path that contractToPages() put the SLOT file at.
       const blueprintSlotPaths = new Set(
@@ -447,7 +479,8 @@ describe('Dry-Run Pipeline Integration', () => {
       }
     })
 
-    it('bookmark_tag list page has FK hooks for bookmark and tag', () => {
+    it('bookmark_tag list page has FK hooks for bookmark and tag', async () => {
+      const result = await runFullPipeline('BookmarkNest', bookmarkContract, bookmarkPageConfigs)
       const btList = result.assembledFiles.find((f) => f.path.includes('bookmark-tags.tsx'))
       expect(btList).toBeDefined()
       expect(btList!.content).toContain('bookmarkOptions = useQuery(')
@@ -456,7 +489,8 @@ describe('Dry-Run Pipeline Integration', () => {
       expect(btList!.content).not.toContain('{(() => {')
     })
 
-    it('passes scaffold validation', () => {
+    it('passes scaffold validation', async () => {
+      const result = await runFullPipeline('BookmarkNest', bookmarkContract, bookmarkPageConfigs)
       const allFiles = [
         ...result.blueprint.fileTree.map((f) => ({ path: f.path, content: f.content })),
         ...result.assembledFiles,
@@ -468,7 +502,8 @@ describe('Dry-Run Pipeline Integration', () => {
       expect(scaffoldResult.passed).toBe(true)
     })
 
-    it('generated code passes tsc --noEmit', { timeout: 15000 }, () => {
+    it('generated code passes tsc --noEmit', { timeout: 15000 }, async () => {
+      const result = await runFullPipeline('BookmarkNest', bookmarkContract, bookmarkPageConfigs)
       const tsc = typeCheckFiles('bookmarks', result.blueprint, result.assembledFiles)
       if (!tsc.passed) {
         console.error('TSC errors for bookmarks:\n', tsc.tscOutput)
@@ -480,13 +515,13 @@ describe('Dry-Run Pipeline Integration', () => {
   })
 
   describe('Test 2: Team Task Board', () => {
-    const result = runFullPipeline('TaskBoard', taskBoardContract, taskBoardPageConfigs)
-
-    it('assembles 8 pages (4 entities × 2)', () => {
+    it('assembles 8 pages (4 entities × 2)', async () => {
+      const result = await runFullPipeline('TaskBoard', taskBoardContract, taskBoardPageConfigs)
       expect(result.assembledFiles).toHaveLength(8)
     })
 
-    it('task list page uses FK hook for project (not auth.users)', () => {
+    it('task list page uses FK hook for project (not auth.users)', async () => {
+      const result = await runFullPipeline('TaskBoard', taskBoardContract, taskBoardPageConfigs)
       const taskList = result.assembledFiles.find((f) => f.path.includes('tasks.tsx') && !f.path.includes('$id'))
       expect(taskList).toBeDefined()
       expect(taskList!.content).toContain('projectOptions = useQuery(')
@@ -494,28 +529,32 @@ describe('Dry-Run Pipeline Integration', () => {
       expect(taskList!.content).not.toContain('authUsersOptions')
     })
 
-    it('task list page has enum select for status and priority', () => {
+    it('task list page has enum select for status and priority', async () => {
+      const result = await runFullPipeline('TaskBoard', taskBoardContract, taskBoardPageConfigs)
       const taskList = result.assembledFiles.find((f) => f.path.includes('tasks.tsx') && !f.path.includes('$id'))
       expect(taskList).toBeDefined()
       expect(taskList!.content).toContain('<option value="todo">')
       expect(taskList!.content).toContain('<option value="low">')
     })
 
-    it('activity_log pages have FK hooks for project and task', () => {
+    it('activity_log pages have FK hooks for project and task', async () => {
+      const result = await runFullPipeline('TaskBoard', taskBoardContract, taskBoardPageConfigs)
       const logList = result.assembledFiles.find((f) => f.path.includes('activity-logs.tsx') && !f.path.includes('$id'))
       expect(logList).toBeDefined()
       expect(logList!.content).toContain('projectOptions = useQuery(')
       expect(logList!.content).toContain('taskOptions = useQuery(')
     })
 
-    it('no tRPC references', () => {
+    it('no tRPC references', async () => {
+      const result = await runFullPipeline('TaskBoard', taskBoardContract, taskBoardPageConfigs)
       for (const file of result.assembledFiles) {
         expect(file.content).not.toContain('trpc')
         expect(file.content).not.toContain('tRPC')
       }
     })
 
-    it('assembled file paths match blueprint SLOT paths', () => {
+    it('assembled file paths match blueprint SLOT paths', async () => {
+      const result = await runFullPipeline('TaskBoard', taskBoardContract, taskBoardPageConfigs)
       const blueprintSlotPaths = new Set(
         result.blueprint.fileTree.filter((f) => f.isLLMSlot).map((f) => f.path),
       )
@@ -524,7 +563,8 @@ describe('Dry-Run Pipeline Integration', () => {
       }
     })
 
-    it('passes scaffold validation', () => {
+    it('passes scaffold validation', async () => {
+      const result = await runFullPipeline('TaskBoard', taskBoardContract, taskBoardPageConfigs)
       const allFiles = [
         ...result.blueprint.fileTree.map((f) => ({ path: f.path, content: f.content })),
         ...result.assembledFiles,
@@ -536,7 +576,8 @@ describe('Dry-Run Pipeline Integration', () => {
       expect(scaffoldResult.passed).toBe(true)
     })
 
-    it('generated code passes tsc --noEmit', { timeout: 15000 }, () => {
+    it('generated code passes tsc --noEmit', { timeout: 15000 }, async () => {
+      const result = await runFullPipeline('TaskBoard', taskBoardContract, taskBoardPageConfigs)
       const tsc = typeCheckFiles('taskboard', result.blueprint, result.assembledFiles)
       if (!tsc.passed) {
         console.error('TSC errors for taskboard:\n', tsc.tscOutput)
@@ -547,32 +588,35 @@ describe('Dry-Run Pipeline Integration', () => {
   })
 
   describe('Test 3: Personal Finance Tracker', () => {
-    const result = runFullPipeline('FinanceTracker', financeContract, financePageConfigs)
-
-    it('assembles 4 pages (2 entities × 2)', () => {
+    it('assembles 4 pages (2 entities × 2)', async () => {
+      const result = await runFullPipeline('FinanceTracker', financeContract, financePageConfigs)
       expect(result.assembledFiles).toHaveLength(4)
     })
 
-    it('transaction list has enum selects for type and category', () => {
+    it('transaction list has enum selects for type and category', async () => {
+      const result = await runFullPipeline('FinanceTracker', financeContract, financePageConfigs)
       const txList = result.assembledFiles.find((f) => f.path.includes('transactions.tsx') && !f.path.includes('$id'))
       expect(txList).toBeDefined()
       expect(txList!.content).toContain('<option value="income">')
       expect(txList!.content).toContain('<option value="Food">')
     })
 
-    it('uses currency format for amount column', () => {
+    it('uses currency format for amount column', async () => {
+      const result = await runFullPipeline('FinanceTracker', financeContract, financePageConfigs)
       const txList = result.assembledFiles.find((f) => f.path.includes('transactions.tsx') && !f.path.includes('$id'))
       expect(txList).toBeDefined()
       // amount column should use currency cell renderer
       expect(txList!.content).toContain('.toFixed(2)')
     })
 
-    it('no server files in blueprint', () => {
+    it('no server files in blueprint', async () => {
+      const result = await runFullPipeline('FinanceTracker', financeContract, financePageConfigs)
       const paths = result.blueprint.fileTree.map((f) => f.path)
       expect(paths.some((p) => p.startsWith('server/'))).toBe(false)
     })
 
-    it('assembled file paths match blueprint SLOT paths', () => {
+    it('assembled file paths match blueprint SLOT paths', async () => {
+      const result = await runFullPipeline('FinanceTracker', financeContract, financePageConfigs)
       const blueprintSlotPaths = new Set(
         result.blueprint.fileTree.filter((f) => f.isLLMSlot).map((f) => f.path),
       )
@@ -581,7 +625,8 @@ describe('Dry-Run Pipeline Integration', () => {
       }
     })
 
-    it('passes scaffold validation', () => {
+    it('passes scaffold validation', async () => {
+      const result = await runFullPipeline('FinanceTracker', financeContract, financePageConfigs)
       const allFiles = [
         ...result.blueprint.fileTree.map((f) => ({ path: f.path, content: f.content })),
         ...result.assembledFiles,
@@ -593,7 +638,8 @@ describe('Dry-Run Pipeline Integration', () => {
       expect(scaffoldResult.passed).toBe(true)
     })
 
-    it('generated code passes tsc --noEmit', { timeout: 15000 }, () => {
+    it('generated code passes tsc --noEmit', { timeout: 15000 }, async () => {
+      const result = await runFullPipeline('FinanceTracker', financeContract, financePageConfigs)
       const tsc = typeCheckFiles('finance', result.blueprint, result.assembledFiles)
       if (!tsc.passed) {
         console.error('TSC errors for finance:\n', tsc.tscOutput)

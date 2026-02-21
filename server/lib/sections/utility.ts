@@ -15,6 +15,7 @@
  */
 
 import type { SectionRenderer, SectionOutput, SectionContext } from './types'
+import { resolveBg, resolveSpacing } from './primitives'
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -45,6 +46,7 @@ function entranceClass(ctx: SectionContext): string {
 // ---------------------------------------------------------------------------
 
 export const utilCategoryScroll: SectionRenderer = (ctx: SectionContext): SectionOutput => {
+  const bg = resolveBg(ctx.config)
   const categoryColumn =
     (ctx.config.categoryColumn as string | undefined) ??
     ctx.metadataColumns?.[0] ??
@@ -54,7 +56,7 @@ export const utilCategoryScroll: SectionRenderer = (ctx: SectionContext): Sectio
   // The chip list is data-driven at runtime — we render the query + map here
   return {
     jsx: `
-      <div className="bg-background border-b border-border" role="region" aria-label="Filter by category">
+      <div className="${bg} border-b border-border" role="region" aria-label="Filter by category">
         <div className="container mx-auto px-4">
           <div
             className="flex items-center gap-2 py-3 overflow-x-auto scrollbar-none"
@@ -112,6 +114,7 @@ export const utilCategoryScroll: SectionRenderer = (ctx: SectionContext): Sectio
 // ---------------------------------------------------------------------------
 
 export const utilBreadcrumb: SectionRenderer = (ctx: SectionContext): SectionOutput => {
+  const bg = resolveBg(ctx.config)
   const pluralTitle = ctx.entityName ? toTitle(ctx.entityName) : 'Items'
   const entitySlug = ctx.entitySlug ?? '#'
   const motion = entranceClass(ctx)
@@ -120,7 +123,7 @@ export const utilBreadcrumb: SectionRenderer = (ctx: SectionContext): SectionOut
     jsx: `
       <nav
         aria-label="Breadcrumb"
-        className="bg-background border-b border-border"
+        className="${bg} border-b border-border"
       >
         <div className="container mx-auto px-4 py-2">
           <ol className="flex items-center gap-1.5 text-sm text-muted-foreground list-none m-0 p-0 flex-wrap">
@@ -176,13 +179,14 @@ export const utilBreadcrumb: SectionRenderer = (ctx: SectionContext): SectionOut
 // ---------------------------------------------------------------------------
 
 export const utilSearchHeader: SectionRenderer = (ctx: SectionContext): SectionOutput => {
+  const bg = resolveBg(ctx.config)
   const pluralTitle = ctx.entityName ? toTitle(ctx.entityName) : 'Items'
   const motion = entranceClass(ctx)
   const searchId = `search-${ctx.tableName ?? 'items'}`
 
   return {
     jsx: `
-      <div className="bg-background border-b border-border" role="search">
+      <div className="${bg} border-b border-border" role="search">
         <div className="container mx-auto px-4 py-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
 
@@ -244,6 +248,7 @@ export const utilSearchHeader: SectionRenderer = (ctx: SectionContext): SectionO
 // ---------------------------------------------------------------------------
 
 export const utilFilterTabs: SectionRenderer = (ctx: SectionContext): SectionOutput => {
+  const bg = resolveBg(ctx.config)
   const configFilters = ctx.config.filters as string[] | undefined
 
   // Static tab list: use config.filters if provided, else derive sensible defaults
@@ -261,7 +266,7 @@ export const utilFilterTabs: SectionRenderer = (ctx: SectionContext): SectionOut
   return {
     jsx: `
       <div
-        className="bg-background border-b border-border overflow-x-auto scrollbar-none"
+        className="${bg} border-b border-border overflow-x-auto scrollbar-none"
         role="region"
         aria-label="${ctx.entityName ? toTitle(ctx.entityName) : 'Content'} filters"
       >
@@ -286,6 +291,8 @@ ${tabTriggers}
 // ---------------------------------------------------------------------------
 
 export const utilEmptyState: SectionRenderer = (ctx: SectionContext): SectionOutput => {
+  const bg = resolveBg(ctx.config)
+  const spacing = resolveSpacing(ctx.config)
   const message = ctx.tokens.textSlots.empty_state
   const singularTitle = ctx.entityName ? roughSingular(ctx.entityName) : 'item'
   const entitySlug = ctx.entitySlug ?? '#'
@@ -306,7 +313,7 @@ export const utilEmptyState: SectionRenderer = (ctx: SectionContext): SectionOut
   return {
     jsx: `
       <section
-        className="flex flex-col items-center justify-center text-center py-20 px-4"
+        className="${bg} flex flex-col items-center justify-center text-center ${spacing} px-4"
         aria-live="polite"
         aria-atomic="true"
         role="status"

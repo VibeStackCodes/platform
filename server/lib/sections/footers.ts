@@ -24,6 +24,7 @@
  */
 
 import type { SectionRenderer, SectionOutput, SectionContext, EntityMeta } from './types'
+import { resolveBg, resolveSpacing } from './primitives'
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -99,6 +100,8 @@ const IMPORT_SOCIAL_ICONS =
 // ---------------------------------------------------------------------------
 
 export const footerDarkPhoto: SectionRenderer = (ctx: SectionContext): SectionOutput => {
+  const bg = resolveBg(ctx.config)
+  const spacing = resolveSpacing(ctx.config)
   const tagline =
     (ctx.config.tagline as string) || ctx.tokens.textSlots.footer_tagline
   const bgImage =
@@ -113,7 +116,7 @@ export const footerDarkPhoto: SectionRenderer = (ctx: SectionContext): SectionOu
 
   return {
     jsx: `
-      <footer className="relative overflow-hidden" aria-label="Site footer">
+      <footer className="${bg} relative overflow-hidden" aria-label="Site footer">
 
         {/* Background photo */}
         <div className="absolute inset-0" aria-hidden="true">
@@ -127,7 +130,7 @@ export const footerDarkPhoto: SectionRenderer = (ctx: SectionContext): SectionOu
         </div>
 
         {/* Content */}
-        <div className="relative z-10 container mx-auto px-4 py-16 md:py-20">
+        <div className="relative z-10 container mx-auto px-4 ${spacing}">
           <div className="flex flex-col items-center text-center gap-6">
 
             {/* Brand */}
@@ -169,6 +172,8 @@ export const footerDarkPhoto: SectionRenderer = (ctx: SectionContext): SectionOu
 // ---------------------------------------------------------------------------
 
 export const footerMinimal: SectionRenderer = (ctx: SectionContext): SectionOutput => {
+  const bg = resolveBg(ctx.config)
+  const spacing = resolveSpacing(ctx.config)
   const navLinks = buildNavLinks(
     ctx,
     'text-muted-foreground hover:text-foreground transition-colors text-sm focus-visible:ring-2 focus-visible:ring-ring rounded-sm',
@@ -180,10 +185,10 @@ export const footerMinimal: SectionRenderer = (ctx: SectionContext): SectionOutp
 
   return {
     jsx: `
-      <footer className="bg-background" aria-label="Site footer">
+      <footer className="${bg}" aria-label="Site footer">
         {/* shadcn Separator replaces manual border-t */}
         <Separator />
-        <div className="container mx-auto px-4 py-6">
+        <div className="container mx-auto px-4 ${spacing}">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
 
             {/* Copyright */}
@@ -212,6 +217,7 @@ export const footerMinimal: SectionRenderer = (ctx: SectionContext): SectionOutp
 // ---------------------------------------------------------------------------
 
 export const footerMultiColumn: SectionRenderer = (ctx: SectionContext): SectionOutput => {
+  const bg = resolveBg(ctx.config)
   const tagline =
     (ctx.config.tagline as string) || ctx.tokens.textSlots.footer_tagline
   const contactEmail = (ctx.config.email as string) || ''
@@ -227,7 +233,7 @@ export const footerMultiColumn: SectionRenderer = (ctx: SectionContext): Section
 
   return {
     jsx: `
-      <footer className="bg-background" aria-label="Site footer">
+      <footer className="${bg}" aria-label="Site footer">
         <div className="container mx-auto px-4 pt-12 md:pt-16 pb-0">
 
           {/* 4-column grid — stacks to 1 col on mobile, 2 cols on sm */}
@@ -357,6 +363,8 @@ export const footerMultiColumn: SectionRenderer = (ctx: SectionContext): Section
 // ---------------------------------------------------------------------------
 
 export const footerCentered: SectionRenderer = (ctx: SectionContext): SectionOutput => {
+  const bg = resolveBg(ctx.config)
+  const spacing = resolveSpacing(ctx.config)
   const tagline =
     (ctx.config.tagline as string) || ctx.tokens.textSlots.footer_tagline
   const navLinks = buildNavLinks(
@@ -371,12 +379,12 @@ export const footerCentered: SectionRenderer = (ctx: SectionContext): SectionOut
   return {
     jsx: `
       <footer
-        className="bg-muted/30 text-center"
+        className="${bg} text-center"
         aria-label="Site footer"
       >
         {/* shadcn Separator at top — replaces border-t */}
         <Separator />
-        <div className="container mx-auto px-4 py-12 md:py-16 flex flex-col items-center gap-5">
+        <div className="container mx-auto px-4 ${spacing} flex flex-col items-center gap-5">
 
           {/* App name */}
           <p className="text-lg font-bold text-foreground font-[family-name:var(--font-display)]">

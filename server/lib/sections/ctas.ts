@@ -25,7 +25,7 @@
  */
 
 import type { SectionRenderer, SectionOutput, SectionContext } from './types'
-import { animateEntrance, staggerChildren } from './primitives'
+import { animateEntrance, staggerChildren, resolveBg, resolveSpacing } from './primitives'
 
 // ---------------------------------------------------------------------------
 // Shared import sets — returned in SectionOutput.imports so the page assembler
@@ -54,6 +54,8 @@ export const ctaNewsletter: SectionRenderer = (ctx: SectionContext): SectionOutp
     (ctx.config.description as string) ||
     `Get the latest from ${ctx.appName} delivered to your inbox.`
   const buttonLabel = (ctx.config.buttonLabel as string) || ctx.tokens.textSlots.cta_label
+  const bg = resolveBg(ctx.config)
+  const spacing = resolveSpacing(ctx.config)
 
   const entrance = animateEntrance(ctx, { direction: 'bottom', distance: 4, durationMs: 700 })
   const entranceClass = entrance ? ` ${entrance}` : ''
@@ -61,10 +63,10 @@ export const ctaNewsletter: SectionRenderer = (ctx: SectionContext): SectionOutp
   return {
     jsx: `
       <section
-        className="bg-muted/30 border-y border-border"
+        className="${bg} border-y border-border"
         aria-label="Newsletter signup"
       >
-        <div className="container mx-auto px-4 py-16 md:py-20">
+        <div className="container mx-auto px-4 ${spacing}">
           <div className="max-w-lg mx-auto text-center${entranceClass}">
             <h2 className="text-2xl md:text-3xl font-bold text-foreground font-[family-name:var(--font-display)] mb-3">
               ${headline}
@@ -118,6 +120,8 @@ export const ctaNewsletterSplit: SectionRenderer = (ctx: SectionContext): Sectio
     (ctx.config.description as string) ||
     `Join the ${ctx.appName} community and never miss an update.`
   const buttonLabel = (ctx.config.buttonLabel as string) || ctx.tokens.textSlots.cta_label
+  const bg = resolveBg(ctx.config)
+  const spacing = resolveSpacing(ctx.config)
 
   const entrance = animateEntrance(ctx, { direction: 'bottom', distance: 4, durationMs: 700 })
   const entranceClass = entrance ? ` ${entrance}` : ''
@@ -125,10 +129,10 @@ export const ctaNewsletterSplit: SectionRenderer = (ctx: SectionContext): Sectio
   return {
     jsx: `
       <section
-        className="border-y border-border bg-background"
+        className="border-y border-border ${bg}"
         aria-label="Newsletter signup"
       >
-        <div className="container mx-auto px-4 py-14 md:py-18">
+        <div className="container mx-auto px-4 ${spacing}">
           <div className="grid md:grid-cols-2 gap-10 items-center${entranceClass}">
 
             {/* Left — text column */}
@@ -238,6 +242,8 @@ export const ctaPricing: SectionRenderer = (ctx: SectionContext): SectionOutput 
   const subtext =
     (ctx.config.subtext as string) || 'Choose the plan that fits your needs.'
   const plans = (ctx.config.plans as PricingPlan[] | undefined) ?? defaultPlans()
+  const bg = resolveBg(ctx.config)
+  const spacing = resolveSpacing(ctx.config)
 
   const headerEntrance = animateEntrance(ctx, {
     direction: 'bottom',
@@ -320,10 +326,10 @@ export const ctaPricing: SectionRenderer = (ctx: SectionContext): SectionOutput 
   return {
     jsx: `
       <section
-        className="bg-background border-y border-border"
+        className="${bg} border-y border-border"
         aria-label="Pricing plans"
       >
-        <div className="container mx-auto px-4 py-16 md:py-24">
+        <div className="container mx-auto px-4 ${spacing}">
           <div className="text-center mb-12${headerEntranceClass}">
             <h2 className="text-3xl md:text-4xl font-bold text-foreground font-[family-name:var(--font-display)] mb-3">
               ${headline}
@@ -352,6 +358,7 @@ export const ctaDownload: SectionRenderer = (ctx: SectionContext): SectionOutput
     'Start for free. No credit card required. Cancel anytime.'
   const buttonLabel = (ctx.config.buttonLabel as string) || ctx.tokens.textSlots.cta_label
   const buttonHref = (ctx.config.buttonHref as string) || '#'
+  const spacing = resolveSpacing(ctx.config)
 
   const entrance = animateEntrance(ctx, { direction: 'bottom', distance: 4, durationMs: 700 })
   const entranceClass = entrance ? ` ${entrance}` : ''
@@ -362,7 +369,7 @@ export const ctaDownload: SectionRenderer = (ctx: SectionContext): SectionOutput
         className="bg-primary text-primary-foreground"
         aria-label="Download or get started"
       >
-        <div className="container mx-auto px-4 py-14 md:py-20 text-center${entranceClass}">
+        <div className="container mx-auto px-4 ${spacing} text-center${entranceClass}">
           <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold font-[family-name:var(--font-display)] mb-4 leading-tight">
             ${headline}
           </h2>
@@ -397,6 +404,8 @@ export const ctaContact: SectionRenderer = (ctx: SectionContext): SectionOutput 
     contactEmail ||
     (ctx.tokens.textSlots.about_paragraph ? ctx.tokens.textSlots.about_paragraph : '')
   const submitLabel = (ctx.config.submitLabel as string) || 'Send message'
+  const bg = resolveBg(ctx.config)
+  const spacing = resolveSpacing(ctx.config)
 
   const entrance = animateEntrance(ctx, { direction: 'bottom', distance: 4, durationMs: 700 })
   const entranceClass = entrance ? ` ${entrance}` : ''
@@ -404,10 +413,10 @@ export const ctaContact: SectionRenderer = (ctx: SectionContext): SectionOutput 
   return {
     jsx: `
       <section
-        className="bg-background border-y border-border"
+        className="${bg} border-y border-border"
         aria-label="Contact us"
       >
-        <div className="container mx-auto px-4 py-16 md:py-24">
+        <div className="container mx-auto px-4 ${spacing}">
           <div className="max-w-2xl mx-auto${entranceClass}">
             <h2 className="text-3xl md:text-4xl font-bold text-foreground font-[family-name:var(--font-display)] mb-3 text-center">
               ${headline}

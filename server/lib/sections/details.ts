@@ -23,7 +23,7 @@
  */
 
 import type { SectionContext, SectionOutput, SectionRenderer } from './types'
-import { animateEntrance } from './primitives'
+import { animateEntrance, resolveBg, resolveSpacing } from './primitives'
 
 // ---------------------------------------------------------------------------
 // Shared import sets
@@ -169,6 +169,8 @@ export const detailHeroOverlay: SectionRenderer = (ctx: SectionContext): Section
   const pluralTitle = resolvePluralTitle(ctx)
   const displayCol = ctx.displayColumn ?? 'id'
   const metaCols = ctx.metadataColumns ?? []
+  const bg = resolveBg(ctx.config)
+  const spacing = resolveSpacing(ctx.config)
 
   const imgBlock = imageBlock(
     itemVar,
@@ -200,7 +202,7 @@ export const detailHeroOverlay: SectionRenderer = (ctx: SectionContext): Section
         </div>
       )}`
 
-  const jsx = `<section aria-label="${pluralTitle} detail" className="min-h-screen bg-background text-foreground">
+  const jsx = `<section aria-label="${pluralTitle} detail" className="min-h-screen ${bg} text-foreground">
       {/* Back navigation */}
       <div className="max-w-7xl mx-auto px-6 lg:px-8 pt-6">
         ${backButton(entitySlug, pluralTitle)}
@@ -280,6 +282,8 @@ export const detailSplitSidebar: SectionRenderer = (ctx: SectionContext): Sectio
   const pluralTitle = resolvePluralTitle(ctx)
   const displayCol = ctx.displayColumn ?? 'id'
   const metaCols = ctx.metadataColumns ?? []
+  const bg = resolveBg(ctx.config)
+  const spacing = resolveSpacing(ctx.config)
 
   const hasImage = Boolean(ctx.imageColumn)
 
@@ -316,7 +320,7 @@ export const detailSplitSidebar: SectionRenderer = (ctx: SectionContext): Sectio
         </div>
       )}`
 
-  const jsx = `<section aria-label="${pluralTitle} detail" className="min-h-screen bg-background text-foreground py-12">
+  const jsx = `<section aria-label="${pluralTitle} detail" className="min-h-screen ${bg} text-foreground ${spacing}">
       <div className="max-w-7xl mx-auto px-6 lg:px-8">
         ${skeletonJsx}
         ${notFoundState(itemVar, entitySlug, pluralTitle)}
@@ -396,6 +400,8 @@ export const detailArticle: SectionRenderer = (ctx: SectionContext): SectionOutp
   const pluralTitle = resolvePluralTitle(ctx)
   const displayCol = ctx.displayColumn ?? 'id'
   const metaCols = ctx.metadataColumns ?? []
+  const bg = resolveBg(ctx.config)
+  const spacing = resolveSpacing(ctx.config)
 
   // Pick a date-like column for article byline, fallback to first meta col
   const dateCol = metaCols.find((c) => /date|published|created/.test(c))
@@ -442,7 +448,7 @@ export const detailArticle: SectionRenderer = (ctx: SectionContext): SectionOutp
         </div>
       )}`
 
-  const jsx = `<section aria-label="${pluralTitle} article" className="min-h-screen bg-background text-foreground">
+  const jsx = `<section aria-label="${pluralTitle} article" className="min-h-screen ${bg} text-foreground">
       <div className="max-w-3xl mx-auto px-6 lg:px-8 pt-8">
         ${backButton(entitySlug, pluralTitle)}
       </div>
@@ -519,6 +525,8 @@ export const detailDataDense: SectionRenderer = (ctx: SectionContext): SectionOu
   const pluralTitle = resolvePluralTitle(ctx)
   const displayCol = ctx.displayColumn ?? 'id'
   const metaCols = ctx.metadataColumns ?? []
+  const bg = resolveBg(ctx.config)
+  const spacing = resolveSpacing(ctx.config)
 
   const allCols = metaCols.length > 0 ? metaCols : []
 
@@ -581,7 +589,7 @@ export const detailDataDense: SectionRenderer = (ctx: SectionContext): SectionOu
         </div>
       )}`
 
-  const jsx = `<section aria-label="${pluralTitle} detail" className="min-h-screen bg-background text-foreground py-10">
+  const jsx = `<section aria-label="${pluralTitle} detail" className="min-h-screen ${bg} text-foreground ${spacing}">
       <div className="max-w-5xl mx-auto px-6 lg:px-8">
         <div className="mb-6 flex items-center gap-4">
           ${backButton(entitySlug, pluralTitle)}
@@ -659,6 +667,8 @@ export const detailGallery: SectionRenderer = (ctx: SectionContext): SectionOutp
   const displayCol = ctx.displayColumn ?? 'id'
   const metaCols = ctx.metadataColumns ?? []
   const hasImage = Boolean(ctx.imageColumn)
+  const bg = resolveBg(ctx.config)
+  const spacing = resolveSpacing(ctx.config)
 
   const metaDl = metadataBadgeRows(metaCols, itemVar)
   const entranceAnim = animateEntrance(ctx, { direction: 'bottom', durationMs: 500 })
@@ -740,7 +750,7 @@ export const detailGallery: SectionRenderer = (ctx: SectionContext): SectionOutp
         </div>
       )}`
 
-  const jsx = `<section aria-label="${pluralTitle} gallery detail" className="min-h-screen bg-background text-foreground">
+  const jsx = `<section aria-label="${pluralTitle} gallery detail" className="min-h-screen ${bg} text-foreground">
       <div className="max-w-7xl mx-auto px-6 lg:px-8 pt-6">
         ${backButton(entitySlug, pluralTitle)}
       </div>

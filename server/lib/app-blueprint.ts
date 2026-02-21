@@ -483,9 +483,9 @@ export default defineConfig({
  * Generate a complete AppBlueprint from SchemaContract + design preferences.
  * The blueprint contains every file the generated app needs, organized by dependency layer.
  */
-function buildBlueprintFromTokens(input: BlueprintInput, tokens: ThemeTokens): AppBlueprint {
+async function buildBlueprintFromTokens(input: BlueprintInput, tokens: ThemeTokens): Promise<AppBlueprint> {
   const features = inferFeatures(input.contract)
-  const themedFiles = generateThemedApp(input.contract, tokens, input.appName)
+  const themedFiles = await generateThemedApp(input.contract, tokens, input.appName, input.appDescription)
   const availableRouteFiles = new Set(Object.keys(themedFiles))
   const fileTree: BlueprintFile[] = []
 
@@ -646,7 +646,7 @@ Thumbs.db
   }
 }
 
-export function contractToBlueprint(input: BlueprintInput): AppBlueprint {
+export async function contractToBlueprint(input: BlueprintInput): Promise<AppBlueprint> {
   return buildBlueprintFromTokens(input, fallbackThemeTokens(input))
 }
 
@@ -656,5 +656,5 @@ export async function contractToBlueprintWithDesignAgent(input: BlueprintInput):
   console.log(`[blueprint] Design Agent selected theme: ${selectedTheme}`)
   console.log(`[blueprint] Theme reasoning: ${themeReasoning}`)
   console.log(`[blueprint] Schema tables: ${mergedContract.tables.length} (user: ${input.contract.tables.length})`)
-  return buildBlueprintFromTokens({ ...input, contract: mergedContract, assembly: input.assembly }, tokens)
+  return await buildBlueprintFromTokens({ ...input, contract: mergedContract, assembly: input.assembly }, tokens)
 }

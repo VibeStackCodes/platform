@@ -17,11 +17,12 @@
  *   - Generated TypeScript compiles (tsc --noEmit)
  *
  * NOTE: There is no longer a two-track system. ALL themes (including Canape)
- * go through fallbackCompositionPlan() → assemblePages(). The old Canape-
+ * go through composeSectionsV2() → assemblePagesV2(). The old Canape-
  * specific hand-crafted route generators have been removed.
  */
 
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
+import type { PageCompositionPlan, PageCompositionPlanV2, SectionVisualSpec } from '@server/lib/sections/types'
 import { generateThemedApp, type ThemeTokens } from '@server/lib/themed-code-engine'
 import { deriveArchetype } from '@server/lib/theme-layouts'
 import { contractToBlueprint } from '@server/lib/app-blueprint'
@@ -30,6 +31,34 @@ import type { SchemaContract } from '@server/lib/schema-contract'
 import { writeFileSync, mkdirSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { execFileSync } from 'node:child_process'
+
+// Mock composeSectionsV2 — deterministic plan from fallbackCompositionPlan (V1→V2 conversion)
+vi.mock('@server/lib/page-composer', async (importOriginal) => {
+  const mod = await importOriginal<typeof import('@server/lib/page-composer')>()
+  return {
+    ...mod,
+    composeSectionsV2: vi.fn(async (entities: any[], tokens: any, _appDescription: string) => {
+      const v1Plan = mod.fallbackCompositionPlan(entities, tokens)
+      return v1ToV2(v1Plan)
+    }),
+  }
+})
+
+function v1ToV2(plan: PageCompositionPlan): PageCompositionPlanV2 {
+  return {
+    routes: Object.entries(plan.pages).map(([path, slots]) => ({
+      path,
+      sections: slots.map((slot): SectionVisualSpec => ({
+        sectionId: slot.sectionId as SectionVisualSpec['sectionId'],
+        entityBinding: slot.entityBinding,
+        background: 'default',
+        spacing: 'normal',
+        showBadges: true,
+        showMetadata: true,
+      })),
+    })),
+  }
+}
 
 // ============================================================================
 // Shared helpers
@@ -41,7 +70,7 @@ import { execFileSync } from 'node:child_process'
  */
 function typeCheckBlueprint(
   testName: string,
-  blueprint: ReturnType<typeof contractToBlueprint>,
+  blueprint: Awaited<ReturnType<typeof contractToBlueprint>>,
 ) {
   const tmpDir = join('/tmp', `vibestack-themed-${testName}-${Date.now()}`)
 
@@ -342,21 +371,22 @@ const adventurerTokens: ThemeTokens = {
 
 describe('Themed Dry-Run Pipeline', () => {
   describe('Test 1: Restaurant Menu (public, editorial, gourmetto)', () => {
-    const themedFiles = generateThemedApp(restaurantContract, gourmettroTokens, 'Test Restaurant')
-
-    it('generates homepage, about, contact routes', () => {
+    it('generates homepage, about, contact routes', async () => {
+      const themedFiles = await generateThemedApp(restaurantContract, gourmettroTokens, 'Test Restaurant')
       expect(themedFiles).toHaveProperty('src/routes/index.tsx')
       expect(themedFiles).toHaveProperty('src/routes/about.tsx')
       expect(themedFiles).toHaveProperty('src/routes/contact.tsx')
     })
 
-    it('does NOT generate auth routes for public posture', () => {
+    it('does NOT generate auth routes for public posture', async () => {
+      const themedFiles = await generateThemedApp(restaurantContract, gourmettroTokens, 'Test Restaurant')
       expect(themedFiles).not.toHaveProperty('src/routes/auth/login.tsx')
       expect(themedFiles).not.toHaveProperty('src/routes/_authenticated/route.tsx')
       expect(themedFiles).not.toHaveProperty('src/routes/_authenticated/dashboard.tsx')
     })
 
-    it('generates entity routes at top level (not under _authenticated)', () => {
+    it('generates entity routes at top level (not under _authenticated)', async () => {
+      const themedFiles = await generateThemedApp(restaurantContract, gourmettroTokens, 'Test Restaurant')
       // Public posture → routes are NOT under _authenticated
       expect(themedFiles).toHaveProperty('src/routes/dishes/index.tsx')
       expect(themedFiles).toHaveProperty('src/routes/dishes/$id.tsx')
@@ -364,13 +394,15 @@ describe('Themed Dry-Run Pipeline', () => {
       expect(themedFiles).toHaveProperty('src/routes/menu-categories/$id.tsx')
     })
 
-    it('homepage references entity data', () => {
+    it('homepage references entity data', async () => {
+      const themedFiles = await generateThemedApp(restaurantContract, gourmettroTokens, 'Test Restaurant')
       const homepage = themedFiles['src/routes/index.tsx']
       expect(homepage).toContain('supabase')
       expect(homepage).not.toContain('JSON.stringify')
     })
 
-    it('slots are interpolated into generated pages', () => {
+    it('slots are interpolated into generated pages', async () => {
+      const themedFiles = await generateThemedApp(restaurantContract, gourmettroTokens, 'Test Restaurant')
       const homepage = themedFiles['src/routes/index.tsx']
       expect(homepage).toContain('Savor Every Moment')
       expect(homepage).toContain('Discover our curated menu')
@@ -382,14 +414,16 @@ describe('Themed Dry-Run Pipeline', () => {
       expect(about).toContain('We bring together the finest ingredients')
     })
 
-    it('generates themed CSS with oklch colors', () => {
+    it('generates themed CSS with oklch colors', async () => {
+      const themedFiles = await generateThemedApp(restaurantContract, gourmettroTokens, 'Test Restaurant')
       const css = themedFiles['src/index.css']
       expect(css).toContain('@theme')
       expect(css).toContain('oklch(')
       expect(css).toContain('--color-primary')
     })
 
-    it('dish list page is a public gallery layout', () => {
+    it('dish list page is a public gallery layout', async () => {
+      const themedFiles = await generateThemedApp(restaurantContract, gourmettroTokens, 'Test Restaurant')
       const dishList = themedFiles['src/routes/dishes/index.tsx']
       // Public pages use composed section layout, not CRUD admin table
       // Photography-heavy imagery → masonry grid (CSS columns) or grid-based layout
@@ -399,8 +433,8 @@ describe('Themed Dry-Run Pipeline', () => {
       expect(dishList).not.toContain('createMutation')
     })
 
-    it('full blueprint passes tsc --noEmit', { timeout: 30000 }, () => {
-      const blueprint = contractToBlueprint({
+    it('full blueprint passes tsc --noEmit', { timeout: 30000 }, async () => {
+      const blueprint = await contractToBlueprint({
         appName: 'Gourmetto Restaurant',
         appDescription: 'Restaurant menu with categories and dishes',
         contract: restaurantContract,
@@ -414,8 +448,8 @@ describe('Themed Dry-Run Pipeline', () => {
       expect(tsc.passed).toBe(true)
     })
 
-    it('passes scaffold validation', () => {
-      const blueprint = contractToBlueprint({
+    it('passes scaffold validation', async () => {
+      const blueprint = await contractToBlueprint({
         appName: 'Gourmetto Restaurant',
         appDescription: 'Restaurant menu with categories and dishes',
         contract: restaurantContract,
@@ -430,15 +464,15 @@ describe('Themed Dry-Run Pipeline', () => {
   })
 
   describe('Test 2: SaaS Dashboard (private, sidebar, luxus)', () => {
-    const themedFiles = generateThemedApp(saasContract, luxusTokens, 'Test SaaS App')
-
-    it('generates auth routes for private posture', () => {
+    it('generates auth routes for private posture', async () => {
+      const themedFiles = await generateThemedApp(saasContract, luxusTokens, 'Test SaaS App')
       expect(themedFiles).toHaveProperty('src/routes/auth/login.tsx')
       expect(themedFiles).toHaveProperty('src/routes/_authenticated/route.tsx')
       expect(themedFiles).toHaveProperty('src/routes/_authenticated/dashboard.tsx')
     })
 
-    it('generates entity routes under _authenticated', () => {
+    it('generates entity routes under _authenticated', async () => {
+      const themedFiles = await generateThemedApp(saasContract, luxusTokens, 'Test SaaS App')
       expect(themedFiles).toHaveProperty('src/routes/_authenticated/clients/index.tsx')
       expect(themedFiles).toHaveProperty('src/routes/_authenticated/clients/$id.tsx')
       expect(themedFiles).toHaveProperty('src/routes/_authenticated/invoices/index.tsx')
@@ -447,20 +481,22 @@ describe('Themed Dry-Run Pipeline', () => {
       expect(themedFiles).toHaveProperty('src/routes/_authenticated/payments/$id.tsx')
     })
 
-    it('invoice page has FK dropdown for client', () => {
+    it('invoice page has FK dropdown for client', async () => {
+      const themedFiles = await generateThemedApp(saasContract, luxusTokens, 'Test SaaS App')
       const invoiceList = themedFiles['src/routes/_authenticated/invoices/index.tsx']
       expect(invoiceList).toContain('client')
       expect(invoiceList).toContain('client_id')
     })
 
-    it('payment page has FK dropdown for invoice', () => {
+    it('payment page has FK dropdown for invoice', async () => {
+      const themedFiles = await generateThemedApp(saasContract, luxusTokens, 'Test SaaS App')
       const paymentList = themedFiles['src/routes/_authenticated/payments/index.tsx']
       expect(paymentList).toContain('invoice')
       expect(paymentList).toContain('invoice_id')
     })
 
-    it('full blueprint passes tsc --noEmit', { timeout: 30000 }, () => {
-      const blueprint = contractToBlueprint({
+    it('full blueprint passes tsc --noEmit', { timeout: 30000 }, async () => {
+      const blueprint = await contractToBlueprint({
         appName: 'ClientHub',
         appDescription: 'SaaS invoicing dashboard',
         contract: saasContract,
@@ -474,8 +510,8 @@ describe('Themed Dry-Run Pipeline', () => {
       expect(tsc.passed).toBe(true)
     })
 
-    it('passes scaffold validation', () => {
-      const blueprint = contractToBlueprint({
+    it('passes scaffold validation', async () => {
+      const blueprint = await contractToBlueprint({
         appName: 'ClientHub',
         appDescription: 'SaaS invoicing dashboard',
         contract: saasContract,
@@ -490,15 +526,15 @@ describe('Themed Dry-Run Pipeline', () => {
   })
 
   describe('Test 3: Blog Platform (hybrid, minimal, adventurer)', () => {
-    const themedFiles = generateThemedApp(blogContract, adventurerTokens, 'Test Blog')
-
-    it('generates auth routes for hybrid posture', () => {
+    it('generates auth routes for hybrid posture', async () => {
+      const themedFiles = await generateThemedApp(blogContract, adventurerTokens, 'Test Blog')
       expect(themedFiles).toHaveProperty('src/routes/auth/login.tsx')
       expect(themedFiles).toHaveProperty('src/routes/_authenticated/route.tsx')
       expect(themedFiles).toHaveProperty('src/routes/_authenticated/dashboard.tsx')
     })
 
-    it('generates mix of public and private entity routes', () => {
+    it('generates mix of public and private entity routes', async () => {
+      const themedFiles = await generateThemedApp(blogContract, adventurerTokens, 'Test Blog')
       // At least some entity routes should exist
       const allPaths = Object.keys(themedFiles)
       const entityPaths = allPaths.filter((p) =>
@@ -507,7 +543,8 @@ describe('Themed Dry-Run Pipeline', () => {
       expect(entityPaths.length).toBeGreaterThanOrEqual(2) // at least list + detail for one entity
     })
 
-    it('comment page has FK dropdown for post', () => {
+    it('comment page has FK dropdown for post', async () => {
+      const themedFiles = await generateThemedApp(blogContract, adventurerTokens, 'Test Blog')
       // Find the comments list page (could be under _authenticated or top-level)
       const commentListPath = Object.keys(themedFiles).find(
         (p) => p.includes('/comments/index.tsx'),
@@ -518,8 +555,8 @@ describe('Themed Dry-Run Pipeline', () => {
       expect(commentList).toContain('post_id')
     })
 
-    it('full blueprint passes tsc --noEmit', { timeout: 30000 }, () => {
-      const blueprint = contractToBlueprint({
+    it('full blueprint passes tsc --noEmit', { timeout: 30000 }, async () => {
+      const blueprint = await contractToBlueprint({
         appName: 'InkWell',
         appDescription: 'A modern blog platform',
         contract: blogContract,
@@ -533,8 +570,8 @@ describe('Themed Dry-Run Pipeline', () => {
       expect(tsc.passed).toBe(true)
     })
 
-    it('passes scaffold validation', () => {
-      const blueprint = contractToBlueprint({
+    it('passes scaffold validation', async () => {
+      const blueprint = await contractToBlueprint({
         appName: 'InkWell',
         appDescription: 'A modern blog platform',
         contract: blogContract,
@@ -653,58 +690,66 @@ describe('Themed Dry-Run Pipeline', () => {
       ],
     }
 
-    const canapeFiles = generateThemedApp(canapeContract, canapeTokens, 'TestRestaurant')
-
-    it('canape theme produces a homepage via section composition', () => {
+    it('canape theme produces a homepage via section composition', async () => {
+      const canapeFiles = await generateThemedApp(canapeContract, canapeTokens, 'TestRestaurant')
       expect(canapeFiles).toHaveProperty('src/routes/index.tsx')
       expect(canapeFiles['src/routes/index.tsx']).toContain('createFileRoute')
     })
 
-    it('canape theme produces menu archive route at /menu/index.tsx', () => {
+    it('canape theme produces menu archive route at /menu/index.tsx', async () => {
+      const canapeFiles = await generateThemedApp(canapeContract, canapeTokens, 'TestRestaurant')
       expect(canapeFiles).toHaveProperty('src/routes/menu/index.tsx')
       expect(canapeFiles['src/routes/menu/index.tsx']).toContain('menu_items')
     })
 
-    it('canape theme produces menu category route at /menu/$category.tsx (not /index.tsx)', () => {
+    it('canape theme produces menu category route at /menu/$category.tsx (not /index.tsx)', async () => {
+      const canapeFiles = await generateThemedApp(canapeContract, canapeTokens, 'TestRestaurant')
       // routePathToFilePath('/menu/$category') → src/routes/menu/$category.tsx
       expect(canapeFiles).toHaveProperty('src/routes/menu/$category.tsx')
       expect(canapeFiles).not.toHaveProperty('src/routes/menu/$category/index.tsx')
     })
 
-    it('canape theme produces news archive route at /news/index.tsx', () => {
+    it('canape theme produces news archive route at /news/index.tsx', async () => {
+      const canapeFiles = await generateThemedApp(canapeContract, canapeTokens, 'TestRestaurant')
       expect(canapeFiles).toHaveProperty('src/routes/news/index.tsx')
     })
 
-    it('canape theme produces news slug route at /news/$slug.tsx (not /index.tsx)', () => {
+    it('canape theme produces news slug route at /news/$slug.tsx (not /index.tsx)', async () => {
+      const canapeFiles = await generateThemedApp(canapeContract, canapeTokens, 'TestRestaurant')
       // routePathToFilePath('/news/$slug') → src/routes/news/$slug.tsx
       expect(canapeFiles).toHaveProperty('src/routes/news/$slug.tsx')
       expect(canapeFiles).not.toHaveProperty('src/routes/news/$slug/index.tsx')
     })
 
-    it('canape theme produces slug route at /$slug.tsx (not /$slug/index.tsx)', () => {
+    it('canape theme produces slug route at /$slug.tsx (not /$slug/index.tsx)', async () => {
+      const canapeFiles = await generateThemedApp(canapeContract, canapeTokens, 'TestRestaurant')
       // routePathToFilePath('/$slug') → src/routes/$slug.tsx
       expect(canapeFiles).toHaveProperty('src/routes/$slug.tsx')
       expect(canapeFiles).not.toHaveProperty('src/routes/$slug/index.tsx')
     })
 
-    it('canape theme produces reservations route at /reservations/index.tsx', () => {
+    it('canape theme produces reservations route at /reservations/index.tsx', async () => {
+      const canapeFiles = await generateThemedApp(canapeContract, canapeTokens, 'TestRestaurant')
       expect(canapeFiles).toHaveProperty('src/routes/reservations/index.tsx')
       expect(canapeFiles['src/routes/reservations/index.tsx']).toContain('reservations')
     })
 
-    it('canape does NOT generate the old two-track hand-crafted routes', () => {
+    it('canape does NOT generate the old two-track hand-crafted routes', async () => {
+      const canapeFiles = await generateThemedApp(canapeContract, canapeTokens, 'TestRestaurant')
       // Verify old path patterns (with /index.tsx for param routes) are gone
       expect(canapeFiles).not.toHaveProperty('src/routes/menu/$category/index.tsx')
       expect(canapeFiles).not.toHaveProperty('src/routes/news/$slug/index.tsx')
       expect(canapeFiles).not.toHaveProperty('src/routes/$slug/index.tsx')
     })
 
-    it('canape homepage does not use JSON.stringify (data is live, not hardcoded)', () => {
+    it('canape homepage does not use JSON.stringify (data is live, not hardcoded)', async () => {
+      const canapeFiles = await generateThemedApp(canapeContract, canapeTokens, 'TestRestaurant')
       const homepage = canapeFiles['src/routes/index.tsx']
       expect(homepage).not.toContain('JSON.stringify')
     })
 
-    it('canape theme does not generate auth routes for public posture', () => {
+    it('canape theme does not generate auth routes for public posture', async () => {
+      const canapeFiles = await generateThemedApp(canapeContract, canapeTokens, 'TestRestaurant')
       expect(canapeFiles).not.toHaveProperty('src/routes/auth/login.tsx')
       expect(canapeFiles).not.toHaveProperty('src/routes/_authenticated/route.tsx')
     })
@@ -719,12 +764,13 @@ describe('Themed Dry-Run Pipeline', () => {
       expect(deriveArchetype({ ...gourmettroTokens, style: { ...gourmettroTokens.style, navStyle: 'top-bar', heroLayout: 'split' } })).toBe('corporate')
     })
 
-    it('editorial tokens produce editorial-nav + editorial-hero sections', () => {
+    it('editorial tokens produce editorial-nav + editorial-hero sections', async () => {
       const tokens: ThemeTokens = {
         ...gourmettroTokens,
         style: { ...gourmettroTokens.style, navStyle: 'editorial', heroLayout: 'editorial' },
       }
-      const homepage = generateThemedApp(restaurantContract, tokens, 'Test Restaurant')['src/routes/index.tsx']
+      const files = await generateThemedApp(restaurantContract, tokens, 'Test Restaurant')
+      const homepage = files['src/routes/index.tsx']
       // Editorial hero uses serif split layout with grid-cols-[3fr_2fr]
       expect(homepage).toContain('md:grid-cols-[3fr_2fr]')
       // Editorial nav
@@ -733,46 +779,50 @@ describe('Themed Dry-Run Pipeline', () => {
       expect(homepage).toContain('font-[family-name:var(--font-display)]')
     })
 
-    it('fullbleed tokens produce fullbleed-hero with dark overlay', () => {
+    it('fullbleed tokens produce fullbleed-hero with dark overlay', async () => {
       const tokens: ThemeTokens = {
         ...gourmettroTokens,
         style: { ...gourmettroTokens.style, navStyle: 'minimal', heroLayout: 'fullbleed' },
       }
-      const homepage = generateThemedApp(restaurantContract, tokens, 'Test Restaurant')['src/routes/index.tsx']
+      const files = await generateThemedApp(restaurantContract, tokens, 'Test Restaurant')
+      const homepage = files['src/routes/index.tsx']
       // Fullbleed hero uses min-h-screen with gradient overlay
       expect(homepage).toContain('min-h-screen')
       expect(homepage).toContain('from-black/70')
       expect(homepage).toContain('font-[family-name:var(--font-display)]')
     })
 
-    it('split hero tokens produce two-column grid layout', () => {
+    it('split hero tokens produce two-column grid layout', async () => {
       const tokens: ThemeTokens = {
         ...gourmettroTokens,
         style: { ...gourmettroTokens.style, navStyle: 'top-bar', heroLayout: 'split' },
       }
-      const homepage = generateThemedApp(restaurantContract, tokens, 'Test Restaurant')['src/routes/index.tsx']
+      const files = await generateThemedApp(restaurantContract, tokens, 'Test Restaurant')
+      const homepage = files['src/routes/index.tsx']
       // Split hero uses grid 2-col
       expect(homepage).toContain('md:grid-cols-2')
       expect(homepage).toContain('font-[family-name:var(--font-display)]')
     })
 
-    it('centered hero tokens produce centered text layout', () => {
+    it('centered hero tokens produce centered text layout', async () => {
       const tokens: ThemeTokens = {
         ...gourmettroTokens,
         style: { ...gourmettroTokens.style, navStyle: 'centered', heroLayout: 'centered' },
       }
-      const homepage = generateThemedApp(restaurantContract, tokens, 'Test Restaurant')['src/routes/index.tsx']
+      const files = await generateThemedApp(restaurantContract, tokens, 'Test Restaurant')
+      const homepage = files['src/routes/index.tsx']
       // Centered hero uses text-center
       expect(homepage).toContain('text-center')
       expect(homepage).toContain('font-[family-name:var(--font-display)]')
     })
 
-    it('sidebar nav tokens produce persistent sidebar layout', () => {
+    it('sidebar nav tokens produce persistent sidebar layout', async () => {
       const tokens: ThemeTokens = {
         ...gourmettroTokens,
         style: { ...gourmettroTokens.style, navStyle: 'sidebar', heroLayout: 'split' },
       }
-      const homepage = generateThemedApp(restaurantContract, tokens, 'Test Restaurant')['src/routes/index.tsx']
+      const files = await generateThemedApp(restaurantContract, tokens, 'Test Restaurant')
+      const homepage = files['src/routes/index.tsx']
       // Sidebar nav has h-screen fixed sidebar with w-64
       expect(homepage).toContain('h-screen')
       expect(homepage).toContain('w-64')

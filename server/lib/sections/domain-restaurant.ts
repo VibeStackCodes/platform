@@ -27,6 +27,7 @@
  */
 
 import type { SectionContext, SectionOutput, SectionRenderer } from './types'
+import { resolveBg, resolveSpacing } from './primitives'
 
 // ---------------------------------------------------------------------------
 // Shared helpers
@@ -53,9 +54,11 @@ function paramName(ctx: SectionContext): string {
  * TanStack Query fetch is in-flight. Matches the Canape /menu/ route style.
  */
 export const domainMenuArchive: SectionRenderer = (ctx: SectionContext): SectionOutput => {
+  const bg = resolveBg(ctx.config)
+  const spacing = resolveSpacing(ctx.config)
   const appName = ctx.appName
 
-  const jsx = `<section className="max-w-4xl mx-auto px-8 py-16" aria-label="${appName} full menu">
+  const jsx = `<section className="${bg} max-w-4xl mx-auto px-8 ${spacing}" aria-label="${appName} full menu">
   {/* Page header */}
   <div className="flex items-center gap-3 mb-4">
     <UtensilsCrossed className="size-8 text-foreground" aria-hidden="true" />
@@ -211,10 +214,12 @@ export const domainMenuArchive: SectionRenderer = (ctx: SectionContext): Section
  * route style.
  */
 export const domainMenuCategory: SectionRenderer = (ctx: SectionContext): SectionOutput => {
+  const bg = resolveBg(ctx.config)
+  const spacing = resolveSpacing(ctx.config)
   const param = paramName(ctx)
 
   const jsx = `<section
-  className="max-w-4xl mx-auto px-8 py-16"
+  className="${bg} max-w-4xl mx-auto px-8 ${spacing}"
   aria-label={decodeURIComponent(_menuCategoryParam) + ' dishes'}
 >
   {/* Category heading badge */}
@@ -364,9 +369,11 @@ export const domainMenuCategory: SectionRenderer = (ctx: SectionContext): Sectio
  * All labels are linked to inputs via htmlFor/id for full accessibility.
  */
 export const domainReservationForm: SectionRenderer = (ctx: SectionContext): SectionOutput => {
+  const bg = resolveBg(ctx.config)
+  const spacing = resolveSpacing(ctx.config)
   const appName = ctx.appName
 
-  const jsx = `<section className="max-w-2xl mx-auto px-8 py-16" aria-label="Make a reservation at ${appName}">
+  const jsx = `<section className="${bg} max-w-2xl mx-auto px-8 ${spacing}" aria-label="Make a reservation at ${appName}">
   <h1 className="text-4xl font-[family-name:var(--font-display)] text-foreground mb-4">
     Reservations
   </h1>
@@ -614,10 +621,12 @@ export const domainReservationForm: SectionRenderer = (ctx: SectionContext): Sec
  * in the Canape theme.
  */
 export const domainServicesList: SectionRenderer = (ctx: SectionContext): SectionOutput => {
+  const bg = resolveBg(ctx.config)
+  const spacing = resolveSpacing(ctx.config)
   const headline = (ctx.config.headline as string) || 'Our Services'
   const appName = ctx.appName
 
-  const jsx = `<section className="max-w-4xl mx-auto px-8 py-16" aria-label="${appName} services">
+  const jsx = `<section className="${bg} max-w-4xl mx-auto px-8 ${spacing}" aria-label="${appName} services">
   <h2 className="text-3xl font-[family-name:var(--font-display)] text-foreground mb-6">
     ${headline}
   </h2>

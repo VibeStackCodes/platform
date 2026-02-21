@@ -2,8 +2,8 @@ import { formatCss, oklch as toOklch, parse as parseColor } from 'culori'
 import type { SchemaContract, TableDef } from './schema-contract'
 import { inferPageConfig, derivePageFeatureSpec, type PageFeatureSpec } from './agents/feature-schema'
 import { pluralize, singularize, snakeToKebab, snakeToPascal, snakeToTitle } from './naming-utils'
-import { fallbackCompositionPlan } from './page-composer'
-import { assemblePages } from './page-assembler'
+import { composeSectionsV2 } from './page-composer'
+import { assemblePagesV2 } from './page-assembler'
 import type { EntityMeta } from './sections/types'
 
 export interface TextSlots {
@@ -973,7 +973,7 @@ function DashboardPage() {
 `
 }
 
-export function generateThemedApp(contract: SchemaContract, tokens: ThemeTokens, appName: string): Record<string, string> {
+export async function generateThemedApp(contract: SchemaContract, tokens: ThemeTokens, appName: string, appDescription?: string): Promise<Record<string, string>> {
   const files: Record<string, string> = {}
 
   const metas: RouteMeta[] = contract.tables.map((table) => {
@@ -995,10 +995,10 @@ export function generateThemedApp(contract: SchemaContract, tokens: ThemeTokens,
 
   files['src/index.css'] = themeCss(tokens)
 
-  // Section composition — deterministic plan from theme tokens
+  // Section composition — LLM-driven visual specs (V2, no fallbacks)
   const entities = metas.map(routeMetaToEntityMeta)
-  const plan = fallbackCompositionPlan(entities, tokens)
-  const composedFiles = assemblePages(plan, entities, tokens, appName)
+  const plan = await composeSectionsV2(entities, tokens, appDescription ?? appName)
+  const composedFiles = assemblePagesV2(plan, entities, tokens, appName)
   Object.assign(files, composedFiles)
 
   // Static pages (not composed)

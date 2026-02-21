@@ -10,75 +10,253 @@
  */
 import { Agent } from '@mastra/core/agent'
 import { createAgentModelResolver } from './agents/provider'
-import { PageCompositionPlanSchema } from './agents/schemas'
+import { PageCompositionPlanV2Schema } from './agents/schemas'
 import type { ThemeTokens } from './themed-code-engine'
-import type { EntityMeta, PageCompositionPlan, SectionSlot } from './sections/types'
+import type { EntityMeta, PageCompositionPlan, PageCompositionPlanV2, SectionSlot } from './sections/types'
 import { SECTION_CATALOG, buildComposerCatalogPrompt, getSectionMeta } from './sections/registry'
 
 // ---------------------------------------------------------------------------
-// Composer agent (singleton — created once, reused across calls)
+// V2 Composer agent (singleton — created once, reused across calls)
 // ---------------------------------------------------------------------------
 
-const composerAgent = new Agent({
-  id: 'page-composer',
-  name: 'page-composer',
-  instructions: `You are a page layout composer for a web application generator.
-Given entity shapes, theme style, and a section catalog, compose pages by selecting
-which sections appear on each route and in what order.
+const composerAgentV2 = new Agent({
+  id: 'page-composer-v2',
+  name: 'page-composer-v2',
+  instructions: `You are an expert web page layout composer. Given entity shapes, theme style, and a section catalog, you compose a complete app layout as a PageCompositionPlanV2.
 
-Rules:
-- Every app needs a homepage ("/") with: 1 hero, 1-2 content sections, 1 footer
-- Each public entity needs a list page ("/{entity}/") and detail page ("/{entity}/$id")
-- List pages: optional search/filter utility + 1 grid section + footer
-- Detail pages: 1 detail section + footer
-- Pick sections that match the theme style (editorial themes → editorial sections, etc.)
-- Maximum 8 sections per page
-- Only 1 hero per page, only 1 footer per page
-- entityBinding is required for grid, detail, and content-featured sections
-- Navigation sections (nav-topbar, nav-sidebar, nav-editorial) appear first on every page`,
+## Your Output Format
+You return a JSON object with:
+- routes: Array of { path, sections[] } — every page in the app
+- globalNav: One nav section ID prepended to every route (pick from: nav-topbar, nav-sidebar, nav-editorial, nav-mega)
+- globalFooter: One footer section ID appended to every route (pick from: footer-dark-photo, footer-minimal, footer-multi-column, footer-centered)
+
+## Section Visual Specs
+Each section has visual properties from closed vocabularies:
+- sectionId: exact ID from the catalog (50 options)
+- entityBinding: table name for data-driven sections (REQUIRED for grid/detail/content-featured)
+- background: "default" | "muted" | "muted-strong" | "accent" | "dark" | "dark-overlay" | "gradient-down" | "gradient-up"
+- spacing: "compact" | "normal" | "generous"
+- cardVariant: "elevated" | "flat" | "glass" | "image-overlay" (only for card-based sections)
+- gridColumns: "2" | "3" | "4" (only for grid sections)
+- imageAspect: "video" | "square" | "4/3" | "3/2" | "21/9" (only for image sections)
+- showBadges: boolean (show category badges)
+- showMetadata: boolean (show dates/counts)
+- text: { headline?, subtext?, buttonLabel?, emptyStateMessage? }
+- limit: 1-24 (max items for grids)
+
+## Visual Rhythm Rules
+1. Alternate backgrounds on the homepage: default → muted → default → accent → default
+2. Heroes always use "generous" spacing and "dark-overlay" or "gradient-down" background
+3. CTAs use "accent" or "muted" background to stand out
+4. Grid sections default to "normal" spacing with "3" columns
+5. Detail pages use "compact" spacing for dense info
+
+## Route Architecture
+- Use domain language for routes: "/journal/" not "/posts/", "/menu/" not "/menu-items/"
+- Homepage: hero + 1-2 content sections + CTA + optional utility
+- List pages: utility (search/filter) + grid + optional pagination
+- Detail pages: 1 detail section
+- Maximum 8 sections per route (excluding globalNav/globalFooter)
+- Only 1 hero per route
+
+## Composition Rules
+- Every app must have a "/" homepage route
+- Each public entity needs a list and detail route
+- entityBinding REQUIRED for: all grid-*, detail-*, content-featured, util-category-scroll, util-filter-tabs, util-search-header, util-pagination
+- Match section style to theme: editorial themes → editorial sections, data-heavy → table/data-dense sections
+- Photography-heavy → masonry/bento grids, image-overlay cards
+- Minimal imagery → list-editorial grids, flat cards`,
   model: createAgentModelResolver('composer'),
   defaultOptions: { modelSettings: { temperature: 0.3 } },
 })
 
 // ---------------------------------------------------------------------------
-// Public API
+// V2 Public API
 // ---------------------------------------------------------------------------
 
 /**
- * Uses LLM to compose pages — which sections appear on which routes and in
- * what order. Falls back to deterministic plan if LLM call fails or the
- * resulting plan fails validation.
+ * V2 LLM-driven page composition. Uses gpt-5.2 with closed-vocabulary visual specs.
+ * NO FALLBACKS — if LLM fails or output is invalid, this THROWS.
  */
-export async function composeSections(
+export async function composeSectionsV2(
   entities: EntityMeta[],
   tokens: ThemeTokens,
   appDescription: string,
-): Promise<PageCompositionPlan> {
-  const prompt = buildComposerPrompt(entities, tokens, appDescription)
+): Promise<PageCompositionPlanV2> {
+  const prompt = buildComposerPromptV2(entities, tokens, appDescription)
 
-  try {
-    const result = await composerAgent.generate(prompt, {
-      structuredOutput: { schema: PageCompositionPlanSchema },
-    })
+  const result = await composerAgentV2.generate(prompt, {
+    structuredOutput: { schema: PageCompositionPlanV2Schema },
+  })
 
-    const raw = PageCompositionPlanSchema.safeParse(result.object ?? result)
-    if (!raw.success) {
-      console.warn('[page-composer] LLM output failed schema parse — using fallback', raw.error.format())
-      return fallbackCompositionPlan(entities, tokens)
-    }
+  // Parse — throws if LLM returned garbage
+  const plan = PageCompositionPlanV2Schema.parse(result.object ?? result)
 
-    const plan = raw.data
-    const validation = validateCompositionPlan(plan, entities)
-    if (!validation.valid) {
-      console.warn('[page-composer] LLM plan failed validation — using fallback', validation.errors)
-      return fallbackCompositionPlan(entities, tokens)
-    }
-
-    return plan
-  } catch (err) {
-    console.error('[page-composer] LLM call failed — using fallback', err)
-    return fallbackCompositionPlan(entities, tokens)
+  // Validate — throws if plan violates composition rules
+  const validation = validateCompositionPlanV2(plan, entities)
+  if (!validation.valid) {
+    throw new Error(
+      `[page-composer] V2 plan failed validation:\n${validation.errors.join('\n')}`,
+    )
   }
+
+  return plan
+}
+
+/**
+ * Validates a V2 composition plan against known sections and entity names.
+ * Returns specific error messages for each violation.
+ * Exported for use in tests.
+ */
+export function validateCompositionPlanV2(
+  plan: PageCompositionPlanV2,
+  entities: EntityMeta[],
+): { valid: boolean; errors: string[] } {
+  const errors: string[] = []
+  const entityNames = new Set(entities.map((e) => e.tableName))
+  const catalogIds = new Set(SECTION_CATALOG.map((s) => s.id))
+
+  // Must have homepage
+  if (!plan.routes.some((r) => r.path === '/')) {
+    errors.push('Plan must include a "/" homepage route')
+  }
+
+  for (const route of plan.routes) {
+    if (route.sections.length === 0) {
+      errors.push(`Route "${route.path}": must have at least 1 section`)
+      continue
+    }
+
+    let heroCount = 0
+    const sectionIdsOnPage: string[] = []
+
+    for (const spec of route.sections) {
+      if (!catalogIds.has(spec.sectionId)) {
+        errors.push(`Route "${route.path}": unknown section ID "${spec.sectionId}"`)
+        continue
+      }
+
+      const meta = getSectionMeta(spec.sectionId)
+      if (!meta) continue
+
+      if (meta.category === 'hero') heroCount++
+
+      // Validate entity binding
+      if (meta.requiresEntity && !spec.entityBinding) {
+        errors.push(
+          `Route "${route.path}": section "${spec.sectionId}" requires entityBinding but none provided`,
+        )
+      }
+      if (spec.entityBinding && !entityNames.has(spec.entityBinding)) {
+        errors.push(
+          `Route "${route.path}": section "${spec.sectionId}" entityBinding "${spec.entityBinding}" is not a known entity`,
+        )
+      }
+
+      sectionIdsOnPage.push(spec.sectionId)
+    }
+
+    if (heroCount > 1) {
+      errors.push(`Route "${route.path}": ${heroCount} hero sections — only 1 allowed per page`)
+    }
+
+    // Check incompatibility constraints
+    for (const spec of route.sections) {
+      const meta = getSectionMeta(spec.sectionId)
+      if (!meta?.incompatibleWith) continue
+      for (const incompatId of meta.incompatibleWith) {
+        if (sectionIdsOnPage.includes(incompatId)) {
+          errors.push(
+            `Route "${route.path}": incompatible sections "${spec.sectionId}" and "${incompatId}" on same page`,
+          )
+        }
+      }
+    }
+
+    // List pages must have at least 1 grid section
+    const isListPage = route.path.endsWith('/') && route.path !== '/'
+    if (isListPage) {
+      const hasGrid = route.sections.some((s) => {
+        const meta = getSectionMeta(s.sectionId)
+        return meta?.category === 'grid'
+      })
+      if (!hasGrid) {
+        errors.push(`Route "${route.path}": list page must have at least 1 grid section`)
+      }
+    }
+
+    // Detail pages must have at least 1 detail section
+    const isDetailPage = route.path.includes('/$')
+    if (isDetailPage) {
+      const hasDetail = route.sections.some((s) => {
+        const meta = getSectionMeta(s.sectionId)
+        return meta?.category === 'detail'
+      })
+      if (!hasDetail) {
+        errors.push(`Route "${route.path}": detail page must have at least 1 detail section`)
+      }
+    }
+  }
+
+  return { valid: errors.length === 0, errors }
+}
+
+// ---------------------------------------------------------------------------
+// V2 Prompt builder (internal)
+// ---------------------------------------------------------------------------
+
+function buildComposerPromptV2(
+  entities: EntityMeta[],
+  tokens: ThemeTokens,
+  appDescription: string,
+): string {
+  const publicEntities = entities.filter((e) => !e.isPrivate)
+  const privateEntities = entities.filter((e) => e.isPrivate)
+
+  const entityLines = publicEntities
+    .map((e) => {
+      const cols = [`displayColumn: ${e.displayColumn ?? 'id'}`]
+      if (e.imageColumn) cols.push(`imageColumn: ${e.imageColumn}`)
+      if (e.metadataColumns.length > 0) cols.push(`metadataColumns: [${e.metadataColumns.join(', ')}]`)
+      return `  - ${e.tableName} (${e.pluralKebab}/) — ${cols.join(', ')}`
+    })
+    .join('\n')
+
+  const privateEntityLines =
+    privateEntities.length > 0
+      ? `\nPrivate entities (admin only, do NOT generate public routes for these):\n${privateEntities.map((e) => `  - ${e.tableName}`).join('\n')}`
+      : ''
+
+  const themeStyle = [
+    `navStyle: ${tokens.style.navStyle}`,
+    `heroLayout: ${tokens.style.heroLayout}`,
+    `cardStyle: ${tokens.style.cardStyle}`,
+    `imagery: ${tokens.style.imagery}`,
+    `spacing: ${tokens.style.spacing}`,
+    `motion: ${tokens.style.motion}`,
+  ].join(', ')
+
+  const catalogPrompt = buildComposerCatalogPrompt()
+
+  return `## App
+${appDescription}
+
+## Theme: ${tokens.name}
+Style: ${themeStyle}
+
+## Public Entities
+${entityLines || '  (none — homepage only)'}
+${privateEntityLines}
+
+${catalogPrompt}
+
+## Required Routes
+- "/" — homepage (hero + content + CTA)
+${publicEntities.map((e) => `- "/${e.pluralKebab}/" — ${e.pluralTitle} list\n- "/${e.pluralKebab}/$id" — ${e.singularTitle} detail`).join('\n')}
+
+Compose a PageCompositionPlanV2 with globalNav, globalFooter, and routes.
+Use domain language for paths. Alternate backgrounds for visual rhythm.
+Match section style to theme tokens.`
 }
 
 /**
@@ -328,67 +506,3 @@ export function fallbackCompositionPlan(
   return { pages }
 }
 
-// ---------------------------------------------------------------------------
-// Prompt builder (internal)
-// ---------------------------------------------------------------------------
-
-function buildComposerPrompt(
-  entities: EntityMeta[],
-  tokens: ThemeTokens,
-  appDescription: string,
-): string {
-  const publicEntities = entities.filter((e) => !e.isPrivate)
-  const privateEntities = entities.filter((e) => e.isPrivate)
-
-  const entityLines = publicEntities
-    .map((e) => {
-      const cols = [`displayColumn: ${e.displayColumn ?? 'id'}`]
-      if (e.imageColumn) cols.push(`imageColumn: ${e.imageColumn}`)
-      if (e.metadataColumns.length > 0) cols.push(`metadataColumns: [${e.metadataColumns.join(', ')}]`)
-      return `  - ${e.tableName} (${e.pluralKebab}/) — ${cols.join(', ')}`
-    })
-    .join('\n')
-
-  const privateEntityLines =
-    privateEntities.length > 0
-      ? `\nPrivate entities (admin only, do NOT generate public routes for these):\n${privateEntities.map((e) => `  - ${e.tableName}`).join('\n')}`
-      : ''
-
-  const themeStyle = [
-    `navStyle: ${tokens.style.navStyle}`,
-    `heroLayout: ${tokens.style.heroLayout}`,
-    `cardStyle: ${tokens.style.cardStyle}`,
-    `imagery: ${tokens.style.imagery}`,
-    `spacing: ${tokens.style.spacing}`,
-    `motion: ${tokens.style.motion}`,
-  ].join(', ')
-
-  const catalogPrompt = buildComposerCatalogPrompt()
-
-  return `## App Description
-${appDescription}
-
-## Theme: ${tokens.name}
-Style tokens: ${themeStyle}
-
-## Public Entities (generate list + detail routes for each)
-${entityLines || '  (none — homepage only)'}
-${privateEntityLines}
-
-${catalogPrompt}
-
-## Your Task
-Compose a PageCompositionPlan with routes and ordered section slots.
-
-Required routes:
-- "/" — homepage
-${publicEntities.map((e) => `- "/${e.pluralKebab}/" — ${e.pluralTitle} list page\n- "/${e.pluralKebab}/$id" — ${e.singularTitle} detail page`).join('\n')}
-
-Follow the composition rules strictly:
-1. Every page starts with exactly 1 navigation section
-2. Homepages have: nav + hero + 1-2 content sections + cta + footer (max 8 total)
-3. List pages have: nav + optional utility + 1 grid section + footer
-4. Detail pages have: nav + 1 detail section + footer
-5. Pick sections whose style tags match the theme (e.g., navStyle=editorial → nav-editorial)
-6. Set entityBinding on all grid, detail, and content-featured sections`
-}

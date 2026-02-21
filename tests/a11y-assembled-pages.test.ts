@@ -26,10 +26,39 @@
  * enforced.
  */
 
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
+import type { PageCompositionPlan, PageCompositionPlanV2, SectionVisualSpec } from '@server/lib/sections/types'
 import { generateThemedApp, type ThemeTokens } from '@server/lib/themed-code-engine'
 import type { SchemaContract } from '@server/lib/schema-contract'
 import { checkA11y, type A11yResult } from './helpers/axe-helper'
+
+// Mock composeSectionsV2 — deterministic plan from fallbackCompositionPlan (V1→V2 conversion)
+vi.mock('@server/lib/page-composer', async (importOriginal) => {
+  const mod = await importOriginal<typeof import('@server/lib/page-composer')>()
+  return {
+    ...mod,
+    composeSectionsV2: vi.fn(async (entities: any[], tokens: any, _appDescription: string) => {
+      const v1Plan = mod.fallbackCompositionPlan(entities, tokens)
+      return v1ToV2(v1Plan)
+    }),
+  }
+})
+
+function v1ToV2(plan: PageCompositionPlan): PageCompositionPlanV2 {
+  return {
+    routes: Object.entries(plan.pages).map(([path, slots]) => ({
+      path,
+      sections: slots.map((slot): SectionVisualSpec => ({
+        sectionId: slot.sectionId as SectionVisualSpec['sectionId'],
+        entityBinding: slot.entityBinding,
+        background: 'default',
+        spacing: 'normal',
+        showBadges: true,
+        showMetadata: true,
+      })),
+    })),
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Local violation assertion — excludes known JSX-transformer false positive
@@ -383,51 +412,57 @@ const blogTokens: ThemeTokens = {
 // ---------------------------------------------------------------------------
 
 describe('A11y: Restaurant app (public, editorial, food theme)', () => {
-  const themedFiles = generateThemedApp(restaurantContract, restaurantTokens, 'Gourmetto')
-
   describe('Homepage (src/routes/index.tsx)', () => {
     const filePath = 'src/routes/index.tsx'
 
-    it('generates the homepage file', () => {
+    it('generates the homepage file', async () => {
+      const themedFiles = await generateThemedApp(restaurantContract, restaurantTokens, 'Gourmetto')
       expect(themedFiles).toHaveProperty(filePath)
     })
 
     it('has zero critical and serious axe violations', async () => {
+      const themedFiles = await generateThemedApp(restaurantContract, restaurantTokens, 'Gourmetto')
       const content = themedFiles[filePath]
       const jsx = extractJsxReturn(content)
       const result = await checkA11y(jsx)
       assertNoPageViolations(result, filePath)
     })
 
-    it('contains heading elements for page structure', () => {
+    it('contains heading elements for page structure', async () => {
+      const themedFiles = await generateThemedApp(restaurantContract, restaurantTokens, 'Gourmetto')
       const content = themedFiles[filePath]
       // Generated pages use h1/h2/h3 for semantic headings
       expect(content).toMatch(/<h[1-3][\s>]/)
     })
 
-    it('contains section or main landmark elements', () => {
+    it('contains section or main landmark elements', async () => {
+      const themedFiles = await generateThemedApp(restaurantContract, restaurantTokens, 'Gourmetto')
       const content = themedFiles[filePath]
       expect(content).toMatch(/<(?:section|main|header|nav)[\s>]/)
     })
 
-    it('interpolates the hero headline text slot', () => {
+    it('interpolates the hero headline text slot', async () => {
+      const themedFiles = await generateThemedApp(restaurantContract, restaurantTokens, 'Gourmetto')
       const content = themedFiles[filePath]
       expect(content).toContain('Savor Every Moment')
     })
 
-    it('interpolates the CTA label text slot', () => {
+    it('interpolates the CTA label text slot', async () => {
+      const themedFiles = await generateThemedApp(restaurantContract, restaurantTokens, 'Gourmetto')
       const content = themedFiles[filePath]
       expect(content).toContain('View menu')
     })
   })
 
   describe('Dish list page (public entity list)', () => {
-    it('generates the dish list file', () => {
+    it('generates the dish list file', async () => {
+      const themedFiles = await generateThemedApp(restaurantContract, restaurantTokens, 'Gourmetto')
       const { listPath } = findEntityRoutes(themedFiles, 'dishes')
       expect(listPath).toBeDefined()
     })
 
     it('has zero critical and serious axe violations on dish list', async () => {
+      const themedFiles = await generateThemedApp(restaurantContract, restaurantTokens, 'Gourmetto')
       const { listPath } = findEntityRoutes(themedFiles, 'dishes')
       expect(listPath).toBeDefined()
       const content = themedFiles[listPath!]
@@ -436,14 +471,16 @@ describe('A11y: Restaurant app (public, editorial, food theme)', () => {
       assertNoPageViolations(result, listPath!)
     })
 
-    it('dish list contains a heading element', () => {
+    it('dish list contains a heading element', async () => {
+      const themedFiles = await generateThemedApp(restaurantContract, restaurantTokens, 'Gourmetto')
       const { listPath } = findEntityRoutes(themedFiles, 'dishes')
       expect(listPath).toBeDefined()
       const content = themedFiles[listPath!]
       expect(content).toMatch(/<h[1-4][\s>]/)
     })
 
-    it('dish list contains section or main landmark', () => {
+    it('dish list contains section or main landmark', async () => {
+      const themedFiles = await generateThemedApp(restaurantContract, restaurantTokens, 'Gourmetto')
       const { listPath } = findEntityRoutes(themedFiles, 'dishes')
       expect(listPath).toBeDefined()
       const content = themedFiles[listPath!]
@@ -452,12 +489,14 @@ describe('A11y: Restaurant app (public, editorial, food theme)', () => {
   })
 
   describe('Dish detail page (public entity detail)', () => {
-    it('generates the dish detail file', () => {
+    it('generates the dish detail file', async () => {
+      const themedFiles = await generateThemedApp(restaurantContract, restaurantTokens, 'Gourmetto')
       const { detailPath } = findEntityRoutes(themedFiles, 'dishes')
       expect(detailPath).toBeDefined()
     })
 
     it('has zero critical and serious axe violations on dish detail', async () => {
+      const themedFiles = await generateThemedApp(restaurantContract, restaurantTokens, 'Gourmetto')
       const { detailPath } = findEntityRoutes(themedFiles, 'dishes')
       expect(detailPath).toBeDefined()
       const content = themedFiles[detailPath!]
@@ -466,7 +505,8 @@ describe('A11y: Restaurant app (public, editorial, food theme)', () => {
       assertNoPageViolations(result, detailPath!)
     })
 
-    it('dish detail contains a heading element', () => {
+    it('dish detail contains a heading element', async () => {
+      const themedFiles = await generateThemedApp(restaurantContract, restaurantTokens, 'Gourmetto')
       const { detailPath } = findEntityRoutes(themedFiles, 'dishes')
       expect(detailPath).toBeDefined()
       const content = themedFiles[detailPath!]
@@ -475,12 +515,14 @@ describe('A11y: Restaurant app (public, editorial, food theme)', () => {
   })
 
   describe('Menu-category list page (secondary public entity)', () => {
-    it('generates the menu-category list file', () => {
+    it('generates the menu-category list file', async () => {
+      const themedFiles = await generateThemedApp(restaurantContract, restaurantTokens, 'Gourmetto')
       const { listPath } = findEntityRoutes(themedFiles, 'menu-categories')
       expect(listPath).toBeDefined()
     })
 
     it('has zero critical and serious axe violations on menu-category list', async () => {
+      const themedFiles = await generateThemedApp(restaurantContract, restaurantTokens, 'Gourmetto')
       const { listPath } = findEntityRoutes(themedFiles, 'menu-categories')
       expect(listPath).toBeDefined()
       const content = themedFiles[listPath!]
@@ -489,7 +531,8 @@ describe('A11y: Restaurant app (public, editorial, food theme)', () => {
       assertNoPageViolations(result, listPath!)
     })
 
-    it('menu-category list contains a heading element', () => {
+    it('menu-category list contains a heading element', async () => {
+      const themedFiles = await generateThemedApp(restaurantContract, restaurantTokens, 'Gourmetto')
       const { listPath } = findEntityRoutes(themedFiles, 'menu-categories')
       expect(listPath).toBeDefined()
       const content = themedFiles[listPath!]
@@ -503,40 +546,44 @@ describe('A11y: Restaurant app (public, editorial, food theme)', () => {
 // ---------------------------------------------------------------------------
 
 describe('A11y: SaaS Dashboard app (private, sidebar, business theme)', () => {
-  const themedFiles = generateThemedApp(saasContract, saasTokens, 'ClientHub')
-
   describe('Homepage / Dashboard entry (src/routes/index.tsx)', () => {
     const filePath = 'src/routes/index.tsx'
 
-    it('generates the homepage file', () => {
+    it('generates the homepage file', async () => {
+      const themedFiles = await generateThemedApp(saasContract, saasTokens, 'ClientHub')
       expect(themedFiles).toHaveProperty(filePath)
     })
 
     it('has zero critical and serious axe violations', async () => {
+      const themedFiles = await generateThemedApp(saasContract, saasTokens, 'ClientHub')
       const content = themedFiles[filePath]
       const jsx = extractJsxReturn(content)
       const result = await checkA11y(jsx)
       assertNoPageViolations(result, filePath)
     })
 
-    it('contains heading elements for page structure', () => {
+    it('contains heading elements for page structure', async () => {
+      const themedFiles = await generateThemedApp(saasContract, saasTokens, 'ClientHub')
       const content = themedFiles[filePath]
       expect(content).toMatch(/<h[1-3][\s>]/)
     })
 
-    it('contains section or main landmark elements', () => {
+    it('contains section or main landmark elements', async () => {
+      const themedFiles = await generateThemedApp(saasContract, saasTokens, 'ClientHub')
       const content = themedFiles[filePath]
       expect(content).toMatch(/<(?:section|main|header|nav|aside)[\s>]/)
     })
 
-    it('interpolates the hero headline text slot', () => {
+    it('interpolates the hero headline text slot', async () => {
+      const themedFiles = await generateThemedApp(saasContract, saasTokens, 'ClientHub')
       const content = themedFiles[filePath]
       expect(content).toContain('Manage Clients')
     })
   })
 
   describe('Client list page (private entity list)', () => {
-    it('generates the client list file under _authenticated', () => {
+    it('generates the client list file under _authenticated', async () => {
+      const themedFiles = await generateThemedApp(saasContract, saasTokens, 'ClientHub')
       const { listPath } = findEntityRoutes(themedFiles, 'clients')
       expect(listPath).toBeDefined()
       // Private posture — must live under the _authenticated layout route
@@ -544,6 +591,7 @@ describe('A11y: SaaS Dashboard app (private, sidebar, business theme)', () => {
     })
 
     it('has zero critical and serious axe violations on client list', async () => {
+      const themedFiles = await generateThemedApp(saasContract, saasTokens, 'ClientHub')
       const { listPath } = findEntityRoutes(themedFiles, 'clients')
       expect(listPath).toBeDefined()
       const content = themedFiles[listPath!]
@@ -552,7 +600,8 @@ describe('A11y: SaaS Dashboard app (private, sidebar, business theme)', () => {
       assertNoPageViolations(result, listPath!)
     })
 
-    it('client list contains a heading or card title element', () => {
+    it('client list contains a heading or card title element', async () => {
+      const themedFiles = await generateThemedApp(saasContract, saasTokens, 'ClientHub')
       const { listPath } = findEntityRoutes(themedFiles, 'clients')
       expect(listPath).toBeDefined()
       const content = themedFiles[listPath!]
@@ -560,7 +609,8 @@ describe('A11y: SaaS Dashboard app (private, sidebar, business theme)', () => {
       expect(content).toMatch(/<h[1-4][\s>]|CardTitle/)
     })
 
-    it('client list contains section or main landmark', () => {
+    it('client list contains section or main landmark', async () => {
+      const themedFiles = await generateThemedApp(saasContract, saasTokens, 'ClientHub')
       const { listPath } = findEntityRoutes(themedFiles, 'clients')
       expect(listPath).toBeDefined()
       const content = themedFiles[listPath!]
@@ -569,13 +619,15 @@ describe('A11y: SaaS Dashboard app (private, sidebar, business theme)', () => {
   })
 
   describe('Client detail page (private entity detail)', () => {
-    it('generates the client detail file under _authenticated', () => {
+    it('generates the client detail file under _authenticated', async () => {
+      const themedFiles = await generateThemedApp(saasContract, saasTokens, 'ClientHub')
       const { detailPath } = findEntityRoutes(themedFiles, 'clients')
       expect(detailPath).toBeDefined()
       expect(detailPath).toContain('_authenticated')
     })
 
     it('has zero critical and serious axe violations on client detail', async () => {
+      const themedFiles = await generateThemedApp(saasContract, saasTokens, 'ClientHub')
       const { detailPath } = findEntityRoutes(themedFiles, 'clients')
       expect(detailPath).toBeDefined()
       const content = themedFiles[detailPath!]
@@ -584,7 +636,8 @@ describe('A11y: SaaS Dashboard app (private, sidebar, business theme)', () => {
       assertNoPageViolations(result, detailPath!)
     })
 
-    it('client detail contains a heading element', () => {
+    it('client detail contains a heading element', async () => {
+      const themedFiles = await generateThemedApp(saasContract, saasTokens, 'ClientHub')
       const { detailPath } = findEntityRoutes(themedFiles, 'clients')
       expect(detailPath).toBeDefined()
       const content = themedFiles[detailPath!]
@@ -593,18 +646,21 @@ describe('A11y: SaaS Dashboard app (private, sidebar, business theme)', () => {
   })
 
   describe('Auth route generated for private posture', () => {
-    it('generates auth/login.tsx for private posture', () => {
+    it('generates auth/login.tsx for private posture', async () => {
+      const themedFiles = await generateThemedApp(saasContract, saasTokens, 'ClientHub')
       expect(themedFiles).toHaveProperty('src/routes/auth/login.tsx')
     })
 
     it('login page has zero critical and serious axe violations', async () => {
+      const themedFiles = await generateThemedApp(saasContract, saasTokens, 'ClientHub')
       const content = themedFiles['src/routes/auth/login.tsx']
       const jsx = extractJsxReturn(content)
       const result = await checkA11y(jsx)
       assertNoPageViolations(result, 'src/routes/auth/login.tsx')
     })
 
-    it('login page contains a form element or input for credential entry', () => {
+    it('login page contains a form element or input for credential entry', async () => {
+      const themedFiles = await generateThemedApp(saasContract, saasTokens, 'ClientHub')
       const content = themedFiles['src/routes/auth/login.tsx']
       // Login pages contain input fields for email/password entry
       expect(content).toMatch(/<input|<form/i)
@@ -617,51 +673,57 @@ describe('A11y: SaaS Dashboard app (private, sidebar, business theme)', () => {
 // ---------------------------------------------------------------------------
 
 describe('A11y: Blog Platform app (hybrid, minimal, writing theme)', () => {
-  const themedFiles = generateThemedApp(blogContract, blogTokens, 'InkWell')
-
   describe('Homepage (src/routes/index.tsx)', () => {
     const filePath = 'src/routes/index.tsx'
 
-    it('generates the homepage file', () => {
+    it('generates the homepage file', async () => {
+      const themedFiles = await generateThemedApp(blogContract, blogTokens, 'InkWell')
       expect(themedFiles).toHaveProperty(filePath)
     })
 
     it('has zero critical and serious axe violations', async () => {
+      const themedFiles = await generateThemedApp(blogContract, blogTokens, 'InkWell')
       const content = themedFiles[filePath]
       const jsx = extractJsxReturn(content)
       const result = await checkA11y(jsx)
       assertNoPageViolations(result, filePath)
     })
 
-    it('contains heading elements for page structure', () => {
+    it('contains heading elements for page structure', async () => {
+      const themedFiles = await generateThemedApp(blogContract, blogTokens, 'InkWell')
       const content = themedFiles[filePath]
       expect(content).toMatch(/<h[1-3][\s>]/)
     })
 
-    it('contains section or main landmark elements', () => {
+    it('contains section or main landmark elements', async () => {
+      const themedFiles = await generateThemedApp(blogContract, blogTokens, 'InkWell')
       const content = themedFiles[filePath]
       expect(content).toMatch(/<(?:section|main|header|nav)[\s>]/)
     })
 
-    it('interpolates the hero headline text slot', () => {
+    it('interpolates the hero headline text slot', async () => {
+      const themedFiles = await generateThemedApp(blogContract, blogTokens, 'InkWell')
       const content = themedFiles[filePath]
       expect(content).toContain('Stories Worth Telling')
     })
 
-    it('interpolates the hero subtext slot', () => {
+    it('interpolates the hero subtext slot', async () => {
+      const themedFiles = await generateThemedApp(blogContract, blogTokens, 'InkWell')
       const content = themedFiles[filePath]
       expect(content).toContain('A platform for writers.')
     })
   })
 
   describe('Post list page (hybrid entity list)', () => {
-    it('generates the post list file', () => {
+    it('generates the post list file', async () => {
+      const themedFiles = await generateThemedApp(blogContract, blogTokens, 'InkWell')
       const allPaths = Object.keys(themedFiles)
       const postListPath = allPaths.find((p) => p.includes('/posts/index.tsx'))
       expect(postListPath).toBeDefined()
     })
 
     it('has zero critical and serious axe violations on post list', async () => {
+      const themedFiles = await generateThemedApp(blogContract, blogTokens, 'InkWell')
       const allPaths = Object.keys(themedFiles)
       const postListPath = allPaths.find((p) => p.includes('/posts/index.tsx'))
       expect(postListPath).toBeDefined()
@@ -671,7 +733,8 @@ describe('A11y: Blog Platform app (hybrid, minimal, writing theme)', () => {
       assertNoPageViolations(result, postListPath!)
     })
 
-    it('post list contains a heading or card title element', () => {
+    it('post list contains a heading or card title element', async () => {
+      const themedFiles = await generateThemedApp(blogContract, blogTokens, 'InkWell')
       const allPaths = Object.keys(themedFiles)
       const postListPath = allPaths.find((p) => p.includes('/posts/index.tsx'))
       expect(postListPath).toBeDefined()
@@ -680,7 +743,8 @@ describe('A11y: Blog Platform app (hybrid, minimal, writing theme)', () => {
       expect(content).toMatch(/<h[1-4][\s>]|CardTitle/)
     })
 
-    it('post list contains section or main landmark', () => {
+    it('post list contains section or main landmark', async () => {
+      const themedFiles = await generateThemedApp(blogContract, blogTokens, 'InkWell')
       const allPaths = Object.keys(themedFiles)
       const postListPath = allPaths.find((p) => p.includes('/posts/index.tsx'))
       expect(postListPath).toBeDefined()
@@ -690,13 +754,15 @@ describe('A11y: Blog Platform app (hybrid, minimal, writing theme)', () => {
   })
 
   describe('Post detail page (hybrid entity detail)', () => {
-    it('generates the post detail file', () => {
+    it('generates the post detail file', async () => {
+      const themedFiles = await generateThemedApp(blogContract, blogTokens, 'InkWell')
       const allPaths = Object.keys(themedFiles)
       const postDetailPath = allPaths.find((p) => p.includes('/posts/$id.tsx'))
       expect(postDetailPath).toBeDefined()
     })
 
     it('has zero critical and serious axe violations on post detail', async () => {
+      const themedFiles = await generateThemedApp(blogContract, blogTokens, 'InkWell')
       const allPaths = Object.keys(themedFiles)
       const postDetailPath = allPaths.find((p) => p.includes('/posts/$id.tsx'))
       expect(postDetailPath).toBeDefined()
@@ -706,7 +772,8 @@ describe('A11y: Blog Platform app (hybrid, minimal, writing theme)', () => {
       assertNoPageViolations(result, postDetailPath!)
     })
 
-    it('post detail contains a heading element', () => {
+    it('post detail contains a heading element', async () => {
+      const themedFiles = await generateThemedApp(blogContract, blogTokens, 'InkWell')
       const allPaths = Object.keys(themedFiles)
       const postDetailPath = allPaths.find((p) => p.includes('/posts/$id.tsx'))
       expect(postDetailPath).toBeDefined()
@@ -716,11 +783,13 @@ describe('A11y: Blog Platform app (hybrid, minimal, writing theme)', () => {
   })
 
   describe('Auth route generated for hybrid posture', () => {
-    it('generates auth/login.tsx for hybrid posture', () => {
+    it('generates auth/login.tsx for hybrid posture', async () => {
+      const themedFiles = await generateThemedApp(blogContract, blogTokens, 'InkWell')
       expect(themedFiles).toHaveProperty('src/routes/auth/login.tsx')
     })
 
     it('login page has zero critical and serious axe violations', async () => {
+      const themedFiles = await generateThemedApp(blogContract, blogTokens, 'InkWell')
       const content = themedFiles['src/routes/auth/login.tsx']
       const jsx = extractJsxReturn(content)
       const result = await checkA11y(jsx)

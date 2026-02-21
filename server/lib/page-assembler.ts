@@ -12,7 +12,14 @@
  */
 
 import type { ThemeTokens } from './themed-code-engine'
-import type { EntityMeta, PageCompositionPlan, SectionContext, SectionOutput } from './sections/types'
+import type {
+  EntityMeta,
+  PageCompositionPlan,
+  PageCompositionPlanV2,
+  SectionContext,
+  SectionOutput,
+  SectionVisualSpec,
+} from './sections/types'
 import { getSectionRenderer } from './sections'
 
 // ---------------------------------------------------------------------------
@@ -308,6 +315,104 @@ export function assemblePages(
     }
 
     output[filePath] = buildRouteFile(routePath, renderedSections, routeId, componentName)
+  }
+
+  return output
+}
+
+/**
+ * V2 page assembler — accepts PageCompositionPlanV2 with visual specs.
+ *
+ * Differences from V1:
+ *   - Input is routes[] (not pages Record)
+ *   - globalNav/globalFooter auto-prepended/appended
+ *   - SectionVisualSpec fields spread into SectionContext.config
+ */
+export function assemblePagesV2(
+  plan: PageCompositionPlanV2,
+  entities: EntityMeta[],
+  tokens: ThemeTokens,
+  appName: string,
+): Record<string, string> {
+  const output: Record<string, string> = {}
+
+  for (const route of plan.routes) {
+    const filePath = routePathToFilePath(route.path)
+    const componentName = routePathToComponentName(route.path)
+    const routeId = routePathToFileRoute(route.path)
+
+    // Build full section list: globalNav + route sections + globalFooter
+    const allSpecs: SectionVisualSpec[] = []
+
+    if (plan.globalNav) {
+      allSpecs.push({
+        sectionId: plan.globalNav as SectionVisualSpec['sectionId'],
+        background: 'default',
+        spacing: 'compact',
+        showBadges: true,
+        showMetadata: true,
+      })
+    }
+
+    allSpecs.push(...route.sections)
+
+    if (plan.globalFooter) {
+      allSpecs.push({
+        sectionId: plan.globalFooter as SectionVisualSpec['sectionId'],
+        background: 'default',
+        spacing: 'normal',
+        showBadges: true,
+        showMetadata: true,
+      })
+    }
+
+    const renderedSections: SectionOutput[] = []
+
+    for (const spec of allSpecs) {
+      const renderer = getSectionRenderer(spec.sectionId)
+      if (!renderer) {
+        console.warn(
+          `[page-assembler-v2] no renderer for section "${spec.sectionId}" on route "${route.path}" — skipping`,
+        )
+        continue
+      }
+
+      // Spread visual spec fields into config so renderers read them via resolvers
+      const configFromSpec: Record<string, unknown> = {
+        background: spec.background,
+        spacing: spec.spacing,
+        showBadges: spec.showBadges,
+        showMetadata: spec.showMetadata,
+      }
+      if (spec.cardVariant) configFromSpec.cardVariant = spec.cardVariant
+      if (spec.gridColumns) configFromSpec.gridColumns = spec.gridColumns
+      if (spec.imageAspect) configFromSpec.imageAspect = spec.imageAspect
+      if (spec.limit) configFromSpec.limit = spec.limit
+      if (spec.text) {
+        if (spec.text.headline) configFromSpec.headline = spec.text.headline
+        if (spec.text.subtext) configFromSpec.subtext = spec.text.subtext
+        if (spec.text.buttonLabel) configFromSpec.buttonLabel = spec.text.buttonLabel
+        if (spec.text.emptyStateMessage) configFromSpec.emptyStateMessage = spec.text.emptyStateMessage
+      }
+
+      const ctx = buildSectionContext(
+        { sectionId: spec.sectionId, entityBinding: spec.entityBinding, config: configFromSpec },
+        entities,
+        tokens,
+        appName,
+      )
+      if (ctx === null) continue
+
+      renderedSections.push(renderer(ctx))
+    }
+
+    if (renderedSections.length === 0) {
+      console.warn(
+        `[page-assembler-v2] route "${route.path}" produced zero sections — empty shell`,
+      )
+    }
+
+    output[filePath] = buildRouteFile(route.path, renderedSections, routeId, componentName)
   }
 
   return output

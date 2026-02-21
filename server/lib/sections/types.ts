@@ -6,6 +6,12 @@
  * into complete route files.
  */
 import type { ThemeTokens } from '../themed-code-engine'
+import type { z } from 'zod'
+import type {
+  SectionVisualSpecSchema,
+  RouteSpecSchema,
+  PageCompositionPlanV2Schema,
+} from '../agents/schemas'
 
 // ---------------------------------------------------------------------------
 // Entity metadata (lighter than full RouteMeta — only what sections need)
@@ -188,3 +194,11 @@ export const SECTION_IDS = {
 } as const
 
 export type SectionId = (typeof SECTION_IDS)[keyof typeof SECTION_IDS]
+
+// ---------------------------------------------------------------------------
+// V2 composition types — inferred from Zod schemas in agents/schemas.ts
+// ---------------------------------------------------------------------------
+
+export type SectionVisualSpec = z.infer<typeof SectionVisualSpecSchema>
+export type RouteSpec = z.infer<typeof RouteSpecSchema>
+export type PageCompositionPlanV2 = z.infer<typeof PageCompositionPlanV2Schema>

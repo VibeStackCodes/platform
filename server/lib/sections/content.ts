@@ -29,7 +29,7 @@
  */
 
 import type { SectionRenderer, SectionOutput, SectionContext } from './types'
-import { animateEntrance, staggerChildren, cardHoverClass, cardClasses } from './primitives'
+import { animateEntrance, staggerChildren, cardHoverClass, cardClasses, resolveBg, resolveSpacing } from './primitives'
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -97,6 +97,8 @@ export const contentFeatured: SectionRenderer = (ctx: SectionContext): SectionOu
   const hover = cardHoverClass(ctx)
   const cardCls = cardClasses(ctx)
   const headline = (ctx.config.headline as string) || `Featured ${entityTitle}`
+  const bg = resolveBg(ctx.config)
+  const spacing = resolveSpacing(ctx.config)
 
   const imageBlock = imageCol
     ? `
@@ -111,7 +113,7 @@ export const contentFeatured: SectionRenderer = (ctx: SectionContext): SectionOu
 
   return {
     jsx: `
-      <section className="py-16 px-4" aria-label="Featured ${entityTitle}">
+      <section className="${spacing} px-4 ${bg}" aria-label="Featured ${entityTitle}">
         <div className="max-w-7xl mx-auto">
           <h2 className="text-2xl md:text-3xl font-bold text-foreground font-[family-name:var(--font-display)] mb-8">
             ${headline}
@@ -208,6 +210,8 @@ export const contentTestimonialsCarousel: SectionRenderer = (
   const items = configArray<TestimonialItem>(ctx, 'testimonials')
   const hover = cardHoverClass(ctx)
   const cardCls = cardClasses(ctx)
+  const bg = resolveBg(ctx.config)
+  const spacing = resolveSpacing(ctx.config)
 
   const testimonials: TestimonialItem[] =
     items.length > 0
@@ -256,7 +260,7 @@ export const contentTestimonialsCarousel: SectionRenderer = (
 
   return {
     jsx: `
-      <section className="py-16 px-4" aria-label="Testimonials">
+      <section className="${spacing} px-4 ${bg}" aria-label="Testimonials">
         <div className="max-w-7xl mx-auto">
           <div className="flex items-center justify-center gap-3 mb-8">
             <Quote className="size-6 text-primary/60" aria-hidden="true" />
@@ -288,6 +292,8 @@ export const contentTestimonialsWall: SectionRenderer = (ctx: SectionContext): S
   const items = configArray<TestimonialItem>(ctx, 'testimonials')
   const hover = cardHoverClass(ctx)
   const cardCls = cardClasses(ctx)
+  const bg = resolveBg(ctx.config)
+  const spacing = resolveSpacing(ctx.config)
 
   const testimonials: TestimonialItem[] =
     items.length > 0
@@ -348,7 +354,7 @@ export const contentTestimonialsWall: SectionRenderer = (ctx: SectionContext): S
 
   return {
     jsx: `
-      <section className="py-16 px-4 bg-muted/20" aria-label="Testimonials">
+      <section className="${spacing} px-4 ${bg}" aria-label="Testimonials">
         <div className="max-w-7xl mx-auto">
           <div className="flex items-center justify-center gap-3 mb-10">
             <Quote className="size-6 text-primary/60" aria-hidden="true" />
@@ -379,6 +385,8 @@ export const contentTestimonialsWall: SectionRenderer = (ctx: SectionContext): S
 export const contentStats: SectionRenderer = (ctx: SectionContext): SectionOutput => {
   const items = configArray<StatItem>(ctx, 'stats')
   const delays = staggerChildren(4, 0, 100)
+  const bg = resolveBg(ctx.config)
+  const spacing = resolveSpacing(ctx.config)
 
   const stats: StatItem[] =
     items.length > 0
@@ -417,7 +425,7 @@ export const contentStats: SectionRenderer = (ctx: SectionContext): SectionOutpu
 
   return {
     jsx: `
-      <section className="py-12 px-4 bg-muted/50" aria-label="Statistics">
+      <section className="${spacing} px-4 ${bg}" aria-label="Statistics">
         <div className="max-w-7xl mx-auto">
           <ul
             className="grid grid-cols-2 md:grid-cols-4 divide-x divide-border list-none"
@@ -439,6 +447,8 @@ export const contentStats: SectionRenderer = (ctx: SectionContext): SectionOutpu
 
 export const contentTimeline: SectionRenderer = (ctx: SectionContext): SectionOutput => {
   const items = configArray<MilestoneItem>(ctx, 'milestones')
+  const bg = resolveBg(ctx.config)
+  const spacing = resolveSpacing(ctx.config)
 
   const milestones: MilestoneItem[] =
     items.length > 0
@@ -505,7 +515,7 @@ export const contentTimeline: SectionRenderer = (ctx: SectionContext): SectionOu
 
   return {
     jsx: `
-      <section className="py-16 px-4" aria-label="Our story timeline">
+      <section className="${spacing} px-4 ${bg}" aria-label="Our story timeline">
         <div className="max-w-5xl mx-auto">
           <h2 className="text-2xl md:text-3xl font-bold text-foreground font-[family-name:var(--font-display)] mb-12 text-center">
             Our Journey
@@ -539,6 +549,8 @@ export const contentTimeline: SectionRenderer = (ctx: SectionContext): SectionOu
 
 export const contentFaq: SectionRenderer = (ctx: SectionContext): SectionOutput => {
   const items = configArray<FaqItem>(ctx, 'faqs')
+  const bg = resolveBg(ctx.config)
+  const spacing = resolveSpacing(ctx.config)
 
   const faqs: FaqItem[] =
     items.length > 0
@@ -578,7 +590,7 @@ export const contentFaq: SectionRenderer = (ctx: SectionContext): SectionOutput 
 
   return {
     jsx: `
-      <section className="py-16 px-4" aria-label="Frequently asked questions">
+      <section className="${spacing} px-4 ${bg}" aria-label="Frequently asked questions">
         <div className="max-w-3xl mx-auto">
           <h2 className="text-2xl md:text-3xl font-bold text-foreground font-[family-name:var(--font-display)] mb-10 text-center">
             Frequently Asked Questions
@@ -606,6 +618,8 @@ export const contentFeatures: SectionRenderer = (ctx: SectionContext): SectionOu
   const items = configArray<FeatureItem>(ctx, 'features')
   const hover = cardHoverClass(ctx)
   const cardCls = cardClasses(ctx)
+  const bg = resolveBg(ctx.config)
+  const spacing = resolveSpacing(ctx.config)
 
   const features: FeatureItem[] =
     items.length > 0
@@ -658,7 +672,7 @@ export const contentFeatures: SectionRenderer = (ctx: SectionContext): SectionOu
 
   return {
     jsx: `
-      <section className="py-16 px-4" aria-label="Features">
+      <section className="${spacing} px-4 ${bg}" aria-label="Features">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-12">
             <h2 className="text-2xl md:text-3xl font-bold text-foreground font-[family-name:var(--font-display)] mb-3">
@@ -691,6 +705,8 @@ export const contentTeam: SectionRenderer = (ctx: SectionContext): SectionOutput
   const items = configArray<TeamMember>(ctx, 'team')
   const hover = cardHoverClass(ctx)
   const cardCls = cardClasses(ctx)
+  const bg = resolveBg(ctx.config)
+  const spacing = resolveSpacing(ctx.config)
 
   const members: TeamMember[] =
     items.length > 0
@@ -732,7 +748,7 @@ export const contentTeam: SectionRenderer = (ctx: SectionContext): SectionOutput
 
   return {
     jsx: `
-      <section className="py-16 px-4" aria-label="Meet the team">
+      <section className="${spacing} px-4 ${bg}" aria-label="Meet the team">
         <div className="max-w-7xl mx-auto">
           <h2 className="text-2xl md:text-3xl font-bold text-foreground font-[family-name:var(--font-display)] mb-10 text-center">
             Meet the Team

@@ -19,6 +19,11 @@ import {
   emptyState,
   cardHoverClass,
   cardClasses,
+  resolveBg,
+  resolveSpacing,
+  resolveGridCols,
+  resolveCardVariant,
+  resolveImageAspect,
 } from './primitives'
 
 // ---------------------------------------------------------------------------
@@ -137,6 +142,8 @@ export const gridMasonry: SectionRenderer = (ctx: SectionContext): SectionOutput
   const src = imageSrc(ctx)
   const display = displayValue(ctx)
   const meta = metaBadges(ctx)
+  const bg = resolveBg(ctx.config)
+  const spacing = resolveSpacing(ctx.config)
 
   // Skeleton: 3-col masonry approximated as a 3-col grid of image cards
   const skeleton = cardSkeletonGrid(3, { rows: 2, hasImage: true })
@@ -148,7 +155,7 @@ export const gridMasonry: SectionRenderer = (ctx: SectionContext): SectionOutput
 
   const hasMotion = ctx.tokens.style.motion !== 'none'
 
-  const jsx = `<section className="py-12 px-4 md:px-8 bg-background" aria-label="${ctx.entitySlug ?? 'items'} gallery">
+  const jsx = `<section className="${spacing} px-4 md:px-8 ${bg}" aria-label="${ctx.entitySlug ?? 'items'} gallery">
   {isLoading ? (
     ${skeleton.jsx}
   ) : ${dataVar}.length === 0 ? (
@@ -215,6 +222,8 @@ export const gridBento: SectionRenderer = (ctx: SectionContext): SectionOutput =
   const display = displayValue(ctx)
   const meta = metaBadges(ctx)
   const hasImage = !!ctx.imageColumn
+  const bg = resolveBg(ctx.config)
+  const spacing = resolveSpacing(ctx.config)
 
   // Bento skeleton: 2 tall + 4 small approximated as 3-col with 2 rows
   const skeleton = cardSkeletonGrid(3, { rows: 2, hasImage: true })
@@ -224,7 +233,7 @@ export const gridBento: SectionRenderer = (ctx: SectionContext): SectionOutput =
     description: 'Items will appear here once added.',
   })
 
-  const jsx = `<section className="py-12 px-4 md:px-8 bg-background" aria-label="${ctx.entitySlug ?? 'items'} collection">
+  const jsx = `<section className="${spacing} px-4 md:px-8 ${bg}" aria-label="${ctx.entitySlug ?? 'items'} collection">
   {isLoading ? (
     ${skeleton.jsx}
   ) : ${dataVar}.length === 0 ? (
@@ -292,6 +301,12 @@ export const gridMagazine: SectionRenderer = (ctx: SectionContext): SectionOutpu
   const display = displayValue(ctx)
   const cols = (ctx.metadataColumns ?? []).slice(0, 2)
   const hasImage = !!ctx.imageColumn
+  const bg = resolveBg(ctx.config)
+  const spacing = resolveSpacing(ctx.config)
+  const gridCols = resolveGridCols(ctx.config)
+  const cardVariant = resolveCardVariant(ctx.config)
+  const imgAspect = resolveImageAspect(ctx.config)
+  const effectiveCardClass = ctx.config.cardVariant ? cardVariant : cardCls
 
   const metaBadgeCols = cols
     .map(
@@ -309,7 +324,7 @@ export const gridMagazine: SectionRenderer = (ctx: SectionContext): SectionOutpu
     description: 'Stories will appear here once published.',
   })
 
-  const jsx = `<section className="py-12 px-4 md:px-8 bg-background" aria-label="${ctx.entitySlug ?? 'items'} magazine">
+  const jsx = `<section className="${spacing} px-4 md:px-8 ${bg}" aria-label="${ctx.entitySlug ?? 'items'} magazine">
   {isLoading ? (
     <div className="space-y-8">
       ${featuredSkeleton.jsx}
@@ -329,7 +344,7 @@ export const gridMagazine: SectionRenderer = (ctx: SectionContext): SectionOutpu
             aria-label={${label}}
             className="group block"
           >
-            <Card className="${cardCls} ${hover} overflow-hidden p-0 shadow-lg hover:shadow-xl">
+            <Card className="${effectiveCardClass} ${hover} overflow-hidden p-0 shadow-lg hover:shadow-xl">
               ${hasImage ? `<div className="aspect-[21/9] overflow-hidden">
                 <img
                   src={\`${src}\`}
@@ -348,7 +363,7 @@ export const gridMagazine: SectionRenderer = (ctx: SectionContext): SectionOutpu
           </Link>
 
           {/* Remaining items in 2-col grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6" role="list">
+          <div className="grid ${gridCols} gap-6" role="list">
             {rest.map((${item}: Record<string, unknown>, _idx: number) => (
               <Link
                 key={String(${item}.id)}
@@ -358,15 +373,15 @@ export const gridMagazine: SectionRenderer = (ctx: SectionContext): SectionOutpu
                 style={{ animationDelay: \`\${_idx * 100}ms\` }}
                 role="listitem"
               >
-                <Card className="${cardCls} ${hover} overflow-hidden p-0 h-full shadow-md hover:shadow-lg">
-                  ${hasImage ? `<div className="aspect-video overflow-hidden">
+                <Card className="${effectiveCardClass} ${hover} overflow-hidden p-0 h-full shadow-md hover:shadow-lg">
+                  ${hasImage ? `<div className="${imgAspect} overflow-hidden">
                     <img
                       src={\`${src}\`}
                       alt={${label}}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                       loading="lazy"
                     />
-                  </div>` : '<div className="aspect-video bg-muted" />'}
+                  </div>` : `<div className="${imgAspect} bg-muted" />`}
                   <CardContent className="p-5">
                     <h3 className="text-lg font-semibold font-[family-name:var(--font-display)] mb-2 group-hover:text-primary transition-colors">${display}</h3>
                     <div className="flex flex-wrap gap-2">
@@ -413,6 +428,12 @@ export const gridCards3col: SectionRenderer = (ctx: SectionContext): SectionOutp
   const meta = metaBadges(ctx)
   const hasImage = !!ctx.imageColumn
   const displayCol = ctx.displayColumn ?? 'id'
+  const bg = resolveBg(ctx.config)
+  const spacing = resolveSpacing(ctx.config)
+  const gridCols = resolveGridCols(ctx.config)
+  const cardVariant = resolveCardVariant(ctx.config)
+  const imgAspect = resolveImageAspect(ctx.config)
+  const effectiveCardClass = ctx.config.cardVariant ? cardVariant : cardCls
 
   const skeleton = cardSkeletonGrid(3, { rows: 2, hasImage: !!ctx.imageColumn })
   const empty = emptyState({
@@ -421,7 +442,7 @@ export const gridCards3col: SectionRenderer = (ctx: SectionContext): SectionOutp
     description: 'Try a different search term.',
   })
 
-  const jsx = `<section className="py-12 px-6 bg-background" aria-label="${ctx.entitySlug ?? 'items'} list">
+  const jsx = `<section className="${spacing} px-6 ${bg}" aria-label="${ctx.entitySlug ?? 'items'} list">
   {/* Search bar */}
   <div className="mb-8 max-w-md relative">
     <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" aria-hidden="true" />
@@ -445,7 +466,7 @@ export const gridCards3col: SectionRenderer = (ctx: SectionContext): SectionOutp
       return _filtered.length === 0 ? (
         ${empty.jsx}
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6" role="list">
+        <div className="grid ${gridCols} gap-6" role="list">
           {_filtered.map((${item}: Record<string, unknown>, _idx: number) => (
             <Link
               key={String(${item}.id)}
@@ -455,8 +476,8 @@ export const gridCards3col: SectionRenderer = (ctx: SectionContext): SectionOutp
               style={{ animationDelay: \`\${Math.min(_idx, 5) * 100}ms\` }}
               role="listitem"
             >
-              <Card className="${cardCls} ${hover} overflow-hidden p-0 h-full flex flex-col shadow-md hover:shadow-lg">
-                ${hasImage ? `<div className="aspect-[4/3] overflow-hidden">
+              <Card className="${effectiveCardClass} ${hover} overflow-hidden p-0 h-full flex flex-col shadow-md hover:shadow-lg">
+                ${hasImage ? `<div className="${imgAspect} overflow-hidden">
                   <img
                     src={\`${src}\`}
                     alt={${label}}
@@ -513,6 +534,12 @@ export const gridHorizontal: SectionRenderer = (ctx: SectionContext): SectionOut
   const display = displayValue(ctx)
   const meta = metaBadges(ctx)
   const hasImage = !!ctx.imageColumn
+  const bg = resolveBg(ctx.config)
+  const spacing = resolveSpacing(ctx.config)
+  const gridCols = resolveGridCols(ctx.config)
+  const cardVariant = resolveCardVariant(ctx.config)
+  const imgAspect = resolveImageAspect(ctx.config)
+  const effectiveCardClass = ctx.config.cardVariant ? cardVariant : cardCls
 
   // Horizontal skeleton: a single row of 4 fixed-width skeleton cards
   const skeletonCards = Array.from(
@@ -530,7 +557,7 @@ export const gridHorizontal: SectionRenderer = (ctx: SectionContext): SectionOut
     description: 'Items will appear here once added.',
   })
 
-  const jsx = `<section className="py-12 bg-background" aria-label="${ctx.entitySlug ?? 'items'} browse">
+  const jsx = `<section className="${spacing} ${bg}" aria-label="${ctx.entitySlug ?? 'items'} browse">
   {isLoading ? (
     <div
       className="flex overflow-x-auto gap-4 px-6 pb-4"
@@ -558,15 +585,15 @@ export const gridHorizontal: SectionRenderer = (ctx: SectionContext): SectionOut
           style={{ animationDelay: \`\${Math.min(_idx, 5) * 80}ms\` }}
           role="listitem"
         >
-          <Card className="${cardCls} ${hover} overflow-hidden p-0 h-full flex flex-col shadow-md hover:shadow-lg">
-            ${hasImage ? `<div className="aspect-[4/3] overflow-hidden">
+          <Card className="${effectiveCardClass} ${hover} overflow-hidden p-0 h-full flex flex-col shadow-md hover:shadow-lg">
+            ${hasImage ? `<div className="${imgAspect} overflow-hidden">
               <img
                 src={\`${src}\`}
                 alt={${label}}
                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                 loading="lazy"
               />
-            </div>` : '<div className="aspect-[4/3] bg-muted" />'}
+            </div>` : `<div className="${imgAspect} bg-muted" />`}
             <CardContent className="p-4 flex flex-col gap-2 flex-1">
               <h3 className="font-semibold font-[family-name:var(--font-display)] text-foreground group-hover:text-primary transition-colors leading-snug text-sm">${display}</h3>
               ${meta ? `<div className="flex flex-wrap gap-1 mt-auto">
@@ -607,6 +634,8 @@ export const gridTable: SectionRenderer = (ctx: SectionContext): SectionOutput =
   const displayCol = ctx.displayColumn ?? 'id'
   const cols = (ctx.metadataColumns ?? []).slice(0, 3)
   const radius = cardRadius(ctx)
+  const bg = resolveBg(ctx.config)
+  const spacing = resolveSpacing(ctx.config)
 
   // Build TableHead cells
   const thCells = [
@@ -653,7 +682,7 @@ export const gridTable: SectionRenderer = (ctx: SectionContext): SectionOutput =
     description: 'Records will appear here once added.',
   })
 
-  const jsx = `<section className="py-12 px-6 bg-background" aria-label="${ctx.entitySlug ?? 'items'} table">
+  const jsx = `<section className="${spacing} px-6 ${bg}" aria-label="${ctx.entitySlug ?? 'items'} table">
   <div className="${radius} border border-border overflow-hidden shadow-sm">
     <div className="overflow-x-auto">
       {isLoading ? (
@@ -718,6 +747,10 @@ export const gridImageOverlay: SectionRenderer = (ctx: SectionContext): SectionO
   const src = imageSrc(ctx)
   const display = displayValue(ctx)
   const meta = metaSpans(ctx)
+  const bg = resolveBg(ctx.config)
+  const spacing = resolveSpacing(ctx.config)
+  const gridCols = resolveGridCols(ctx.config)
+  const imgAspect = resolveImageAspect(ctx.config)
 
   const skeleton = cardSkeletonGrid(4, { rows: 2, hasImage: true })
   const empty = emptyState({
@@ -726,13 +759,13 @@ export const gridImageOverlay: SectionRenderer = (ctx: SectionContext): SectionO
     description: 'Gallery items will appear here once added.',
   })
 
-  const jsx = `<section className="py-12 px-6 bg-background" aria-label="${ctx.entitySlug ?? 'items'} gallery">
+  const jsx = `<section className="${spacing} px-6 ${bg}" aria-label="${ctx.entitySlug ?? 'items'} gallery">
   {isLoading ? (
     ${skeleton.jsx}
   ) : ${dataVar}.length === 0 ? (
     ${empty.jsx}
   ) : (
-    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2" role="list">
+    <div className="grid ${gridCols} gap-2" role="list">
       {${dataVar}.map((${item}: Record<string, unknown>, _idx: number) => (
         <Link
           key={String(${item}.id)}
@@ -742,7 +775,7 @@ export const gridImageOverlay: SectionRenderer = (ctx: SectionContext): SectionO
           style={{ animationDelay: \`\${Math.min(_idx, 7) * 60}ms\` }}
           role="listitem"
         >
-          <div className="aspect-[4/3] overflow-hidden">
+          <div className="${imgAspect} overflow-hidden">
             <img
               src={\`${src}\`}
               alt={${label}}
@@ -792,6 +825,11 @@ export const gridListEditorial: SectionRenderer = (ctx: SectionContext): Section
   const display = displayValue(ctx)
   const cols = (ctx.metadataColumns ?? []).slice(0, 3)
   const hasImage = !!ctx.imageColumn
+  const bg = resolveBg(ctx.config)
+  const spacing = resolveSpacing(ctx.config)
+  const cardVariant = resolveCardVariant(ctx.config)
+  const imgAspect = resolveImageAspect(ctx.config)
+  const effectiveCardClass = ctx.config.cardVariant ? cardVariant : cardCls
 
   const metaBadgeCols = cols
     .map(
@@ -825,7 +863,7 @@ export const gridListEditorial: SectionRenderer = (ctx: SectionContext): Section
     description: 'Posts will appear here once published.',
   })
 
-  const jsx = `<section className="py-12 px-6 bg-background" aria-label="${ctx.entitySlug ?? 'items'} editorial list">
+  const jsx = `<section className="${spacing} px-6 ${bg}" aria-label="${ctx.entitySlug ?? 'items'} editorial list">
   {isLoading ? (
     <div role="status" aria-busy="true" aria-label="Loading content">
       ${skeletonRows}
@@ -845,11 +883,11 @@ export const gridListEditorial: SectionRenderer = (ctx: SectionContext): Section
             aria-label={${label}}
             className="block"
           >
-            <Card className="${cardCls} ${hover} border-0 shadow-none rounded-none py-8 hover:bg-muted/30 transition-colors duration-200">
+            <Card className="${effectiveCardClass} ${hover} border-0 shadow-none rounded-none py-8 hover:bg-muted/30 transition-colors duration-200">
               <CardContent className="p-0 flex gap-6">
                 ${hasImage ? `{/* Image */}
                 <div className="flex-shrink-0 w-1/3 max-w-[240px]">
-                  <div className="aspect-[4/3] overflow-hidden ${radius}">
+                  <div className="${imgAspect} overflow-hidden ${radius}">
                     <img
                       src={\`${src}\`}
                       alt={${label}}

@@ -15,7 +15,7 @@
  */
 
 import type { SectionRenderer, SectionOutput, SectionContext } from './types'
-import { animateEntrance } from './primitives'
+import { animateEntrance, resolveBg, resolveSpacing } from './primitives'
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -131,6 +131,8 @@ export const heroSplit: SectionRenderer = (ctx: SectionContext): SectionOutput =
   const ctaPath = firstPublicPath(ctx)
   const radius = ctx.tokens.style.borderRadius
   const motion = hasMotion(ctx)
+  const bg = resolveBg(ctx.config)
+  const spacing = resolveSpacing(ctx.config)
 
   const textColClass = motion
     ? animateEntrance(ctx, { direction: 'left', distance: 4, durationMs: 700, delayMs: 0 })
@@ -147,8 +149,8 @@ export const heroSplit: SectionRenderer = (ctx: SectionContext): SectionOutput =
 
   return {
     jsx: `
-      <section id="hero" className="bg-background border-b border-border" aria-label="Hero">
-        <div className="container mx-auto px-6 py-16 md:py-24">
+      <section id="hero" className="${bg} border-b border-border" aria-label="Hero">
+        <div className="container mx-auto px-6 ${spacing}">
           <div className="grid md:grid-cols-2 gap-10 md:gap-16 items-center">
 
             {/* Left — text column */}
@@ -205,6 +207,8 @@ export const heroCentered: SectionRenderer = (ctx: SectionContext): SectionOutpu
   const ctaPath = firstPublicPath(ctx)
   const radius = ctx.tokens.style.borderRadius
   const motion = hasMotion(ctx)
+  const bg = resolveBg(ctx.config)
+  const spacing = resolveSpacing(ctx.config)
 
   const headlineClass = motion
     ? animateEntrance(ctx, { direction: 'bottom', distance: 4, durationMs: 700, delayMs: 0 })
@@ -221,8 +225,8 @@ export const heroCentered: SectionRenderer = (ctx: SectionContext): SectionOutpu
 
   return {
     jsx: `
-      <section id="hero" className="bg-accent/5 border-b border-border" aria-label="Hero">
-        <div className="container mx-auto px-6 py-20 md:py-28 flex flex-col items-center text-center gap-6">
+      <section id="hero" className="${bg} border-b border-border" aria-label="Hero">
+        <div className="container mx-auto px-6 ${spacing} flex flex-col items-center text-center gap-6">
 
           {/* Text block */}
           <div className="max-w-2xl flex flex-col items-center gap-5">
@@ -351,6 +355,7 @@ export const heroGradient: SectionRenderer = (ctx: SectionContext): SectionOutpu
   const cta = ctx.tokens.textSlots.cta_label
   const ctaPath = firstPublicPath(ctx)
   const motion = hasMotion(ctx)
+  const spacing = resolveSpacing(ctx.config)
 
   // Animate the gradient via a CSS keyframe class when motion is on.
   const gradientAnimClass = motion
@@ -394,7 +399,7 @@ export const heroGradient: SectionRenderer = (ctx: SectionContext): SectionOutpu
           aria-hidden="true"
         />
 
-        <div className="relative container mx-auto px-6 py-24 md:py-36 flex flex-col items-center text-center gap-6">
+        <div className="relative container mx-auto px-6 ${spacing} flex flex-col items-center text-center gap-6">
           <span className="inline-block text-xs font-semibold tracking-[0.2em] uppercase text-primary/70 mb-2 ${badgeClass}">
             ${ctx.appName}
           </span>
@@ -431,6 +436,8 @@ export const heroEditorial: SectionRenderer = (ctx: SectionContext): SectionOutp
   const ctaPath = firstPublicPath(ctx)
   const radius = ctx.tokens.style.borderRadius
   const motion = hasMotion(ctx)
+  const bg = resolveBg(ctx.config)
+  const spacing = resolveSpacing(ctx.config)
 
   const textColClass = motion
     ? animateEntrance(ctx, { direction: 'left', distance: 4, durationMs: 700, delayMs: 0 })
@@ -452,14 +459,14 @@ export const heroEditorial: SectionRenderer = (ctx: SectionContext): SectionOutp
     jsx: `
       <section
         id="hero"
-        className="bg-background border-b border-border"
+        className="${bg} border-b border-border"
         aria-label="Hero"
       >
         <div className="container mx-auto px-6">
           <div className="grid md:grid-cols-[3fr_2fr] gap-0 md:gap-12 items-stretch min-h-screen md:min-h-[640px]">
 
             {/* Left — large serif headline column */}
-            <div className="flex flex-col justify-center py-16 md:py-24 pr-0 md:pr-10 border-r border-border ${textColClass}">
+            <div className="flex flex-col justify-center ${spacing} pr-0 md:pr-10 border-r border-border ${textColClass}">
               <p className="text-[10px] font-semibold tracking-[0.3em] uppercase text-muted-foreground mb-8">
                 ${ctx.appName}
               </p>
