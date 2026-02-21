@@ -214,6 +214,7 @@ describe('assembleApp — crud archetype includes Supabase', () => {
 
 describe('assembleApp — auth.required=true generates login page', () => {
   const authSpec: Partial<CreativeSpec> = {
+    archetype: 'content',
     auth: {
       required: true,
       publicRoutes: ['/auth/login'],
@@ -320,10 +321,12 @@ describe('assembleApp — index.css contains palette colors', () => {
 // ---------------------------------------------------------------------------
 
 describe('assembleApp — routeTree.gen.ts imports sitemap pages', () => {
-  it('imports the Homepage component', () => {
+  it('imports the index route using fileNameToRouteVar', () => {
     const files = assembleApp(makeInput())
     const routeTree = files.find((f) => f.path === 'src/routeTree.gen.ts')
-    expect(routeTree!.content).toContain('Homepage')
+    // fileNameToRouteVar('routes/index.tsx') → 'Index'
+    expect(routeTree!.content).toContain('IndexImport')
+    expect(routeTree!.content).toContain('IndexRoute')
   })
 
   it('imports all pages from a multi-page sitemap', () => {
@@ -352,8 +355,9 @@ describe('assembleApp — routeTree.gen.ts imports sitemap pages', () => {
 
     const files = assembleApp({ spec, generatedPages: makePages(), appName: 'TestApp' })
     const routeTree = files.find((f) => f.path === 'src/routeTree.gen.ts')
-    expect(routeTree!.content).toContain('Homepage')
-    expect(routeTree!.content).toContain('AboutPage')
+    // fileNameToRouteVar('routes/index.tsx') → 'Index', routes/about/index.tsx → 'AboutIndex'
+    expect(routeTree!.content).toContain('IndexImport')
+    expect(routeTree!.content).toContain('AboutIndexImport')
     expect(routeTree!.content).toContain('./routes/index')
     expect(routeTree!.content).toContain('./routes/about/index')
   })
@@ -376,11 +380,13 @@ describe('assembleApp — routeTree.gen.ts imports sitemap pages', () => {
     const files = assembleApp({ spec, generatedPages: makePages(), appName: 'TestApp' })
     const routeTree = files.find((f) => f.path === 'src/routeTree.gen.ts')
     expect(routeTree!.content).toContain('./routes/recipes/$id')
-    expect(routeTree!.content).toContain('RecipeDetailPage')
+    // fileNameToRouteVar('routes/recipes/$id.tsx') → 'RecipesId'
+    expect(routeTree!.content).toContain('RecipesIdImport')
   })
 
-  it('includes auth login import when auth.required=true', () => {
+  it('includes auth login import when auth.required=true (non-static)', () => {
     const spec = makeSpec({
+      archetype: 'content',
       auth: { required: true, publicRoutes: ['/auth/login'], privateRoutes: ['*'], loginRoute: '/auth/login' },
     })
     const files = assembleApp({ spec, generatedPages: makePages(), appName: 'TestApp' })
@@ -484,6 +490,7 @@ describe('assembleApp — layer ordering', () => {
 
   it('src/routes/auth/login.tsx layer is higher than src/index.css layer', () => {
     const spec = makeSpec({
+      archetype: 'content',
       auth: { required: true, publicRoutes: ['/auth/login'], privateRoutes: ['*'], loginRoute: '/auth/login' },
     })
     const files = assembleApp({ spec, generatedPages: makePages(), appName: 'TestApp' })
@@ -630,6 +637,7 @@ describe('assembleApp — isLLMSlot flag', () => {
 
   it('src/routes/auth/login.tsx has isLLMSlot=false', () => {
     const spec = makeSpec({
+      archetype: 'content',
       auth: { required: true, publicRoutes: ['/auth/login'], privateRoutes: ['*'], loginRoute: '/auth/login' },
     })
     const files = assembleApp({ spec, generatedPages: makePages(), appName: 'TestApp' })

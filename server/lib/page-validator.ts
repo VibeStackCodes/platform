@@ -48,40 +48,50 @@ const VALID_PACKAGES = new Set([
   'react-dom/client',
   'lucide-react',
   '@supabase/supabase-js',
+  'clsx',
+  'tailwind-merge',
+  'class-variance-authority',
+  'radix-ui',
+  'sonner',
+  'cmdk',
+  'react-hook-form',
 ])
 
 // shadcn/ui component file names (kebab-case keys under @/components/ui/)
+// Synced with snapshot/ui-kit/ contents — run `ls snapshot/ui-kit/*.tsx | sed 's/.*\///' | sed 's/\.tsx//'` to verify
 const VALID_SHADCN_COMPONENTS = new Set([
   'accordion',
   'alert',
   'avatar',
   'badge',
-  'breadcrumb',
   'button',
-  'calendar',
+  'button-group',
   'card',
+  'carousel',
   'checkbox',
   'collapsible',
+  'command',
   'dialog',
   'dropdown-menu',
   'form',
+  'hover-card',
   'input',
+  'input-group',
   'label',
-  'navigation-menu',
-  'pagination',
   'popover',
   'progress',
+  'radio-group',
   'scroll-area',
   'select',
   'separator',
   'sheet',
   'skeleton',
-  'slider',
+  'sonner',
+  'spinner',
   'switch',
   'table',
   'tabs',
   'textarea',
-  'toggle',
   'tooltip',
 ])
 
@@ -178,7 +188,22 @@ function internalRouteExists(to: string, validRoutes: string[]): boolean {
     r.replace(/\$[^/]+/g, '$param')
 
   const normTo = normalise(to)
-  return validRoutes.some((r) => normalise(r) === normTo)
+  if (validRoutes.some((r) => normalise(r) === normTo)) return true
+
+  // Check if the link matches a parametric route pattern.
+  // e.g., "/blog/some-slug" should match "/blog/$slug"
+  const stripTrailing = (s: string) =>
+    s.length > 1 && s.endsWith('/') ? s.slice(0, -1) : s
+  const toSegs = stripTrailing(to).split('/')
+  for (const route of validRoutes) {
+    const routeSegs = stripTrailing(route).split('/')
+    if (routeSegs.length !== toSegs.length) continue
+    const matches = routeSegs.every(
+      (seg, i) => seg.startsWith('$') || seg === toSegs[i],
+    )
+    if (matches) return true
+  }
+  return false
 }
 
 // ============================================================================
@@ -367,7 +392,7 @@ function checkLinks(
   errors: ValidationError[],
 ): void {
   const checkTarget = (raw: string) => {
-    // Allow non-internal links
+    // Allow non-internal links and hash anchors
     if (
       raw.startsWith('https://') ||
       raw.startsWith('http://') ||
@@ -377,6 +402,9 @@ function checkLinks(
     ) {
       return
     }
+
+    // Allow hash links on internal routes (e.g. "/#neighborhoods")
+    if (raw.includes('#')) return
 
     // Must start with '/' to be treated as an internal route
     if (!raw.startsWith('/')) return
@@ -546,6 +574,8 @@ export function validateGeneratedApp(input: ValidatorInput): ValidationResult {
 
   for (const [filePath, content] of input.files) {
     if (!filePath.endsWith('.tsx') && !filePath.endsWith('.ts')) continue
+    // Skip build-config files — they use Node/Vite APIs not in the app runtime
+    if (filePath === 'vite.config.ts' || filePath === 'tsconfig.json') continue
 
     checkImports(filePath, content, input, errors)
     checkLinks(filePath, content, input.validRoutes, errors)

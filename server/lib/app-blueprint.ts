@@ -692,9 +692,7 @@ export async function contractToBlueprintCreative(input: BlueprintInput): Promis
   // 3. Generate pages in parallel
   const pageResult = await generatePages({
     spec,
-    contract: mergedContract,
-    supabaseUrl: '__PLACEHOLDER__',
-    supabaseAnonKey: '__PLACEHOLDER__',
+    ...(spec.archetype !== 'static' ? { contract: mergedContract } : {}),
   })
   const generatedPages = pageResult.pages
   console.log(`[blueprint:creative] Generated ${generatedPages.length} pages`)
@@ -704,6 +702,7 @@ export async function contractToBlueprintCreative(input: BlueprintInput): Promis
     spec,
     generatedPages,
     appName: input.appName,
+    includeUiKit: true,
   })
   console.log(`[blueprint:creative] Assembled ${assembledFiles.length} files`)
 

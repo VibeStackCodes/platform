@@ -14,6 +14,8 @@
  * Everything here is purely deterministic — zero LLM calls.
  */
 
+import { readdirSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import type { BlueprintFile } from './app-blueprint'
 import type { CreativeSpec } from './agents/schemas'
 
@@ -32,6 +34,8 @@ export interface AssemblyInput {
   spec: CreativeSpec
   generatedPages: GeneratedPage[]
   appName: string
+  /** When true, include the shadcn/ui-kit component files in the assembled output */
+  includeUiKit?: boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -85,7 +89,12 @@ function fileNameToRouteVar(fileName: string): string {
     .map((seg) => {
       // $slug → Slug, _authenticated → Authenticated, index → Index
       const clean = seg.replace(/^[$_]/, '')
-      return clean.charAt(0).toUpperCase() + clean.slice(1)
+      // Convert hyphens and other non-alphanumeric chars to camelCase
+      // "market-outlook-2026" → "MarketOutlook2026"
+      return clean
+        .split(/[-_.]+/)
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+        .join('')
     })
     .join('')
 }
@@ -156,6 +165,20 @@ function generateRouteTree(spec: CreativeSpec): string {
     )
 
     childrenList.push(`  ${routeVar}`)
+  }
+
+  // Add auth login route when auth is required and archetype is not static
+  if (spec.auth.required && spec.archetype !== 'static') {
+    const authVar = 'AuthLogin'
+    importLines.push(`import { Route as ${authVar}Import } from './routes/auth/login'`)
+    constLines.push(
+      `const ${authVar}Route = ${authVar}Import.update({` +
+        ` id: '/auth/login',` +
+        ` path: '/auth/login',` +
+        ` getParentRoute: () => rootRoute,` +
+        ` } as any)`,
+    )
+    childrenList.push(`  ${authVar}Route`)
   }
 
   return [
@@ -653,6 +676,37 @@ function generateRootLayout(spec: CreativeSpec): string {
 }
 
 // ---------------------------------------------------------------------------
+// ui-kit file loader
+// ---------------------------------------------------------------------------
+
+/**
+ * Read all shadcn/ui component files from snapshot/ui-kit/ and return them
+ * as BlueprintFile[] ready to be included in the assembled app output.
+ *
+ * Routes utils.ts → src/lib/utils.ts; all .tsx files → src/components/ui/{name}.
+ */
+export function getUiKitFiles(): BlueprintFile[] {
+  const uiKitDir = join(import.meta.dirname, '../../snapshot/ui-kit')
+  const files: BlueprintFile[] = []
+
+  try {
+    const entries = readdirSync(uiKitDir)
+    for (const entry of entries) {
+      if (!entry.endsWith('.tsx') && !entry.endsWith('.ts')) continue
+      const content = readFileSync(join(uiKitDir, entry), 'utf-8')
+      const path = entry === 'utils.ts'
+        ? 'src/lib/utils.ts'
+        : `src/components/ui/${entry}`
+      files.push({ path, content, layer: 1, isLLMSlot: false })
+    }
+  } catch {
+    // ui-kit dir not found — return empty (tests may not have snapshot/)
+  }
+
+  return files
+}
+
+// ---------------------------------------------------------------------------
 // Main assembler
 // ---------------------------------------------------------------------------
 
@@ -734,9 +788,16 @@ export function assembleApp(input: AssemblyInput): BlueprintFile[] {
     })
   }
 
-  // ---- Layer 4: auth routes ----
+  // ---- Layer 3.5: ui-kit components (if includeUiKit) ----
 
-  if (spec.auth.required) {
+  if (input.includeUiKit) {
+    files.push(...getUiKitFiles())
+  }
+
+  // ---- Layer 4: auth routes ----
+  // Skip auth pages for static archetype — no supabase, no auth
+
+  if (spec.auth.required && spec.archetype !== 'static') {
     files.push({
       path: 'src/routes/auth/login.tsx',
       content: generateLoginPage(spec, appName),

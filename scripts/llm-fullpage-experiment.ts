@@ -21,7 +21,7 @@
  *   bun scripts/llm-fullpage-experiment.ts --keep             # keep /tmp dirs
  */
 
-import { writeFileSync, mkdirSync } from 'node:fs'
+import { writeFileSync, mkdirSync, readdirSync, readFileSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { execFileSync } from 'node:child_process'
 
@@ -35,11 +35,13 @@ const PRICING = {
   'gpt-5.2-codex': { input: 2.50, output: 10.0 },
 } as const
 
-const DEFAULT_PROMPT = `Build a recipe website with a public blog and authoring admin.
-Recipes have categories, ingredients, and step-by-step instructions.
-The homepage should showcase featured recipes, browse-by-category,
-a testimonials section, newsletter signup, and a blog/journal section.
-It should feel like a premium culinary magazine — warm, editorial, distinctive.`
+const DEFAULT_PROMPT = `Build a real estate agency landing page.
+The homepage should have a hero section with a search bar, featured property listings,
+neighborhood guides, agent profiles, testimonials from happy homebuyers,
+a "Why choose us" section, and a newsletter signup. Include pages for
+About Us, Our Properties (gallery with static listings), Contact, and Blog
+with 3-4 sample articles. Everything is static — no database, no admin.
+It should feel premium, trustworthy, and modern.`
 
 // ---------------------------------------------------------------------------
 // CLI args
@@ -179,9 +181,6 @@ async function main() {
   const t4 = Date.now()
   const pageResult = await generatePages({
     spec,
-    contract: mergedContract,
-    supabaseUrl: 'https://placeholder.supabase.co',
-    supabaseAnonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.placeholder',
   })
   const generatedPages = pageResult.pages
   trackUsage('page-generation', 'gpt-5.2-codex', pageResult.usage.inputTokens, pageResult.usage.outputTokens, Date.now() - t4)
@@ -198,6 +197,7 @@ async function main() {
     spec,
     generatedPages,
     appName: analysisResult.appName,
+    includeUiKit: true,
   })
 
   // Write all assembled files to tmpDir
@@ -234,11 +234,7 @@ async function main() {
     '  <script type="module" src="/src/main.tsx"></script>',
     '</body>', '</html>',
   ].join('\n'))
-  writeFileSync(join(tmpDir, '.env'), [
-    'VITE_SUPABASE_URL=https://placeholder.supabase.co',
-    'VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.placeholder',
-    '',
-  ].join('\n'))
+  // No .env needed for static apps
 
   // Symlink node_modules from project root for tsc validation
   const projectRoot = join(import.meta.dirname, '..')
@@ -248,22 +244,28 @@ async function main() {
     /* ignore */
   }
 
-  // Copy shadcn/ui components
-  log('\n  Copying shadcn components...')
-  const projectUi = join(import.meta.dirname, '..', 'src', 'components', 'ui')
+  // Copy shadcn/ui components from snapshot/ui-kit/
+  log('\n  Copying shadcn components from snapshot/ui-kit/...')
+  const uiKitSrc = join(import.meta.dirname, '..', 'snapshot', 'ui-kit')
   const uiDest = join(tmpDir, 'src', 'components', 'ui')
+  const libDest = join(tmpDir, 'src', 'lib')
   mkdirSync(uiDest, { recursive: true })
+  mkdirSync(libDest, { recursive: true })
+
   try {
-    execFileSync('cp', ['-r', `${projectUi}/`, uiDest])
-    log('  Copied shadcn components from project src/')
-  } catch {
-    const uiSrc = join(import.meta.dirname, '..', 'snapshot', 'warmup-scaffold', 'src', 'components', 'ui')
-    try {
-      execFileSync('cp', ['-r', `${uiSrc}/`, uiDest])
-      log('  Copied shadcn components from snapshot/')
-    } catch {
-      log('  WARNING: Could not copy shadcn components')
+    const entries = readdirSync(uiKitSrc)
+    for (const entry of entries) {
+      if (!entry.endsWith('.tsx') && !entry.endsWith('.ts')) continue
+      const fileContent = readFileSync(join(uiKitSrc, entry), 'utf-8')
+      if (entry === 'utils.ts') {
+        writeFileSync(join(libDest, 'utils.ts'), fileContent)
+      } else {
+        writeFileSync(join(uiDest, entry), fileContent)
+      }
     }
+    log(`  Copied ${entries.filter(e => e.endsWith('.tsx') || e.endsWith('.ts')).length} ui-kit files`)
+  } catch (err) {
+    log(`  WARNING: Could not copy ui-kit: ${err}`)
   }
 
   // --- Phase 6: Validation ---

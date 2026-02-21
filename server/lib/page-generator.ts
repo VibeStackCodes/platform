@@ -17,7 +17,7 @@
 import { generateText } from 'ai'
 import { createHeliconeProvider, PIPELINE_MODELS } from './agents/provider'
 import type { CreativeSpec } from './agents/schemas'
-import { getCondensedDesignRules } from './design-knowledge'
+import { getStaticDesignRules } from './design-knowledge'
 import type { SchemaContract } from './schema-contract'
 
 export interface GeneratedPage {
@@ -33,11 +33,8 @@ export interface GeneratedPage {
 
 export interface PageGeneratorInput {
   spec: CreativeSpec
-  contract: SchemaContract
-  /** Placeholder Supabase URL for queries */
-  supabaseUrl: string
-  /** Placeholder anon key */
-  supabaseAnonKey: string
+  /** Required for non-static archetypes; omit for static apps */
+  contract?: SchemaContract
 }
 
 // ---------------------------------------------------------------------------
@@ -63,7 +60,7 @@ export async function generatePages(input: PageGeneratorInput): Promise<PageGene
   const { spec, contract } = input
 
   const results = await Promise.all(
-    spec.sitemap.map((page) => generateSinglePage(page, spec, contract)),
+    spec.sitemap.map((page) => generateSinglePage(page, spec, contract ?? null)),
   )
 
   const usage = results.reduce(
@@ -87,7 +84,7 @@ export async function generatePages(input: PageGeneratorInput): Promise<PageGene
 async function generateSinglePage(
   page: CreativeSpec['sitemap'][number],
   spec: CreativeSpec,
-  contract: SchemaContract,
+  contract: SchemaContract | null,
 ): Promise<GeneratedPage & { inputTokens: number; outputTokens: number }> {
   const systemPrompt = buildPageGenSystemPrompt(spec)
   const userPrompt = buildPageGenUserPrompt(page, spec, contract)
@@ -117,32 +114,102 @@ async function generateSinglePage(
 // Internal: system prompt
 // ---------------------------------------------------------------------------
 
-function buildPageGenSystemPrompt(spec: CreativeSpec): string {
+/**
+ * Build the system prompt for the LLM page generator.
+ *
+ * Exported so tests can validate the prompt's closed vocabulary, forbidden
+ * section, and absence of Supabase / TanStack Query references.
+ */
+export function buildPageGenSystemPrompt(spec: CreativeSpec): string {
   return `You are an expert React developer generating a complete TanStack Router page file (.tsx).
 
 ## Output Format
 Output ONLY the complete .tsx file content. No markdown, no explanation, no code fences.
 
-## Technical Stack
-- React 19 with TypeScript
-- TanStack Router (createFileRoute)
-- TanStack Query (useQuery) for data fetching — ONLY if dataRequirements !== 'none'
-- shadcn/ui components (import from @/components/ui/{name})
-- Lucide React icons (import from lucide-react)
-- Tailwind CSS with tw-animate-css animation classes
-- Supabase JS client (import supabase from @/lib/supabase)
+## CLOSED VOCABULARY — Allowed Imports (EXHAUSTIVE)
+
+You may ONLY import from the modules listed below. Every allowed export name is listed.
+If a module or export is not listed here, you MUST NOT use it.
+
+### React
+\`\`\`tsx
+import { useState, useEffect, useCallback, useMemo, useRef, Fragment } from 'react'
+\`\`\`
+
+### TanStack Router
+\`\`\`tsx
+import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
+\`\`\`
+
+### Utility
+\`\`\`tsx
+import { cn } from '@/lib/utils'
+\`\`\`
+
+### Lucide Icons (any icon name — tree-shakeable, all 1000+ icons available)
+\`\`\`tsx
+import { ArrowRight, Star, Heart, /* any valid lucide icon name */ } from 'lucide-react'
+\`\`\`
+
+### shadcn/ui Components (EXACT exports listed — do NOT import sub-exports not listed)
+\`\`\`tsx
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
+import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from '@/components/ui/carousel'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Progress } from '@/components/ui/progress'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Separator } from '@/components/ui/separator'
+import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Switch } from '@/components/ui/switch'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Textarea } from '@/components/ui/textarea'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+\`\`\`
+
+## FORBIDDEN — Do NOT use any of these
+
+- Any database client, data-fetching library, or server communication library
+- Any data-fetching or server-state hook (only useState/useEffect from the CLOSED VOCABULARY)
+- Form validation libraries (no schema validators, no form libraries)
+- \`fetch()\`, \`window.location\`, \`document.querySelector()\`
+- Any npm package not listed in the CLOSED VOCABULARY above
+- Custom hooks, custom context providers
+- Inline \`<style>\` tags (use Tailwind only)
+- Importing from any path not starting with \`@/components/ui/\`, \`@/lib/\`, \`lucide-react\`, \`react\`, or \`@tanstack/react-router\`
+
+ONLY import from the CLOSED VOCABULARY — anything else will cause a build failure.
+
+## STATIC CONTENT RULE
+
+ALL content is static — hardcode text, lists, images, and cards directly in JSX.
+Use placeholder text that sounds real (not "Lorem ipsum").
+For images, use placeholder URLs like \`https://placehold.co/600x400\` with descriptive alt text.
+No data fetching, no API calls, no database queries.
 
 ## Route File Structure
 \`\`\`tsx
 import { createFileRoute } from '@tanstack/react-router'
-// ... other imports
+// ... other imports from CLOSED VOCABULARY only
 
 export const Route = createFileRoute('{fileRoute}')({
   component: {ComponentName},
 })
 
 function {ComponentName}() {
-  // component body
+  // component body — static content only
   return (...)
 }
 \`\`\`
@@ -156,7 +223,7 @@ function {ComponentName}() {
 - Motion: ${spec.visualDna.motionPreset} — if not 'none', use tw-animate-css classes (animate-in, fade-in, slide-in-from-bottom-4, duration-500)
 
 ## Design Rules
-${getCondensedDesignRules()}
+${getStaticDesignRules()}
 
 ## Mood/Aesthetic
 ${spec.visualDna.moodBoard}
@@ -164,19 +231,12 @@ ${spec.visualDna.moodBoard}
 ## Critical Rules
 1. Do NOT generate navigation or footer — these are in __root.tsx
 2. Use CSS variable colors ONLY (bg-primary, not #hex)
-3. For data pages: always include loading skeleton and empty state
-4. All images: alt text required, aspect ratio classes, object-cover
-5. Touch targets: min-h-[44px] on all interactive elements
-6. Use Link from @tanstack/react-router for internal navigation
-7. Supabase queries go through the imported supabase client:
-   const { data, isLoading } = useQuery({
-     queryKey: ['{table}'],
-     queryFn: async () => {
-       const { data, error } = await supabase.from('{table}').select('{columns}').order('created_at', { ascending: false })
-       if (error) throw error
-       return data
-     },
-   })`
+3. All images: alt text required, aspect ratio classes, object-cover
+4. Touch targets: min-h-[44px] on all interactive elements
+5. Use Link from @tanstack/react-router for internal navigation
+6. ALL content is hardcoded — no data fetching, no API calls, no database queries
+7. ONLY import from the CLOSED VOCABULARY — anything else will cause a build failure
+8. Component function name MUST NOT conflict with any imported icon name. If you import { Home } from lucide-react, do NOT name your function "Home" — use "Homepage" or "{ComponentName}" instead. Rename the icon import if needed: import { Home as HomeIcon } from 'lucide-react'.`
 }
 
 // ---------------------------------------------------------------------------
@@ -186,7 +246,7 @@ ${spec.visualDna.moodBoard}
 function buildPageGenUserPrompt(
   page: CreativeSpec['sitemap'][number],
   spec: CreativeSpec,
-  contract: SchemaContract,
+  _contract: SchemaContract | null,
 ): string {
   // Derive the createFileRoute path: normalise trailing slashes but preserve
   // the root "/" and TanStack Router's dynamic segment convention ($param).
@@ -200,24 +260,8 @@ Component: ${page.componentName}
 createFileRoute path: '${fileRoutePath}'
 
 Purpose: ${page.purpose}
-Data: ${page.dataRequirements}
+Content: ALL STATIC — hardcode everything directly in JSX
 `
-
-  if (page.entities?.length && page.dataRequirements !== 'none') {
-    prompt += `\nDatabase Tables:\n`
-    for (const entityName of page.entities) {
-      const table = contract.tables.find((t) => t.name === entityName)
-      if (table) {
-        const cols = table.columns
-          .map(
-            (c) =>
-              `${c.name} (${c.type}${c.references ? ` → ${c.references.table}` : ''})`,
-          )
-          .join(', ')
-        prompt += `- ${table.name}: ${cols}\n`
-      }
-    }
-  }
 
   prompt += `
 Sections to include:

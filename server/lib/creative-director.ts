@@ -157,12 +157,24 @@ function buildUserPrompt(input: CreativeDirectorInput): string {
     })
     .join('\n')
 
+  // Static override: when no tables exist, force static archetype
+  const staticOverride = contract.tables.length === 0
+    ? `\n\nIMPORTANT — STATIC APP OVERRIDE:
+This app has ZERO database tables. You MUST:
+- Set archetype to "static"
+- Set dataRequirements to "none" for ALL pages
+- Set auth.required to false
+- Set publicRoutes to all routes
+- Do NOT include any /auth/* routes
+- ALL content will be hardcoded in JSX — no database, no API calls`
+    : ''
+
   return `App Name: ${appName}
 App Description: ${appDescription}
 User Request: ${userPrompt}
 
 Database Schema (tables):
-${tableLines || '  (no tables — static app)'}
+${tableLines || '  (no tables — static app)'}${staticOverride}
 
 Theme Tokens (already selected — use as foundation):
 - Fonts: ${tokens.fonts.display} / ${tokens.fonts.body}
