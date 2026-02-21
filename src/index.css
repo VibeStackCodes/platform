@@ -178,3 +178,10 @@
   83%  { background: hsl(320, 90%, 50%); }
   100% { background: hsl(320, 90%, 55%); }
 }
+
+/* Sand grain drift — translates the tiling noise texture diagonally
+   so specks appear to slowly flow like sand across the mural */
+@keyframes sand-drift {
+  0%   { background-position: 0px 0px; }
+  100% { background-position: 180px 90px; }
+}

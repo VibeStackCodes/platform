@@ -1,10 +1,14 @@
+// Sand grain: a tiling noise texture that slowly translates — creates
+// the illusion of millions of tiny specks shifting across the mural.
+const GRAIN_SVG = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='1' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23g)' opacity='1'/%3E%3C/svg%3E")`
+
 export function PerspectiveGrid() {
   return (
     <div
       aria-hidden="true"
       className="pointer-events-none absolute inset-0 overflow-hidden"
     >
-      {/* Base image layer */}
+      {/* Base image — slow drift gives depth */}
       <div
         className="absolute inset-0"
         style={{
@@ -15,40 +19,32 @@ export function PerspectiveGrid() {
           willChange: 'transform',
         }}
       />
-      {/* Color spectrum shift overlay */}
+
+      {/* Sand grain layer — tiling noise texture that slides slowly.
+          High baseFrequency (0.82) = fine specks you can actually see.
+          screen blend = grain picks up the image colors underneath. */}
+      <div
+        className="absolute inset-0"
+        style={{
+          backgroundImage: GRAIN_SVG,
+          backgroundSize: '180px 180px',
+          backgroundRepeat: 'repeat',
+          mixBlendMode: 'screen',
+          opacity: 0.35,
+          animation: 'sand-drift 22s linear infinite',
+          willChange: 'background-position',
+        }}
+      />
+
+      {/* Soft spectrum color wash — keeps hues alive */}
       <div
         className="absolute inset-0"
         style={{
           animation: 'spectrum-wave 70s linear infinite',
           mixBlendMode: 'color',
-          opacity: 0.25,
+          opacity: 0.18,
         }}
       />
-      {/* SVG turbulence displacement for sand/particle effect */}
-      <svg
-        className="absolute inset-0 w-full h-full"
-        style={{ mixBlendMode: 'overlay', opacity: 0.08 }}
-      >
-        <defs>
-          <filter id="sand">
-            <feTurbulence
-              type="fractalNoise"
-              baseFrequency="0.65"
-              numOctaves="3"
-              seed="15"
-              result="noise"
-            />
-            <feDisplacementMap
-              in="SourceGraphic"
-              in2="noise"
-              scale="8"
-              xChannelSelector="R"
-              yChannelSelector="G"
-            />
-          </filter>
-        </defs>
-        <rect width="100%" height="100%" fill="rgba(180,60,180,0.4)" filter="url(#sand)" />
-      </svg>
     </div>
   )
 }
