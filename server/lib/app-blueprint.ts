@@ -10,6 +10,7 @@ import { runDesignAgent } from './agents/design-agent'
 import { runCreativeDirector, type CreativeDirectorInput } from './creative-director'
 import { generatePages } from './page-generator'
 import { assembleApp } from './deterministic-assembly'
+import { fetchHeroImages } from './unsplash'
 import { validateGeneratedApp } from './page-validator'
 import type { AssemblyResult } from './capabilities/assembler'
 import type { PageDef } from './capabilities/types'
@@ -689,9 +690,18 @@ export async function contractToBlueprintCreative(input: BlueprintInput): Promis
   const spec = cdResult.spec
   console.log(`[blueprint:creative] CreativeSpec archetype: ${spec.archetype}, pages: ${spec.sitemap.length}`)
 
+  // 2.5. Fetch Unsplash images in parallel with nothing — fast standalone call
+  // Extract domain keywords from user prompt — Unsplash needs short, generic queries
+  const promptFirstLine = (input.userPrompt ?? input.appName ?? 'website').split(/[.\n]/)[0].slice(0, 60).trim()
+  const imageQuery = promptFirstLine
+  const heroImages = await fetchHeroImages(imageQuery, 10)
+  const imagePool = heroImages.map((img) => img.url)
+  console.log(`[blueprint:creative] Fetched ${imagePool.length} Unsplash images`)
+
   // 3. Generate pages in parallel
   const pageResult = await generatePages({
     spec,
+    imagePool,
     ...(spec.archetype !== 'static' ? { contract: mergedContract } : {}),
   })
   const generatedPages = pageResult.pages

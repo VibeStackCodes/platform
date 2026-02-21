@@ -143,6 +143,12 @@ export const PageCompositionPlanV2Schema = z.object({
 const toStringArray = (val: unknown): unknown =>
   typeof val === 'string' ? val.split(',').map((s) => s.trim()).filter(Boolean) : val
 
+/** Parse stringified JSON. LLMs sometimes return nested structures as escaped strings. */
+const tryParseJson = (val: unknown): unknown => {
+  if (typeof val !== 'string') return val
+  try { return JSON.parse(val) } catch { return val }
+}
+
 export const CreativeSpecSchema = z.object({
   archetype: z
     .preprocess(
@@ -188,7 +194,7 @@ export const CreativeSpecSchema = z.object({
         purpose: z.string().describe('1-2 sentence page description'),
         dataRequirements: z.enum(['none', 'read-only', 'read-write']).describe('Data access pattern'),
         entities: z
-          .preprocess(toStringArray, z.array(z.string()).optional())
+          .preprocess(toStringArray, z.array(z.string()).default([]))
           .describe('Table names for data-driven pages'),
         brief: z.object({
           sections: z.array(z.string()).describe('Section descriptions for this page'),
@@ -216,32 +222,39 @@ export const CreativeSpecSchema = z.object({
         }),
       )
       .describe('Navigation links'),
-    cta: z
-      .object({
-        label: z.string(),
-        href: z.string(),
-      })
-      .optional()
-      .describe('Optional CTA button in nav'),
+    cta: z.preprocess(
+      tryParseJson,
+      z
+        .object({
+          label: z.string(),
+          href: z.string(),
+        })
+        .nullable()
+        .default(null)
+        .describe('Optional CTA button in nav — null if none'),
+    ),
     mobileStyle: z.enum(['sheet', 'fullscreen', 'dropdown']).describe('Mobile navigation style'),
   }),
 
   footer: z.object({
     style: z.enum(['multi-column', 'minimal', 'centered', 'magazine']).describe('Footer layout style'),
-    columns: z
-      .array(
-        z.object({
-          heading: z.string(),
-          links: z.array(
-            z.object({
-              label: z.string(),
-              href: z.string(),
-            }),
-          ),
-        }),
-      )
-      .optional()
-      .describe('Footer columns with links'),
+    columns: z.preprocess(
+      tryParseJson,
+      z
+        .array(
+          z.object({
+            heading: z.string(),
+            links: z.array(
+              z.object({
+                label: z.string(),
+                href: z.string(),
+              }),
+            ),
+          }),
+        )
+        .default([])
+        .describe('Footer columns with links'),
+    ),
     showNewsletter: z.boolean().describe('Whether to show newsletter signup'),
     socialLinks: z
       .preprocess(toStringArray, z.array(z.string()))

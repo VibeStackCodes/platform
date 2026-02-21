@@ -35,6 +35,8 @@ export interface PageGeneratorInput {
   spec: CreativeSpec
   /** Required for non-static archetypes; omit for static apps */
   contract?: SchemaContract
+  /** Unsplash image URLs to use instead of placeholders. Fetched before generation. */
+  imagePool?: string[]
 }
 
 // ---------------------------------------------------------------------------
@@ -57,10 +59,10 @@ export interface PageGeneratorResult {
 }
 
 export async function generatePages(input: PageGeneratorInput): Promise<PageGeneratorResult> {
-  const { spec, contract } = input
+  const { spec, contract, imagePool } = input
 
   const results = await Promise.all(
-    spec.sitemap.map((page) => generateSinglePage(page, spec, contract ?? null)),
+    spec.sitemap.map((page) => generateSinglePage(page, spec, contract ?? null, imagePool ?? [])),
   )
 
   const usage = results.reduce(
@@ -85,8 +87,9 @@ async function generateSinglePage(
   page: CreativeSpec['sitemap'][number],
   spec: CreativeSpec,
   contract: SchemaContract | null,
+  imagePool: string[],
 ): Promise<GeneratedPage & { inputTokens: number; outputTokens: number }> {
-  const systemPrompt = buildPageGenSystemPrompt(spec)
+  const systemPrompt = buildPageGenSystemPrompt(spec, imagePool)
   const userPrompt = buildPageGenUserPrompt(page, spec, contract)
 
   const provider = createHeliconeProvider({ userId: 'pipeline', agentName: 'page-gen' })
@@ -120,7 +123,7 @@ async function generateSinglePage(
  * Exported so tests can validate the prompt's closed vocabulary, forbidden
  * section, and absence of Supabase / TanStack Query references.
  */
-export function buildPageGenSystemPrompt(spec: CreativeSpec): string {
+export function buildPageGenSystemPrompt(spec: CreativeSpec, imagePool: string[] = []): string {
   return `You are an expert React developer generating a complete TanStack Router page file (.tsx).
 
 ## Output Format
@@ -196,7 +199,12 @@ ONLY import from the CLOSED VOCABULARY — anything else will cause a build fail
 
 ALL content is static — hardcode text, lists, images, and cards directly in JSX.
 Use placeholder text that sounds real (not "Lorem ipsum").
-For images, use placeholder URLs like \`https://placehold.co/600x400\` with descriptive alt text.
+${imagePool.length > 0
+    ? `For images, use these Unsplash URLs (cycle through them, reuse as needed):
+${imagePool.map((url, i) => `  ${i + 1}. ${url}`).join('\n')}
+Add \`?w=800&q=80\` for hero/banner images, \`?w=400&q=80\` for cards/thumbnails.
+Always include descriptive alt text.`
+    : `For images, use placeholder URLs like \`https://placehold.co/600x400\` with descriptive alt text.`}
 No data fetching, no API calls, no database queries.
 
 ## Route File Structure

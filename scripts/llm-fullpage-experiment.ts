@@ -174,6 +174,16 @@ async function main() {
   log(`  Pages in sitemap: ${spec.sitemap.length}`)
   log(`  Routes: ${spec.sitemap.map((p) => p.route).join(', ')}`)
 
+  // --- Phase 3.5: Fetch Unsplash images ---
+  log('\nPhase 3.5: Fetching Unsplash images...')
+  const { fetchHeroImages } = await import('../server/lib/unsplash')
+  // Extract domain keywords from user prompt — Unsplash works best with short, generic queries
+  // Use first ~50 chars of user prompt to capture domain keywords (not the LLM-generated brand name)
+  const imageQuery = userPrompt.split(/[.\n]/)[0].slice(0, 60).trim()
+  const heroImages = await fetchHeroImages(imageQuery, 10)
+  const imagePool = heroImages.map((img) => img.url)
+  log(`  Fetched ${imagePool.length} Unsplash images for query: "${imageQuery.slice(0, 60)}..."`)
+
   // --- Phase 4: Page Generation ---
   log('\nPhase 4: Generating pages in parallel...')
   const { generatePages } = await import('../server/lib/page-generator')
@@ -181,6 +191,7 @@ async function main() {
   const t4 = Date.now()
   const pageResult = await generatePages({
     spec,
+    imagePool,
   })
   const generatedPages = pageResult.pages
   trackUsage('page-generation', 'gpt-5.2-codex', pageResult.usage.inputTokens, pageResult.usage.outputTokens, Date.now() - t4)
