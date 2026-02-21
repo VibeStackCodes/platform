@@ -292,6 +292,12 @@ export type StreamEvent =
   | PlanReadyEvent
   | CreditsUsedEvent
   | ClarificationRequestEvent
+  | DesignTokensEvent
+  | ArchitectureReadyEvent
+  | PageGeneratingEvent
+  | PageCompleteEvent
+  | FileAssembledEvent
+  | ValidationCheckEvent
 
 export interface StageUpdateEvent {
   type: 'stage_update'
@@ -428,7 +434,13 @@ export interface PhaseCompleteEvent {
 
 export interface PlanReadyEvent {
   type: 'plan_ready'
-  plan: Record<string, unknown>
+  plan: {
+    appName?: string
+    appDescription?: string
+    tables?: string[]
+    prd?: string
+    [key: string]: unknown
+  }
 }
 
 export interface ClarificationQuestion {
@@ -444,12 +456,131 @@ export interface ClarificationRequestEvent {
 }
 
 // ============================================================================
+// Pipeline B Events
+// ============================================================================
+
+export interface DesignTokensEvent {
+  type: 'design_tokens'
+  tokens: {
+    name: string
+    colors: {
+      background: string
+      foreground: string
+      primary: string
+      primaryForeground: string
+      secondary: string
+      accent: string
+      muted: string
+      border: string
+    }
+    fonts: { display: string; body: string; googleFontsUrl: string }
+    style: {
+      borderRadius: string
+      cardStyle: 'flat' | 'bordered' | 'elevated' | 'glass'
+      navStyle: 'top-bar' | 'sidebar' | 'editorial' | 'minimal' | 'centered'
+      heroLayout: 'fullbleed' | 'split' | 'centered' | 'editorial' | 'none'
+      spacing: 'compact' | 'normal' | 'airy'
+      motion: 'none' | 'subtle' | 'expressive'
+      imagery: 'photography-heavy' | 'illustration' | 'minimal' | 'icon-focused'
+    }
+    authPosture: 'public' | 'private' | 'hybrid'
+    textSlots: {
+      hero_headline: string
+      hero_subtext: string
+      about_paragraph: string
+      cta_label: string
+      empty_state: string
+      footer_tagline: string
+    }
+  }
+}
+
+export interface ArchitectureReadyEvent {
+  type: 'architecture_ready'
+  spec: {
+    archetype: string
+    sitemap: Array<{
+      route: string
+      componentName: string
+      purpose: string
+      sections: string[]
+      dataRequirements: string
+      entities?: string[]
+    }>
+    auth: { required: boolean }
+  }
+}
+
+export interface PageGeneratingEvent {
+  type: 'page_generating'
+  fileName: string
+  route: string
+  componentName: string
+  pageIndex: number
+  totalPages: number
+}
+
+export interface PageCompleteEvent {
+  type: 'page_complete'
+  fileName: string
+  route: string
+  componentName: string
+  lineCount: number
+  code: string
+  pageIndex: number
+  totalPages: number
+}
+
+export interface FileAssembledEvent {
+  type: 'file_assembled'
+  path: string
+  category: 'config' | 'ui-kit' | 'route' | 'migration' | 'style' | 'wiring'
+}
+
+export interface ValidationCheckEvent {
+  type: 'validation_check'
+  name: 'imports' | 'links' | 'accessibility' | 'hardcoded_colors' | 'typescript' | 'lint' | 'build'
+  status: 'passed' | 'failed' | 'running'
+  errors?: Array<{
+    file: string
+    line?: number
+    message: string
+    type: string
+  }>
+}
+
+// ============================================================================
 // Timeline Entries (unified chat + pipeline event stream)
 // ============================================================================
 
+export type PageProgressEntry = {
+  fileName: string
+  route: string
+  componentName: string
+  status: 'pending' | 'generating' | 'complete' | 'error'
+  lineCount?: number
+  code?: string
+}
+
+export type FileAssemblyEntry = {
+  path: string
+  category: 'config' | 'ui-kit' | 'route' | 'migration' | 'style' | 'wiring'
+}
+
+export type ValidationCheckEntry = {
+  name: string
+  status: 'passed' | 'failed' | 'running'
+  errors?: Array<{ file: string; line?: number; message: string; type: string }>
+}
+
 export type TimelineEntry =
   | { type: 'agent'; ts: number; agent: AgentStartEvent; status: 'running' | 'complete'; durationMs?: number }
-  | { type: 'plan'; ts: number; plan: Record<string, unknown> }
+  | { type: 'plan'; ts: number; plan: PlanReadyEvent['plan'] }
+  | { type: 'design_tokens'; ts: number; tokens: DesignTokensEvent['tokens'] }
+  | { type: 'architecture'; ts: number; spec: ArchitectureReadyEvent['spec'] }
+  | { type: 'page_progress'; ts: number; pages: PageProgressEntry[] }
+  | { type: 'file_assembly'; ts: number; files: FileAssemblyEntry[] }
+  | { type: 'validation'; ts: number; checks: ValidationCheckEntry[] }
   | { type: 'error'; ts: number; error: string }
   | { type: 'complete'; ts: number; deploymentUrl?: string }
 
