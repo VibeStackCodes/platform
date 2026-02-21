@@ -11,7 +11,7 @@ interface RouterContext {
 export const Route = createRootRouteWithContext<RouterContext>()({
   component: () => (
     <TooltipProvider>
-      <div className="dark font-sans antialiased">
+      <div className="font-sans antialiased">
         <Outlet />
         {import.meta.env.DEV && <TanStackRouterDevtools position="bottom-right" />}
       </div>
