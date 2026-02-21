@@ -36,15 +36,6 @@ export function PerspectiveGrid() {
         }}
       />
 
-      {/* Soft spectrum color wash — keeps hues alive */}
-      <div
-        className="absolute inset-0"
-        style={{
-          animation: 'spectrum-wave 70s linear infinite',
-          mixBlendMode: 'color',
-          opacity: 0.18,
-        }}
-      />
     </div>
   )
 }
