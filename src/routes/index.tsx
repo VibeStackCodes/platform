@@ -34,15 +34,6 @@ function LandingPage() {
 
         <main className="flex-1 container mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-center">
           <div className="flex flex-col items-center text-center max-w-4xl mx-auto py-12">
-            {/* Headline - bold white */}
-            <motion.h1
-              {...fadeUp}
-              transition={{ duration: 0.5, delay: 0.2 }}
-              className="mt-4 max-w-5xl font-display text-5xl sm:text-6xl md:text-7xl lg:text-8xl font-bold tracking-tighter leading-tight text-white drop-shadow-lg"
-            >
-              Unleash the agents.
-            </motion.h1>
-
             {/* Prompt bar */}
             <motion.div
               initial={{ opacity: 0, y: 20, scale: 0.95 }}
