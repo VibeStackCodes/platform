@@ -37,6 +37,10 @@ export interface PageGeneratorInput {
   contract?: SchemaContract
   /** Unsplash image URLs to use instead of placeholders. Fetched before generation. */
   imagePool?: string[]
+  /** Called when a page starts generating */
+  onPageStart?: (fileName: string, route: string, componentName: string, index: number, total: number) => void
+  /** Called when a page finishes generating */
+  onPageComplete?: (fileName: string, route: string, componentName: string, lineCount: number, code: string, index: number, total: number) => void
 }
 
 // ---------------------------------------------------------------------------
@@ -59,10 +63,18 @@ export interface PageGeneratorResult {
 }
 
 export async function generatePages(input: PageGeneratorInput): Promise<PageGeneratorResult> {
-  const { spec, contract, imagePool } = input
+  const { spec, contract, imagePool, onPageStart, onPageComplete } = input
+  const total = spec.sitemap.length
 
   const results = await Promise.all(
-    spec.sitemap.map((page) => generateSinglePage(page, spec, contract ?? null, imagePool ?? [])),
+    spec.sitemap.map(async (page, index) => {
+      onPageStart?.(page.fileName, page.route, page.componentName, index, total)
+      const result = await generateSinglePage(page, spec, contract ?? null, imagePool ?? [])
+      const lineCount = result.content.split('\n').length
+      const codePreview = result.content.split('\n').slice(0, 50).join('\n')
+      onPageComplete?.(result.fileName, page.route, page.componentName, lineCount, codePreview, index, total)
+      return result
+    }),
   )
 
   const usage = results.reduce(
