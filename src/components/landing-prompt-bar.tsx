@@ -33,6 +33,7 @@ export function LandingPromptBar({
   }
 
   return (
+    <div className="rounded-xl bg-white shadow-2xl">
     <PromptInput onSubmit={handleSubmit} multiple>
       <PromptInputBody>
         <PromptInputTextarea
@@ -57,5 +58,6 @@ export function LandingPromptBar({
         />
       </PromptInputFooter>
     </PromptInput>
+    </div>
   )
 }
