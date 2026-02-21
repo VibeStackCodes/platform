@@ -6,7 +6,6 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { apiFetch } from '@/lib/utils'
 import { BuilderChat } from '@/components/builder-chat'
 import { BuilderPreview } from '@/components/builder-preview'
-import type { ElementContext } from '@/lib/types'
 
 interface ProjectLayoutProps {
   projectId: string
@@ -86,7 +85,6 @@ export function ProjectLayout({
   const [supabaseProjectId, setSupabaseProjectId] = useState(initialSupabaseProjectId)
   const [expiresAt, setExpiresAt] = useState<string | undefined>()
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
-  const [selectedElement, setSelectedElement] = useState<ElementContext | null>(null)
 
   // Fetch sandbox URLs using TanStack Query with automatic polling
   const { data: sandboxUrls } = useQuery({
@@ -171,19 +169,13 @@ export function ProjectLayout({
           initialPrompt={initialPrompt}
           initialMessages={initialMessages}
           onGenerationComplete={fetchSandboxUrls}
-          selectedElement={selectedElement}
-          onEditComplete={() => setSelectedElement(null)}
         />
       </div>
       <div className="w-3/5">
         <BuilderPreview
           projectId={projectId}
-          sandboxId={sandboxId}
           previewUrl={previewUrl}
           codeServerUrl={codeServerUrl}
-          supabaseUrl={supabaseUrl}
-          supabaseProjectId={supabaseProjectId}
-          onElementSelected={setSelectedElement}
         />
       </div>
     </div>
