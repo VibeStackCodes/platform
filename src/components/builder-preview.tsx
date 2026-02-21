@@ -73,7 +73,7 @@ export function BuilderPreview({ projectId, previewUrl, codeServerUrl }: Builder
         <SandboxTabContent
           value="code"
           forceMount
-          className="data-[state=inactive]:hidden flex-1"
+          className="flex-1 data-[state=inactive]:hidden"
         >
           {codeServerUrl ? (
             <iframe
