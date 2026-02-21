@@ -344,7 +344,7 @@ export function inferRefTableFromStem(stem: string, tableNames: string[]): strin
 }
 
 export const SchemaContractSchema = z.object({
-  tables: z.array(TableDefSchema).describe('Database tables'),
+  tables: z.array(TableDefSchema).default([]).describe('Database tables'),
   enums: z.preprocess(
     (val) => (val === null ? undefined : val),
     z.array(EnumDefSchema).optional(),
