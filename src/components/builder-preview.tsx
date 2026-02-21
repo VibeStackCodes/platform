@@ -4,7 +4,6 @@ import { MousePointer, Pencil, Rocket, X } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { apiFetch } from '@/lib/utils'
 import { WebPreview, WebPreviewBody } from '@/components/ai-elements/web-preview'
-import { DatabaseManager } from '@/components/supabase-manager/database'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import type { ElementContext } from '@/lib/types'
@@ -14,8 +13,6 @@ interface BuilderPreviewProps {
   sandboxId?: string
   previewUrl?: string
   codeServerUrl?: string
-  supabaseUrl?: string
-  supabaseProjectId?: string
   onElementSelected?: (element: ElementContext | null) => void
 }
 
@@ -23,7 +20,6 @@ export function BuilderPreview({
   projectId,
   previewUrl,
   codeServerUrl,
-  supabaseProjectId,
   onElementSelected,
 }: BuilderPreviewProps) {
   const [activeTab, setActiveTab] = useState('preview')
@@ -150,7 +146,7 @@ export function BuilderPreview({
       {/* Tab bar */}
       <div className="border-b px-4">
         <div className="inline-flex h-9 items-center justify-center rounded-lg bg-muted p-1 text-muted-foreground">
-          {(['preview', 'code', 'database'] as const).map((tab) => (
+          {(['preview', 'code'] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => switchTab(tab)}
@@ -197,15 +193,6 @@ export function BuilderPreview({
           </div>
         )}
 
-        {mountedTabs.has('database') && (
-          <div className={`absolute inset-0 ${activeTab === 'database' ? '' : 'invisible'}`}>
-            {supabaseProjectId ? (
-              <DatabaseManager projectRef={supabaseProjectId} />
-            ) : (
-              <div className="h-full" />
-            )}
-          </div>
-        )}
       </div>
     </div>
   )

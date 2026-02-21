@@ -57,7 +57,8 @@ function LoginPage() {
         },
       })
       if (error) {
-        setError(error.message.includes('not confirmed') ? 'Please confirm your email first.' : 'Sign up failed. Please try again.')
+        console.error('[signup] Supabase error:', error.message, error.status)
+        setError(error.message)
       } else if (data.session && data.user) {
         await redirectAfterAuth(data.user.id)
       } else {
