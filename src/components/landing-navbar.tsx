@@ -6,11 +6,11 @@ export function LandingNavbar() {
   const { user } = useAuth()
 
   return (
-    <nav className="sticky top-0 z-50 bg-background border-b border-border">
+    <nav className="sticky top-0 z-50 bg-transparent">
       <div className="container mx-auto flex h-16 items-center justify-between px-4 sm:px-6 lg:px-8">
         {/* Left: Logo */}
         <Link to="/" className="flex items-center">
-          <img src="/vibestack-logo.svg" alt="VibeStack" className="h-7" />
+          <img src="/vibestack-logo.png" alt="VibeStack" className="h-7 w-auto" />
         </Link>
 
         {/* Right: Auth actions */}
