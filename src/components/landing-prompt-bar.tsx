@@ -61,7 +61,7 @@ export function LandingPromptBar({
   return (
     <div
       className={cn(
-        'rounded-xl bg-white transition-all duration-200',
+        'w-full rounded-xl bg-white transition-all duration-200',
         '[&>form>div]:!border-0 [&>form>div]:!ring-0 [&>form>div]:!shadow-none',
         focused
           ? 'shadow-[0_32px_80px_-8px_rgba(0,0,0,0.45)] -translate-y-1'
