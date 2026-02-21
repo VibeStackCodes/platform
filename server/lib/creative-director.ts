@@ -173,11 +173,24 @@ Theme Tokens (already selected — use as foundation):
 
 Produce a complete CreativeSpec with:
 1. Archetype classification (static/content/crud) — choose based on schema tables and user intent
-2. Visual DNA: use the theme tokens as your foundation. Add headlineStyle, bodyStyle Tailwind classes, moodBoard description, visualTexture, and borderRadius. Fill in mutedForeground (#6b7280 or domain-appropriate), card (slightly lighter/darker than bg), destructive (#ef4444 or domain-appropriate).
-3. Complete sitemap: every route the app needs, with per-page briefs (sections, copyDirection, keyInteractions, lucideIcons, shadcnComponents)
-4. Nav contract: style, logo text, links array, optional CTA, mobile style
-5. Footer contract: style, columns, socialLinks (Lucide icon names), copyright text
+2. Visual DNA: use the theme tokens as your foundation.
+   - displayFont MUST be "${tokens.fonts.display}" — DO NOT change it
+   - bodyFont MUST be "${tokens.fonts.body}" — DO NOT change it
+   - googleFontsUrl: provide the full Google Fonts import URL for both fonts (e.g. "https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Source+Sans+3:wght@400;600&display=swap")
+   - background MUST be "${tokens.colors.background}", foreground MUST be "${tokens.colors.foreground}"
+   - primary MUST be "${tokens.colors.primary}", accent MUST be "${tokens.colors.accent}"
+   - Fill in: primaryForeground (white or black for contrast), muted (subtle bg tint), mutedForeground (#6b7280), border (subtle separator), card (slightly off-bg), destructive (#ef4444)
+   - Add headlineStyle, bodyStyle Tailwind classes, moodBoard, visualTexture, borderRadius
+3. Complete sitemap: every route the app needs, with per-page briefs (sections, copyDirection, keyInteractions, lucideIcons, shadcnComponents). Cap at 15 routes maximum.
+4. Nav contract: style, logo text, links array, optional CTA (use null if none), mobile style
+5. Footer contract: style, columns (as a JSON array of {heading, links} objects), socialLinks (Lucide icon names), copyright text
 6. Auth configuration: based on authPosture="${tokens.authPosture}"
+
+CRITICAL RULES:
+- NEVER use Inter, Roboto, Arial, or system fonts for displayFont/bodyFont — use the fonts from the theme tokens above
+- NEVER leave palette values empty — every color MUST have a valid hex value
+- footer.columns MUST be a JSON array, NOT a text string
+- nav.cta MUST be a JSON object {label, href} or null, NOT a text string
 
 Think through the visual identity and every page thoroughly before settling on your decisions.`
 }

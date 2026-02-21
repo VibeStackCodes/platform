@@ -78,29 +78,20 @@ function componentToRouteVar(componentName: string): string {
 }
 
 /**
- * Convert a sitemap route path to the file import path used by the route tree.
- * Mirrors the logic in page-assembler.routePathToFilePath but returns the module
- * path relative to `src/` (without the `src/` prefix for the import statement).
+ * Convert a sitemap entry's fileName to the import path used by the route tree.
+ * Uses the fileName from the CreativeSpec directly (which the Creative Director
+ * already generates correctly) instead of deriving from the route path.
  *
- * /             → ./routes/index
- * /about        → ./routes/about
- * /recipes/     → ./routes/recipes/index
- * /recipes/$id  → ./routes/recipes/$id
+ * routes/index.tsx              → ./routes/index
+ * routes/about.tsx              → ./routes/about
+ * routes/recipes/index.tsx      → ./routes/recipes/index
+ * routes/recipes/$slug.tsx      → ./routes/recipes/$slug
  */
-function routeToImportPath(route: string): string {
-  if (route === '/') return './routes/index'
-
-  const stripped = route.replace(/^\//, '').replace(/\/$/, '')
-  const segments = stripped.split('/')
-  const last = segments[segments.length - 1] ?? ''
-
-  if (last.startsWith('$')) {
-    // Param route: /recipes/$id → ./routes/recipes/$id
-    return `./routes/${segments.join('/')}`
-  }
-
-  // Directory index: /recipes/ → ./routes/recipes/index
-  return `./routes/${segments.join('/')}/index`
+function fileNameToImportPath(fileName: string): string {
+  // Strip the leading "routes/" prefix if present (some LLMs include it, some don't)
+  const normalized = fileName.replace(/^(src\/)?/, '')
+  // Remove .tsx extension
+  return `./${normalized.replace(/\.tsx$/, '')}`
 }
 
 /**
@@ -132,7 +123,7 @@ function generateRouteTree(spec: CreativeSpec): string {
     const varBase = componentToRouteVar(page.componentName)
     const importVar = `${varBase}Import`
     const routeVar = `${varBase}Route`
-    const importPath = routeToImportPath(page.route)
+    const importPath = fileNameToImportPath(page.fileName)
     const routeId = routeToId(page.route)
 
     importLines.push(`import { Route as ${importVar} } from '${importPath}'`)
@@ -179,13 +170,51 @@ function generateRouteTree(spec: CreativeSpec): string {
 /**
  * Generate src/index.css — Tailwind v4 @theme block with palette from CreativeSpec.
  */
+/**
+ * Compute missing palette values from the ones we have.
+ * LLMs often leave primaryForeground, muted, and border empty.
+ */
+function fillPaletteGaps(palette: CreativeSpec['visualDna']['palette']) {
+  const bg = palette.background || '#ffffff'
+  const fg = palette.foreground || '#111111'
+  return {
+    background: bg,
+    foreground: fg,
+    primary: palette.primary || '#2563eb',
+    primaryForeground: palette.primaryForeground || '#ffffff',
+    accent: palette.accent || palette.primary || '#f59e0b',
+    muted: palette.muted || (isLightColor(bg) ? '#f1f5f9' : '#1e293b'),
+    mutedForeground: palette.mutedForeground || '#6b7280',
+    border: palette.border || (isLightColor(bg) ? '#e2e8f0' : '#334155'),
+    card: palette.card || bg,
+    destructive: palette.destructive || '#ef4444',
+  }
+}
+
+/** Quick heuristic: is a hex color "light"? */
+function isLightColor(hex: string): boolean {
+  const clean = hex.replace('#', '')
+  if (clean.length < 6) return true // fallback
+  const r = parseInt(clean.slice(0, 2), 16)
+  const g = parseInt(clean.slice(2, 4), 16)
+  const b = parseInt(clean.slice(4, 6), 16)
+  return (r * 299 + g * 587 + b * 114) / 1000 > 128
+}
+
 function generateIndexCSS(spec: CreativeSpec): string {
   const { visualDna } = spec
-  const { palette, typography, borderRadius } = visualDna
+  const { typography, borderRadius } = visualDna
+  const palette = fillPaletteGaps(visualDna.palette)
 
-  return [
-    `@import url('${typography.googleFontsUrl}');`,
-    '',
+  const lines: string[] = []
+
+  // Google Fonts — only import if a URL is provided
+  if (typography.googleFontsUrl?.trim()) {
+    lines.push(`@import url('${typography.googleFontsUrl}');`)
+    lines.push('')
+  }
+
+  lines.push(
     '@import "tailwindcss";',
     '@import "tw-animate-css";',
     '',
@@ -202,7 +231,7 @@ function generateIndexCSS(spec: CreativeSpec): string {
     `  --color-border: ${palette.border};`,
     `  --color-card: ${palette.card};`,
     `  --color-destructive: ${palette.destructive};`,
-    `  --radius: ${borderRadius};`,
+    `  --radius: ${borderRadius || '0.75rem'};`,
     `  --font-display: "${typography.displayFont}", ui-serif, serif;`,
     `  --font-body: "${typography.bodyFont}", ui-sans-serif, system-ui, sans-serif;`,
     '}',
@@ -211,7 +240,9 @@ function generateIndexCSS(spec: CreativeSpec): string {
     '  * { @apply border-border; }',
     '  body { @apply bg-background text-foreground; }',
     '}',
-  ].join('\n')
+  )
+
+  return lines.join('\n')
 }
 
 /**
