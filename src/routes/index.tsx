@@ -35,7 +35,7 @@ function LandingPage() {
               initial={{ opacity: 0, y: 20, scale: 0.95 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               transition={{ duration: 0.5, delay: 0.5 }}
-              className="mt-10 w-full max-w-2xl"
+              className="w-full max-w-3xl"
             >
               <HeroPrompt />
             </motion.div>
