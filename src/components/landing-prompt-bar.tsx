@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { cn } from '@/lib/utils'
 import {
   PromptInput,
   PromptInputActionAddAttachments,
@@ -25,6 +26,7 @@ export function LandingPromptBar({
   placeholder = 'Describe the app you want to build...',
 }: LandingPromptBarProps) {
   const [text, setText] = useState('')
+  const [focused, setFocused] = useState(false)
 
   function handleSubmit(message: PromptInputMessage) {
     const result = onSubmit(message)
@@ -33,7 +35,17 @@ export function LandingPromptBar({
   }
 
   return (
-    <div className="rounded-xl bg-white shadow-2xl [&>form>div]:border-0 [&>form>div]:shadow-none">
+    <div
+      className={cn(
+        'rounded-xl bg-white transition-all duration-200',
+        '[&>form>div]:!border-0 [&>form>div]:!ring-0 [&>form>div]:!shadow-none',
+        focused
+          ? 'shadow-[0_32px_80px_-8px_rgba(0,0,0,0.45)] -translate-y-1'
+          : 'shadow-2xl',
+      )}
+      onFocusCapture={() => setFocused(true)}
+      onBlurCapture={() => setFocused(false)}
+    >
     <PromptInput onSubmit={handleSubmit} multiple>
       <PromptInputBody>
         <PromptInputTextarea
