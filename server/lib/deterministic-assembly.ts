@@ -1,0 +1,704 @@
+/**
+ * Deterministic Assembly Module
+ *
+ * Produces all non-LLM files for a generated app from a CreativeSpec:
+ *   - src/routes/__root.tsx  (root layout: nav + footer)
+ *   - src/routeTree.gen.ts   (route tree from sitemap)
+ *   - src/index.css          (Tailwind v4 @theme from visualDna.palette)
+ *   - src/main.tsx           (app entry with providers)
+ *   - src/lib/supabase.ts    (Supabase client — omitted for static archetype)
+ *   - vite.config.ts         (Vite + Tailwind + React config)
+ *   - src/routes/auth/login.tsx  (auth login page — only if auth.required)
+ *   - src/routes/*.tsx       (generated page files passed in from LLM)
+ *
+ * Everything here is purely deterministic — zero LLM calls.
+ */
+
+import type { BlueprintFile } from './app-blueprint'
+import type { CreativeSpec } from './agents/schemas'
+
+// ---------------------------------------------------------------------------
+// Public API types
+// ---------------------------------------------------------------------------
+
+export interface GeneratedPage {
+  fileName: string
+  componentName: string
+  content: string
+  route: string
+}
+
+export interface AssemblyInput {
+  spec: CreativeSpec
+  generatedPages: GeneratedPage[]
+  appName: string
+}
+
+// ---------------------------------------------------------------------------
+// Social icon mapping — platform name → Lucide icon component name
+// ---------------------------------------------------------------------------
+
+const SOCIAL_ICON_MAP: Record<string, string> = {
+  github: 'Github',
+  twitter: 'Twitter',
+  x: 'Twitter',
+  linkedin: 'Linkedin',
+  instagram: 'Instagram',
+  youtube: 'Youtube',
+  facebook: 'Facebook',
+  tiktok: 'Music2',
+  discord: 'MessageCircle',
+  twitch: 'Tv',
+  mastodon: 'Globe',
+  bluesky: 'Globe',
+  website: 'Globe',
+  globe: 'Globe',
+  link: 'Link',
+  email: 'Mail',
+  mail: 'Mail',
+}
+
+function socialPlatformToIcon(platform: string): string {
+  const key = platform.toLowerCase().replace(/[^a-z0-9]/g, '')
+  return SOCIAL_ICON_MAP[key] ?? 'Globe'
+}
+
+// ---------------------------------------------------------------------------
+// Route tree helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Derive a unique variable name prefix from a component name for the route tree.
+ * "Homepage"       → "Homepage"
+ * "MenuArchivePage" → "MenuArchivePage"
+ */
+function componentToRouteVar(componentName: string): string {
+  // Strip the trailing "Page" if present to keep names concise, then re-add for clarity
+  return componentName
+}
+
+/**
+ * Convert a sitemap route path to the file import path used by the route tree.
+ * Mirrors the logic in page-assembler.routePathToFilePath but returns the module
+ * path relative to `src/` (without the `src/` prefix for the import statement).
+ *
+ * /             → ./routes/index
+ * /about        → ./routes/about
+ * /recipes/     → ./routes/recipes/index
+ * /recipes/$id  → ./routes/recipes/$id
+ */
+function routeToImportPath(route: string): string {
+  if (route === '/') return './routes/index'
+
+  const stripped = route.replace(/^\//, '').replace(/\/$/, '')
+  const segments = stripped.split('/')
+  const last = segments[segments.length - 1] ?? ''
+
+  if (last.startsWith('$')) {
+    // Param route: /recipes/$id → ./routes/recipes/$id
+    return `./routes/${segments.join('/')}`
+  }
+
+  // Directory index: /recipes/ → ./routes/recipes/index
+  return `./routes/${segments.join('/')}/index`
+}
+
+/**
+ * Derive the TanStack Router route id from a sitemap route path.
+ * The id is the path itself.
+ */
+function routeToId(route: string): string {
+  return route
+}
+
+// ---------------------------------------------------------------------------
+// File generators
+// ---------------------------------------------------------------------------
+
+/**
+ * Generate src/routeTree.gen.ts from the sitemap.
+ */
+function generateRouteTree(spec: CreativeSpec): string {
+  const { sitemap } = spec
+
+  // Collect import lines
+  const importLines: string[] = ['import { Route as rootRoute } from "./routes/__root"']
+  // Collect const assignment lines
+  const constLines: string[] = []
+  // Collect children list
+  const childrenList: string[] = []
+
+  for (const page of sitemap) {
+    const varBase = componentToRouteVar(page.componentName)
+    const importVar = `${varBase}Import`
+    const routeVar = `${varBase}Route`
+    const importPath = routeToImportPath(page.route)
+    const routeId = routeToId(page.route)
+
+    importLines.push(`import { Route as ${importVar} } from '${importPath}'`)
+
+    constLines.push(
+      `const ${routeVar} = ${importVar}.update({` +
+        ` id: '${routeId}',` +
+        ` path: '${page.route}',` +
+        ` getParentRoute: () => rootRoute,` +
+        ` } as any)`,
+    )
+
+    childrenList.push(`  ${routeVar}`)
+  }
+
+  // Auth login route — added to tree only when auth is required
+  const authRouteBlock = spec.auth.required
+    ? [
+        `import { Route as AuthLoginImport } from './routes/auth/login'`,
+        `const AuthLoginRoute = AuthLoginImport.update({ id: '${spec.auth.loginRoute}', path: '${spec.auth.loginRoute}', getParentRoute: () => rootRoute } as any)`,
+      ]
+    : []
+
+  const authChildEntry = spec.auth.required ? '  AuthLoginRoute' : null
+
+  const allChildren = authChildEntry ? [...childrenList, authChildEntry] : childrenList
+
+  return [
+    '/* eslint-disable */',
+    '// @ts-nocheck',
+    '// Auto-generated by VibeStack — do not edit manually',
+    '',
+    ...importLines,
+    ...(authRouteBlock.length > 0 ? ['', ...authRouteBlock] : []),
+    '',
+    ...constLines,
+    '',
+    'export const routeTree = rootRoute.addChildren([',
+    allChildren.join(',\n'),
+    '])',
+  ].join('\n')
+}
+
+/**
+ * Generate src/index.css — Tailwind v4 @theme block with palette from CreativeSpec.
+ */
+function generateIndexCSS(spec: CreativeSpec): string {
+  const { visualDna } = spec
+  const { palette, typography, borderRadius } = visualDna
+
+  return [
+    `@import url('${typography.googleFontsUrl}');`,
+    '',
+    '@import "tailwindcss";',
+    '@import "tw-animate-css";',
+    '',
+    '@custom-variant dark (&:is(.dark *));',
+    '',
+    '@theme inline {',
+    `  --color-background: ${palette.background};`,
+    `  --color-foreground: ${palette.foreground};`,
+    `  --color-primary: ${palette.primary};`,
+    `  --color-primary-foreground: ${palette.primaryForeground};`,
+    `  --color-accent: ${palette.accent};`,
+    `  --color-muted: ${palette.muted};`,
+    `  --color-muted-foreground: ${palette.mutedForeground};`,
+    `  --color-border: ${palette.border};`,
+    `  --color-card: ${palette.card};`,
+    `  --color-destructive: ${palette.destructive};`,
+    `  --radius: ${borderRadius};`,
+    `  --font-display: "${typography.displayFont}", ui-serif, serif;`,
+    `  --font-body: "${typography.bodyFont}", ui-sans-serif, system-ui, sans-serif;`,
+    '}',
+    '',
+    '@layer base {',
+    '  * { @apply border-border; }',
+    '  body { @apply bg-background text-foreground; }',
+    '}',
+  ].join('\n')
+}
+
+/**
+ * Generate src/main.tsx.
+ * Static archetype omits QueryClient and QueryClientProvider.
+ */
+function generateMainTSX(spec: CreativeSpec): string {
+  const isStatic = spec.archetype === 'static'
+
+  if (isStatic) {
+    return [
+      "// Auto-generated by VibeStack — do not edit manually",
+      "import './index.css'",
+      "import { StrictMode } from 'react'",
+      "import { createRoot } from 'react-dom/client'",
+      "import { RouterProvider, createRouter } from '@tanstack/react-router'",
+      "import { routeTree } from './routeTree.gen'",
+      '',
+      'const router = createRouter({',
+      '  routeTree,',
+      "  defaultPreload: 'intent',",
+      '  scrollRestoration: true,',
+      '})',
+      '',
+      "declare module '@tanstack/react-router' {",
+      '  interface Register {',
+      '    router: typeof router',
+      '  }',
+      '}',
+      '',
+      "createRoot(document.getElementById('root')!).render(",
+      '  <StrictMode>',
+      '    <RouterProvider router={router} />',
+      '  </StrictMode>,',
+      ')',
+    ].join('\n')
+  }
+
+  return [
+    "// Auto-generated by VibeStack — do not edit manually",
+    "import './index.css'",
+    "import { StrictMode } from 'react'",
+    "import { createRoot } from 'react-dom/client'",
+    "import { QueryClient, QueryClientProvider } from '@tanstack/react-query'",
+    "import { RouterProvider, createRouter } from '@tanstack/react-router'",
+    "import { routeTree } from './routeTree.gen'",
+    '',
+    'const queryClient = new QueryClient()',
+    'const router = createRouter({',
+    '  routeTree,',
+    "  defaultPreload: 'intent',",
+    '  scrollRestoration: true,',
+    '})',
+    '',
+    "declare module '@tanstack/react-router' {",
+    '  interface Register {',
+    '    router: typeof router',
+    '  }',
+    '}',
+    '',
+    "createRoot(document.getElementById('root')!).render(",
+    '  <StrictMode>',
+    '    <QueryClientProvider client={queryClient}>',
+    '      <RouterProvider router={router} />',
+    '    </QueryClientProvider>',
+    '  </StrictMode>,',
+    ')',
+  ].join('\n')
+}
+
+/**
+ * Generate src/lib/supabase.ts.
+ * Only included for content and crud archetypes.
+ */
+function generateSupabaseClient(): string {
+  return [
+    "// Auto-generated by VibeStack — do not edit manually",
+    "import { createClient } from '@supabase/supabase-js'",
+    '',
+    'const supabaseUrl = import.meta.env.VITE_SUPABASE_URL',
+    'const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY',
+    '',
+    'export const supabase = createClient(supabaseUrl, supabaseAnonKey)',
+    'export default supabase',
+  ].join('\n')
+}
+
+/**
+ * Generate vite.config.ts.
+ */
+function generateViteConfig(): string {
+  return [
+    "// Auto-generated by VibeStack — do not edit manually",
+    "import tailwindcss from '@tailwindcss/vite'",
+    "import react from '@vitejs/plugin-react'",
+    "import { resolve } from 'node:path'",
+    "import { defineConfig } from 'vite'",
+    '',
+    'export default defineConfig({',
+    '  plugins: [react(), tailwindcss()],',
+    '  resolve: {',
+    "    alias: { '@': resolve(__dirname, './src') },",
+    '  },',
+    "  cacheDir: '/tmp/.vite',",
+    '})',
+  ].join('\n')
+}
+
+/**
+ * Generate src/routes/auth/login.tsx — a minimal login page using shadcn components.
+ */
+function generateLoginPage(spec: CreativeSpec, appName: string): string {
+  const loginRoute = spec.auth.loginRoute
+
+  return [
+    "// Auto-generated by VibeStack — do not edit manually",
+    `import { createFileRoute, useNavigate } from '@tanstack/react-router'`,
+    `import { useState } from 'react'`,
+    `import { supabase } from '@/lib/supabase'`,
+    `import { Button } from '@/components/ui/button'`,
+    `import { Input } from '@/components/ui/input'`,
+    `import { Label } from '@/components/ui/label'`,
+    `import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'`,
+    '',
+    `export const Route = createFileRoute('${loginRoute}')({`,
+    '  component: LoginPage,',
+    '})',
+    '',
+    'function LoginPage() {',
+    "  const [email, setEmail] = useState('')",
+    "  const [password, setPassword] = useState('')",
+    "  const [error, setError] = useState<string | null>(null)",
+    '  const [loading, setLoading] = useState(false)',
+    '  const navigate = useNavigate()',
+    '',
+    '  async function handleSubmit(e: React.FormEvent) {',
+    '    e.preventDefault()',
+    "    setError(null)",
+    '    setLoading(true)',
+    '    const { error: authError } = await supabase.auth.signInWithPassword({ email, password })',
+    '    setLoading(false)',
+    '    if (authError) {',
+    '      setError(authError.message)',
+    '      return',
+    '    }',
+    "    await navigate({ to: '/' })",
+    '  }',
+    '',
+    '  return (',
+    '    <div className="min-h-screen flex items-center justify-center bg-background p-4">',
+    '      <Card className="w-full max-w-sm">',
+    '        <CardHeader>',
+    `          <CardTitle className="text-2xl">Sign in to ${appName}</CardTitle>`,
+    '          <CardDescription>Enter your email and password to access your account.</CardDescription>',
+    '        </CardHeader>',
+    '        <CardContent>',
+    '          <form onSubmit={handleSubmit} className="space-y-4">',
+    '            <div className="space-y-2">',
+    '              <Label htmlFor="email">Email</Label>',
+    '              <Input',
+    '                id="email"',
+    '                type="email"',
+    '                placeholder="you@example.com"',
+    '                value={email}',
+    '                onChange={(e) => setEmail(e.target.value)}',
+    '                required',
+    '              />',
+    '            </div>',
+    '            <div className="space-y-2">',
+    '              <Label htmlFor="password">Password</Label>',
+    '              <Input',
+    '                id="password"',
+    '                type="password"',
+    '                placeholder="••••••••"',
+    '                value={password}',
+    '                onChange={(e) => setPassword(e.target.value)}',
+    '                required',
+    '              />',
+    '            </div>',
+    '            {error && (',
+    '              <p className="text-sm text-destructive">{error}</p>',
+    '            )}',
+    '            <Button type="submit" className="w-full" disabled={loading}>',
+    '              {loading ? \'Signing in…\' : \'Sign in\'}',
+    '            </Button>',
+    '          </form>',
+    '        </CardContent>',
+    '      </Card>',
+    '    </div>',
+    '  )',
+    '}',
+  ].join('\n')
+}
+
+/**
+ * Build the Navigation component source (inlined in __root.tsx).
+ */
+function buildNavigation(spec: CreativeSpec): string {
+  const { nav } = spec
+
+  // Build nav link JSX lines
+  const navLinks = nav.links
+    .map(
+      (link) =>
+        `        <Link\n          to="${link.href}"\n          aria-current={router.state.location.pathname === '${link.href}' ? 'page' : undefined}\n          className="text-sm font-medium transition-colors hover:text-primary aria-[current=page]:text-primary"\n        >\n          ${link.label}\n        </Link>`,
+    )
+    .join('\n')
+
+  const mobileLinks = nav.links
+    .map(
+      (link) =>
+        `          <Link\n            to="${link.href}"\n            onClick={() => setMobileOpen(false)}\n            aria-current={router.state.location.pathname === '${link.href}' ? 'page' : undefined}\n            className="block py-2 text-base font-medium transition-colors hover:text-primary aria-[current=page]:text-primary"\n          >\n            ${link.label}\n          </Link>`,
+    )
+    .join('\n')
+
+  const ctaBlock = nav.cta
+    ? `\n        <Button asChild size="sm">\n          <Link to="${nav.cta.href}">${nav.cta.label}</Link>\n        </Button>`
+    : ''
+
+  const mobileCta = nav.cta
+    ? `\n          <Button asChild className="mt-2 w-full">\n            <Link to="${nav.cta.href}" onClick={() => setMobileOpen(false)}>${nav.cta.label}</Link>\n          </Button>`
+    : ''
+
+  return `function Navigation() {
+  const router = useRouter()
+  const [isScrolled, setIsScrolled] = useState(false)
+  const [mobileOpen, setMobileOpen] = useState(false)
+
+  useEffect(() => {
+    function onScroll() {
+      setIsScrolled(window.scrollY > 8)
+    }
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [])
+
+  return (
+    <header
+      className={\`sticky top-0 z-50 w-full border-b transition-all duration-200 \${
+        isScrolled ? 'backdrop-blur-md bg-background/80 border-border/50 shadow-sm' : 'bg-background border-transparent'
+      }\`}
+    >
+      <div className="container mx-auto flex h-16 items-center justify-between px-4 md:px-6">
+        {/* Logo */}
+        <Link to="/" className="flex items-center gap-2 font-semibold text-lg font-[family-name:var(--font-display)]">
+          ${nav.logo}
+        </Link>
+
+        {/* Desktop nav */}
+        <nav className="hidden md:flex items-center gap-6" aria-label="Main navigation">
+${navLinks}
+        </nav>
+
+        {/* Desktop CTA */${ctaBlock}
+
+        {/* Mobile menu */}
+        <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+          <SheetTrigger asChild className="md:hidden">
+            <Button variant="ghost" size="icon" aria-label="Open navigation menu">
+              {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+            </Button>
+          </SheetTrigger>
+          <SheetContent side="right" className="w-72">
+            <div className="flex flex-col gap-1 mt-6">
+${mobileLinks}${mobileCta}
+            </div>
+          </SheetContent>
+        </Sheet>
+      </div>
+    </header>
+  )
+}`
+}
+
+/**
+ * Build the Footer component source (inlined in __root.tsx).
+ */
+function buildFooter(spec: CreativeSpec): string {
+  const { footer } = spec
+
+  // Collect unique social icons needed
+  const socialIconNames = footer.socialLinks.map(socialPlatformToIcon)
+  // We will import these from lucide-react at the top of __root.tsx
+
+  // Build social buttons
+  const socialButtons = footer.socialLinks
+    .map((platform, i) => {
+      const iconName = socialIconNames[i] ?? 'Globe'
+      return `          <Button variant="ghost" size="icon" aria-label="${platform}">\n            <${iconName} className="h-4 w-4" />\n          </Button>`
+    })
+    .join('\n')
+
+  // Build newsletter block
+  const newsletterBlock = footer.showNewsletter
+    ? `        <form
+          className="flex gap-2 mt-4"
+          onSubmit={(e) => e.preventDefault()}
+        >
+          <Input
+            type="email"
+            placeholder="Enter your email"
+            className="max-w-xs"
+            aria-label="Newsletter email"
+          />
+          <Button type="submit" variant="default">Subscribe</Button>
+        </form>`
+    : ''
+
+  // Build footer columns
+  const columnsBlock =
+    footer.columns && footer.columns.length > 0
+      ? `        <div className="grid grid-cols-2 md:grid-cols-${Math.min(footer.columns.length, 4)} gap-8">
+${footer.columns
+  .map(
+    (col) => `          <div>
+            <h3 className="text-sm font-semibold mb-3">${col.heading}</h3>
+            <ul className="space-y-2">
+${col.links
+  .map(
+    (link) => `              <li>
+                <Link to="${link.href}" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                  ${link.label}
+                </Link>
+              </li>`,
+  )
+  .join('\n')}
+            </ul>
+          </div>`,
+  )
+  .join('\n')}
+        </div>`
+      : ''
+
+  return `function Footer() {
+  return (
+    <footer className="border-t bg-background">
+      <Separator />
+      <div className="container mx-auto px-4 md:px-6 py-10">
+${columnsBlock}
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 ${footer.columns && footer.columns.length > 0 ? 'mt-8 pt-8 border-t' : ''}">
+          <div>
+            <p className="text-sm text-muted-foreground">${footer.copyright}</p>
+${newsletterBlock}
+          </div>
+          {/* Social links */}
+          <div className="flex items-center gap-1">
+${socialButtons}
+          </div>
+        </div>
+      </div>
+    </footer>
+  )
+}`
+}
+
+/**
+ * Generate src/routes/__root.tsx — root layout with inline Navigation and Footer.
+ */
+function generateRootLayout(spec: CreativeSpec): string {
+  // Collect all unique Lucide icon names for social links
+  const socialIcons = [...new Set(spec.footer.socialLinks.map(socialPlatformToIcon))]
+
+  // Base lucide imports for nav
+  const navIcons = ['Menu', 'X']
+  const allIcons = [...new Set([...navIcons, ...socialIcons])]
+
+  const lucideImport = `import { ${allIcons.join(', ')} } from 'lucide-react'`
+
+  const navSource = buildNavigation(spec)
+  const footerSource = buildFooter(spec)
+
+  return [
+    "// Auto-generated by VibeStack — do not edit manually",
+    `import { Outlet, Link, useRouter, createRootRoute } from '@tanstack/react-router'`,
+    `import { useState, useEffect } from 'react'`,
+    `import { Button } from '@/components/ui/button'`,
+    `import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'`,
+    `import { Separator } from '@/components/ui/separator'`,
+    `import { Input } from '@/components/ui/input'`,
+    lucideImport,
+    '',
+    'export const Route = createRootRoute({',
+    '  component: RootLayout,',
+    '})',
+    '',
+    'function RootLayout() {',
+    '  return (',
+    '    <div className="min-h-screen flex flex-col bg-background text-foreground font-[family-name:var(--font-body)]">',
+    '      <Navigation />',
+    '      <main className="flex-1">',
+    '        <Outlet />',
+    '      </main>',
+    '      <Footer />',
+    '    </div>',
+    '  )',
+    '}',
+    '',
+    navSource,
+    '',
+    footerSource,
+  ].join('\n')
+}
+
+// ---------------------------------------------------------------------------
+// Main assembler
+// ---------------------------------------------------------------------------
+
+/**
+ * Assemble all deterministic files for a generated app.
+ *
+ * Returns a BlueprintFile[] ordered by layer so callers can sort or prioritise.
+ */
+export function assembleApp(input: AssemblyInput): BlueprintFile[] {
+  const { spec, generatedPages, appName } = input
+  const files: BlueprintFile[] = []
+
+  // ---- Layer 0: build tooling ----
+
+  files.push({
+    path: 'vite.config.ts',
+    content: generateViteConfig(),
+    layer: 0,
+    isLLMSlot: false,
+  })
+
+  // ---- Layer 1: lib utilities ----
+
+  if (spec.archetype !== 'static') {
+    files.push({
+      path: 'src/lib/supabase.ts',
+      content: generateSupabaseClient(),
+      layer: 1,
+      isLLMSlot: false,
+    })
+  }
+
+  // ---- Layer 2: app skeleton ----
+
+  files.push({
+    path: 'src/index.css',
+    content: generateIndexCSS(spec),
+    layer: 2,
+    isLLMSlot: false,
+  })
+
+  files.push({
+    path: 'src/main.tsx',
+    content: generateMainTSX(spec),
+    layer: 2,
+    isLLMSlot: false,
+  })
+
+  files.push({
+    path: 'src/routeTree.gen.ts',
+    content: generateRouteTree(spec),
+    layer: 2,
+    isLLMSlot: false,
+  })
+
+  files.push({
+    path: 'src/routes/__root.tsx',
+    content: generateRootLayout(spec),
+    layer: 2,
+    isLLMSlot: false,
+  })
+
+  // ---- Layer 3: LLM-generated page routes ----
+
+  for (const page of generatedPages) {
+    files.push({
+      path: `src/${page.fileName}`,
+      content: page.content,
+      layer: 3,
+      isLLMSlot: true,
+    })
+  }
+
+  // ---- Layer 4: auth routes ----
+
+  if (spec.auth.required) {
+    files.push({
+      path: 'src/routes/auth/login.tsx',
+      content: generateLoginPage(spec, appName),
+      layer: 4,
+      isLLMSlot: false,
+    })
+  }
+
+  return files
+}

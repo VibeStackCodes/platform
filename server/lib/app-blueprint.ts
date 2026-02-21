@@ -7,6 +7,10 @@ import { contractToSQL } from './contract-to-sql'
 import { snakeToPascal, snakeToKebab, pluralize } from './naming-utils'
 import { generateThemedApp, type ThemeTokens, DEFAULT_TEXT_SLOTS } from './themed-code-engine'
 import { runDesignAgent } from './agents/design-agent'
+import { runCreativeDirector, type CreativeDirectorInput } from './creative-director'
+import { generatePages } from './page-generator'
+import { assembleApp } from './deterministic-assembly'
+import { validateGeneratedApp } from './page-validator'
 import type { AssemblyResult } from './capabilities/assembler'
 import type { PageDef } from './capabilities/types'
 
@@ -657,4 +661,169 @@ export async function contractToBlueprintWithDesignAgent(input: BlueprintInput):
   console.log(`[blueprint] Theme reasoning: ${themeReasoning}`)
   console.log(`[blueprint] Schema tables: ${mergedContract.tables.length} (user: ${input.contract.tables.length})`)
   return await buildBlueprintFromTokens({ ...input, contract: mergedContract, assembly: input.assembly }, tokens)
+}
+
+export async function contractToBlueprintCreative(input: BlueprintInput): Promise<AppBlueprint> {
+  const userPrompt = input.userPrompt?.trim() || `${input.appName}. ${input.appDescription}`
+
+  // 1. Run Design Agent — same as contractToBlueprintWithDesignAgent
+  const { tokens, contract: mergedContract, selectedTheme, themeReasoning } = await runDesignAgent(
+    userPrompt,
+    input.contract,
+    input.appName,
+    input.appDescription,
+  )
+  console.log(`[blueprint:creative] Design Agent selected theme: ${selectedTheme}`)
+  console.log(`[blueprint:creative] Theme reasoning: ${themeReasoning}`)
+  console.log(`[blueprint:creative] Schema tables: ${mergedContract.tables.length} (user: ${input.contract.tables.length})`)
+
+  // 2. Run Creative Director
+  const creativeDirectorInput: CreativeDirectorInput = {
+    userPrompt,
+    appName: input.appName,
+    appDescription: input.appDescription,
+    contract: mergedContract,
+    tokens,
+  }
+  const spec = await runCreativeDirector(creativeDirectorInput)
+  console.log(`[blueprint:creative] CreativeSpec archetype: ${spec.archetype}, pages: ${spec.sitemap.length}`)
+
+  // 3. Generate pages in parallel
+  const generatedPages = await generatePages({
+    spec,
+    contract: mergedContract,
+    supabaseUrl: '__PLACEHOLDER__',
+    supabaseAnonKey: '__PLACEHOLDER__',
+  })
+  console.log(`[blueprint:creative] Generated ${generatedPages.length} pages`)
+
+  // 4. Assemble deterministic files
+  const assembledFiles = assembleApp({
+    spec,
+    generatedPages,
+    appName: input.appName,
+  })
+  console.log(`[blueprint:creative] Assembled ${assembledFiles.length} files`)
+
+  // 5. Validate
+  const fileMap = new Map(assembledFiles.map((f) => [f.path, f.content]))
+  const validRoutes = spec.sitemap.map((p) => p.route)
+  const validation = validateGeneratedApp({
+    files: fileMap,
+    validRoutes,
+    hasSupabase: spec.archetype !== 'static',
+  })
+
+  if (validation.warnings.length > 0) {
+    for (const warning of validation.warnings) {
+      console.log(`[blueprint:creative] Warning [${warning.type}] ${warning.file}: ${warning.message}`)
+    }
+  }
+
+  if (!validation.valid) {
+    const errorSummary = validation.errors
+      .map((e) => `${e.file}:${e.line ?? '?'} [${e.type}] ${e.message}`)
+      .join('\n')
+    throw new Error(`[blueprint:creative] Validation failed with ${validation.errors.length} error(s):\n${errorSummary}`)
+  }
+
+  // 6. Merge with infrastructure files
+  const features = inferFeatures(mergedContract)
+  const fileTree: BlueprintFile[] = []
+
+  // Infrastructure: .gitignore, vercel.json
+  fileTree.push({
+    path: '.gitignore',
+    content: `# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build output
+dist/
+dist-ssr/
+*.local
+
+# Environment files — use Vercel env vars for secrets
+.env
+.env.local
+.env.*.local
+
+# Vite caches
+.vite/
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+`,
+    layer: 0,
+    isLLMSlot: false,
+  })
+  fileTree.push({
+    path: 'vercel.json',
+    content: `{
+  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+}
+`,
+    layer: 0,
+    isLLMSlot: false,
+  })
+
+  // index.html — use fonts from the CreativeSpec's visual DNA
+  fileTree.push({
+    path: 'index.html',
+    content: generateIndexHTML(input.appName, spec.visualDna.typography.googleFontsUrl),
+    layer: 1,
+    isLLMSlot: false,
+  })
+
+  // .env placeholder
+  fileTree.push({
+    path: '.env',
+    content: generateDotEnv(),
+    layer: 2,
+    isLLMSlot: false,
+  })
+
+  // SQL migration from the merged contract
+  fileTree.push({
+    path: 'supabase/migrations/0001_initial.sql',
+    content: contractToSQL(mergedContract),
+    layer: 2,
+    isLLMSlot: false,
+  })
+
+  // UI kit — shadcn/ui components
+  fileTree.push(...loadUIKit())
+
+  // App.tsx stub to avoid duplicate createRootRoute() from the snapshot warmup scaffold
+  fileTree.push({
+    path: 'src/App.tsx',
+    content: '// Replaced by VibeStack — see main.tsx\nexport default function App() { return null }\n',
+    layer: 0,
+    isLLMSlot: false,
+  })
+
+  // All assembled files (vite.config, src/index.css, src/main.tsx, src/routeTree.gen.ts,
+  // src/routes/__root.tsx, src/lib/supabase.ts, generated pages, auth routes)
+  for (const file of assembledFiles) {
+    fileTree.push(file)
+  }
+
+  // 7. Return AppBlueprint
+  return {
+    meta: {
+      appName: input.appName,
+      appDescription: input.appDescription,
+      tokens,
+    },
+    features,
+    contract: mergedContract,
+    fileTree,
+  }
 }

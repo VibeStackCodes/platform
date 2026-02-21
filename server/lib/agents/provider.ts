@@ -138,6 +138,8 @@ export const PIPELINE_MODELS = {
   edit: 'gpt-5.2-codex',
   seed: 'gpt-5-mini',
   composer: 'gpt-5.2',
+  creativeDirector: 'gpt-5.2',
+  pageGen: 'gpt-5.2-codex',
 } as const
 
 export type PipelineRole = keyof typeof PIPELINE_MODELS
