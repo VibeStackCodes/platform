@@ -1,5 +1,17 @@
-import { useState } from 'react'
-import { cn } from '@/lib/utils'
+import { ChevronDownIcon } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import {
+  ModelSelector,
+  ModelSelectorContent,
+  ModelSelectorEmpty,
+  ModelSelectorGroup,
+  ModelSelectorInput,
+  ModelSelectorItem,
+  ModelSelectorList,
+  ModelSelectorLogo,
+  ModelSelectorName,
+  ModelSelectorTrigger,
+} from '@/components/ai-elements/model-selector'
 import {
   PromptInput,
   PromptInputActionAddAttachments,
@@ -7,14 +19,22 @@ import {
   PromptInputActionMenuContent,
   PromptInputActionMenuTrigger,
   PromptInputBody,
+  PromptInputButton,
   PromptInputFooter,
   type PromptInputMessage,
   PromptInputSubmit,
   PromptInputTextarea,
   PromptInputTools,
 } from '@/components/ai-elements/prompt-input'
+import { cn } from '@/lib/utils'
 
 export type { PromptInputMessage }
+
+const models = [
+  { id: 'gpt-5.2', name: 'GPT-5.2', provider: 'openai' as const, available: true },
+  { id: 'gpt-5.1-codex-max', name: 'GPT-5.1 Codex Max', provider: 'openai' as const, available: false },
+  { id: 'gpt-5-mini', name: 'GPT-5 Mini', provider: 'openai' as const, available: false },
+]
 
 interface LandingPromptBarProps {
   onSubmit: (message: PromptInputMessage) => void | Promise<void>
@@ -27,6 +47,10 @@ export function LandingPromptBar({
 }: LandingPromptBarProps) {
   const [text, setText] = useState('')
   const [focused, setFocused] = useState(false)
+  const [model, setModel] = useState(models[0].id)
+  const [selectorOpen, setSelectorOpen] = useState(false)
+
+  const selectedModel = useMemo(() => models.find((m) => m.id === model) ?? models[0], [model])
 
   function handleSubmit(message: PromptInputMessage) {
     const result = onSubmit(message)
@@ -63,6 +87,43 @@ export function LandingPromptBar({
               <PromptInputActionAddAttachments />
             </PromptInputActionMenuContent>
           </PromptInputActionMenu>
+          <ModelSelector open={selectorOpen} onOpenChange={setSelectorOpen}>
+            <ModelSelectorTrigger asChild>
+              <PromptInputButton tooltip={{ content: 'Select model' }}>
+                <ModelSelectorLogo provider={selectedModel.provider} />
+                <span>{selectedModel.name}</span>
+                <ChevronDownIcon size={12} />
+              </PromptInputButton>
+            </ModelSelectorTrigger>
+            <ModelSelectorContent>
+              <ModelSelectorInput placeholder="Search models..." />
+              <ModelSelectorList>
+                <ModelSelectorEmpty>No models found.</ModelSelectorEmpty>
+                <ModelSelectorGroup heading="OpenAI">
+                  {models
+                    .filter((m) => m.provider === 'openai')
+                    .map((m) => (
+                      <ModelSelectorItem
+                        key={m.id}
+                        value={m.id}
+                        onSelect={() => {
+                          if (!m.available) return
+                          setModel(m.id)
+                          setSelectorOpen(false)
+                        }}
+                        className={!m.available ? 'opacity-50 cursor-not-allowed' : ''}
+                      >
+                        <ModelSelectorLogo provider={m.provider} />
+                        <ModelSelectorName>{m.name}</ModelSelectorName>
+                        {!m.available && (
+                          <span className="ml-auto text-xs text-muted-foreground">Coming soon</span>
+                        )}
+                      </ModelSelectorItem>
+                    ))}
+                </ModelSelectorGroup>
+              </ModelSelectorList>
+            </ModelSelectorContent>
+          </ModelSelector>
         </PromptInputTools>
         <PromptInputSubmit
           className="rounded-full"
