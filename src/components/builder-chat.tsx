@@ -1,9 +1,23 @@
 'use client'
 
-import { Bot, CheckCircle2 } from 'lucide-react'
-import { Suspense, useCallback, useEffect, useRef, useState } from 'react'
+import {
+  Bot,
+  CheckCircle2,
+  Clock,
+  Cog,
+  Loader2,
+  Rocket,
+  Sparkles,
+} from 'lucide-react'
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { apiFetch } from '@/lib/utils'
 import { Checkpoint, CheckpointIcon, CheckpointTrigger } from '@/components/ai-elements/checkpoint'
+import {
+  ChainOfThought,
+  ChainOfThoughtContent,
+  ChainOfThoughtHeader,
+  ChainOfThoughtStep,
+} from '@/components/ai-elements/chain-of-thought'
 import {
   Commit,
   CommitContent,
@@ -27,6 +41,15 @@ import {
 import { Message, MessageContent, MessageResponse } from '@/components/ai-elements/message'
 import type { PromptInputMessage } from '@/components/ai-elements/prompt-input'
 import {
+  Plan,
+  PlanAction,
+  PlanContent,
+  PlanDescription,
+  PlanHeader,
+  PlanTitle,
+  PlanTrigger,
+} from '@/components/ai-elements/plan'
+import {
   Queue,
   QueueItem,
   QueueItemContent,
@@ -46,17 +69,16 @@ import {
   StackTraceHeader,
 } from '@/components/ai-elements/stack-trace'
 import { Suggestion, Suggestions } from '@/components/ai-elements/suggestion'
+import { Task, TaskContent, TaskItem, TaskTrigger } from '@/components/ai-elements/task'
 import { ClarificationQuestions } from '@/components/clarification-questions'
 import { CreditDisplay } from '@/components/credit-display'
 import { PromptBar } from '@/components/prompt-bar'
 import type {
   BuildError,
-  ChatPlan,
-  CheckpointEvent,
   ClarificationQuestion,
   ElementContext,
-  LayerCommitEvent,
   StreamEvent,
+  TimelineEntry,
 } from '@/lib/types'
 
 // Custom message type — replaces UIMessage from Vercel AI SDK
@@ -86,6 +108,13 @@ const SUGGESTIONS = [
   'A real-time chat application',
 ]
 
+/** Format milliseconds as human-readable duration */
+function formatDuration(ms: number): string {
+  if (ms < 1000) return `${ms}ms`
+  const secs = (ms / 1000).toFixed(1)
+  return `${secs}s`
+}
+
 export function BuilderChat({
   projectId,
   initialPrompt,
@@ -98,15 +127,16 @@ export function BuilderChat({
   const [generationStatus, setGenerationStatus] = useState<
     'idle' | 'generating' | 'complete' | 'error'
   >('idle')
+
+  // File queue — tracked separately for incremental updates
   const [generationFiles, setGenerationFiles] = useState<
     { path: string; status: 'pending' | 'generating' | 'complete' | 'error'; lines?: number }[]
   >([])
   const [buildErrors, setBuildErrors] = useState<BuildError[]>([])
-  const [checkpoints, setCheckpoints] = useState<CheckpointEvent[]>([])
-  const [layerCommits, setLayerCommits] = useState<LayerCommitEvent[]>([])
-  const [_activeAgents, setActiveAgents] = useState<
-    { id: string; name: string; status: 'running' | 'complete'; message?: string }[]
-  >([])
+
+  // Unified timeline — ordered array of all pipeline events
+  const [timelineEvents, setTimelineEvents] = useState<TimelineEntry[]>([])
+
   const [pendingClarification, setPendingClarification] = useState<ClarificationQuestion[] | null>(
     null,
   )
@@ -143,10 +173,29 @@ export function BuilderChat({
   const [chatStatus, setChatStatus] = useState<'ready' | 'streaming'>('ready')
   const [chatError, setChatError] = useState<Error | null>(null)
 
-  // Message persistence is handled by Mastra agent memory (thread/resource)
+  /** Push a timeline entry with automatic timestamp */
+  const pushTimeline = useCallback((entry: TimelineEntry) => {
+    setTimelineEvents((prev) => [...prev, entry])
+  }, [])
+
+  /** Update an existing timeline entry by finding it via predicate */
+  const updateTimeline = useCallback(
+    (predicate: (e: TimelineEntry) => boolean, updater: (e: TimelineEntry) => TimelineEntry) => {
+      setTimelineEvents((prev) => {
+        const idx = prev.findLastIndex(predicate)
+        if (idx < 0) return prev
+        const updated = [...prev]
+        updated[idx] = updater(prev[idx])
+        return updated
+      })
+    },
+    [],
+  )
 
   const handleGenerationEvent = useCallback(
     (event: StreamEvent) => {
+      const now = Date.now()
+
       switch (event.type) {
         case 'stage_update':
           if (event.stage === 'complete') {
@@ -155,26 +204,54 @@ export function BuilderChat({
             setGenerationStatus('error')
           }
           break
+
+        case 'phase_start':
+          pushTimeline({
+            type: 'phase',
+            ts: now,
+            phase: event,
+            status: 'active',
+          })
+          break
+
+        case 'phase_complete':
+          updateTimeline(
+            (e) => e.type === 'phase' && e.phase.phase === event.phase,
+            (e) => ({ ...e, status: 'complete' as const }),
+          )
+          break
+
         case 'agent_start':
-          setActiveAgents((prev) => [
-            ...prev.filter((a) => a.id !== event.agentId),
-            { id: event.agentId, name: event.agentName, status: 'running' as const },
-          ])
+          pushTimeline({
+            type: 'agent',
+            ts: now,
+            agent: event,
+            status: 'running',
+          })
           break
-        case 'agent_progress':
-          setActiveAgents((prev) =>
-            prev.map((a) => (a.id === event.agentId ? { ...a, message: event.message } : a)),
-          )
-          break
+
         case 'agent_complete':
-          setActiveAgents((prev) =>
-            prev.map((a) => (a.id === event.agentId ? { ...a, status: 'complete' as const } : a)),
+          updateTimeline(
+            (e) => e.type === 'agent' && e.agent.agentId === event.agentId,
+            (e) => ({
+              ...e,
+              status: 'complete' as const,
+              durationMs: event.durationMs,
+            }),
           )
           break
+
+        case 'agent_progress':
+          // Agent progress text is streamed into the assistant message via parseSSEBuffer
+          break
+
         case 'agent_artifact':
           break
+
         case 'plan_ready':
+          pushTimeline({ type: 'plan', ts: now, plan: event.plan })
           break
+
         case 'file_start':
           setGenerationFiles((prev) => {
             const exists = prev.some((f) => f.path === event.path)
@@ -186,6 +263,7 @@ export function BuilderChat({
             return [...prev, { path: event.path, status: 'generating' as const }]
           })
           break
+
         case 'file_complete':
           setGenerationFiles((prev) =>
             prev.map((f) =>
@@ -195,35 +273,44 @@ export function BuilderChat({
             ),
           )
           break
+
         case 'file_error':
           setGenerationFiles((prev) =>
             prev.map((f) => (f.path === event.path ? { ...f, status: 'error' as const } : f)),
           )
           break
+
         case 'complete':
           setGenerationStatus('complete')
+          pushTimeline({
+            type: 'complete',
+            ts: now,
+            deploymentUrl: event.urls?.deploy,
+          })
           onGenerationComplete?.()
           break
+
         case 'error':
           setGenerationStatus('error')
+          pushTimeline({ type: 'error', ts: now, error: event.message })
           break
+
         case 'build_error':
           setBuildErrors(event.errors)
           break
+
         case 'checkpoint':
-          setCheckpoints((prev) => {
-            const existing = prev.findIndex((c) => c.label === event.label)
-            if (existing >= 0) {
-              const updated = [...prev]
-              updated[existing] = event
-              return updated
-            }
-            return [...prev, event]
+          pushTimeline({
+            type: 'checkpoint',
+            ts: now,
+            checkpoint: event,
           })
           break
+
         case 'layer_commit':
-          setLayerCommits((prev) => [...prev, event])
+          pushTimeline({ type: 'commit', ts: now, commit: event })
           break
+
         case 'credits_used':
           setUserCredits((prev) =>
             prev
@@ -234,13 +321,14 @@ export function BuilderChat({
               : prev,
           )
           break
+
         case 'clarification_request':
           setPendingClarification(event.questions)
           setResumeRunId(event.runId)
           break
       }
     },
-    [onGenerationComplete],
+    [onGenerationComplete, pushTimeline, updateTimeline],
   )
 
   /**
@@ -286,11 +374,9 @@ export function BuilderChat({
 
   /**
    * Send a chat message to /api/agent (or /api/agent/edit if an element is selected).
-   * Replaces the Vercel AI SDK useChat + /api/chat flow.
    */
   const sendChatMessage = useCallback(
     async (text: string) => {
-      // Guard against concurrent calls
       if (chatStatus === 'streaming') return
 
       const userMessage: ChatMessage = {
@@ -301,17 +387,19 @@ export function BuilderChat({
       setMessages((prev) => [...prev, userMessage])
       setChatStatus('streaming')
       setChatError(null)
+      setGenerationStatus('generating')
+      setGenerationFiles([])
+      setTimelineEvents([])
+      setBuildErrors([])
 
       const assistantId = `assistant-${Date.now()}`
       setMessages((prev) => [...prev, { id: assistantId, role: 'assistant' as const, content: '' }])
 
       let fullText = ''
-      // Abort any previous in-flight request
       abortControllerRef.current?.abort()
       const abortController = new AbortController()
       abortControllerRef.current = abortController
 
-      // Determine endpoint based on whether an element is selected
       const endpoint = selectedElement ? '/api/agent/edit' : '/api/agent'
       const body = selectedElement
         ? { message: text, projectId, targetElement: selectedElement, model }
@@ -333,6 +421,7 @@ export function BuilderChat({
             )
             setMessages((prev) => prev.filter((m) => m.id !== assistantId))
             setChatStatus('ready')
+            setGenerationStatus('error')
             return
           }
           throw new Error(`Request failed: ${response.status}`)
@@ -357,7 +446,6 @@ export function BuilderChat({
                   prev.map((m) => (m.id === assistantId ? { ...m, content: snapshot } : m)),
                 )
               },
-              // Also forward generation-relevant events during chat
               handleGenerationEvent,
             )
           }
@@ -365,15 +453,12 @@ export function BuilderChat({
           reader.releaseLock()
         }
 
-        // If this was an edit operation, notify parent to clear selection
         if (selectedElement) {
           onEditComplete?.()
         }
       } catch (err) {
-        // Silent abort on unmount or cancellation
         if (err instanceof Error && err.name === 'AbortError') return
         setChatError(err instanceof Error ? err : new Error('Chat failed'))
-        // Remove empty assistant placeholder on error
         setMessages((prev) => prev.filter((m) => m.id !== assistantId || m.content.length > 0))
       } finally {
         setChatStatus('ready')
@@ -382,7 +467,7 @@ export function BuilderChat({
     [projectId, model, chatStatus, parseSSEBuffer, handleGenerationEvent, selectedElement, onEditComplete],
   )
 
-  // Auto-submit initial prompt (skip if conversation was restored from DB)
+  // Auto-submit initial prompt
   useEffect(() => {
     if (
       initialPrompt &&
@@ -471,76 +556,28 @@ export function BuilderChat({
     [resumeRunId, parseSSEBuffer, handleGenerationEvent, sendChatMessage],
   )
 
-  const _handleStartGeneration = useCallback(
-    async (chatPlan: ChatPlan) => {
-      setGenerationStatus('generating')
-      setGenerationFiles([])
-
-      abortControllerRef.current?.abort()
-      const abortController = new AbortController()
-      abortControllerRef.current = abortController
-
-      try {
-        const response = await apiFetch('/api/agent', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message: chatPlan.appDescription, projectId, model }),
-          signal: abortController.signal,
-        })
-
-        if (!response.ok || !response.body) {
-          if (response.status === 402) {
-            const errorData = await response.json()
-            setGenerationStatus('error')
-            setChatError(
-              new Error(
-                `Out of credits (${errorData.credits_remaining ?? 0} remaining). Please upgrade to Pro for more credits.`,
-              ),
-            )
-            return
-          }
-          throw new Error('Generation failed')
-        }
-
-        const reader = response.body.getReader()
-        const decoder = new TextDecoder()
-        let buffer = ''
-
-        try {
-          while (true) {
-            const { done, value } = await reader.read()
-            if (done) break
-
-            buffer += decoder.decode(value, { stream: true })
-            const events = buffer.split('\n\n')
-            buffer = events.pop() || ''
-
-            for (const eventText of events) {
-              if (!eventText.trim() || !eventText.startsWith('data: ')) continue
-              try {
-                const event: StreamEvent = JSON.parse(eventText.replace(/^data: /, ''))
-                handleGenerationEvent(event)
-              } catch {
-                // skip malformed events
-              }
-            }
-          }
-        } finally {
-          reader.releaseLock()
-        }
-      } catch (err) {
-        if (err instanceof Error && err.name === 'AbortError') return
-        setGenerationStatus('error')
+  // Deduplicate phases — only show the latest status per phase number
+  const dedupedPhases = useMemo(() => {
+    const phaseMap = new Map<number, TimelineEntry & { type: 'phase' }>()
+    for (const entry of timelineEvents) {
+      if (entry.type === 'phase') {
+        phaseMap.set(entry.phase.phase, entry)
       }
-    },
-    [projectId, model, handleGenerationEvent],
-  )
+    }
+    return phaseMap
+  }, [timelineEvents])
+
+  // Whether we should show the file queue (any file events have occurred)
+  const hasFiles = generationFiles.length > 0
+
+  // Whether pipeline is actively running (show timeline section)
+  const showTimeline = generationStatus === 'generating' || timelineEvents.length > 0
 
   return (
     <div className="flex h-full flex-col">
       <Conversation>
         <ConversationContent>
-          {messages.length === 0 ? (
+          {messages.length === 0 && !showTimeline ? (
             <div className="flex h-full flex-col items-center justify-center gap-6">
               <ConversationEmptyState
                 icon={<Bot className="size-12" />}
@@ -555,6 +592,7 @@ export function BuilderChat({
             </div>
           ) : (
             <>
+              {/* ── Chat Messages ── */}
               {messages.map((message) => (
                 <Message from={message.role} key={message.id}>
                   <MessageContent>
@@ -575,7 +613,7 @@ export function BuilderChat({
                 </Message>
               ))}
 
-              {/* Streaming indicator — shown only while waiting for first token */}
+              {/* Streaming indicator */}
               {(() => {
                 const lastMessage = messages[messages.length - 1]
                 const showThinking =
@@ -589,7 +627,7 @@ export function BuilderChat({
                 ) : null
               })()}
 
-              {/* Clarification Questions — interactive multi-choice cards */}
+              {/* Clarification Questions */}
               {pendingClarification && (
                 <ClarificationQuestions
                   questions={pendingClarification}
@@ -608,90 +646,246 @@ export function BuilderChat({
                 </div>
               )}
 
-              {/* Generation Queue — shown below chat messages */}
-              {generationFiles.length > 0 && (
-                <div className="px-4 py-2">
-                  <Queue>
-                    <QueueList>
-                      {generationFiles.map((file) => (
-                        <QueueItem key={file.path}>
-                          <div className="flex items-center gap-2">
-                            <QueueItemIndicator completed={file.status === 'complete'} />
-                            <QueueItemContent completed={file.status === 'complete'}>
-                              {file.path}
-                              {file.status === 'generating' && ' ...'}
-                              {file.lines !== undefined && ` (${file.lines} lines)`}
-                            </QueueItemContent>
-                          </div>
-                        </QueueItem>
-                      ))}
-                    </QueueList>
-                  </Queue>
+              {/* ── Rich Timeline ── */}
+              {showTimeline && (
+                <div className="px-4 py-3 space-y-1">
+                  <ChainOfThought defaultOpen>
+                    <ChainOfThoughtHeader>Pipeline Progress</ChainOfThoughtHeader>
+                    <ChainOfThoughtContent>
+                      {timelineEvents.map((entry) => {
+                        switch (entry.type) {
+                          case 'phase': {
+                            // Skip duplicate phase entries (already rendered)
+                            const deduped = dedupedPhases.get(entry.phase.phase)
+                            if (deduped !== entry) return null
 
-                  {/* Build Errors */}
-                  {buildErrors.length > 0 && (
-                    <div className="mt-3 space-y-2">
-                      {buildErrors.map((err) => (
-                        <StackTrace
-                          key={`${err.file}-${err.message}`}
-                          trace={err.raw}
-                          defaultOpen={false}
-                        >
-                          <StackTraceHeader>
-                            <StackTraceError>
-                              <StackTraceErrorType>Build Error</StackTraceErrorType>
-                              <StackTraceErrorMessage>{err.message}</StackTraceErrorMessage>
-                            </StackTraceError>
-                            <StackTraceActions>
-                              <StackTraceCopyButton />
-                              <StackTraceExpandButton />
-                            </StackTraceActions>
-                          </StackTraceHeader>
-                          <StackTraceContent>
-                            <StackTraceFrames showInternalFrames={false} />
-                          </StackTraceContent>
-                        </StackTrace>
-                      ))}
-                    </div>
-                  )}
+                            const isComplete = entry.status === 'complete'
+                            const PhaseIcon = isComplete ? CheckCircle2 : Loader2
+                            return (
+                              <ChainOfThoughtStep
+                                key={`phase-${entry.phase.phase}`}
+                                icon={PhaseIcon}
+                                label={entry.phase.phaseName}
+                                status={isComplete ? 'complete' : 'active'}
+                              />
+                            )
+                          }
 
-                  {/* Checkpoints */}
-                  {checkpoints.map((cp) => (
-                    <Checkpoint key={cp.label}>
-                      <CheckpointIcon />
-                      <CheckpointTrigger>
-                        {cp.label}
-                        {cp.status === 'complete' && (
-                          <CheckCircle2 className="ml-1 inline size-3 text-green-500" />
-                        )}
-                      </CheckpointTrigger>
-                    </Checkpoint>
-                  ))}
+                          case 'agent': {
+                            const isComplete = entry.status === 'complete'
+                            return (
+                              <Task key={`agent-${entry.agent.agentId}-${entry.ts}`} defaultOpen={!isComplete}>
+                                <TaskTrigger title={entry.agent.agentName}>
+                                  <div className="flex w-full cursor-pointer items-center gap-2 text-sm transition-colors hover:text-foreground">
+                                    {isComplete ? (
+                                      <CheckCircle2 className="size-4 text-green-500" />
+                                    ) : (
+                                      <Cog className="size-4 animate-spin text-muted-foreground" />
+                                    )}
+                                    <span className={isComplete ? 'text-muted-foreground' : 'text-foreground'}>
+                                      {entry.agent.agentName}
+                                    </span>
+                                    {isComplete && entry.durationMs != null && (
+                                      <span className="ml-auto flex items-center gap-1 text-xs text-muted-foreground">
+                                        <Clock className="size-3" />
+                                        {formatDuration(entry.durationMs)}
+                                      </span>
+                                    )}
+                                  </div>
+                                </TaskTrigger>
+                                <TaskContent>
+                                  <TaskItem>
+                                    Phase {entry.agent.phase} — {isComplete ? 'Done' : 'Running...'}
+                                  </TaskItem>
+                                </TaskContent>
+                              </Task>
+                            )
+                          }
 
-                  {/* Layer Commits */}
-                  {layerCommits.map((lc) => (
-                    <Commit key={lc.hash}>
-                      <CommitHeader>
-                        <CommitInfo>
-                          <CommitMessage>{lc.message}</CommitMessage>
-                          <CommitHash>{lc.hash}</CommitHash>
-                        </CommitInfo>
-                      </CommitHeader>
-                      <CommitContent>
-                        <CommitFiles>
-                          {lc.files.map((filePath) => (
-                            <CommitFile key={filePath}>
-                              <CommitFileInfo>
-                                <CommitFileIcon />
-                                <CommitFilePath>{filePath}</CommitFilePath>
-                              </CommitFileInfo>
-                              <CommitFileStatus status="added" />
-                            </CommitFile>
+                          case 'plan':
+                            return (
+                              <Plan key={`plan-${entry.ts}`} defaultOpen={false}>
+                                <PlanHeader>
+                                  <div>
+                                    <PlanTitle>{(entry.plan.appName as string) || 'App Blueprint'}</PlanTitle>
+                                    <PlanDescription>
+                                      {(entry.plan.appDescription as string) || 'Generation plan ready'}
+                                    </PlanDescription>
+                                  </div>
+                                  <PlanAction>
+                                    <PlanTrigger />
+                                  </PlanAction>
+                                </PlanHeader>
+                                <PlanContent>
+                                  <div className="space-y-2 text-sm text-muted-foreground">
+                                    {typeof entry.plan.fileCount === 'number' && (
+                                      <p>{entry.plan.fileCount} files to generate</p>
+                                    )}
+                                    {Array.isArray(entry.plan.tables) && entry.plan.tables.length > 0 && (
+                                      <p>Tables: {(entry.plan.tables as string[]).join(', ')}</p>
+                                    )}
+                                  </div>
+                                </PlanContent>
+                              </Plan>
+                            )
+
+                          case 'checkpoint': {
+                            const cp = entry.checkpoint
+                            return (
+                              <Checkpoint key={`cp-${cp.label}-${entry.ts}`}>
+                                <CheckpointIcon />
+                                <CheckpointTrigger>
+                                  {cp.label}
+                                  {cp.status === 'complete' && (
+                                    <CheckCircle2 className="ml-1 inline size-3 text-green-500" />
+                                  )}
+                                </CheckpointTrigger>
+                              </Checkpoint>
+                            )
+                          }
+
+                          case 'commit': {
+                            const lc = entry.commit
+                            return (
+                              <Commit key={`commit-${lc.hash}`}>
+                                <CommitHeader>
+                                  <CommitInfo>
+                                    <CommitMessage>{lc.message}</CommitMessage>
+                                    <CommitHash>{lc.hash}</CommitHash>
+                                  </CommitInfo>
+                                </CommitHeader>
+                                <CommitContent>
+                                  <CommitFiles>
+                                    {lc.files.map((filePath) => (
+                                      <CommitFile key={filePath}>
+                                        <CommitFileInfo>
+                                          <CommitFileIcon />
+                                          <CommitFilePath>{filePath}</CommitFilePath>
+                                        </CommitFileInfo>
+                                        <CommitFileStatus status="added" />
+                                      </CommitFile>
+                                    ))}
+                                  </CommitFiles>
+                                </CommitContent>
+                              </Commit>
+                            )
+                          }
+
+                          case 'error':
+                            return (
+                              <StackTrace
+                                key={`error-${entry.ts}`}
+                                trace={entry.error}
+                                defaultOpen
+                              >
+                                <StackTraceHeader>
+                                  <StackTraceError>
+                                    <StackTraceErrorType>Pipeline Error</StackTraceErrorType>
+                                    <StackTraceErrorMessage>{entry.error}</StackTraceErrorMessage>
+                                  </StackTraceError>
+                                  <StackTraceActions>
+                                    <StackTraceCopyButton />
+                                    <StackTraceExpandButton />
+                                  </StackTraceActions>
+                                </StackTraceHeader>
+                                <StackTraceContent>
+                                  <StackTraceFrames showInternalFrames={false} />
+                                </StackTraceContent>
+                              </StackTrace>
+                            )
+
+                          case 'complete':
+                            return (
+                              <div
+                                key={`complete-${entry.ts}`}
+                                className="flex items-center gap-2 rounded-lg border border-green-500/30 bg-green-500/10 p-3 text-sm text-green-400"
+                              >
+                                <Rocket className="size-4" />
+                                <span>
+                                  App deployed successfully
+                                  {entry.deploymentUrl && (
+                                    <>
+                                      {' — '}
+                                      <a
+                                        href={entry.deploymentUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="underline hover:text-green-300"
+                                      >
+                                        View live
+                                      </a>
+                                    </>
+                                  )}
+                                </span>
+                              </div>
+                            )
+
+                          default:
+                            return null
+                        }
+                      })}
+
+                      {/* File Queue — rendered inline when files exist */}
+                      {hasFiles && (
+                        <Task defaultOpen>
+                          <TaskTrigger title="Generated Files">
+                            <div className="flex w-full cursor-pointer items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground">
+                              <Sparkles className="size-4" />
+                              <span>
+                                Files ({generationFiles.filter((f) => f.status === 'complete').length}/
+                                {generationFiles.length})
+                              </span>
+                            </div>
+                          </TaskTrigger>
+                          <TaskContent>
+                            <Queue>
+                              <QueueList>
+                                {generationFiles.map((file) => (
+                                  <QueueItem key={file.path}>
+                                    <div className="flex items-center gap-2">
+                                      <QueueItemIndicator completed={file.status === 'complete'} />
+                                      <QueueItemContent completed={file.status === 'complete'}>
+                                        {file.path}
+                                        {file.status === 'generating' && ' ...'}
+                                        {file.lines !== undefined && ` (${file.lines} lines)`}
+                                      </QueueItemContent>
+                                    </div>
+                                  </QueueItem>
+                                ))}
+                              </QueueList>
+                            </Queue>
+                          </TaskContent>
+                        </Task>
+                      )}
+
+                      {/* Build Errors */}
+                      {buildErrors.length > 0 && (
+                        <div className="space-y-2">
+                          {buildErrors.map((err) => (
+                            <StackTrace
+                              key={`${err.file}-${err.message}`}
+                              trace={err.raw}
+                              defaultOpen={false}
+                            >
+                              <StackTraceHeader>
+                                <StackTraceError>
+                                  <StackTraceErrorType>Build Error</StackTraceErrorType>
+                                  <StackTraceErrorMessage>{err.message}</StackTraceErrorMessage>
+                                </StackTraceError>
+                                <StackTraceActions>
+                                  <StackTraceCopyButton />
+                                  <StackTraceExpandButton />
+                                </StackTraceActions>
+                              </StackTraceHeader>
+                              <StackTraceContent>
+                                <StackTraceFrames showInternalFrames={false} />
+                              </StackTraceContent>
+                            </StackTrace>
                           ))}
-                        </CommitFiles>
-                      </CommitContent>
-                    </Commit>
-                  ))}
+                        </div>
+                      )}
+                    </ChainOfThoughtContent>
+                  </ChainOfThought>
                 </div>
               )}
             </>

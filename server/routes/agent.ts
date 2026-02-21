@@ -20,7 +20,7 @@ import { createActor } from 'xstate'
 import { Hono } from 'hono'
 import * as Sentry from '@sentry/node'
 import { createHeliconeProvider, isAllowedModel } from '../lib/agents/provider'
-import { createInspectedActor } from '../lib/agents/machine'
+import { createMockOrRealActor, isMockPipeline, MOCK_FILE_LIST } from '../lib/agents/machine'
 import type { MachineContext } from '../lib/agents/machine'
 import { editMachine } from '../lib/agents/edit-machine'
 import type { EditMachineContext } from '../lib/agents/edit-machine'
@@ -70,17 +70,18 @@ if (process.env.NODE_ENV !== 'production') {
   }, 1800_000)
 }
 
-/** Map XState states to human-readable phase names */
-const STATE_PHASES: Record<string, { name: string; phase: number }> = {
-  analyzing: { name: 'Analyzing requirements', phase: 1 },
+/** Map XState states to human-readable phase names + agent identifiers */
+const STATE_PHASES: Record<string, { name: string; phase: number; agentId?: string; agentName?: string }> = {
+  analyzing: { name: 'Analyzing requirements', phase: 1, agentId: 'analyst', agentName: 'Analyst' },
   awaitingClarification: { name: 'Awaiting clarification', phase: 1 },
-  blueprinting: { name: 'Creating blueprint', phase: 2 },
-  provisioning: { name: 'Provisioning infrastructure', phase: 3 },
-  generating: { name: 'Generating code', phase: 4 },
-  polishing: { name: 'Polishing design', phase: 4 },
-  validating: { name: 'Validating code', phase: 5 },
-  repairing: { name: 'Repairing errors', phase: 5 },
-  deploying: { name: 'Deploying application', phase: 6 },
+  blueprinting: { name: 'Creating blueprint', phase: 2, agentId: 'blueprint', agentName: 'Blueprint Engine' },
+  provisioning: { name: 'Provisioning infrastructure', phase: 3, agentId: 'provisioner', agentName: 'Provisioner' },
+  generating: { name: 'Generating code', phase: 4, agentId: 'codegen', agentName: 'Code Generator' },
+  polishing: { name: 'Polishing design', phase: 4, agentId: 'polish', agentName: 'Design Polish' },
+  validating: { name: 'Validating code', phase: 5, agentId: 'validator', agentName: 'Validator' },
+  repairing: { name: 'Repairing errors', phase: 5, agentId: 'repair', agentName: 'Repair Agent' },
+  reviewing: { name: 'Reviewing code', phase: 5, agentId: 'reviewer', agentName: 'Code Reviewer' },
+  deploying: { name: 'Deploying application', phase: 6, agentId: 'deployer', agentName: 'Deployer' },
   complete: { name: 'Complete', phase: 7 },
   failed: { name: 'Failed', phase: 7 },
 }
@@ -103,6 +104,8 @@ const STATE_TO_DB_STATUS: Record<string, string> = {
 
 /**
  * Subscribe to XState actor and emit SSE events for state transitions.
+ * Emits rich events: agent_start/complete with duration, file events during
+ * generating phase, plan_ready on blueprint→generating transition.
  * Returns a Promise that resolves when the actor reaches a final state.
  */
 function streamActorStates(
@@ -113,8 +116,14 @@ function streamActorStates(
   runId: string,
   projectId: string,
   userId: string,
+  mockMode = false,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
+    // Track when each agent-state was entered for duration calculation
+    const stateEntryTimes = new Map<string, number>()
+    let previousState: string | null = null
+    let fileEventsEmitted = false
+
     const subscription = actor.subscribe((snapshot: { value: string; context: MachineContext; status?: string }) => {
       if (signal.aborted) {
         subscription.unsubscribe()
@@ -126,18 +135,48 @@ function streamActorStates(
       const phaseInfo = STATE_PHASES[state]
 
       // Update project status in DB based on state transition (fire-and-forget)
-      const dbStatus = STATE_TO_DB_STATUS[state]
-      if (dbStatus) {
-        updateProject(projectId, { status: dbStatus }, userId).catch((err) => {
-          console.error('[agent] Failed to update project status:', err)
-        })
+      // Skip DB updates in mock mode
+      if (!mockMode) {
+        const dbStatus = STATE_TO_DB_STATUS[state]
+        if (dbStatus) {
+          updateProject(projectId, { status: dbStatus }, userId).catch((err) => {
+            console.error('[agent] Failed to update project status:', err)
+          })
+        }
       }
 
       if (!phaseInfo) {
         return
       }
 
-      // Emit phase events
+      // ── Emit agent_complete for the previous state ──
+      if (previousState && previousState !== state) {
+        const prevPhase = STATE_PHASES[previousState]
+        if (prevPhase?.agentId) {
+          const entryTime = stateEntryTimes.get(previousState)
+          const durationMs = entryTime ? Date.now() - entryTime : 0
+          emit({
+            type: 'agent_complete',
+            agentId: prevPhase.agentId,
+            tokensUsed: 0,
+            durationMs,
+          })
+          // Mark the previous checkpoint complete
+          emit({
+            type: 'checkpoint',
+            label: prevPhase.name,
+            status: 'complete',
+          })
+        }
+      }
+
+      // Track entry time for duration calculation
+      if (state !== previousState) {
+        stateEntryTimes.set(state, Date.now())
+      }
+      previousState = state
+
+      // ── Emit phase events ──
       if (state === 'complete') {
         emit({ type: 'stage_update', stage: 'complete' })
         emit({
@@ -149,10 +188,12 @@ function streamActorStates(
         resolve()
       } else if (state === 'failed') {
         const errorMsg = snapshot.context.error ?? 'Pipeline failed'
-        Sentry.captureMessage(errorMsg, {
-          level: 'error',
-          tags: { operation: 'state_machine', state: 'failed' },
-        })
+        if (!mockMode) {
+          Sentry.captureMessage(errorMsg, {
+            level: 'error',
+            tags: { operation: 'state_machine', state: 'failed' },
+          })
+        }
         emit({
           type: 'error',
           message: errorMsg,
@@ -161,7 +202,6 @@ function streamActorStates(
         subscription.unsubscribe()
         reject(new Error(errorMsg))
       } else if (state === 'awaitingClarification') {
-        // Special handling for clarification state
         const questions = snapshot.context.clarificationQuestions
         if (questions) {
           emit({
@@ -192,6 +232,55 @@ function streamActorStates(
           label: phaseInfo.name,
           status: 'active',
         })
+
+        // Emit agent_start for states that have an agent
+        if (phaseInfo.agentId && phaseInfo.agentName) {
+          emit({
+            type: 'agent_start',
+            agentId: phaseInfo.agentId,
+            agentName: phaseInfo.agentName,
+            phase: phaseInfo.phase,
+          })
+        }
+
+        // Emit plan_ready when entering generating (blueprint is available)
+        if (state === 'generating' && snapshot.context.blueprint) {
+          emit({
+            type: 'plan_ready',
+            plan: {
+              appName: snapshot.context.appName,
+              appDescription: snapshot.context.appDescription,
+              fileCount: snapshot.context.blueprint.fileTree.length,
+              tables: snapshot.context.contract?.tables?.map((t: { name: string }) => t.name) ?? [],
+            },
+          })
+        }
+
+        // Emit file events during generating state (mock: emit from blueprint file list)
+        if (state === 'generating' && !fileEventsEmitted) {
+          fileEventsEmitted = true
+          const files = mockMode
+            ? MOCK_FILE_LIST
+            : snapshot.context.blueprint?.fileTree?.map((f: { path: string }) => f.path) ?? []
+
+          // Emit file_start for all files immediately
+          for (const filePath of files) {
+            emit({ type: 'file_start', path: filePath, layer: 0 })
+          }
+
+          // In mock mode, schedule file_complete events with staggered delays
+          if (mockMode) {
+            for (let i = 0; i < files.length; i++) {
+              setTimeout(() => {
+                emit({
+                  type: 'file_complete',
+                  path: files[i],
+                  linesOfCode: 20 + Math.floor(Math.random() * 80),
+                })
+              }, 200 * (i + 1))
+            }
+          }
+        }
       }
     })
 
@@ -237,6 +326,8 @@ agentRoutes.post('/', async (c) => {
     return c.json({ error: 'Project not found' }, 404)
   }
 
+  const mockMode = isMockPipeline()
+
   // M4: Check concurrent generation limit FIRST (before reserving credits)
   const userRuns = [...activeRuns.values()].filter((r) => r.userId === user.id).length
   if (userRuns >= 3) {
@@ -249,57 +340,61 @@ agentRoutes.post('/', async (c) => {
     )
   }
 
-  // Reserve credits atomically to prevent race conditions
+  // Skip credit reservation in mock mode
   const CREDIT_RESERVATION = 50 // Minimum reservation amount
-  const reserved = await reserveCredits(user.id, CREDIT_RESERVATION)
-  if (!reserved) {
-    // Check current credits for detailed error message
-    const credits = await getUserCredits(user.id)
-    return c.json(
-      {
-        error: 'insufficient_credits',
-        message: 'Not enough credits to start generation',
-        credits_remaining: credits?.creditsRemaining ?? 0,
-        credits_reset_at: credits?.creditsResetAt ?? null,
-      },
-      402,
-    )
+  if (!mockMode) {
+    const reserved = await reserveCredits(user.id, CREDIT_RESERVATION)
+    if (!reserved) {
+      // Check current credits for detailed error message
+      const credits = await getUserCredits(user.id)
+      return c.json(
+        {
+          error: 'insufficient_credits',
+          message: 'Not enough credits to start generation',
+          credits_remaining: credits?.creditsRemaining ?? 0,
+          credits_reset_at: credits?.creditsResetAt ?? null,
+        },
+        402,
+      )
+    }
   }
 
-  // Inject per-request Helicone context via RequestContext.
-  // Each agent resolves its own model from PIPELINE_MODELS using this context.
-  const heliconeContext = {
-    userId: user.id,
-    projectId,
-    sessionId: `${projectId}:${Date.now()}`,
+  // Inject per-request Helicone context via RequestContext (skip in mock mode).
+  if (!mockMode) {
+    const heliconeContext = {
+      userId: user.id,
+      projectId,
+      sessionId: `${projectId}:${Date.now()}`,
+    }
+    const requestContext = new RequestContext()
+    requestContext.set('heliconeContext', heliconeContext)
+    requestContext.set(
+      'llm',
+      createHeliconeProvider({ ...heliconeContext, agentName: 'app-generation' })(model),
+    )
+    requestContext.set('userId', user.id)
   }
-  const requestContext = new RequestContext()
-  requestContext.set('heliconeContext', heliconeContext)
-  // Legacy 'llm' key — kept for backward compat with any code reading it directly
-  requestContext.set(
-    'llm',
-    createHeliconeProvider({ ...heliconeContext, agentName: 'app-generation' })(model),
-  )
-  requestContext.set('userId', user.id)
 
   // H1: Create XState actor with error handling to refund credits on failure
   const runId = crypto.randomUUID()
   let actor: any
   try {
-    actor = await createInspectedActor()
+    actor = await createMockOrRealActor()
     activeRuns.set(runId, {
       actor,
       userId: user.id,
       projectId,
       model,
       createdAt: Date.now(),
-      reservedCredits: CREDIT_RESERVATION,
-      settled: false,
+      reservedCredits: mockMode ? 0 : CREDIT_RESERVATION,
+      settled: mockMode, // Mock mode: already settled (no credits to settle)
     })
     actor.start()
   } catch (error) {
-    // Refund reserved credits if actor creation fails
-    await settleCredits(user.id, CREDIT_RESERVATION, 0)
+    // Refund reserved credits if actor creation fails (skip in mock mode)
+    if (!mockMode) {
+      await settleCredits(user.id, CREDIT_RESERVATION, 0)
+    }
     Sentry.captureException(error, {
       tags: { route: '/api/agent', operation: 'actor_creation' },
       extra: { projectId, model, userId: user.id },
@@ -322,7 +417,7 @@ agentRoutes.post('/', async (c) => {
       actor.send({ type: 'START', userMessage: message, projectId, userId: user.id })
 
       // Stream state transitions
-      await streamActorStates(actor, emit, signal, runId, projectId, user.id)
+      await streamActorStates(actor, emit, signal, runId, projectId, user.id, mockMode)
 
       // Get final snapshot to read totalTokens from machine context
       const finalSnapshot = actor.getSnapshot()
@@ -341,6 +436,14 @@ agentRoutes.post('/', async (c) => {
           type: 'credits_used',
           creditsUsed,
           creditsRemaining: settlement.creditsRemaining,
+          tokensTotal: totalTokens,
+        })
+      } else if (mockMode) {
+        // In mock mode, emit synthetic credits_used event
+        emit({
+          type: 'credits_used',
+          creditsUsed: 0,
+          creditsRemaining: 999,
           tokensTotal: totalTokens,
         })
       }

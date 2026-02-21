@@ -789,3 +789,483 @@ export function stopInspector() {
   _inspector?.stop()
   _inspector = null
 }
+
+// ============================================================================
+// Mock pipeline — MOCK_PIPELINE=true bypasses all real actors
+// ============================================================================
+
+const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
+
+/** Minimal todo-app contract for mock pipeline */
+const MOCK_CONTRACT: SchemaContract = {
+  tables: [
+    {
+      name: 'categories',
+      columns: [
+        { name: 'id', type: 'uuid', primaryKey: true, default: 'gen_random_uuid()' },
+        { name: 'name', type: 'text', nullable: false },
+        { name: 'color', type: 'text', default: "'#3b82f6'" },
+        { name: 'created_at', type: 'timestamptz', default: 'now()' },
+      ],
+    },
+    {
+      name: 'todos',
+      columns: [
+        { name: 'id', type: 'uuid', primaryKey: true, default: 'gen_random_uuid()' },
+        { name: 'title', type: 'text', nullable: false },
+        { name: 'description', type: 'text' },
+        { name: 'completed', type: 'boolean', default: 'false' },
+        { name: 'priority', type: 'text', default: "'medium'" },
+        { name: 'category_id', type: 'uuid', references: { table: 'categories', column: 'id' } },
+        { name: 'user_id', type: 'uuid', references: { table: 'auth.users', column: 'id' } },
+        { name: 'due_date', type: 'timestamptz' },
+        { name: 'created_at', type: 'timestamptz', default: 'now()' },
+      ],
+    },
+    {
+      name: 'profiles',
+      columns: [
+        { name: 'id', type: 'uuid', primaryKey: true, references: { table: 'auth.users', column: 'id' } },
+        { name: 'display_name', type: 'text' },
+        { name: 'avatar_url', type: 'text' },
+        { name: 'created_at', type: 'timestamptz', default: 'now()' },
+      ],
+    },
+  ],
+}
+
+/** Minimal blueprint for mock pipeline */
+const MOCK_BLUEPRINT: AppBlueprint = {
+  meta: {
+    appName: 'TaskFlow',
+    appDescription: 'A modern task management app with categories, priorities, and due dates',
+  },
+  features: { auth: true, crud: true, realtime: false, rls: true, search: false, imageUpload: false },
+  contract: MOCK_CONTRACT,
+  fileTree: [
+    { path: 'src/main.tsx', content: '', layer: 0, isLLMSlot: false },
+    { path: 'src/routes/__root.tsx', content: '', layer: 0, isLLMSlot: false },
+    { path: 'src/routes/index.tsx', content: '', layer: 1, isLLMSlot: false },
+    { path: 'src/routes/_authenticated/route.tsx', content: '', layer: 1, isLLMSlot: false },
+    { path: 'src/routes/_authenticated/dashboard.tsx', content: '', layer: 2, isLLMSlot: false },
+    { path: 'src/routes/_authenticated/todos/index.tsx', content: '', layer: 2, isLLMSlot: true },
+    { path: 'src/routes/_authenticated/todos/$id.tsx', content: '', layer: 2, isLLMSlot: true },
+    { path: 'src/routes/_authenticated/categories/index.tsx', content: '', layer: 2, isLLMSlot: true },
+    { path: 'src/lib/supabase.ts', content: '', layer: 0, isLLMSlot: false },
+    { path: 'src/lib/hooks.ts', content: '', layer: 1, isLLMSlot: false },
+    { path: 'src/components/ui/button.tsx', content: '', layer: 0, isLLMSlot: false },
+    { path: 'src/components/ui/input.tsx', content: '', layer: 0, isLLMSlot: false },
+    { path: 'src/components/ui/card.tsx', content: '', layer: 0, isLLMSlot: false },
+  ],
+}
+
+/** Mock files emitted during code generation (simulates file_start/file_complete) */
+export const MOCK_FILE_LIST = MOCK_BLUEPRINT.fileTree.map((f) => f.path)
+
+export const mockAppGenerationMachine = setup({
+  types: {
+    context: {} as MachineContext,
+    events: {} as MachineEvent,
+  },
+  actors: {
+    runAnalysisActor: fromPromise(async () => {
+      await delay(2000)
+      return {
+        type: 'done' as const,
+        appName: 'TaskFlow',
+        appDescription: 'A modern task management app with categories, priorities, and due dates',
+        contract: MOCK_CONTRACT,
+        capabilityManifest: ['auth', 'crud', 'rls'],
+        assembly: null,
+        tokensUsed: 3500,
+      }
+    }),
+    runBlueprintActor: fromPromise(async () => {
+      await delay(1000)
+      return { blueprint: MOCK_BLUEPRINT, tokensUsed: 1200 }
+    }),
+    runProvisioningActor: fromPromise(async () => {
+      await delay(1500)
+      return {
+        sandboxId: 'mock-sandbox-001',
+        supabaseProjectId: 'mock-supabase-001',
+        supabaseUrl: 'https://mock-project.supabase.co',
+        supabaseAnonKey: 'mock-anon-key-xxxx',
+        githubCloneUrl: 'https://github.com/mock-org/taskflow.git',
+        githubHtmlUrl: 'https://github.com/mock-org/taskflow',
+        repoName: 'taskflow',
+        tokensUsed: 0,
+      }
+    }),
+    runCodeGenerationActor: fromPromise(async () => {
+      await delay(3000)
+      return { tokensUsed: 5000 }
+    }),
+    runPolishActor: fromPromise(async () => {
+      await delay(1000)
+      return { tokensUsed: 500 }
+    }),
+    runValidationActor: fromPromise(async () => {
+      await delay(1000)
+      return { allPassed: true, validation: null, tokensUsed: 200 }
+    }),
+    runRepairActor: fromPromise(async () => {
+      await delay(500)
+      return { tokensUsed: 0 }
+    }),
+    runCodeReviewActor: fromPromise(async () => {
+      await delay(1000)
+      return {
+        passed: true,
+        tokensUsed: 300,
+        deterministicIssues: [],
+        llmIssues: [],
+        summary: 'Mock review — all checks passed',
+      }
+    }),
+    runDeploymentActor: fromPromise(async () => {
+      await delay(2000)
+      return { deploymentUrl: 'https://taskflow-mock.vercel.app', tokensUsed: 0 }
+    }),
+    runCleanupActor: fromPromise(async () => {
+      return { errors: [] }
+    }),
+  },
+  guards: {
+    canRetry: ({ context }) => context.retryCount < 2,
+    cannotRetry: ({ context }) => context.retryCount >= 2,
+  },
+}).createMachine({
+  // Reuse the exact same machine definition — only actors are swapped
+  id: 'appGeneration',
+  initial: 'idle',
+  context: {
+    userMessage: '',
+    projectId: '',
+    userId: '',
+    appName: '',
+    appDescription: '',
+    contract: null,
+    capabilityManifest: [],
+    assembly: null,
+    clarificationQuestions: null,
+    blueprint: null,
+    sandboxId: null,
+    supabaseProjectId: null,
+    supabaseUrl: null,
+    supabaseAnonKey: null,
+    githubCloneUrl: null,
+    githubHtmlUrl: null,
+    repoName: null,
+    validation: null,
+    retryCount: 0,
+    previousValidationErrors: null,
+    reviewResult: null,
+    reviewSkipped: false,
+    deploymentUrl: null,
+    totalTokens: 0,
+    polishTokens: 0,
+    error: null,
+  },
+  states: {
+    idle: {
+      on: {
+        START: {
+          target: 'preparing',
+          actions: assign({
+            userMessage: ({ event }) => event.userMessage,
+            projectId: ({ event }) => event.projectId,
+            userId: ({ event }) => event.userId,
+          }),
+        },
+      },
+    },
+    preparing: {
+      type: 'parallel',
+      states: {
+        analysis: {
+          initial: 'running',
+          states: {
+            running: {
+              invoke: {
+                src: 'runAnalysisActor',
+                input: ({ context }) => ({
+                  userMessage: context.userMessage,
+                  projectId: context.projectId,
+                }),
+                onDone: {
+                  target: 'done',
+                  actions: assign({
+                    appName: ({ event }) => event.output.appName,
+                    appDescription: ({ event }) => event.output.appDescription,
+                    contract: ({ event }) => event.output.contract,
+                    capabilityManifest: ({ event }) => event.output.capabilityManifest ?? [],
+                    assembly: ({ event }) => event.output.assembly ?? null,
+                    totalTokens: ({ context, event }) => context.totalTokens + event.output.tokensUsed,
+                  }),
+                },
+                onError: {
+                  target: '#appGeneration.failed',
+                  actions: assign({ error: ({ event }) => String(event.error) }),
+                },
+              },
+            },
+            awaitingClarification: {
+              on: {
+                USER_ANSWERED: {
+                  target: 'running',
+                  actions: assign({
+                    userMessage: ({ context, event }) =>
+                      `${context.userMessage}\n\nUser's answers:\n${event.answers}`,
+                  }),
+                },
+              },
+            },
+            done: { type: 'final' as const },
+          },
+        },
+        infrastructure: {
+          initial: 'provisioning',
+          states: {
+            provisioning: {
+              invoke: {
+                src: 'runProvisioningActor',
+                input: ({ context }) => ({
+                  appName: context.appName || `project-${context.projectId.slice(0, 8)}`,
+                  projectId: context.projectId,
+                  userId: context.userId,
+                }),
+                onDone: {
+                  target: 'done',
+                  actions: assign({
+                    sandboxId: ({ event }) => event.output.sandboxId,
+                    supabaseProjectId: ({ event }) => event.output.supabaseProjectId,
+                    supabaseUrl: ({ event }) => event.output.supabaseUrl,
+                    supabaseAnonKey: ({ event }) => event.output.supabaseAnonKey,
+                    githubCloneUrl: ({ event }) => event.output.githubCloneUrl,
+                    githubHtmlUrl: ({ event }) => event.output.githubHtmlUrl,
+                    repoName: ({ event }) => event.output.repoName,
+                    totalTokens: ({ context, event }) => context.totalTokens + event.output.tokensUsed,
+                  }),
+                },
+                onError: {
+                  target: '#appGeneration.failed',
+                  actions: assign({ error: ({ event }) => String(event.error) }),
+                },
+              },
+            },
+            done: { type: 'final' as const },
+          },
+        },
+      },
+      onDone: { target: 'blueprinting' },
+    },
+    blueprinting: {
+      invoke: {
+        src: 'runBlueprintActor',
+        input: ({ context }) => ({
+          appName: context.appName ?? '',
+          appDescription: context.appDescription ?? '',
+          contract: context.contract!,
+        }),
+        onDone: {
+          target: 'generating',
+          actions: assign({
+            blueprint: ({ event }) => event.output.blueprint,
+            contract: ({ event }) => event.output.blueprint.contract,
+            totalTokens: ({ context, event }) => context.totalTokens + event.output.tokensUsed,
+          }),
+        },
+        onError: {
+          target: 'failed',
+          actions: assign({ error: ({ event }) => String(event.error) }),
+        },
+      },
+    },
+    generating: {
+      invoke: {
+        src: 'runCodeGenerationActor',
+        input: ({ context }) => ({
+          blueprint: context.blueprint!,
+          contract: context.contract!,
+          sandboxId: context.sandboxId!,
+          supabaseProjectId: context.supabaseProjectId!,
+          supabaseUrl: context.supabaseUrl!,
+          supabaseAnonKey: context.supabaseAnonKey!,
+        }),
+        onDone: {
+          target: 'polishing',
+          actions: assign({
+            totalTokens: ({ context, event }) => context.totalTokens + event.output.tokensUsed,
+          }),
+        },
+        onError: {
+          target: 'failed',
+          actions: assign({ error: ({ event }) => String(event.error) }),
+        },
+      },
+    },
+    polishing: {
+      invoke: {
+        src: 'runPolishActor',
+        input: ({ context }) => ({
+          sandboxId: context.sandboxId!,
+          blueprint: context.blueprint!,
+          assembly: context.assembly,
+          tokens: (context.blueprint?.meta as { tokens?: ThemeTokens } | undefined)?.tokens ?? {
+            name: 'public-website',
+            fonts: { display: 'Inter', body: 'Inter', googleFontsUrl: '' },
+            colors: {
+              background: '#ffffff', foreground: '#111111', primary: '#2b6cb0',
+              primaryForeground: '#ffffff', secondary: '#e5e7eb', accent: '#f59e0b',
+              muted: '#f3f4f6', border: '#d1d5db',
+            },
+            style: {
+              borderRadius: '0.5rem', cardStyle: 'elevated', navStyle: 'top-bar',
+              heroLayout: 'split', spacing: 'normal', motion: 'subtle', imagery: 'minimal',
+            },
+            authPosture: 'hybrid',
+            heroImages: [],
+            heroQuery: 'modern web app',
+            textSlots: {
+              hero_headline: 'Welcome', hero_subtext: 'Generated app',
+              about_paragraph: 'Generated app experience.', cta_label: 'Get started',
+              empty_state: 'No items yet.', footer_tagline: 'Built with care.',
+            },
+          },
+        }),
+        onDone: {
+          target: 'validating',
+          actions: assign({
+            totalTokens: ({ context, event }) => context.totalTokens + (event.output?.tokensUsed ?? 0),
+            polishTokens: ({ context, event }) => context.polishTokens + (event.output?.tokensUsed ?? 0),
+          }),
+        },
+        onError: { target: 'validating' },
+      },
+    },
+    validating: {
+      invoke: {
+        src: 'runValidationActor',
+        input: ({ context }) => ({
+          blueprint: context.blueprint!,
+          sandboxId: context.sandboxId!,
+        }),
+        onDone: [
+          {
+            guard: ({ event }) => event.output.allPassed,
+            target: 'reviewing',
+            actions: assign({
+              totalTokens: ({ context, event }) => context.totalTokens + event.output.tokensUsed,
+            }),
+          },
+          {
+            target: 'failed',
+            actions: assign({ error: () => 'Mock validation failed' }),
+          },
+        ],
+        onError: {
+          target: 'failed',
+          actions: assign({ error: ({ event }) => String(event.error) }),
+        },
+      },
+    },
+    repairing: {
+      invoke: {
+        src: 'runRepairActor',
+        input: ({ context }) => ({
+          blueprint: context.blueprint!,
+          validation: context.validation!,
+          sandboxId: context.sandboxId!,
+        }),
+        onDone: {
+          target: 'validating',
+          actions: assign({
+            totalTokens: ({ context, event }) => context.totalTokens + event.output.tokensUsed,
+          }),
+        },
+        onError: {
+          target: 'failed',
+          actions: assign({ error: ({ event }) => String(event.error) }),
+        },
+      },
+    },
+    reviewing: {
+      invoke: {
+        src: 'runCodeReviewActor',
+        input: ({ context }) => ({
+          blueprint: context.blueprint!,
+          contract: context.contract!,
+          sandboxId: context.sandboxId!,
+        }),
+        onDone: [
+          {
+            guard: ({ event }) => event.output.passed,
+            target: 'deploying',
+            actions: assign({
+              reviewResult: ({ event }) => event.output,
+              totalTokens: ({ context, event }) => context.totalTokens + event.output.tokensUsed,
+            }),
+          },
+          {
+            target: 'failed',
+            actions: assign({ error: () => 'Mock review failed' }),
+          },
+        ],
+        onError: {
+          target: 'deploying',
+          actions: assign({ reviewSkipped: () => true }),
+        },
+      },
+    },
+    deploying: {
+      invoke: {
+        src: 'runDeploymentActor',
+        input: ({ context }) => ({
+          sandboxId: context.sandboxId!,
+          projectId: context.projectId,
+        }),
+        onDone: {
+          target: 'complete',
+          actions: assign({
+            deploymentUrl: ({ event }) => event.output.deploymentUrl,
+            totalTokens: ({ context, event }) => context.totalTokens + event.output.tokensUsed,
+          }),
+        },
+        onError: {
+          target: 'failed',
+          actions: assign({ error: ({ event }) => String(event.error) }),
+        },
+      },
+    },
+    complete: { type: 'final' },
+    cleanup: {
+      invoke: {
+        src: 'runCleanupActor',
+        input: ({ context }) => ({
+          sandboxId: context.sandboxId,
+          supabaseProjectId: context.supabaseProjectId,
+        }),
+        onDone: { target: 'failed' },
+        onError: { target: 'failed' },
+      },
+    },
+    failed: { type: 'final' },
+  },
+})
+
+/**
+ * Create the appropriate actor based on MOCK_PIPELINE env var.
+ * When MOCK_PIPELINE=true, uses mock actors with fake delays.
+ */
+export function isMockPipeline(): boolean {
+  return process.env.MOCK_PIPELINE === 'true'
+}
+
+export async function createMockOrRealActor(options?: ActorOptions<typeof appGenerationMachine>) {
+  if (isMockPipeline()) {
+    console.log('[mock-pipeline] Using mock actors — no LLMs or external services')
+    return createActor(mockAppGenerationMachine, options)
+  }
+  return createInspectedActor(options)
+}
