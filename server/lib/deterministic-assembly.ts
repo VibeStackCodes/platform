@@ -502,7 +502,7 @@ function buildNavigation(spec: CreativeSpec): string {
 ${navLinks}
         </nav>
 
-        {/* Desktop CTA */${ctaBlock}
+        {/* Desktop CTA */}${ctaBlock}
 
         {/* Mobile menu */}
         <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
@@ -675,6 +675,14 @@ export function assembleApp(input: AssemblyInput): BlueprintFile[] {
   })
 
   // ---- Layer 1: lib utilities ----
+
+  // cn() helper — required by all shadcn/ui components
+  files.push({
+    path: 'src/lib/utils.ts',
+    content: `import { type ClassValue, clsx } from 'clsx'\nimport { twMerge } from 'tailwind-merge'\n\nexport function cn(...inputs: ClassValue[]) {\n  return twMerge(clsx(inputs))\n}\n`,
+    layer: 1,
+    isLLMSlot: false,
+  })
 
   if (spec.archetype !== 'static') {
     files.push({
