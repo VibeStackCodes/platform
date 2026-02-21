@@ -28,18 +28,15 @@ function LandingPage() {
           <LandingNavbar />
         </motion.div>
 
-        <main className="flex-1 container mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-center">
-          <div className="flex flex-col items-center text-center max-w-4xl mx-auto py-12">
-            {/* Prompt bar */}
-            <motion.div
-              initial={{ opacity: 0, y: 20, scale: 0.95 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              transition={{ duration: 0.5, delay: 0.5 }}
-              className="w-full max-w-3xl"
-            >
-              <HeroPrompt />
-            </motion.div>
-          </div>
+        <main className="flex-1 flex items-center justify-center px-4 sm:px-6 lg:px-8">
+          <motion.div
+            initial={{ opacity: 0, y: 20, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            transition={{ duration: 0.5, delay: 0.5 }}
+            className="w-full max-w-3xl"
+          >
+            <HeroPrompt />
+          </motion.div>
         </main>
       </div>
     </div>
