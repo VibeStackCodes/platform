@@ -75,7 +75,7 @@ export const utilCategoryScroll: SectionRenderer = (ctx: SectionContext): Sectio
             </Badge>
 
             {/* Dynamic category chips from data */}
-            {categories.map((cat) => (
+            {uniqueCategories.map((cat) => (
               <Badge
                 key={cat}
                 variant={activeCategory === cat ? 'default' : 'outline'}
@@ -96,7 +96,7 @@ export const utilCategoryScroll: SectionRenderer = (ctx: SectionContext): Sectio
     ],
     hooks: [
       'const [activeCategory, setActiveCategory] = useState<string | null>(null)',
-      `const categories = useMemo(() => {
+      `const uniqueCategories = useMemo(() => {
     if (!${ctx.dataVar ?? 'data'}) return []
     const seen = new Set<string>()
     for (const item of ${ctx.dataVar ?? 'data'}) {
