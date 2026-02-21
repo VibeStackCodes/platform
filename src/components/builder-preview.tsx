@@ -170,7 +170,19 @@ export function BuilderPreview({
               <WebPreviewBody ref={iframeRef} src={previewUrl} className="h-full" />
             </WebPreview>
           ) : (
-            <div className="h-full" />
+            <div className="flex h-full flex-col items-center justify-center gap-4 text-muted-foreground">
+              <div className="relative">
+                <div className="size-16 rounded-2xl border-2 border-dashed border-muted-foreground/30 flex items-center justify-center">
+                  <Rocket className="size-8 text-muted-foreground/40" />
+                </div>
+              </div>
+              <div className="text-center">
+                <p className="text-sm font-medium text-foreground/60">No preview yet</p>
+                <p className="text-xs text-muted-foreground/60 mt-1">
+                  Describe your app in the chat to start building
+                </p>
+              </div>
+            </div>
           )}
         </div>
 
@@ -188,7 +200,12 @@ export function BuilderPreview({
                 sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
               />
             ) : (
-              <div className="h-full" />
+              <div className="flex h-full flex-col items-center justify-center gap-3 text-muted-foreground">
+                <div className="size-12 rounded-xl border-2 border-dashed border-muted-foreground/30 flex items-center justify-center">
+                  <Pencil className="size-5 text-muted-foreground/40" />
+                </div>
+                <p className="text-xs text-muted-foreground/60">Code editor will appear here</p>
+              </div>
             )}
           </div>
         )}

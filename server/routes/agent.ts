@@ -25,7 +25,7 @@ import type { MachineContext } from '../lib/agents/machine'
 import { editMachine } from '../lib/agents/edit-machine'
 import type { EditMachineContext } from '../lib/agents/edit-machine'
 import { RequestContext } from '../lib/agents/registry'
-import { getProject, getUserCredits, getProjectGenerationState, updateProject } from '../lib/db/queries'
+import { getProject, getUserCredits, getProjectGenerationState, updateProject, insertChatMessage } from '../lib/db/queries'
 import { reserveCredits, settleCredits } from '../lib/credits'
 import { createSSEStream } from '../lib/sse'
 import type { StreamEvent } from '../lib/types'
@@ -74,16 +74,29 @@ if (process.env.NODE_ENV !== 'production') {
 const STATE_PHASES: Record<string, { name: string; phase: number; agentId?: string; agentName?: string }> = {
   analyzing: { name: 'Analyzing requirements', phase: 1, agentId: 'analyst', agentName: 'Analyst' },
   awaitingClarification: { name: 'Awaiting clarification', phase: 1 },
-  blueprinting: { name: 'Creating blueprint', phase: 2, agentId: 'blueprint', agentName: 'Blueprint Engine' },
+  blueprinting: { name: 'Creating blueprint', phase: 2 }, // No agentId — internal step, not shown in timeline
   provisioning: { name: 'Provisioning infrastructure', phase: 3, agentId: 'provisioner', agentName: 'Provisioner' },
   generating: { name: 'Generating code', phase: 4, agentId: 'codegen', agentName: 'Code Generator' },
   polishing: { name: 'Polishing design', phase: 4, agentId: 'polish', agentName: 'Design Polish' },
   validating: { name: 'Validating code', phase: 5, agentId: 'validator', agentName: 'Validator' },
   repairing: { name: 'Repairing errors', phase: 5, agentId: 'repair', agentName: 'Repair Agent' },
   reviewing: { name: 'Reviewing code', phase: 5, agentId: 'reviewer', agentName: 'Code Reviewer' },
-  deploying: { name: 'Deploying application', phase: 6, agentId: 'deployer', agentName: 'Deployer' },
+  deploying: { name: 'Deploying app', phase: 6, agentId: 'deployer', agentName: 'Deployer' },
   complete: { name: 'Complete', phase: 7 },
   failed: { name: 'Failed', phase: 7 },
+}
+
+// Map parallel sub-state paths to STATE_PHASES keys
+const PARALLEL_STATE_MAP: Record<string, Record<string, string>> = {
+  analysis: {
+    running: 'analyzing',
+    awaitingClarification: 'awaitingClarification',
+    done: '', // skip
+  },
+  infrastructure: {
+    provisioning: 'provisioning',
+    done: '', // skip
+  },
 }
 
 /** Map XState states to DB status values for project updates */
@@ -123,6 +136,7 @@ function streamActorStates(
     const stateEntryTimes = new Map<string, number>()
     let previousState: string | null = null
     let fileEventsEmitted = false
+    let previousParallelSubStates = new Set<string>()
 
     const subscription = actor.subscribe((snapshot: { value: string; context: MachineContext; status?: string }) => {
       if (signal.aborted) {
@@ -133,6 +147,62 @@ function streamActorStates(
 
       const state = snapshot.value as string
       const phaseInfo = STATE_PHASES[state]
+
+      // Handle parallel state (preparing): snapshot.value is an object, not a string
+      if (typeof snapshot.value === 'object' && snapshot.value !== null) {
+        const currentSubStates = new Set<string>()
+        const stateObj = snapshot.value as Record<string, Record<string, string>>
+
+        for (const [branch, subStateMap] of Object.entries(PARALLEL_STATE_MAP)) {
+          const subVal = stateObj.preparing?.[branch]
+          if (typeof subVal === 'string') {
+            const mappedKey = subStateMap[subVal]
+            if (mappedKey) currentSubStates.add(mappedKey)
+          }
+        }
+
+        // Emit agent_complete for sub-states that just finished
+        for (const prev of previousParallelSubStates) {
+          if (!currentSubStates.has(prev)) {
+            const prevPhase = STATE_PHASES[prev]
+            if (prevPhase?.agentId) {
+              const entryTime = stateEntryTimes.get(prev)
+              const durationMs = entryTime ? Date.now() - entryTime : 0
+              emit({ type: 'agent_complete', agentId: prevPhase.agentId, tokensUsed: 0, durationMs })
+            }
+          }
+        }
+
+        // Emit agent_start for newly appeared sub-states
+        for (const curr of currentSubStates) {
+          if (!previousParallelSubStates.has(curr)) {
+            stateEntryTimes.set(curr, Date.now())
+            const phase = STATE_PHASES[curr]
+            if (phase) {
+              emit({ type: 'phase_start', phase: phase.phase, phaseName: phase.name, agentCount: 1 })
+              if (phase.agentId && phase.agentName) {
+                emit({ type: 'agent_start', agentId: phase.agentId, agentName: phase.agentName, phase: phase.phase })
+              }
+            }
+          }
+        }
+
+        previousParallelSubStates = currentSubStates
+        return // Skip the flat-string logic below
+      }
+
+      // Reset parallel tracking when leaving parallel state
+      if (previousParallelSubStates.size > 0) {
+        for (const prev of previousParallelSubStates) {
+          const prevPhase = STATE_PHASES[prev]
+          if (prevPhase?.agentId) {
+            const entryTime = stateEntryTimes.get(prev)
+            const durationMs = entryTime ? Date.now() - entryTime : 0
+            emit({ type: 'agent_complete', agentId: prevPhase.agentId, tokensUsed: 0, durationMs })
+          }
+        }
+        previousParallelSubStates = new Set()
+      }
 
       // Update project status in DB based on state transition (fire-and-forget)
       // Skip DB updates in mock mode
@@ -168,6 +238,13 @@ function streamActorStates(
             status: 'complete',
           })
         }
+        // When leaving 'generating', mark all files as complete
+        if (previousState === 'generating') {
+          const files = snapshot.context.blueprint?.fileTree?.map((f: { path: string }) => f.path) ?? []
+          for (const filePath of files) {
+            emit({ type: 'file_complete', path: filePath, linesOfCode: 0 })
+          }
+        }
       }
 
       // Track entry time for duration calculation
@@ -180,9 +257,10 @@ function streamActorStates(
       if (state === 'complete') {
         emit({ type: 'stage_update', stage: 'complete' })
         emit({
-          type: 'checkpoint',
-          label: 'Pipeline complete',
-          status: 'complete',
+          type: 'complete',
+          projectId,
+          urls: { deploy: snapshot.context.deploymentUrl ?? undefined },
+          requirementResults: [],
         })
         subscription.unsubscribe()
         resolve()
@@ -233,6 +311,19 @@ function streamActorStates(
           status: 'active',
         })
 
+        // Emit plan_ready when entering blueprinting (Analyst PRD is ready)
+        // Shows the Analyst's output: app name, description, and contract tables
+        if (state === 'blueprinting' && snapshot.context.contract) {
+          emit({
+            type: 'plan_ready',
+            plan: {
+              appName: snapshot.context.appName,
+              appDescription: snapshot.context.appDescription,
+              tables: snapshot.context.contract.tables?.map((t: { name: string }) => t.name) ?? [],
+            },
+          })
+        }
+
         // Emit agent_start for states that have an agent
         if (phaseInfo.agentId && phaseInfo.agentName) {
           emit({
@@ -241,19 +332,22 @@ function streamActorStates(
             agentName: phaseInfo.agentName,
             phase: phaseInfo.phase,
           })
-        }
 
-        // Emit plan_ready when entering generating (blueprint is available)
-        if (state === 'generating' && snapshot.context.blueprint) {
-          emit({
-            type: 'plan_ready',
-            plan: {
-              appName: snapshot.context.appName,
-              appDescription: snapshot.context.appDescription,
-              fileCount: snapshot.context.blueprint.fileTree.length,
-              tables: snapshot.context.contract?.tables?.map((t: { name: string }) => t.name) ?? [],
-            },
-          })
+          // In mock mode, emit descriptive agent_progress so cards aren't empty
+          if (mockMode) {
+            const mockProgress: Record<string, string> = {
+              analyst: 'Analyzing your requirements and extracting app features, database schema, and authentication needs...',
+              codegen: 'Generating React components, routes, and database hooks...',
+              polish: 'Applying design tokens and refining visual consistency...',
+              validator: 'Running build validation and type checks...',
+              reviewer: 'Reviewing generated code for quality and security...',
+              deployer: 'Deploying to Vercel and configuring custom domain...',
+            }
+            const progressText = mockProgress[phaseInfo.agentId]
+            if (progressText) {
+              emit({ type: 'agent_progress', agentId: phaseInfo.agentId, message: progressText })
+            }
+          }
         }
 
         // Emit file events during generating state (mock: emit from blueprint file list)
@@ -411,6 +505,13 @@ agentRoutes.post('/', async (c) => {
   // Return SSE stream
   return createSSEStream(async (emit: (event: StreamEvent) => void, signal: AbortSignal) => {
     try {
+      // Persist user message to DB (fire-and-forget, skip in mock mode)
+      if (!mockMode) {
+        insertChatMessage(`user-${runId}`, projectId, 'user', [{ text: message }]).catch((err) => {
+          console.error('[agent] Failed to save user message:', err)
+        })
+      }
+
       emit({ type: 'stage_update', stage: 'generating' })
 
       // Send START event to actor
@@ -423,6 +524,18 @@ agentRoutes.post('/', async (c) => {
       const finalSnapshot = actor.getSnapshot()
       const totalTokens = finalSnapshot.context.totalTokens
       const creditsUsed = Math.ceil(totalTokens / 1000) // 1 credit = 1,000 tokens
+
+      // Persist assistant message to DB (fire-and-forget, skip in mock mode)
+      if (!mockMode) {
+        const appName = finalSnapshot.context.appName || 'App'
+        const appDesc = finalSnapshot.context.appDescription || ''
+        const assistantText = appDesc
+          ? `I'll build **${appName}** — ${appDesc}`
+          : `Building ${appName}...`
+        insertChatMessage(`assistant-${runId}`, projectId, 'assistant', [{ text: assistantText }]).catch((err) => {
+          console.error('[agent] Failed to save assistant message:', err)
+        })
+      }
 
       // B2: Check settled flag to prevent double-settlement
       const activeRun = activeRuns.get(runId)

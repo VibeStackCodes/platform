@@ -14,6 +14,7 @@ vi.mock('@server/lib/db/queries', () => ({
   getProjectGenerationState: vi.fn().mockResolvedValue({ id: 'proj-1', generationState: {} }),
   getUserCredits: vi.fn(),
   updateProject: vi.fn().mockResolvedValue({}),
+  insertChatMessage: vi.fn().mockResolvedValue({ id: 'msg-1' }),
 }))
 
 vi.mock('@server/lib/agents/provider', () => ({

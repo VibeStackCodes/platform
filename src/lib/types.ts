@@ -448,12 +448,7 @@ export interface ClarificationRequestEvent {
 // ============================================================================
 
 export type TimelineEntry =
-  | { type: 'message'; ts: number; message: { id: string; role: 'user' | 'assistant'; content: string } }
-  | { type: 'phase'; ts: number; phase: PhaseStartEvent; status: 'active' | 'complete' }
   | { type: 'agent'; ts: number; agent: AgentStartEvent; status: 'running' | 'complete'; durationMs?: number }
-  | { type: 'files'; ts: number; files: FileProgress[] }
-  | { type: 'checkpoint'; ts: number; checkpoint: CheckpointEvent }
-  | { type: 'commit'; ts: number; commit: LayerCommitEvent }
   | { type: 'plan'; ts: number; plan: Record<string, unknown> }
   | { type: 'error'; ts: number; error: string }
   | { type: 'complete'; ts: number; deploymentUrl?: string }

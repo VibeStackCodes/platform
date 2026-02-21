@@ -163,6 +163,20 @@ export async function getProjectMessages(projectId: string) {
     .orderBy(asc(chatMessages.createdAt))
 }
 
+/** Insert a chat message for a project */
+export async function insertChatMessage(
+  id: string,
+  projectId: string,
+  role: string,
+  parts: unknown[],
+) {
+  return db
+    .insert(chatMessages)
+    .values({ id, projectId, role, parts })
+    .returning()
+    .then((rows) => rows[0])
+}
+
 // ── Relational Queries (using db.query) ──────────────────────────
 
 /** Get project with its chat messages (relational) */

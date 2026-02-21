@@ -2,7 +2,7 @@
 
 ## Problem
 
-When a user submits "Build a todo app", the chat panel shows their message bubble and a collapsed "Pipeline Progress" accordion — then nothing for ~90 seconds while the backend pipeline runs 8+ agents. The user has zero visibility into what's happening.
+When a user submits prompt, the chat panel shows their message bubble and a collapsed "Pipeline Progress" accordion — then nothing for ~90 seconds while the backend pipeline runs 8+ agents. The user has zero visibility into what's happening.
 
 Root causes:
 1. **The `preparing` parallel state emits zero SSE events** — `STATE_PHASES` does flat string lookup but `snapshot.value` is a nested object `{ preparing: { analysis: 'running', infrastructure: 'provisioning' } }`.

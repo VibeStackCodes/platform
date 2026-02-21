@@ -7,31 +7,12 @@ import {
   Cog,
   Loader2,
   Rocket,
-  Sparkles,
 } from 'lucide-react'
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { apiFetch } from '@/lib/utils'
-import { Checkpoint, CheckpointIcon, CheckpointTrigger } from '@/components/ai-elements/checkpoint'
-import {
-  ChainOfThought,
-  ChainOfThoughtContent,
-  ChainOfThoughtHeader,
-  ChainOfThoughtStep,
-} from '@/components/ai-elements/chain-of-thought'
-import {
-  Commit,
-  CommitContent,
-  CommitFile,
-  CommitFileIcon,
-  CommitFileInfo,
-  CommitFilePath,
-  CommitFileStatus,
-  CommitFiles,
-  CommitHash,
-  CommitHeader,
-  CommitInfo,
-  CommitMessage,
-} from '@/components/ai-elements/commit'
+import { supabase } from '@/lib/supabase-browser'
+import { useAuth } from '@/lib/auth'
 import {
   Conversation,
   ConversationContent,
@@ -50,12 +31,12 @@ import {
   PlanTrigger,
 } from '@/components/ai-elements/plan'
 import {
-  Queue,
-  QueueItem,
-  QueueItemContent,
-  QueueItemIndicator,
-  QueueList,
-} from '@/components/ai-elements/queue'
+  FileTree,
+  FileTreeFile,
+  FileTreeFolder,
+  FileTreeIcon,
+  FileTreeName,
+} from '@/components/ai-elements/file-tree'
 import {
   StackTrace,
   StackTraceActions,
@@ -69,7 +50,7 @@ import {
   StackTraceHeader,
 } from '@/components/ai-elements/stack-trace'
 import { Suggestion, Suggestions } from '@/components/ai-elements/suggestion'
-import { Task, TaskContent, TaskItem, TaskTrigger } from '@/components/ai-elements/task'
+import { Task, TaskContent, TaskTrigger } from '@/components/ai-elements/task'
 import { ClarificationQuestions } from '@/components/clarification-questions'
 import { CreditDisplay } from '@/components/credit-display'
 import { PromptBar } from '@/components/prompt-bar'
@@ -115,6 +96,110 @@ function formatDuration(ms: number): string {
   return `${secs}s`
 }
 
+/** Build a hierarchical tree from flat file paths for FileTree rendering */
+interface TreeNode {
+  name: string
+  path: string
+  isDir: boolean
+  children: TreeNode[]
+  status?: 'pending' | 'generating' | 'complete' | 'error'
+  lines?: number
+}
+
+function buildFileTree(
+  files: { path: string; status: 'pending' | 'generating' | 'complete' | 'error'; lines?: number }[],
+): TreeNode[] {
+  const root: TreeNode[] = []
+
+  for (const file of files) {
+    const parts = file.path.split('/')
+    let current = root
+
+    for (let i = 0; i < parts.length; i++) {
+      const part = parts[i]
+      const isLast = i === parts.length - 1
+      const fullPath = parts.slice(0, i + 1).join('/')
+
+      const existing = current.find((n) => n.name === part)
+      if (existing) {
+        if (isLast) {
+          existing.status = file.status
+          existing.lines = file.lines
+        }
+        current = existing.children
+      } else {
+        const node: TreeNode = {
+          name: part,
+          path: fullPath,
+          isDir: !isLast,
+          children: [],
+          status: isLast ? file.status : undefined,
+          lines: isLast ? file.lines : undefined,
+        }
+        current.push(node)
+        current = node.children
+      }
+    }
+  }
+
+  return root
+}
+
+/** Renders generated files as a collapsible tree */
+function GeneratedFileTree({
+  files,
+}: {
+  files: { path: string; status: 'pending' | 'generating' | 'complete' | 'error'; lines?: number }[]
+}) {
+  const tree = useMemo(() => buildFileTree(files), [files])
+  const defaultExpanded = useMemo(
+    () => new Set(tree.filter((n) => n.isDir).map((n) => n.path)),
+    [tree],
+  )
+
+  function renderNode(node: TreeNode) {
+    if (node.isDir) {
+      return (
+        <FileTreeFolder key={node.path} path={node.path} name={node.name}>
+          {node.children.map(renderNode)}
+        </FileTreeFolder>
+      )
+    }
+
+    const statusIcon =
+      node.status === 'complete' ? (
+        <CheckCircle2 className="size-3.5 text-green-500" />
+      ) : node.status === 'generating' ? (
+        <Loader2 className="size-3.5 animate-spin text-blue-400" />
+      ) : node.status === 'error' ? (
+        <span className="size-3.5 text-red-500">!</span>
+      ) : (
+        <span className="size-3.5 text-muted-foreground/50" />
+      )
+
+    return (
+      <FileTreeFile key={node.path} path={node.path} name={node.name}>
+        <span className="size-4" />
+        <FileTreeIcon>{statusIcon}</FileTreeIcon>
+        <FileTreeName
+          className={node.status === 'complete' ? 'text-muted-foreground' : 'text-foreground'}
+        >
+          {node.name}
+          {node.lines !== undefined && (
+            <span className="ml-1 text-xs text-muted-foreground">({node.lines}L)</span>
+          )}
+        </FileTreeName>
+      </FileTreeFile>
+    )
+  }
+
+  return (
+    <FileTree defaultExpanded={defaultExpanded} className="border-0 bg-transparent text-xs">
+      {tree.map(renderNode)}
+    </FileTree>
+  )
+}
+
 export function BuilderChat({
   projectId,
   initialPrompt,
@@ -149,12 +234,48 @@ export function BuilderChat({
   } | null>(null)
   const hasAutoSubmitted = useRef(false)
   const abortControllerRef = useRef<AbortController | null>(null)
+  const { user } = useAuth()
+
+  // Fetch credits on mount via Supabase browser client
+  const { data: creditsData } = useQuery({
+    queryKey: ['user-credits', user?.id],
+    queryFn: async () => {
+      if (!user?.id) return null
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('credits_remaining, credits_monthly, credits_reset_at, plan')
+        .eq('id', user.id)
+        .single()
+      if (error || !data) return null
+      return data as {
+        credits_remaining: number
+        credits_monthly: number
+        credits_reset_at: string | null
+        plan: 'free' | 'pro'
+      }
+    },
+    enabled: !!user?.id,
+  })
+
+  // Sync fetched credits into local state (SSE events update it later)
+  useEffect(() => {
+    if (creditsData) {
+      setUserCredits(creditsData)
+    }
+  }, [creditsData])
 
   // Abort in-flight SSE streams on unmount
   useEffect(() => {
     return () => {
       abortControllerRef.current?.abort()
     }
+  }, [])
+
+  /** Stop the current generation */
+  const handleStop = useCallback(() => {
+    abortControllerRef.current?.abort()
+    setChatStatus('ready')
+    setGenerationStatus('idle')
   }, [])
 
   // Custom state management — replaces useChat from @ai-sdk/react
@@ -203,22 +324,6 @@ export function BuilderChat({
           } else if (event.stage === 'error') {
             setGenerationStatus('error')
           }
-          break
-
-        case 'phase_start':
-          pushTimeline({
-            type: 'phase',
-            ts: now,
-            phase: event,
-            status: 'active',
-          })
-          break
-
-        case 'phase_complete':
-          updateTimeline(
-            (e) => e.type === 'phase' && e.phase.phase === event.phase,
-            (e) => ({ ...e, status: 'complete' as const }),
-          )
           break
 
         case 'agent_start':
@@ -297,18 +402,6 @@ export function BuilderChat({
 
         case 'build_error':
           setBuildErrors(event.errors)
-          break
-
-        case 'checkpoint':
-          pushTimeline({
-            type: 'checkpoint',
-            ts: now,
-            checkpoint: event,
-          })
-          break
-
-        case 'layer_commit':
-          pushTimeline({ type: 'commit', ts: now, commit: event })
           break
 
         case 'credits_used':
@@ -556,17 +649,6 @@ export function BuilderChat({
     [resumeRunId, parseSSEBuffer, handleGenerationEvent, sendChatMessage],
   )
 
-  // Deduplicate phases — only show the latest status per phase number
-  const dedupedPhases = useMemo(() => {
-    const phaseMap = new Map<number, TimelineEntry & { type: 'phase' }>()
-    for (const entry of timelineEvents) {
-      if (entry.type === 'phase') {
-        phaseMap.set(entry.phase.phase, entry)
-      }
-    }
-    return phaseMap
-  }, [timelineEvents])
-
   // Whether we should show the file queue (any file events have occurred)
   const hasFiles = generationFiles.length > 0
 
@@ -646,246 +728,149 @@ export function BuilderChat({
                 </div>
               )}
 
-              {/* ── Rich Timeline ── */}
+              {/* ── Inline Timeline ── */}
               {showTimeline && (
-                <div className="px-4 py-3 space-y-1">
-                  <ChainOfThought defaultOpen>
-                    <ChainOfThoughtHeader>Pipeline Progress</ChainOfThoughtHeader>
-                    <ChainOfThoughtContent>
-                      {timelineEvents.map((entry) => {
-                        switch (entry.type) {
-                          case 'phase': {
-                            // Skip duplicate phase entries (already rendered)
-                            const deduped = dedupedPhases.get(entry.phase.phase)
-                            if (deduped !== entry) return null
-
-                            const isComplete = entry.status === 'complete'
-                            const PhaseIcon = isComplete ? CheckCircle2 : Loader2
-                            return (
-                              <ChainOfThoughtStep
-                                key={`phase-${entry.phase.phase}`}
-                                icon={PhaseIcon}
-                                label={entry.phase.phaseName}
-                                status={isComplete ? 'complete' : 'active'}
-                              />
-                            )
-                          }
-
-                          case 'agent': {
-                            const isComplete = entry.status === 'complete'
-                            return (
-                              <Task key={`agent-${entry.agent.agentId}-${entry.ts}`} defaultOpen={!isComplete}>
-                                <TaskTrigger title={entry.agent.agentName}>
-                                  <div className="flex w-full cursor-pointer items-center gap-2 text-sm transition-colors hover:text-foreground">
-                                    {isComplete ? (
-                                      <CheckCircle2 className="size-4 text-green-500" />
-                                    ) : (
-                                      <Cog className="size-4 animate-spin text-muted-foreground" />
-                                    )}
-                                    <span className={isComplete ? 'text-muted-foreground' : 'text-foreground'}>
-                                      {entry.agent.agentName}
-                                    </span>
-                                    {isComplete && entry.durationMs != null && (
-                                      <span className="ml-auto flex items-center gap-1 text-xs text-muted-foreground">
-                                        <Clock className="size-3" />
-                                        {formatDuration(entry.durationMs)}
-                                      </span>
-                                    )}
-                                  </div>
-                                </TaskTrigger>
-                                <TaskContent>
-                                  <TaskItem>
-                                    Phase {entry.agent.phase} — {isComplete ? 'Done' : 'Running...'}
-                                  </TaskItem>
-                                </TaskContent>
-                              </Task>
-                            )
-                          }
-
-                          case 'plan':
-                            return (
-                              <Plan key={`plan-${entry.ts}`} defaultOpen={false}>
-                                <PlanHeader>
-                                  <div>
-                                    <PlanTitle>{(entry.plan.appName as string) || 'App Blueprint'}</PlanTitle>
-                                    <PlanDescription>
-                                      {(entry.plan.appDescription as string) || 'Generation plan ready'}
-                                    </PlanDescription>
-                                  </div>
-                                  <PlanAction>
-                                    <PlanTrigger />
-                                  </PlanAction>
-                                </PlanHeader>
-                                <PlanContent>
-                                  <div className="space-y-2 text-sm text-muted-foreground">
-                                    {typeof entry.plan.fileCount === 'number' && (
-                                      <p>{entry.plan.fileCount} files to generate</p>
-                                    )}
-                                    {Array.isArray(entry.plan.tables) && entry.plan.tables.length > 0 && (
-                                      <p>Tables: {(entry.plan.tables as string[]).join(', ')}</p>
-                                    )}
-                                  </div>
-                                </PlanContent>
-                              </Plan>
-                            )
-
-                          case 'checkpoint': {
-                            const cp = entry.checkpoint
-                            return (
-                              <Checkpoint key={`cp-${cp.label}-${entry.ts}`}>
-                                <CheckpointIcon />
-                                <CheckpointTrigger>
-                                  {cp.label}
-                                  {cp.status === 'complete' && (
-                                    <CheckCircle2 className="ml-1 inline size-3 text-green-500" />
-                                  )}
-                                </CheckpointTrigger>
-                              </Checkpoint>
-                            )
-                          }
-
-                          case 'commit': {
-                            const lc = entry.commit
-                            return (
-                              <Commit key={`commit-${lc.hash}`}>
-                                <CommitHeader>
-                                  <CommitInfo>
-                                    <CommitMessage>{lc.message}</CommitMessage>
-                                    <CommitHash>{lc.hash}</CommitHash>
-                                  </CommitInfo>
-                                </CommitHeader>
-                                <CommitContent>
-                                  <CommitFiles>
-                                    {lc.files.map((filePath) => (
-                                      <CommitFile key={filePath}>
-                                        <CommitFileInfo>
-                                          <CommitFileIcon />
-                                          <CommitFilePath>{filePath}</CommitFilePath>
-                                        </CommitFileInfo>
-                                        <CommitFileStatus status="added" />
-                                      </CommitFile>
-                                    ))}
-                                  </CommitFiles>
-                                </CommitContent>
-                              </Commit>
-                            )
-                          }
-
-                          case 'error':
-                            return (
-                              <StackTrace
-                                key={`error-${entry.ts}`}
-                                trace={entry.error}
-                                defaultOpen
-                              >
-                                <StackTraceHeader>
-                                  <StackTraceError>
-                                    <StackTraceErrorType>Pipeline Error</StackTraceErrorType>
-                                    <StackTraceErrorMessage>{entry.error}</StackTraceErrorMessage>
-                                  </StackTraceError>
-                                  <StackTraceActions>
-                                    <StackTraceCopyButton />
-                                    <StackTraceExpandButton />
-                                  </StackTraceActions>
-                                </StackTraceHeader>
-                                <StackTraceContent>
-                                  <StackTraceFrames showInternalFrames={false} />
-                                </StackTraceContent>
-                              </StackTrace>
-                            )
-
-                          case 'complete':
-                            return (
-                              <div
-                                key={`complete-${entry.ts}`}
-                                className="flex items-center gap-2 rounded-lg border border-green-500/30 bg-green-500/10 p-3 text-sm text-green-400"
-                              >
-                                <Rocket className="size-4" />
-                                <span>
-                                  App deployed successfully
-                                  {entry.deploymentUrl && (
-                                    <>
-                                      {' — '}
-                                      <a
-                                        href={entry.deploymentUrl}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="underline hover:text-green-300"
-                                      >
-                                        View live
-                                      </a>
-                                    </>
-                                  )}
+                <div className="space-y-3 px-4 py-3">
+                  {timelineEvents.map((entry) => {
+                    switch (entry.type) {
+                      case 'agent': {
+                        const isComplete = entry.status === 'complete'
+                        const isCodegen = entry.agent.agentId === 'codegen'
+                        return (
+                          <Task
+                            key={`agent-${entry.agent.agentId}-${entry.ts}`}
+                            defaultOpen={!isComplete}
+                          >
+                            <TaskTrigger title={entry.agent.agentName}>
+                              <div className="flex w-full cursor-pointer items-center gap-2 text-sm transition-colors hover:text-foreground">
+                                {isComplete ? (
+                                  <CheckCircle2 className="size-4 shrink-0 text-green-500" />
+                                ) : (
+                                  <Cog className="size-4 shrink-0 animate-spin text-muted-foreground" />
+                                )}
+                                <span className={isComplete ? 'text-muted-foreground' : 'text-foreground'}>
+                                  {entry.agent.agentName}
                                 </span>
+                                {isComplete && entry.durationMs != null && (
+                                  <span className="ml-auto flex items-center gap-1 text-xs text-muted-foreground">
+                                    <Clock className="size-3" />
+                                    {formatDuration(entry.durationMs)}
+                                  </span>
+                                )}
                               </div>
-                            )
+                            </TaskTrigger>
+                            {/* Show file tree inside Code Generator */}
+                            {isCodegen && hasFiles && (
+                              <TaskContent>
+                                <GeneratedFileTree files={generationFiles} />
+                              </TaskContent>
+                            )}
+                          </Task>
+                        )
+                      }
 
-                          default:
-                            return null
-                        }
-                      })}
+                      case 'plan':
+                        return (
+                          <Plan key={`plan-${entry.ts}`} defaultOpen>
+                            <PlanHeader>
+                              <div>
+                                <PlanTitle>
+                                  {(entry.plan.appName as string) || 'App Blueprint'}
+                                </PlanTitle>
+                                <PlanDescription>
+                                  {(entry.plan.appDescription as string) ||
+                                    (Array.isArray(entry.plan.tables) && entry.plan.tables.length > 0
+                                      ? `${entry.plan.tables.length} tables`
+                                      : 'Generation plan ready')}
+                                </PlanDescription>
+                              </div>
+                              <PlanAction>
+                                <PlanTrigger />
+                              </PlanAction>
+                            </PlanHeader>
+                            <PlanContent>
+                              <div className="space-y-2 text-sm text-muted-foreground">
+                                {Array.isArray(entry.plan.tables) &&
+                                  entry.plan.tables.length > 0 && (
+                                    <p>
+                                      Tables:{' '}
+                                      {(entry.plan.tables as string[]).join(', ')}
+                                    </p>
+                                  )}
+                              </div>
+                            </PlanContent>
+                          </Plan>
+                        )
 
-                      {/* File Queue — rendered inline when files exist */}
-                      {hasFiles && (
-                        <Task defaultOpen>
-                          <TaskTrigger title="Generated Files">
-                            <div className="flex w-full cursor-pointer items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground">
-                              <Sparkles className="size-4" />
-                              <span>
-                                Files ({generationFiles.filter((f) => f.status === 'complete').length}/
-                                {generationFiles.length})
-                              </span>
-                            </div>
-                          </TaskTrigger>
-                          <TaskContent>
-                            <Queue>
-                              <QueueList>
-                                {generationFiles.map((file) => (
-                                  <QueueItem key={file.path}>
-                                    <div className="flex items-center gap-2">
-                                      <QueueItemIndicator completed={file.status === 'complete'} />
-                                      <QueueItemContent completed={file.status === 'complete'}>
-                                        {file.path}
-                                        {file.status === 'generating' && ' ...'}
-                                        {file.lines !== undefined && ` (${file.lines} lines)`}
-                                      </QueueItemContent>
-                                    </div>
-                                  </QueueItem>
-                                ))}
-                              </QueueList>
-                            </Queue>
-                          </TaskContent>
-                        </Task>
-                      )}
+                      case 'error':
+                        return (
+                          <StackTrace
+                            key={`error-${entry.ts}`}
+                            trace={entry.error}
+                            defaultOpen
+                          >
+                            <StackTraceHeader>
+                              <StackTraceError>
+                                <StackTraceErrorType>Pipeline Error</StackTraceErrorType>
+                                <StackTraceErrorMessage>
+                                  {entry.error}
+                                </StackTraceErrorMessage>
+                              </StackTraceError>
+                              <StackTraceActions>
+                                <StackTraceCopyButton />
+                                <StackTraceExpandButton />
+                              </StackTraceActions>
+                            </StackTraceHeader>
+                            <StackTraceContent>
+                              <StackTraceFrames showInternalFrames={false} />
+                            </StackTraceContent>
+                          </StackTrace>
+                        )
 
-                      {/* Build Errors */}
-                      {buildErrors.length > 0 && (
-                        <div className="space-y-2">
-                          {buildErrors.map((err) => (
-                            <StackTrace
-                              key={`${err.file}-${err.message}`}
-                              trace={err.raw}
-                              defaultOpen={false}
-                            >
-                              <StackTraceHeader>
-                                <StackTraceError>
-                                  <StackTraceErrorType>Build Error</StackTraceErrorType>
-                                  <StackTraceErrorMessage>{err.message}</StackTraceErrorMessage>
-                                </StackTraceError>
-                                <StackTraceActions>
-                                  <StackTraceCopyButton />
-                                  <StackTraceExpandButton />
-                                </StackTraceActions>
-                              </StackTraceHeader>
-                              <StackTraceContent>
-                                <StackTraceFrames showInternalFrames={false} />
-                              </StackTraceContent>
-                            </StackTrace>
-                          ))}
-                        </div>
-                      )}
-                    </ChainOfThoughtContent>
-                  </ChainOfThought>
+                      case 'complete':
+                        return (
+                          <div
+                            key={`complete-${entry.ts}`}
+                            className="flex items-center gap-2 rounded-lg border border-green-500/30 bg-green-500/10 p-3 text-sm text-green-600 dark:text-green-400"
+                          >
+                            <Rocket className="size-4" />
+                            <span>Your app is ready!</span>
+                          </div>
+                        )
+
+                      default:
+                        return null
+                    }
+                  })}
+
+                  {/* Build Errors (outside timeline entries) */}
+                  {buildErrors.length > 0 && (
+                    <div className="space-y-2">
+                      {buildErrors.map((err) => (
+                        <StackTrace
+                          key={`${err.file}-${err.message}`}
+                          trace={err.raw}
+                          defaultOpen={false}
+                        >
+                          <StackTraceHeader>
+                            <StackTraceError>
+                              <StackTraceErrorType>Build Error</StackTraceErrorType>
+                              <StackTraceErrorMessage>
+                                {err.message}
+                              </StackTraceErrorMessage>
+                            </StackTraceError>
+                            <StackTraceActions>
+                              <StackTraceCopyButton />
+                              <StackTraceExpandButton />
+                            </StackTraceActions>
+                          </StackTraceHeader>
+                          <StackTraceContent>
+                            <StackTraceFrames showInternalFrames={false} />
+                          </StackTraceContent>
+                        </StackTrace>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </>
@@ -907,9 +892,9 @@ export function BuilderChat({
         )}
         <PromptBar
           onSubmit={handleSubmit}
+          onStop={handleStop}
           placeholder="Describe what you want to build..."
           status={chatStatus === 'streaming' ? 'streaming' : 'ready'}
-          disabled={generationStatus === 'generating'}
         />
       </div>
     </div>
