@@ -34,18 +34,6 @@ function LandingPage() {
 
         <main className="flex-1 container mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-center">
           <div className="flex flex-col items-center text-center max-w-4xl mx-auto py-12">
-            {/* Preheading - bright accent */}
-            <motion.div
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, delay: 0.1 }}
-              className="mb-6"
-            >
-              <span className="inline-block text-xs sm:text-sm font-medium tracking-widest uppercase text-white/70 backdrop-blur-sm px-3 py-1.5 rounded-full border border-white/20">
-                AI Agent Platform
-              </span>
-            </motion.div>
-
             {/* Headline - bold white */}
             <motion.h1
               {...fadeUp}
@@ -54,15 +42,6 @@ function LandingPage() {
             >
               Unleash the agents.
             </motion.h1>
-
-            {/* Subheading */}
-            <motion.p
-              {...fadeUp}
-              transition={{ duration: 0.4, delay: 0.3 }}
-              className="mt-6 max-w-2xl text-lg sm:text-xl text-white/80 leading-relaxed"
-            >
-              Build AI-powered apps by describing what you want. Watch agents handle the design, development, and deployment — all in real time.
-            </motion.p>
 
             {/* Prompt bar */}
             <motion.div
