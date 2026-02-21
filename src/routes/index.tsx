@@ -15,7 +15,7 @@ const fadeUp = {
 
 function LandingPage() {
   return (
-    <div className="relative min-h-screen overflow-hidden bg-black">
+    <div className="relative min-h-screen overflow-hidden bg-[#1a0a2e]">
       {/* Gradient background */}
       <PerspectiveGrid />
 
