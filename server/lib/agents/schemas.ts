@@ -143,6 +143,36 @@ export const PageCompositionPlanV2Schema = z.object({
 const toStringArray = (val: unknown): unknown =>
   typeof val === 'string' ? val.split(',').map((s) => s.trim()).filter(Boolean) : val
 
+/** Coerce a string to an object. LLMs sometimes stringify objects. Returns null on failure. */
+const toObjectOrNull = (val: unknown): unknown => {
+  if (val == null) return null
+  if (typeof val === 'object') return val
+  if (typeof val === 'string') {
+    try { return JSON.parse(val) } catch { return null }
+  }
+  return null
+}
+
+/** Coerce a string to an array. LLMs sometimes describe arrays as pipe-delimited text. */
+const toColumnsArray = (val: unknown): unknown => {
+  if (Array.isArray(val)) return val
+  if (val == null) return []
+  if (typeof val !== 'string') return []
+  // Try JSON parse first
+  try { const parsed = JSON.parse(val); if (Array.isArray(parsed)) return parsed } catch { /* ignore */ }
+  // Parse pipe-delimited format: "Heading: Label → /href; Label2 → /href2 | Heading2: ..."
+  const groups = val.split('|').map((g) => g.trim()).filter(Boolean)
+  return groups.map((group) => {
+    const [heading, ...rest] = group.split(':')
+    const linksStr = rest.join(':').trim()
+    const links = linksStr.split(';').map((l) => l.trim()).filter(Boolean).map((link) => {
+      const [label, href] = link.split('→').map((s) => s.trim())
+      return { label: label || '', href: href || '#' }
+    })
+    return { heading: heading?.trim() || '', links }
+  })
+}
+
 export const CreativeSpecSchema = z.object({
   archetype: z
     .preprocess(
@@ -217,12 +247,13 @@ export const CreativeSpecSchema = z.object({
       )
       .describe('Navigation links'),
     cta: z
-      .object({
-        label: z.string(),
-        href: z.string(),
-      })
-      .nullable()
-      .default(null)
+      .preprocess(
+        toObjectOrNull,
+        z.object({
+          label: z.string(),
+          href: z.string(),
+        }).nullable().default(null),
+      )
       .describe('Optional CTA button in nav (null if none)'),
     mobileStyle: z.enum(['sheet', 'fullscreen', 'dropdown']).describe('Mobile navigation style'),
   }),
@@ -230,18 +261,20 @@ export const CreativeSpecSchema = z.object({
   footer: z.object({
     style: z.enum(['multi-column', 'minimal', 'centered', 'magazine']).describe('Footer layout style'),
     columns: z
-      .array(
-        z.object({
-          heading: z.string(),
-          links: z.array(
-            z.object({
-              label: z.string(),
-              href: z.string(),
-            }),
-          ),
-        }),
+      .preprocess(
+        toColumnsArray,
+        z.array(
+          z.object({
+            heading: z.string(),
+            links: z.array(
+              z.object({
+                label: z.string(),
+                href: z.string(),
+              }),
+            ),
+          }),
+        ).default([]),
       )
-      .default([])
       .describe('Footer columns with links'),
     showNewsletter: z.boolean().describe('Whether to show newsletter signup'),
     socialLinks: z
