@@ -73,9 +73,6 @@ function ProjectPage() {
       projectId={id}
       initialPrompt={project.status === 'pending' ? (project.prompt ?? undefined) : undefined}
       initialMessages={initialMessages}
-      initialSandboxId={project.sandboxId ?? undefined}
-      initialSupabaseUrl={project.supabaseUrl ?? undefined}
-      initialSupabaseProjectId={project.supabaseProjectId ?? undefined}
     />
   )
 }
