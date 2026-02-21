@@ -6,12 +6,12 @@ export function LandingNavbar() {
   const { user } = useAuth()
 
   return (
-    <nav className="sticky top-0 z-50 bg-black/30 backdrop-blur-lg border-b border-white/10">
+    <nav className="sticky top-0 z-50 bg-white/60 backdrop-blur-lg border-b border-purple-100/60">
       <div className="container mx-auto flex h-16 items-center justify-between px-4 sm:px-6 lg:px-8">
         {/* Left: Logo */}
         <Link to="/" className="flex items-center gap-2.5 group">
-          <div className="size-7 rounded-md bg-gradient-to-br from-purple-600 to-blue-600 shadow-sm group-hover:shadow-md transition-shadow" aria-hidden="true" />
-          <span className="text-lg font-semibold tracking-tight text-white">VibeStack</span>
+          <div className="size-7 rounded-md bg-gradient-to-br from-purple-600 to-fuchsia-500 shadow-sm group-hover:shadow-md transition-shadow" aria-hidden="true" />
+          <span className="text-lg font-semibold tracking-tight text-slate-900">VibeStack</span>
         </Link>
 
         {/* Right: Auth actions */}
