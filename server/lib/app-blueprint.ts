@@ -7,7 +7,7 @@ import { contractToSQL } from './contract-to-sql'
 import { snakeToPascal, snakeToKebab, pluralize } from './naming-utils'
 import { generateThemedApp, type ThemeTokens, DEFAULT_TEXT_SLOTS } from './themed-code-engine'
 import { runDesignAgent } from './agents/design-agent'
-import { runCreativeDirector, type CreativeDirectorInput } from './creative-director'
+import { runCreativeDirector } from './creative-director'
 import { generatePages } from './page-generator'
 import { assembleApp } from './deterministic-assembly'
 import { fetchHeroImages } from './unsplash'
@@ -666,16 +666,12 @@ export async function contractToBlueprintCreative(input: BlueprintInput): Promis
   )
 
   // 2. Run Creative Director
-  const creativeDirectorInput: CreativeDirectorInput = {
-    userPrompt,
+  const cdResult = await runCreativeDirector({
     appName: input.appName,
-    appDescription: input.appDescription,
-    contract: input.contract,
-    tokens,
-  }
-  const cdResult = await runCreativeDirector(creativeDirectorInput)
+    prd: userPrompt,
+  })
   const spec = cdResult.spec
-  console.log(`[blueprint:creative] CreativeSpec archetype: ${spec.archetype}, pages: ${spec.sitemap.length}`)
+  console.log(`[blueprint:creative] pages: ${spec.sitemap.length}`)
 
   // 2.5. Fetch Unsplash images in parallel with nothing — fast standalone call
   // Extract domain keywords from user prompt — Unsplash needs short, generic queries
@@ -688,8 +684,7 @@ export async function contractToBlueprintCreative(input: BlueprintInput): Promis
   // 3. Generate pages in parallel
   const pageResult = await generatePages({
     spec,
-    imagePool,
-    ...(spec.archetype !== 'static' ? { contract: input.contract } : {}),
+    tokens,
   })
   const generatedPages = pageResult.pages
   console.log(`[blueprint:creative] Generated ${generatedPages.length} pages`)
@@ -699,6 +694,7 @@ export async function contractToBlueprintCreative(input: BlueprintInput): Promis
     spec,
     generatedPages,
     appName: input.appName,
+    tokens,
     includeUiKit: true,
   })
   console.log(`[blueprint:creative] Assembled ${assembledFiles.length} files`)
@@ -709,7 +705,7 @@ export async function contractToBlueprintCreative(input: BlueprintInput): Promis
   const validation = validateGeneratedApp({
     files: fileMap,
     validRoutes,
-    hasSupabase: spec.archetype !== 'static',
+    hasSupabase: false,
   })
 
   if (validation.warnings.length > 0) {
@@ -772,10 +768,10 @@ Thumbs.db
     isLLMSlot: false,
   })
 
-  // index.html — use fonts from the CreativeSpec's visual DNA
+  // index.html — fonts are handled by Design Agent tokens; no fonts URL in CreativeSpec
   fileTree.push({
     path: 'index.html',
-    content: generateIndexHTML(input.appName, spec.visualDna.typography.googleFontsUrl),
+    content: generateIndexHTML(input.appName, ''),
     layer: 1,
     isLLMSlot: false,
   })

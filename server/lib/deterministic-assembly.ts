@@ -1,14 +1,12 @@
 /**
  * Deterministic Assembly Module
  *
- * Produces all non-LLM files for a generated app from a CreativeSpec:
+ * Produces all non-LLM files for a generated app from a CreativeSpec and ThemeTokens:
  *   - src/routes/__root.tsx  (root layout: nav + footer)
  *   - src/routeTree.gen.ts   (route tree from sitemap)
- *   - src/index.css          (Tailwind v4 @theme from visualDna.palette)
- *   - src/main.tsx           (app entry with providers)
- *   - src/lib/supabase.ts    (Supabase client — omitted for static archetype)
+ *   - src/index.css          (Tailwind v4 @theme from ThemeTokens colors + fonts)
+ *   - src/main.tsx           (app entry — static router, no QueryClient)
  *   - vite.config.ts         (Vite + Tailwind + React config)
- *   - src/routes/auth/login.tsx  (auth login page — only if auth.required)
  *   - src/routes/*.tsx       (generated page files passed in from LLM)
  *
  * Everything here is purely deterministic — zero LLM calls.
@@ -18,6 +16,7 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { BlueprintFile } from './app-blueprint'
 import type { CreativeSpec } from './agents/schemas'
+import type { ThemeTokens } from './themed-code-engine'
 
 // ---------------------------------------------------------------------------
 // Public API types
@@ -34,6 +33,7 @@ export interface AssemblyInput {
   spec: CreativeSpec
   generatedPages: GeneratedPage[]
   appName: string
+  tokens: ThemeTokens
   /** When true, include the shadcn/ui-kit component files in the assembled output */
   includeUiKit?: boolean
 }
@@ -167,20 +167,6 @@ function generateRouteTree(spec: CreativeSpec): string {
     childrenList.push(`  ${routeVar}`)
   }
 
-  // Add auth login route when auth is required and archetype is not static
-  if (spec.auth.required && spec.archetype !== 'static') {
-    const authVar = 'AuthLogin'
-    importLines.push(`import { Route as ${authVar}Import } from './routes/auth/login'`)
-    constLines.push(
-      `const ${authVar}Route = ${authVar}Import.update({` +
-        ` id: '/auth/login',` +
-        ` path: '/auth/login',` +
-        ` getParentRoute: () => rootRoute,` +
-        ` } as any)`,
-    )
-    childrenList.push(`  ${authVar}Route`)
-  }
-
   return [
     '/* eslint-disable */',
     '// @ts-nocheck',
@@ -197,13 +183,13 @@ function generateRouteTree(spec: CreativeSpec): string {
 }
 
 /**
- * Generate src/index.css — Tailwind v4 @theme block with palette from CreativeSpec.
+ * Generate src/index.css — Tailwind v4 @theme block with palette from ThemeTokens.
  */
 /**
  * Compute missing palette values from the ones we have.
  * LLMs often leave primaryForeground, muted, and border empty.
  */
-function fillPaletteGaps(palette: CreativeSpec['visualDna']['palette']) {
+function fillPaletteGaps(palette: Record<string, string>) {
   const bg = palette.background || '#ffffff'
   const fg = palette.foreground || '#111111'
   return {
@@ -230,16 +216,24 @@ function isLightColor(hex: string): boolean {
   return (r * 299 + g * 587 + b * 114) / 1000 > 128
 }
 
-function generateIndexCSS(spec: CreativeSpec): string {
-  const { visualDna } = spec
-  const { typography, borderRadius } = visualDna
-  const palette = fillPaletteGaps(visualDna.palette)
+function generateIndexCSS(tokens: ThemeTokens): string {
+  const palette = fillPaletteGaps({
+    background: tokens.colors.background,
+    foreground: tokens.colors.foreground,
+    primary: tokens.colors.primary,
+    primaryForeground: tokens.colors.primaryForeground,
+    accent: tokens.colors.accent,
+    muted: tokens.colors.muted,
+    mutedForeground: (tokens.colors as Record<string, string>).mutedForeground ?? '#6b7280',
+    border: tokens.colors.border,
+    card: tokens.colors.background, // card defaults to bg
+    destructive: '#ef4444',
+  })
 
   const lines: string[] = []
 
-  // Google Fonts — only import if a URL is provided
-  if (typography.googleFontsUrl?.trim()) {
-    lines.push(`@import url('${typography.googleFontsUrl}');`)
+  if (tokens.fonts.googleFontsUrl?.trim()) {
+    lines.push(`@import url('${tokens.fonts.googleFontsUrl}');`)
     lines.push('')
   }
 
@@ -260,9 +254,9 @@ function generateIndexCSS(spec: CreativeSpec): string {
     `  --color-border: ${palette.border};`,
     `  --color-card: ${palette.card};`,
     `  --color-destructive: ${palette.destructive};`,
-    `  --radius: ${borderRadius || '0.75rem'};`,
-    `  --font-display: "${typography.displayFont}", ui-serif, serif;`,
-    `  --font-body: "${typography.bodyFont}", ui-sans-serif, system-ui, sans-serif;`,
+    `  --radius: ${tokens.style.borderRadius || '0.75rem'};`,
+    `  --font-display: "${tokens.fonts.display}", ui-serif, serif;`,
+    `  --font-body: "${tokens.fonts.body}", ui-sans-serif, system-ui, sans-serif;`,
     '}',
     '',
     '@layer base {',
@@ -275,51 +269,17 @@ function generateIndexCSS(spec: CreativeSpec): string {
 }
 
 /**
- * Generate src/main.tsx.
- * Static archetype omits QueryClient and QueryClientProvider.
+ * Generate src/main.tsx — static router entry, no QueryClient or QueryClientProvider.
  */
-function generateMainTSX(spec: CreativeSpec): string {
-  const isStatic = spec.archetype === 'static'
-
-  if (isStatic) {
-    return [
-      "// Auto-generated by VibeStack — do not edit manually",
-      "import './index.css'",
-      "import { StrictMode } from 'react'",
-      "import { createRoot } from 'react-dom/client'",
-      "import { RouterProvider, createRouter } from '@tanstack/react-router'",
-      "import { routeTree } from './routeTree.gen'",
-      '',
-      'const router = createRouter({',
-      '  routeTree,',
-      "  defaultPreload: 'intent',",
-      '  scrollRestoration: true,',
-      '})',
-      '',
-      "declare module '@tanstack/react-router' {",
-      '  interface Register {',
-      '    router: typeof router',
-      '  }',
-      '}',
-      '',
-      "createRoot(document.getElementById('root')!).render(",
-      '  <StrictMode>',
-      '    <RouterProvider router={router} />',
-      '  </StrictMode>,',
-      ')',
-    ].join('\n')
-  }
-
+function generateMainTSX(): string {
   return [
     "// Auto-generated by VibeStack — do not edit manually",
     "import './index.css'",
     "import { StrictMode } from 'react'",
     "import { createRoot } from 'react-dom/client'",
-    "import { QueryClient, QueryClientProvider } from '@tanstack/react-query'",
     "import { RouterProvider, createRouter } from '@tanstack/react-router'",
     "import { routeTree } from './routeTree.gen'",
     '',
-    'const queryClient = new QueryClient()',
     'const router = createRouter({',
     '  routeTree,',
     "  defaultPreload: 'intent',",
@@ -334,28 +294,9 @@ function generateMainTSX(spec: CreativeSpec): string {
     '',
     "createRoot(document.getElementById('root')!).render(",
     '  <StrictMode>',
-    '    <QueryClientProvider client={queryClient}>',
-    '      <RouterProvider router={router} />',
-    '    </QueryClientProvider>',
+    '    <RouterProvider router={router} />',
     '  </StrictMode>,',
     ')',
-  ].join('\n')
-}
-
-/**
- * Generate src/lib/supabase.ts.
- * Only included for content and crud archetypes.
- */
-function generateSupabaseClient(): string {
-  return [
-    "// Auto-generated by VibeStack — do not edit manually",
-    "import { createClient } from '@supabase/supabase-js'",
-    '',
-    'const supabaseUrl = import.meta.env.VITE_SUPABASE_URL',
-    'const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY',
-    '',
-    'export const supabase = createClient(supabaseUrl, supabaseAnonKey)',
-    'export default supabase',
   ].join('\n')
 }
 
@@ -377,92 +318,6 @@ function generateViteConfig(): string {
     '  },',
     "  cacheDir: '/tmp/.vite',",
     '})',
-  ].join('\n')
-}
-
-/**
- * Generate src/routes/auth/login.tsx — a minimal login page using shadcn components.
- */
-function generateLoginPage(spec: CreativeSpec, appName: string): string {
-  const loginRoute = spec.auth.loginRoute
-
-  return [
-    "// Auto-generated by VibeStack — do not edit manually",
-    `import { createFileRoute, useNavigate } from '@tanstack/react-router'`,
-    `import { useState } from 'react'`,
-    `import { supabase } from '@/lib/supabase'`,
-    `import { Button } from '@/components/ui/button'`,
-    `import { Input } from '@/components/ui/input'`,
-    `import { Label } from '@/components/ui/label'`,
-    `import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'`,
-    '',
-    `export const Route = createFileRoute('${loginRoute}')({`,
-    '  component: LoginPage,',
-    '})',
-    '',
-    'function LoginPage() {',
-    "  const [email, setEmail] = useState('')",
-    "  const [password, setPassword] = useState('')",
-    "  const [error, setError] = useState<string | null>(null)",
-    '  const [loading, setLoading] = useState(false)',
-    '  const navigate = useNavigate()',
-    '',
-    '  async function handleSubmit(e: React.FormEvent) {',
-    '    e.preventDefault()',
-    "    setError(null)",
-    '    setLoading(true)',
-    '    const { error: authError } = await supabase.auth.signInWithPassword({ email, password })',
-    '    setLoading(false)',
-    '    if (authError) {',
-    '      setError(authError.message)',
-    '      return',
-    '    }',
-    "    await navigate({ to: '/' })",
-    '  }',
-    '',
-    '  return (',
-    '    <div className="min-h-screen flex items-center justify-center bg-background p-4">',
-    '      <Card className="w-full max-w-sm">',
-    '        <CardHeader>',
-    `          <CardTitle className="text-2xl">Sign in to ${appName}</CardTitle>`,
-    '          <CardDescription>Enter your email and password to access your account.</CardDescription>',
-    '        </CardHeader>',
-    '        <CardContent>',
-    '          <form onSubmit={handleSubmit} className="space-y-4">',
-    '            <div className="space-y-2">',
-    '              <Label htmlFor="email">Email</Label>',
-    '              <Input',
-    '                id="email"',
-    '                type="email"',
-    '                placeholder="you@example.com"',
-    '                value={email}',
-    '                onChange={(e) => setEmail(e.target.value)}',
-    '                required',
-    '              />',
-    '            </div>',
-    '            <div className="space-y-2">',
-    '              <Label htmlFor="password">Password</Label>',
-    '              <Input',
-    '                id="password"',
-    '                type="password"',
-    '                placeholder="••••••••"',
-    '                value={password}',
-    '                onChange={(e) => setPassword(e.target.value)}',
-    '                required',
-    '              />',
-    '            </div>',
-    '            {error && (',
-    '              <p className="text-sm text-destructive">{error}</p>',
-    '            )}',
-    '            <Button type="submit" className="w-full" disabled={loading}>',
-    '              {loading ? \'Signing in…\' : \'Sign in\'}',
-    '            </Button>',
-    '          </form>',
-    '        </CardContent>',
-    '      </Card>',
-    '    </div>',
-    '  )',
-    '}',
   ].join('\n')
 }
 
@@ -716,7 +571,7 @@ export function getUiKitFiles(): BlueprintFile[] {
  * Returns a BlueprintFile[] ordered by layer so callers can sort or prioritise.
  */
 export function assembleApp(input: AssemblyInput): BlueprintFile[] {
-  const { spec, generatedPages, appName } = input
+  const { spec, generatedPages, appName: _appName, tokens } = input
   const files: BlueprintFile[] = []
 
   // ---- Layer 0: build tooling ----
@@ -738,27 +593,18 @@ export function assembleApp(input: AssemblyInput): BlueprintFile[] {
     isLLMSlot: false,
   })
 
-  if (spec.archetype !== 'static') {
-    files.push({
-      path: 'src/lib/supabase.ts',
-      content: generateSupabaseClient(),
-      layer: 1,
-      isLLMSlot: false,
-    })
-  }
-
   // ---- Layer 2: app skeleton ----
 
   files.push({
     path: 'src/index.css',
-    content: generateIndexCSS(spec),
+    content: generateIndexCSS(tokens),
     layer: 2,
     isLLMSlot: false,
   })
 
   files.push({
     path: 'src/main.tsx',
-    content: generateMainTSX(spec),
+    content: generateMainTSX(),
     layer: 2,
     isLLMSlot: false,
   })
@@ -792,18 +638,6 @@ export function assembleApp(input: AssemblyInput): BlueprintFile[] {
 
   if (input.includeUiKit) {
     files.push(...getUiKitFiles())
-  }
-
-  // ---- Layer 4: auth routes ----
-  // Skip auth pages for static archetype — no supabase, no auth
-
-  if (spec.auth.required && spec.archetype !== 'static') {
-    files.push({
-      path: 'src/routes/auth/login.tsx',
-      content: generateLoginPage(spec, appName),
-      layer: 4,
-      isLLMSlot: false,
-    })
   }
 
   return files

@@ -124,7 +124,8 @@ export const PageCompositionPlanV2Schema = z.object({
 
 // ---------------------------------------------------------------------------
 // CreativeSpec — Creative Director agent output
-// Complete visual identity and sitemap for a generated app.
+// Sitemap + navigation + footer for a generated app.
+// Visual identity (colors, fonts, styles) is handled by Design Agent tokens.
 // ---------------------------------------------------------------------------
 
 /** Coerce a value to a string array. LLMs sometimes return a bare string instead of an array. */
@@ -138,41 +139,6 @@ const tryParseJson = (val: unknown): unknown => {
 }
 
 export const CreativeSpecSchema = z.object({
-  archetype: z
-    .preprocess(
-      (val) => (typeof val === 'string' ? val.toLowerCase().trim() : val),
-      z.enum(['static', 'content', 'crud']),
-    )
-    .describe('App classification: static (no DB), content (read-heavy), crud (full CRUD)'),
-
-  visualDna: z.object({
-    typography: z.object({
-      displayFont: z.string().describe('Display/heading font family e.g. "Playfair Display"'),
-      bodyFont: z.string().describe('Body text font family e.g. "Source Sans 3"'),
-      googleFontsUrl: z.string().describe('Full Google Fonts import URL'),
-      headlineStyle: z.string().describe('Tailwind classes for headlines e.g. "text-5xl font-bold tracking-tight"'),
-      bodyStyle: z.string().describe('Tailwind classes for body text e.g. "text-base leading-relaxed"'),
-    }),
-    palette: z.object({
-      background: z.preprocess((val) => (typeof val === 'string' ? val.trim() : val), z.string()).describe('Background color (hex or oklch)'),
-      foreground: z.preprocess((val) => (typeof val === 'string' ? val.trim() : val), z.string()).describe('Text color'),
-      primary: z.preprocess((val) => (typeof val === 'string' ? val.trim() : val), z.string()).describe('Primary brand color'),
-      primaryForeground: z.preprocess((val) => (typeof val === 'string' ? val.trim() : val), z.string()).describe('Text on primary color'),
-      accent: z.preprocess((val) => (typeof val === 'string' ? val.trim() : val), z.string()).describe('Accent/highlight color'),
-      muted: z.preprocess((val) => (typeof val === 'string' ? val.trim() : val), z.string()).describe('Muted background'),
-      mutedForeground: z.preprocess((val) => (typeof val === 'string' ? val.trim() : val), z.string()).describe('Text on muted background'),
-      border: z.preprocess((val) => (typeof val === 'string' ? val.trim() : val), z.string()).describe('Border color'),
-      card: z.preprocess((val) => (typeof val === 'string' ? val.trim() : val), z.string()).describe('Card background color'),
-      destructive: z.preprocess((val) => (typeof val === 'string' ? val.trim() : val), z.string()).describe('Error/destructive color'),
-    }),
-    motionPreset: z.enum(['none', 'subtle', 'expressive']).describe('Animation intensity'),
-    borderRadius: z.string().describe('CSS border-radius value e.g. "0.75rem"'),
-    cardStyle: z.enum(['elevated', 'flat', 'glass', 'bordered']).describe('Card visual style'),
-    imagery: z.enum(['photography-heavy', 'illustration', 'minimal', 'icon-focused']).describe('Image strategy'),
-    visualTexture: z.string().describe('Background texture: "grain overlay", "gradient mesh", "none"'),
-    moodBoard: z.string().describe('2-3 sentence aesthetic direction for the app'),
-  }),
-
   sitemap: z
     .array(
       z.object({
@@ -180,10 +146,6 @@ export const CreativeSpecSchema = z.object({
         fileName: z.string().describe('TanStack Router file path e.g. "routes/index.tsx"'),
         componentName: z.string().describe('React component name e.g. "Homepage"'),
         purpose: z.string().describe('1-2 sentence page description'),
-        dataRequirements: z.enum(['none', 'read-only', 'read-write']).describe('Data access pattern'),
-        entities: z
-          .preprocess(toStringArray, z.array(z.string()).default([]))
-          .describe('Table names for data-driven pages'),
         brief: z.object({
           sections: z.array(z.string()).describe('Section descriptions for this page'),
           copyDirection: z.string().describe('Tone/voice for copy on this page'),
@@ -197,6 +159,7 @@ export const CreativeSpecSchema = z.object({
         }),
       }),
     )
+    .max(3)
     .describe('Complete sitemap with per-page generation briefs'),
 
   nav: z.object({
@@ -248,13 +211,6 @@ export const CreativeSpecSchema = z.object({
       .preprocess(toStringArray, z.array(z.string()))
       .describe('Lucide icon names for social links'),
     copyright: z.string().describe('Copyright text'),
-  }),
-
-  auth: z.object({
-    required: z.boolean().describe('Whether auth is required'),
-    publicRoutes: z.array(z.string()).describe('Routes accessible without auth'),
-    privateRoutes: z.array(z.string()).describe('Routes requiring auth'),
-    loginRoute: z.string().describe('Login page route path'),
   }),
 })
 

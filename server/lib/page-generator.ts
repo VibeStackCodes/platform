@@ -3,7 +3,7 @@
  *
  * Parallel React route file (.tsx) generator.
  *
- * Takes a CreativeSpec + SchemaContract and generates all page route files
+ * Takes a CreativeSpec + ThemeTokens and generates all page route files
  * concurrently using generateText() from the Vercel AI SDK. Each page is
  * an independent stateless text generation call — safe for Promise.all().
  *
@@ -18,7 +18,7 @@ import { generateText } from 'ai'
 import { createHeliconeProvider, PIPELINE_MODELS } from './agents/provider'
 import type { CreativeSpec } from './agents/schemas'
 import { getStaticDesignRules } from './design-knowledge'
-import type { SchemaContract } from './schema-contract'
+import type { ThemeTokens } from './themed-code-engine'
 
 export interface GeneratedPage {
   /** e.g. "routes/index.tsx" */
@@ -33,10 +33,7 @@ export interface GeneratedPage {
 
 export interface PageGeneratorInput {
   spec: CreativeSpec
-  /** Required for non-static archetypes; omit for static apps */
-  contract?: SchemaContract
-  /** Unsplash image URLs to use instead of placeholders. Fetched before generation. */
-  imagePool?: string[]
+  tokens: ThemeTokens
   /** Called when a page starts generating */
   onPageStart?: (fileName: string, route: string, componentName: string, index: number, total: number) => void
   /** Called when a page finishes generating */
@@ -63,13 +60,13 @@ export interface PageGeneratorResult {
 }
 
 export async function generatePages(input: PageGeneratorInput): Promise<PageGeneratorResult> {
-  const { spec, contract, imagePool, onPageStart, onPageComplete } = input
+  const { spec, tokens, onPageStart, onPageComplete } = input
   const total = spec.sitemap.length
 
   const results = await Promise.all(
     spec.sitemap.map(async (page, index) => {
       onPageStart?.(page.fileName, page.route, page.componentName, index, total)
-      const result = await generateSinglePage(page, spec, contract ?? null, imagePool ?? [])
+      const result = await generateSinglePage(page, spec, tokens)
       const lineCount = result.content.split('\n').length
       const codePreview = result.content.split('\n').slice(0, 50).join('\n')
       onPageComplete?.(result.fileName, page.route, page.componentName, lineCount, codePreview, index, total)
@@ -98,11 +95,10 @@ export async function generatePages(input: PageGeneratorInput): Promise<PageGene
 async function generateSinglePage(
   page: CreativeSpec['sitemap'][number],
   spec: CreativeSpec,
-  contract: SchemaContract | null,
-  imagePool: string[],
+  tokens: ThemeTokens,
 ): Promise<GeneratedPage & { inputTokens: number; outputTokens: number }> {
-  const systemPrompt = buildPageGenSystemPrompt(spec, imagePool)
-  const userPrompt = buildPageGenUserPrompt(page, spec, contract)
+  const systemPrompt = buildPageGenSystemPrompt(spec, tokens)
+  const userPrompt = buildPageGenUserPrompt(page, spec)
 
   const provider = createHeliconeProvider({ userId: 'pipeline', agentName: 'page-gen' })
 
@@ -135,7 +131,7 @@ async function generateSinglePage(
  * Exported so tests can validate the prompt's closed vocabulary, forbidden
  * section, and absence of Supabase / TanStack Query references.
  */
-export function buildPageGenSystemPrompt(spec: CreativeSpec, imagePool: string[] = []): string {
+export function buildPageGenSystemPrompt(spec: CreativeSpec, tokens: ThemeTokens): string {
   return `You are an expert React developer generating a complete TanStack Router page file (.tsx).
 
 ## Output Format
@@ -207,16 +203,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 
 ONLY import from the CLOSED VOCABULARY — anything else will cause a build failure.
 
-## STATIC CONTENT RULE
+## CONTENT RULES
 
-ALL content is static — hardcode text, lists, images, and cards directly in JSX.
-Use placeholder text that sounds real (not "Lorem ipsum").
-${imagePool.length > 0
-    ? `For images, use these Unsplash URLs (cycle through them, reuse as needed):
-${imagePool.map((url, i) => `  ${i + 1}. ${url}`).join('\n')}
-Add \`?w=800&q=80\` for hero/banner images, \`?w=400&q=80\` for cards/thumbnails.
-Always include descriptive alt text.`
-    : `For images, use placeholder URLs like \`https://placehold.co/600x400\` with descriptive alt text.`}
+For landing pages and informational pages: hardcode content in JSX with realistic placeholder text (not "Lorem ipsum").
+For interactive apps (to-do lists, calculators, form builders, etc.): use React state (useState, useEffect) for client-side interactivity. All state is local — no external APIs, no database.
+For images, use placeholder URLs like \`https://placehold.co/600x400\` with descriptive alt text.
 No data fetching, no API calls, no database queries.
 
 ## Route File Structure
@@ -239,14 +230,11 @@ function {ComponentName}() {
 - Colors: ONLY use Tailwind semantic colors — bg-background, text-foreground, bg-primary, text-primary-foreground, bg-accent, bg-muted, text-muted-foreground, border-border, bg-card, bg-destructive
 - NEVER use hardcoded colors like #2b6cb0 or bg-blue-500
 - Border radius: use rounded-[var(--radius)] or the Tailwind rounded-lg/rounded-xl classes
-- Card style: ${spec.visualDna.cardStyle}
-- Motion: ${spec.visualDna.motionPreset} — if not 'none', use tw-animate-css classes (animate-in, fade-in, slide-in-from-bottom-4, duration-500)
+- Card style: ${tokens.style.cardStyle}
+- Motion: ${tokens.style.motion} — if not 'none', use tw-animate-css classes (animate-in, fade-in, slide-in-from-bottom-4, duration-500)
 
 ## Design Rules
 ${getStaticDesignRules()}
-
-## Mood/Aesthetic
-${spec.visualDna.moodBoard}
 
 ## Critical Rules
 1. Do NOT generate navigation or footer — these are in __root.tsx
@@ -266,7 +254,6 @@ ${spec.visualDna.moodBoard}
 function buildPageGenUserPrompt(
   page: CreativeSpec['sitemap'][number],
   spec: CreativeSpec,
-  _contract: SchemaContract | null,
 ): string {
   // Derive the createFileRoute path: normalise trailing slashes but preserve
   // the root "/" and TanStack Router's dynamic segment convention ($param).

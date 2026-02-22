@@ -40,7 +40,6 @@ export interface MachineContext {
   generatedPages: GeneratedPage[] | null
   assembledFiles: BlueprintFile[] | null
   prd: string | null
-  imagePool: string[]
 
   // Infrastructure
   sandboxId: string | null
@@ -123,16 +122,15 @@ export const appGenerationMachine = setup({
       const { runDesign } = await import('./orchestrator')
       return runDesign(input)
     }),
-    runArchitectActor: fromPromise(async ({ input }: { input: { userPrompt: string; appName: string; appDescription: string; contract: SchemaContract; tokens: ThemeTokens } }) => {
+    runArchitectActor: fromPromise(async ({ input }: { input: { appName: string; prd: string } }) => {
       const { runArchitect } = await import('./orchestrator')
       return runArchitect(input)
     }),
-    runPageGenerationActor: fromPromise(async ({ input }: { input: { spec: CreativeSpec; contract: SchemaContract | null | undefined; imagePool: string[] } }) => {
+    runPageGenerationActor: fromPromise(async ({ input }: { input: { spec: CreativeSpec; tokens: ThemeTokens } }) => {
       const { runPageGeneration } = await import('./orchestrator')
-      // Convert null to undefined to match runPageGeneration's optional parameter signature
-      return runPageGeneration({ ...input, contract: input.contract ?? undefined })
+      return runPageGeneration(input)
     }),
-    runAssemblyActor: fromPromise(async ({ input }: { input: { spec: CreativeSpec; generatedPages: GeneratedPage[]; appName: string; contract: SchemaContract; sandboxId: string; supabaseProjectId: string; supabaseUrl: string; supabaseAnonKey: string } }) => {
+    runAssemblyActor: fromPromise(async ({ input }: { input: { spec: CreativeSpec; generatedPages: GeneratedPage[]; appName: string; tokens: ThemeTokens; sandboxId: string } }) => {
       const { runAssembly } = await import('./orchestrator')
       return runAssembly(input)
     }),
@@ -219,7 +217,6 @@ export const appGenerationMachine = setup({
     generatedPages: null,
     assembledFiles: null,
     prd: null,
-    imagePool: [],
     sandboxId: null,
     supabaseProjectId: null,
     supabaseUrl: null,
@@ -421,17 +418,13 @@ export const appGenerationMachine = setup({
       invoke: {
         src: 'runArchitectActor',
         input: ({ context }) => ({
-          userPrompt: context.userMessage,
           appName: context.appName ?? '',
-          appDescription: context.appDescription ?? '',
-          contract: context.contract!,
-          tokens: context.tokens!,
+          prd: context.prd ?? '',
         }),
         onDone: {
           target: 'pageGeneration',
           actions: assign({
             creativeSpec: ({ event }) => event.output.spec,
-            imagePool: ({ event }) => event.output.imagePool ?? [],
             totalTokens: ({ context, event }) => context.totalTokens + (event.output.tokensUsed ?? 0),
           }),
         },
@@ -453,8 +446,7 @@ export const appGenerationMachine = setup({
         src: 'runPageGenerationActor',
         input: ({ context }) => ({
           spec: context.creativeSpec!,
-          contract: context.contract,
-          imagePool: context.imagePool,
+          tokens: context.tokens!,
         }),
         onDone: {
           target: 'assembly',
@@ -483,11 +475,8 @@ export const appGenerationMachine = setup({
           spec: context.creativeSpec!,
           generatedPages: context.generatedPages!,
           appName: context.appName ?? '',
-          contract: context.contract!,
+          tokens: context.tokens!,
           sandboxId: context.sandboxId!,
-          supabaseProjectId: context.supabaseProjectId!,
-          supabaseUrl: context.supabaseUrl!,
-          supabaseAnonKey: context.supabaseAnonKey!,
         }),
         onDone: {
           target: 'validating',
@@ -731,47 +720,12 @@ export function stopInspector() {
 
 const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
 
-/** Minimal todo-app contract for mock pipeline */
-const MOCK_CONTRACT: SchemaContract = {
-  tables: [
-    {
-      name: 'categories',
-      columns: [
-        { name: 'id', type: 'uuid', primaryKey: true, default: 'gen_random_uuid()' },
-        { name: 'name', type: 'text', nullable: false },
-        { name: 'color', type: 'text', default: "'#3b82f6'" },
-        { name: 'created_at', type: 'timestamptz', default: 'now()' },
-      ],
-    },
-    {
-      name: 'todos',
-      columns: [
-        { name: 'id', type: 'uuid', primaryKey: true, default: 'gen_random_uuid()' },
-        { name: 'title', type: 'text', nullable: false },
-        { name: 'description', type: 'text' },
-        { name: 'completed', type: 'boolean', default: 'false' },
-        { name: 'priority', type: 'text', default: "'medium'" },
-        { name: 'category_id', type: 'uuid', references: { table: 'categories', column: 'id' } },
-        { name: 'user_id', type: 'uuid', references: { table: 'auth.users', column: 'id' } },
-        { name: 'due_date', type: 'timestamptz' },
-        { name: 'created_at', type: 'timestamptz', default: 'now()' },
-      ],
-    },
-    {
-      name: 'profiles',
-      columns: [
-        { name: 'id', type: 'uuid', primaryKey: true, references: { table: 'auth.users', column: 'id' } },
-        { name: 'display_name', type: 'text' },
-        { name: 'avatar_url', type: 'text' },
-        { name: 'created_at', type: 'timestamptz', default: 'now()' },
-      ],
-    },
-  ],
-}
+/** Minimal contract for mock pipeline */
+const MOCK_CONTRACT: SchemaContract = { tables: [] }
 
 /** Minimal mock tokens for the mock pipeline */
 const MOCK_TOKENS: ThemeTokens = {
-  name: 'canape',
+  name: '',
   colors: {
     background: '#ffffff',
     foreground: '#111111',
@@ -798,7 +752,7 @@ const MOCK_TOKENS: ThemeTokens = {
   },
   authPosture: 'public',
   heroImages: [],
-  heroQuery: 'modern task management app',
+  heroQuery: '',
   textSlots: {
     hero_headline: 'Welcome',
     hero_subtext: 'Your app',
@@ -811,105 +765,26 @@ const MOCK_TOKENS: ThemeTokens = {
 
 /** Minimal mock CreativeSpec for the mock pipeline */
 const MOCK_CREATIVE_SPEC: CreativeSpec = {
-  archetype: 'crud',
-  visualDna: {
-    typography: {
-      displayFont: 'Playfair Display',
-      bodyFont: 'Inter',
-      googleFontsUrl: 'https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Inter:wght@400;500;600&display=swap',
-      headlineStyle: 'text-5xl font-bold tracking-tight',
-      bodyStyle: 'text-base leading-relaxed',
-    },
-    palette: {
-      background: '#ffffff',
-      foreground: '#111111',
-      primary: '#2b6cb0',
-      primaryForeground: '#ffffff',
-      accent: '#f59e0b',
-      muted: '#f3f4f6',
-      mutedForeground: '#6b7280',
-      border: '#d1d5db',
-      card: '#ffffff',
-      destructive: '#ef4444',
-    },
-    motionPreset: 'subtle',
-    borderRadius: '0.5rem',
-    cardStyle: 'flat',
-    imagery: 'minimal',
-    visualTexture: 'none',
-    moodBoard: 'Clean, minimal, and professional. Focus on content with clear hierarchy.',
-  },
   sitemap: [
     {
       route: '/',
       fileName: 'routes/index.tsx',
       componentName: 'Homepage',
-      purpose: 'Landing page showcasing app features',
-      dataRequirements: 'none',
-      entities: [],
+      purpose: 'A functional to-do app with task management',
       brief: {
-        sections: ['Hero section', 'Features overview'],
+        sections: ['Task input form', 'Task list with checkboxes', 'Filter tabs (all/active/completed)'],
         copyDirection: 'Professional and clear',
-        keyInteractions: 'CTA button to sign up',
-        lucideIcons: ['ArrowRight', 'CheckCircle'],
-        shadcnComponents: ['Button', 'Card'],
-      },
-    },
-    {
-      route: '/todos/',
-      fileName: 'routes/todos/index.tsx',
-      componentName: 'TodoList',
-      purpose: 'List all todos with filtering and sorting',
-      dataRequirements: 'read-write',
-      entities: ['todos'],
-      brief: {
-        sections: ['Todo list with filters', 'Create todo form'],
-        copyDirection: 'Action-oriented',
-        keyInteractions: 'Create, complete, delete todos',
-        lucideIcons: ['Plus', 'Check', 'Trash2'],
+        keyInteractions: 'Add, complete, and delete tasks',
+        lucideIcons: ['Plus', 'CheckCircle', 'Trash2'],
         shadcnComponents: ['Button', 'Input', 'Card', 'Checkbox'],
-      },
-    },
-    {
-      route: '/categories/',
-      fileName: 'routes/categories/index.tsx',
-      componentName: 'CategoryList',
-      purpose: 'Manage todo categories',
-      dataRequirements: 'read-write',
-      entities: ['categories'],
-      brief: {
-        sections: ['Category grid', 'Create category form'],
-        copyDirection: 'Organizational and clear',
-        keyInteractions: 'Create, edit, delete categories',
-        lucideIcons: ['FolderPlus', 'Edit', 'Trash2'],
-        shadcnComponents: ['Button', 'Input', 'Card', 'Badge'],
-      },
-    },
-    {
-      route: '/dashboard/',
-      fileName: 'routes/dashboard.tsx',
-      componentName: 'Dashboard',
-      purpose: 'Overview stats and quick actions',
-      dataRequirements: 'read-only',
-      entities: ['todos', 'categories'],
-      brief: {
-        sections: ['Stats cards', 'Recent todos'],
-        copyDirection: 'Informative and at-a-glance',
-        keyInteractions: 'Navigate to todo list, view stats',
-        lucideIcons: ['BarChart', 'TrendingUp', 'ListTodo'],
-        shadcnComponents: ['Card', 'Badge'],
       },
     },
   ],
   nav: {
     style: 'sticky-blur',
     logo: 'TaskFlow',
-    links: [
-      { label: 'Dashboard', href: '/dashboard/' },
-      { label: 'Todos', href: '/todos/' },
-      { label: 'Categories', href: '/categories/' },
-    ],
-    cta: { label: 'Sign In', href: '/auth/login' },
+    links: [{ label: 'Home', href: '/' }],
+    cta: null,
     mobileStyle: 'sheet',
   },
   footer: {
@@ -919,12 +794,6 @@ const MOCK_CREATIVE_SPEC: CreativeSpec = {
     socialLinks: [],
     copyright: '© 2026 TaskFlow. Built with VibeStack.',
   },
-  auth: {
-    required: true,
-    publicRoutes: ['/'],
-    privateRoutes: ['/todos/', '/categories/', '/dashboard/'],
-    loginRoute: '/auth/login',
-  },
 }
 
 /** Mock generated pages for the mock pipeline */
@@ -933,54 +802,27 @@ export const MOCK_GENERATED_PAGES: GeneratedPage[] = [
     fileName: 'routes/index.tsx',
     componentName: 'Homepage',
     route: '/',
-    content: `import { Link } from '@tanstack/react-router'
-export default function Homepage() {
+    content: `import { createFileRoute } from '@tanstack/react-router'
+import { useState } from 'react'
+
+export const Route = createFileRoute('/')({
+  component: Homepage,
+})
+
+function Homepage() {
+  const [tasks, setTasks] = useState<string[]>([])
+  const [input, setInput] = useState('')
+
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center">
-      <h1 className="text-5xl font-bold tracking-tight mb-4">TaskFlow</h1>
-      <p className="text-base leading-relaxed text-muted-foreground mb-8">Manage your tasks with ease</p>
-      <Link to="/todos/" className="inline-flex items-center px-6 py-3 bg-primary text-primary-foreground rounded-lg">
-        Get Started
-      </Link>
-    </div>
-  )
-}`,
-  },
-  {
-    fileName: 'routes/todos/index.tsx',
-    componentName: 'TodoList',
-    route: '/todos/',
-    content: `export default function TodoList() {
-  return (
-    <div className="container mx-auto py-8">
-      <h1 className="text-3xl font-bold mb-6">Todos</h1>
-      <p className="text-muted-foreground">Your todo list will appear here.</p>
-    </div>
-  )
-}`,
-  },
-  {
-    fileName: 'routes/categories/index.tsx',
-    componentName: 'CategoryList',
-    route: '/categories/',
-    content: `export default function CategoryList() {
-  return (
-    <div className="container mx-auto py-8">
-      <h1 className="text-3xl font-bold mb-6">Categories</h1>
-      <p className="text-muted-foreground">Your categories will appear here.</p>
-    </div>
-  )
-}`,
-  },
-  {
-    fileName: 'routes/dashboard.tsx',
-    componentName: 'Dashboard',
-    route: '/dashboard/',
-    content: `export default function Dashboard() {
-  return (
-    <div className="container mx-auto py-8">
-      <h1 className="text-3xl font-bold mb-6">Dashboard</h1>
-      <p className="text-muted-foreground">Your overview stats will appear here.</p>
+    <div className="container mx-auto py-8 max-w-lg">
+      <h1 className="text-3xl font-bold mb-6 font-[family-name:var(--font-display)]">TaskFlow</h1>
+      <div className="flex gap-2 mb-4">
+        <input className="flex-1 border rounded px-3 py-2" value={input} onChange={e => setInput(e.target.value)} placeholder="Add a task..." />
+        <button className="bg-primary text-primary-foreground px-4 py-2 rounded" onClick={() => { if (input.trim()) { setTasks([...tasks, input.trim()]); setInput('') } }}>Add</button>
+      </div>
+      <ul className="space-y-2">
+        {tasks.map((t, i) => <li key={i} className="p-3 border rounded">{t}</li>)}
+      </ul>
     </div>
   )
 }`,
@@ -992,9 +834,6 @@ export const MOCK_ASSEMBLED_FILES: BlueprintFile[] = [
   { path: 'src/main.tsx', content: '// mock main.tsx', layer: 0, isLLMSlot: false },
   { path: 'src/routes/__root.tsx', content: '// mock root', layer: 0, isLLMSlot: false },
   { path: 'src/routes/index.tsx', content: MOCK_GENERATED_PAGES[0].content, layer: 1, isLLMSlot: true },
-  { path: 'src/routes/todos/index.tsx', content: MOCK_GENERATED_PAGES[1].content, layer: 1, isLLMSlot: true },
-  { path: 'src/routes/categories/index.tsx', content: MOCK_GENERATED_PAGES[2].content, layer: 1, isLLMSlot: true },
-  { path: 'src/routes/dashboard.tsx', content: MOCK_GENERATED_PAGES[3].content, layer: 1, isLLMSlot: true },
 ]
 
 /** Mock file paths emitted during assembly (simulates file_start/file_complete) */
@@ -1029,10 +868,6 @@ export const mockAppGenerationMachine = setup({
       await delay(1500)
       return {
         spec: MOCK_CREATIVE_SPEC,
-        imagePool: [
-          'https://images.unsplash.com/photo-1484480974693-6ca0a78fb36b?w=1200',
-          'https://images.unsplash.com/photo-1507925921958-8a62f3d1a50d?w=1200',
-        ],
         tokensUsed: 1200,
       }
     }),
@@ -1122,7 +957,6 @@ export const mockAppGenerationMachine = setup({
     generatedPages: null,
     assembledFiles: null,
     prd: null,
-    imagePool: [],
     sandboxId: null,
     supabaseProjectId: null,
     supabaseUrl: null,
@@ -1257,17 +1091,13 @@ export const mockAppGenerationMachine = setup({
       invoke: {
         src: 'runArchitectActor',
         input: ({ context }) => ({
-          userPrompt: context.userMessage,
           appName: context.appName ?? '',
-          appDescription: context.appDescription ?? '',
-          contract: context.contract!,
-          tokens: context.tokens!,
+          prd: context.prd ?? '',
         }),
         onDone: {
           target: 'pageGeneration',
           actions: assign({
             creativeSpec: ({ event }) => event.output.spec,
-            imagePool: ({ event }) => event.output.imagePool ?? [],
             totalTokens: ({ context, event }) => context.totalTokens + (event.output.tokensUsed ?? 0),
           }),
         },
@@ -1282,8 +1112,7 @@ export const mockAppGenerationMachine = setup({
         src: 'runPageGenerationActor',
         input: ({ context }) => ({
           spec: context.creativeSpec!,
-          contract: context.contract,
-          imagePool: context.imagePool,
+          tokens: context.tokens!,
         }),
         onDone: {
           target: 'assembly',
@@ -1305,11 +1134,8 @@ export const mockAppGenerationMachine = setup({
           spec: context.creativeSpec!,
           generatedPages: context.generatedPages!,
           appName: context.appName ?? '',
-          contract: context.contract!,
+          tokens: context.tokens!,
           sandboxId: context.sandboxId!,
-          supabaseProjectId: context.supabaseProjectId!,
-          supabaseUrl: context.supabaseUrl!,
-          supabaseAnonKey: context.supabaseAnonKey!,
         }),
         onDone: {
           target: 'validating',

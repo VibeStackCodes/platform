@@ -69,7 +69,6 @@ export interface DesignResult {
 
 export interface ArchitectResult {
   spec: CreativeSpec
-  imagePool: string[]
   tokensUsed: number
 }
 
@@ -600,36 +599,24 @@ export async function runDesign(input: {
 
 /**
  * Run the Creative Director to produce a CreativeSpec (visual identity + sitemap).
- * Pipeline B step 2: tokens + contract → spec + imagePool.
+ * Pipeline B step 2: appName + prd → spec.
  */
 export async function runArchitect(input: {
-  userPrompt: string
   appName: string
-  appDescription: string
-  contract: SchemaContract
-  tokens: ThemeTokens
+  prd: string
 }): Promise<ArchitectResult> {
   console.log('[architect] Starting creative director...')
   const { runCreativeDirector } = await import('../creative-director')
-  const { fetchHeroImages } = await import('../unsplash')
 
   const result = await runCreativeDirector({
-    userPrompt: input.userPrompt,
     appName: input.appName,
-    appDescription: input.appDescription,
-    contract: input.contract,
-    tokens: input.tokens,
+    prd: input.prd,
   })
-
-  // Fetch a pool of hero images for use in page generation
-  const imagePool = await fetchHeroImages(input.tokens.heroQuery, 5)
-  const imageUrls = imagePool.map((img) => img.url)
 
   const tokensUsed = (result.usage.inputTokens ?? 0) + (result.usage.outputTokens ?? 0)
 
   return {
     spec: result.spec,
-    imagePool: imageUrls,
     tokensUsed,
   }
 }
@@ -640,12 +627,11 @@ export async function runArchitect(input: {
 
 /**
  * Generate all page route files in parallel from a CreativeSpec.
- * Pipeline B step 3: spec → GeneratedPage[].
+ * Pipeline B step 3: spec + tokens → GeneratedPage[].
  */
 export async function runPageGeneration(input: {
   spec: CreativeSpec
-  contract?: SchemaContract
-  imagePool?: string[]
+  tokens: ThemeTokens
   onPageStart?: (fileName: string, route: string, componentName: string, index: number, total: number) => void
   onPageComplete?: (fileName: string, route: string, componentName: string, lineCount: number, code: string, index: number, total: number) => void
 }): Promise<PageGenerationResult> {
@@ -653,8 +639,7 @@ export async function runPageGeneration(input: {
 
   const result = await generatePages({
     spec: input.spec,
-    contract: input.contract,
-    imagePool: input.imagePool,
+    tokens: input.tokens,
     onPageStart: input.onPageStart,
     onPageComplete: input.onPageComplete,
   })
@@ -680,11 +665,8 @@ export async function runAssembly(input: {
   spec: CreativeSpec
   generatedPages: GeneratedPage[]
   appName: string
-  contract: SchemaContract
+  tokens: ThemeTokens
   sandboxId: string
-  supabaseProjectId: string
-  supabaseUrl: string
-  supabaseAnonKey: string
   onFileAssembled?: (path: string, category: string) => void
 }): Promise<AssemblyResult2> {
   // Dynamic imports to avoid circular deps
@@ -696,6 +678,7 @@ export async function runAssembly(input: {
     spec: input.spec,
     generatedPages: input.generatedPages,
     appName: input.appName,
+    tokens: input.tokens,
     includeUiKit: true,
   })
 
@@ -727,16 +710,11 @@ export async function runAssembly(input: {
     }
   }
 
-  // Write files, replacing .env placeholders with real credentials
-  const uploads = assembledFiles.map((file) => {
-    let content = file.content
-    if (file.path === '.env') {
-      content = content
-        .replace('VITE_SUPABASE_URL=__PLACEHOLDER__', `VITE_SUPABASE_URL=${input.supabaseUrl}`)
-        .replace('VITE_SUPABASE_ANON_KEY=__PLACEHOLDER__', `VITE_SUPABASE_ANON_KEY=${input.supabaseAnonKey}`)
-    }
-    return { content, path: `/workspace/${file.path}` }
-  })
+  // Upload files as-is
+  const uploads = assembledFiles.map((file) => ({
+    content: file.content,
+    path: `/workspace/${file.path}`,
+  }))
   await uploadFiles(sandbox, uploads)
   console.log(`[assembly] Upload complete: ${uploads.length} files written`)
 
@@ -752,43 +730,12 @@ export async function runAssembly(input: {
     console.warn(`[assembly] bun install exit code: ${installResult.exitCode}`)
   }
 
-  // Step 4: Apply migration + seed SQL to Supabase (skip if using stub Supabase)
-  const isStubSupabase = input.supabaseProjectId.startsWith('stub-')
-  if (isStubSupabase) {
-    console.log('[assembly] Supabase is stubbed — skipping migration and seed')
-  } else {
-    const { runMigration } = await import('../supabase-mgmt')
-    const { contractToSeedSQL } = await import('../contract-to-seed')
-
-    // Find migration file in the assembled set
-    const migrationFile = assembledFiles.find((f) => f.path === 'supabase/migrations/0001_initial.sql')
-    if (migrationFile) {
-      const migResult = await runMigration(input.supabaseProjectId, migrationFile.content)
-      if (!migResult.success) {
-        // FATAL per CLAUDE.md determinism rules
-        throw new Error(`[assembly] Migration failed — fix the SQL generator, not the symptom: ${migResult.error}`)
-      }
-      console.log('[assembly] Migration applied to Supabase')
-    }
-
-    const seedSQL = await contractToSeedSQL(input.contract)
-    if (seedSQL) {
-      const seedResult = await runMigration(input.supabaseProjectId, seedSQL)
-      if (!seedResult.success) {
-        console.error(`[assembly] Seed failed: ${seedResult.error}`)
-        // Non-fatal — app works without seed data, just looks empty
-      } else {
-        console.log('[assembly] Seed data applied to Supabase')
-      }
-    }
-  }
-
   // Construct AppBlueprint from assembled files so downstream states
   // (validating, repairing, reviewing) have the fileTree they expect.
   const blueprint: AppBlueprint = {
     meta: { appName: input.appName, appDescription: '' },
-    features: inferFeatures(input.contract),
-    contract: input.contract,
+    features: inferFeatures({ tables: [] }),
+    contract: { tables: [] },
     fileTree: assembledFiles,
   }
 
