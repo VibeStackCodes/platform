@@ -64,8 +64,6 @@ export interface DeploymentResult {
 
 export interface DesignResult {
   tokens: ThemeTokens
-  selectedTheme: string
-  themeReasoning: string
   tokensUsed: number
 }
 
@@ -573,7 +571,6 @@ export async function runDeployment(input: {
  */
 export async function runDesign(input: {
   userPrompt: string
-  contract: SchemaContract
   appName?: string
   appDescription?: string
 }): Promise<DesignResult> {
@@ -583,19 +580,13 @@ export async function runDesign(input: {
   try {
     const result = await runDesignAgent(
       input.userPrompt,
-      input.contract,
       input.appName,
       input.appDescription,
     )
 
-    console.log(`[design] Theme selected: ${result.selectedTheme}`)
-    console.log(`[design] Theme reasoning: ${result.themeReasoning}`)
-
     return {
       tokens: result.tokens,
-      selectedTheme: result.selectedTheme,
-      themeReasoning: result.themeReasoning,
-      tokensUsed: 0,
+      tokensUsed: result.tokensUsed,
     }
   } catch (error) {
     console.error('[design] Design agent failed:', error)

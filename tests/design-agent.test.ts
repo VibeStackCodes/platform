@@ -1,206 +1,125 @@
 /**
  * Design Agent tests
  *
- * Tests that runDesignAgent:
- * 1. Calls the theme selector tool (deterministic keyword scoring)
- * 2. Returns selectedTheme and themeReasoning in the result
- * 3. Routes website prompts to website themes and management prompts to admin themes
+ * Tests that runDesignAgent returns ThemeTokens with:
+ * 1. colors (8 hex fields)
+ * 2. fonts (display, body, googleFontsUrl)
+ * 3. style (6 enum fields + borderRadius)
+ * 4. Default values for fields the Design Agent no longer manages
  *
- * The Mastra Agent.generate() call and catalog/unsplash I/O are mocked so no
- * real LLM calls or network requests are made.
+ * The Mastra Agent.generate() call is mocked — no real LLM calls.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import type { SchemaContract } from '@server/lib/schema-contract'
+import { describe, it, expect, vi } from 'vitest'
 
 // ---------------------------------------------------------------------------
 // Mock: @mastra/core/agent
-// The Agent constructor and generate() are mocked so no real LLM calls happen.
-// generate() returns a minimal selectionSchema-compatible object.
-// The theme returned by the mock is controlled per-test via `mockTheme`.
 // ---------------------------------------------------------------------------
-let mockTheme = 'recipes'
-
-function makeSelection() {
-  return {
-    object: {
-      theme: mockTheme,
-      heroImageQuery: 'restaurant food',
-      textSlots: {
-        hero_headline: 'Test headline here',
-        hero_subtext: 'Test subtext supporting line goes here',
-        about_paragraph: 'Test about paragraph for the app description two sentences.',
-        cta_label: 'Get started',
-        empty_state: 'No items yet. Add your first one.',
-        footer_tagline: 'Built with care.',
-      },
-    },
-  }
-}
-
 vi.mock('@mastra/core/agent', () => {
   return {
     Agent: class MockAgent {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      generate(_prompt: string, _opts?: any) {
-        return Promise.resolve(makeSelection())
+      generate() {
+        return Promise.resolve({
+          object: {
+            colors: {
+              background: '#faf9f6',
+              foreground: '#1a1a2e',
+              primary: '#2b6cb0',
+              primaryForeground: '#ffffff',
+              secondary: '#e8e4df',
+              accent: '#d4a373',
+              muted: '#f0ece6',
+              border: '#d1ccc4',
+            },
+            fonts: {
+              display: 'Playfair Display',
+              body: 'Source Sans 3',
+            },
+            style: {
+              borderRadius: '0.5rem',
+              cardStyle: 'elevated',
+              navStyle: 'top-bar',
+              heroLayout: 'split',
+              spacing: 'normal',
+              motion: 'subtle',
+              imagery: 'photography-heavy',
+            },
+          },
+          totalUsage: { totalTokens: 350 },
+        })
       }
     },
   }
 })
 
 // ---------------------------------------------------------------------------
-// Mock: catalog-loader — returns a minimal prompt that includes the mock themes
-// ---------------------------------------------------------------------------
-vi.mock('@server/lib/skills/catalog-loader', () => ({
-  buildSkillCatalogPrompt: vi.fn(async () =>
-    [
-      '- recipes: Recipe capability with food-focused visuals',
-      '- blog: Editorial blog capability',
-      '- portfolio: Portfolio/gallery capability',
-      '- public-website: Marketing website capability',
-      '- auth: Authentication capability',
-    ].join('\n'),
-  ),
-  resolveThemeSkillPath: vi.fn(async () => null),
-}))
-
-// ---------------------------------------------------------------------------
-// Mock: unsplash — return empty array without network call
-// ---------------------------------------------------------------------------
-vi.mock('@server/lib/unsplash', () => ({
-  fetchHeroImages: vi.fn(async () => []),
-}))
-
-// ---------------------------------------------------------------------------
-// Mock: theme-schemas — isThemeSpecificSchema returns false by default
-// ---------------------------------------------------------------------------
-vi.mock('@server/lib/theme-schemas', () => ({
-  isThemeSpecificSchema: vi.fn(() => false),
-  getThemeBaseSchema: vi.fn(() => undefined),
-}))
-
-// ---------------------------------------------------------------------------
-// Import after mocks are set up
+// Import after mocks
 // ---------------------------------------------------------------------------
 import { runDesignAgent } from '@server/lib/agents/design-agent'
-
-// ---------------------------------------------------------------------------
-// Shared test contract
-// ---------------------------------------------------------------------------
-const contract: SchemaContract = {
-  tables: [
-    {
-      name: 'item',
-      columns: [
-        { name: 'id', type: 'uuid', primaryKey: true, default: 'gen_random_uuid()' },
-        { name: 'name', type: 'text', nullable: false },
-        { name: 'created_at', type: 'timestamptz', default: 'now()' },
-      ],
-    },
-  ],
-}
+import { DEFAULT_TEXT_SLOTS } from '@server/lib/themed-code-engine'
 
 describe('runDesignAgent', () => {
-  beforeEach(() => {
-    // Reset mock theme to default before each test
-    mockTheme = 'recipes'
-  })
-
-  it('returns selectedTheme and themeReasoning in result', async () => {
-    const result = await runDesignAgent(
-      'Build a simple app',
-      contract,
-      'MyApp',
-      'A simple web application',
-    )
+  it('returns tokens and tokensUsed', async () => {
+    const result = await runDesignAgent('Build a recipe website', 'RecipePress', 'A recipe sharing platform')
 
     expect(result).toHaveProperty('tokens')
-    expect(result).toHaveProperty('contract')
-    expect(result).toHaveProperty('selectedTheme')
-    expect(result).toHaveProperty('themeReasoning')
-    expect(typeof result.selectedTheme).toBe('string')
-    expect(typeof result.themeReasoning).toBe('string')
+    expect(result).toHaveProperty('tokensUsed')
+    expect(result.tokensUsed).toBe(350)
   })
 
-  it('selectedTheme is normalized to a catalog capability name', async () => {
-    const result = await runDesignAgent('Build an app', contract)
+  it('tokens.colors has all 8 required hex fields', async () => {
+    const { tokens } = await runDesignAgent('Build an app')
 
-    expect(['recipes', 'blog', 'portfolio', 'public-website', 'auth']).toContain(result.selectedTheme)
+    const hexRegex = /^#[0-9a-fA-F]{6}$/
+    expect(tokens.colors.background).toMatch(hexRegex)
+    expect(tokens.colors.foreground).toMatch(hexRegex)
+    expect(tokens.colors.primary).toMatch(hexRegex)
+    expect(tokens.colors.primaryForeground).toMatch(hexRegex)
+    expect(tokens.colors.secondary).toMatch(hexRegex)
+    expect(tokens.colors.accent).toMatch(hexRegex)
+    expect(tokens.colors.muted).toMatch(hexRegex)
+    expect(tokens.colors.border).toMatch(hexRegex)
   })
 
-  it('selects appropriate theme based on prompt intent (website)', async () => {
-    // Mock the LLM to return canape for a restaurant website prompt
-    mockTheme = 'recipes'
+  it('tokens.fonts has display, body, and valid googleFontsUrl', async () => {
+    const { tokens } = await runDesignAgent('Build an app')
 
-    const result = await runDesignAgent(
-      'Restaurant website with menu and reservations',
-      contract,
-      'RestaurantSite',
-      'Public-facing restaurant website',
-    )
-
-    expect(result.selectedTheme).toBe('recipes')
-    // themeReasoning comes from the deterministic theme selector tool
-    expect(result.themeReasoning).toContain('website')
+    expect(tokens.fonts.display).toBe('Playfair Display')
+    expect(tokens.fonts.body).toBe('Source Sans 3')
+    expect(tokens.fonts.googleFontsUrl).toContain('fonts.googleapis.com')
+    expect(tokens.fonts.googleFontsUrl).toContain('Playfair+Display')
+    expect(tokens.fonts.googleFontsUrl).toContain('Source+Sans+3')
   })
 
-  it('does NOT select website theme for management apps', async () => {
-    // Mock the LLM to return dashboard for a management app prompt
-    mockTheme = 'public-website'
+  it('tokens.style has all 6 enum fields with valid values', async () => {
+    const { tokens } = await runDesignAgent('Build an app')
 
-    const result = await runDesignAgent(
-      'Restaurant management system for staff',
-      contract,
-      'RestaurantManager',
-      'Staff-only management app',
-    )
-
-    expect(['public-website', 'blog', 'portfolio']).toContain(result.selectedTheme)
-    expect(result.selectedTheme).not.toBe('recipes')
-    // themeReasoning from the tool should mention management/staff intent
-    expect(result.themeReasoning).toBeTruthy()
+    expect(['flat', 'bordered', 'elevated', 'glass']).toContain(tokens.style.cardStyle)
+    expect(['top-bar', 'sidebar', 'editorial', 'minimal', 'centered']).toContain(tokens.style.navStyle)
+    expect(['fullbleed', 'split', 'centered', 'editorial', 'none']).toContain(tokens.style.heroLayout)
+    expect(['compact', 'normal', 'airy']).toContain(tokens.style.spacing)
+    expect(['none', 'subtle', 'expressive']).toContain(tokens.style.motion)
+    expect(['photography-heavy', 'illustration', 'minimal', 'icon-focused']).toContain(tokens.style.imagery)
+    expect(tokens.style.borderRadius).toBe('0.5rem')
   })
 
-  it('themeReasoning reflects website intent for website prompts', async () => {
-    const result = await runDesignAgent(
-      'Restaurant website with menu and reservations',
-      contract,
-      'RestaurantSite',
-      'Public-facing restaurant website',
-    )
-
-    // The deterministic tool produces a reasoning string about website intent
-    expect(result.themeReasoning.toLowerCase()).toMatch(/website|public|facing/)
+  it('authPosture is always public', async () => {
+    const { tokens } = await runDesignAgent('Build an app')
+    expect(tokens.authPosture).toBe('public')
   })
 
-  it('themeReasoning reflects management intent for admin prompts', async () => {
-    mockTheme = 'public-website'
-
-    const result = await runDesignAgent(
-      'Restaurant management system for staff',
-      contract,
-      'RestaurantManager',
-      'Staff-only management app',
-    )
-
-    // The deterministic tool produces a reasoning string about admin/management intent
-    expect(result.themeReasoning).toBeTruthy()
-    expect(result.themeReasoning.length).toBeGreaterThan(10)
+  it('textSlots defaults to DEFAULT_TEXT_SLOTS', async () => {
+    const { tokens } = await runDesignAgent('Build an app')
+    expect(tokens.textSlots).toEqual(DEFAULT_TEXT_SLOTS)
   })
 
-  it('result still contains tokens and contract (backward compatibility)', async () => {
-    const result = await runDesignAgent('Build an app', contract, 'TestApp', 'A test app')
+  it('heroImages is empty array', async () => {
+    const { tokens } = await runDesignAgent('Build an app')
+    expect(tokens.heroImages).toEqual([])
+  })
 
-    // tokens must have required ThemeTokens shape
-    expect(result.tokens).toHaveProperty('name')
-    expect(result.tokens).toHaveProperty('fonts')
-    expect(result.tokens).toHaveProperty('colors')
-    expect(result.tokens).toHaveProperty('style')
-    expect(result.tokens.textSlots).toBeDefined()
-
-    // contract must be returned (at minimum unchanged when no base schema merge)
-    expect(result.contract).toBeDefined()
-    expect(Array.isArray(result.contract.tables)).toBe(true)
+  it('name is empty string', async () => {
+    const { tokens } = await runDesignAgent('Build an app')
+    expect(tokens.name).toBe('')
   })
 })

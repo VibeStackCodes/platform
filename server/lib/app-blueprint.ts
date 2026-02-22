@@ -658,23 +658,19 @@ export async function contractToBlueprint(input: BlueprintInput): Promise<AppBlu
 export async function contractToBlueprintCreative(input: BlueprintInput): Promise<AppBlueprint> {
   const userPrompt = input.userPrompt?.trim() || `${input.appName}. ${input.appDescription}`
 
-  // 1. Run Design Agent — same as contractToBlueprintWithDesignAgent
-  const { tokens, contract: mergedContract, selectedTheme, themeReasoning } = await runDesignAgent(
+  // 1. Run Design Agent — generates color palette, fonts, and page styles
+  const { tokens } = await runDesignAgent(
     userPrompt,
-    input.contract,
     input.appName,
     input.appDescription,
   )
-  console.log(`[blueprint:creative] Design Agent selected theme: ${selectedTheme}`)
-  console.log(`[blueprint:creative] Theme reasoning: ${themeReasoning}`)
-  console.log(`[blueprint:creative] Schema tables: ${mergedContract.tables.length} (user: ${input.contract.tables.length})`)
 
   // 2. Run Creative Director
   const creativeDirectorInput: CreativeDirectorInput = {
     userPrompt,
     appName: input.appName,
     appDescription: input.appDescription,
-    contract: mergedContract,
+    contract: input.contract,
     tokens,
   }
   const cdResult = await runCreativeDirector(creativeDirectorInput)
@@ -693,7 +689,7 @@ export async function contractToBlueprintCreative(input: BlueprintInput): Promis
   const pageResult = await generatePages({
     spec,
     imagePool,
-    ...(spec.archetype !== 'static' ? { contract: mergedContract } : {}),
+    ...(spec.archetype !== 'static' ? { contract: input.contract } : {}),
   })
   const generatedPages = pageResult.pages
   console.log(`[blueprint:creative] Generated ${generatedPages.length} pages`)
@@ -730,7 +726,7 @@ export async function contractToBlueprintCreative(input: BlueprintInput): Promis
   }
 
   // 6. Merge with infrastructure files
-  const features = inferFeatures(mergedContract)
+  const features = inferFeatures(input.contract)
   const fileTree: BlueprintFile[] = []
 
   // Infrastructure: .gitignore, vercel.json
@@ -795,7 +791,7 @@ Thumbs.db
   // SQL migration from the merged contract
   fileTree.push({
     path: 'supabase/migrations/0001_initial.sql',
-    content: contractToSQL(mergedContract),
+    content: contractToSQL(input.contract),
     layer: 2,
     isLLMSlot: false,
   })
@@ -825,7 +821,7 @@ Thumbs.db
       tokens,
     },
     features,
-    contract: mergedContract,
+    contract: input.contract,
     fileTree,
   }
 }

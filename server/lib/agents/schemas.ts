@@ -23,17 +23,6 @@ export const AnalystOutputSchema = z.object({
   prd: z.string().describe('Short PRD: 2-line introduction followed by 5 bullet points of key requirements'),
 })
 
-export const ThemeSelectorInputSchema = z.object({
-  userPrompt: z.string().min(5).describe('User prompt describing the app'),
-  appDescription: z.string().optional().describe('App description'),
-})
-
-export const ThemeSelectorOutputSchema = z.object({
-  themeName: z.string().describe('Selected theme name'),
-  reasoning: z.string().describe('Why this theme was selected'),
-  shouldMergeTables: z.boolean().describe('Whether to merge theme base tables with user schema'),
-})
-
 // ---------------------------------------------------------------------------
 // Section Composition — Page Composer output schemas
 // ---------------------------------------------------------------------------

@@ -142,18 +142,14 @@ async function main() {
   const t2 = Date.now()
   const designResult = await runDesignAgent(
     userPrompt,
-    analysisResult.contract,
     analysisResult.appName,
     analysisResult.appDescription,
   )
   trackUsage('design', 'gpt-5.2', 0, 0, Date.now() - t2)
 
-  const mergedContract = designResult.contract
   const tokens = designResult.tokens
-  log(`  Theme: ${tokens.name ?? 'unknown'}`)
-  log(`  [design] Theme selected: ${designResult.selectedTheme}`)
-  log(`  [design] Theme reasoning: ${designResult.themeReasoning}`)
-  log(`  [design] Tables from merged schema: ${mergedContract.tables.length}`)
+  log(`  Fonts: ${tokens.fonts.display} / ${tokens.fonts.body}`)
+  log(`  Card style: ${tokens.style.cardStyle}, Nav: ${tokens.style.navStyle}`)
 
   // --- Phase 3: Creative Director ---
   log('\nPhase 3: Running creative director...')
@@ -164,7 +160,7 @@ async function main() {
     userPrompt,
     appName: analysisResult.appName,
     appDescription: analysisResult.appDescription,
-    contract: mergedContract,
+    contract: analysisResult.contract,
     tokens,
   })
   const spec = cdResult.spec

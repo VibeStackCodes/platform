@@ -119,7 +119,7 @@ export const appGenerationMachine = setup({
       const { runAnalysis } = await import('./orchestrator')
       return runAnalysis(input)
     }),
-    runDesignActor: fromPromise(async ({ input }: { input: { userPrompt: string; contract: SchemaContract; appName: string; appDescription: string } }) => {
+    runDesignActor: fromPromise(async ({ input }: { input: { userPrompt: string; appName: string; appDescription: string } }) => {
       const { runDesign } = await import('./orchestrator')
       return runDesign(input)
     }),
@@ -394,7 +394,6 @@ export const appGenerationMachine = setup({
         src: 'runDesignActor',
         input: ({ context }) => ({
           userPrompt: context.userMessage,
-          contract: context.contract!,
           appName: context.appName ?? '',
           appDescription: context.appDescription ?? '',
         }),
@@ -1023,8 +1022,6 @@ export const mockAppGenerationMachine = setup({
       await delay(1000)
       return {
         tokens: MOCK_TOKENS,
-        selectedTheme: 'canape',
-        themeReasoning: 'Mock theme selection — canape for clean task management UI',
         tokensUsed: 500,
       }
     }),
@@ -1240,7 +1237,6 @@ export const mockAppGenerationMachine = setup({
         src: 'runDesignActor',
         input: ({ context }) => ({
           userPrompt: context.userMessage,
-          contract: context.contract!,
           appName: context.appName ?? '',
           appDescription: context.appDescription ?? '',
         }),
