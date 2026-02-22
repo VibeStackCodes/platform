@@ -655,15 +655,6 @@ export async function contractToBlueprint(input: BlueprintInput): Promise<AppBlu
   return buildBlueprintFromTokens(input, fallbackThemeTokens(input))
 }
 
-export async function contractToBlueprintWithDesignAgent(input: BlueprintInput): Promise<AppBlueprint> {
-  const userPrompt = input.userPrompt?.trim() || `${input.appName}. ${input.appDescription}`
-  const { tokens, contract: mergedContract, selectedTheme, themeReasoning } = await runDesignAgent(userPrompt, input.contract, input.appName, input.appDescription)
-  console.log(`[blueprint] Design Agent selected theme: ${selectedTheme}`)
-  console.log(`[blueprint] Theme reasoning: ${themeReasoning}`)
-  console.log(`[blueprint] Schema tables: ${mergedContract.tables.length} (user: ${input.contract.tables.length})`)
-  return await buildBlueprintFromTokens({ ...input, contract: mergedContract, assembly: input.assembly }, tokens)
-}
-
 export async function contractToBlueprintCreative(input: BlueprintInput): Promise<AppBlueprint> {
   const userPrompt = input.userPrompt?.trim() || `${input.appName}. ${input.appDescription}`
 
