@@ -3,7 +3,11 @@
 // Fetch hero images from Unsplash API.
 // Gracefully no-ops when UNSPLASH_ACCESS_KEY is unset.
 
-import type { HeroImage } from './design-spec'
+export interface HeroImage {
+  url: string
+  alt: string
+  photographer: string
+}
 
 interface UnsplashPhoto {
   id: string

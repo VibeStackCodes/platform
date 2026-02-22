@@ -5,10 +5,7 @@
  * All routes require authentication + admin role.
  *
  * Endpoints:
- * - GET  /api/admin/health     — System health check (DB, pool, env vars)
- * - GET  /api/admin/pool       — Warm Supabase pool status + metrics
- * - POST /api/admin/pool/replenish — Manually trigger pool replenishment
- * - POST /api/admin/pool/cleanup   — Clean up zombie + error projects
+ * - GET  /api/admin/health     — System health check (DB, Daytona, env vars)
  * - GET  /api/admin/env-check  — Verify required environment variables
  */
 
@@ -64,22 +61,7 @@ adminRoutes.get('/health', async (c) => {
     checks.database = { status: 'error', details: error instanceof Error ? error.message : 'Connection failed' }
   }
 
-  // 2. Warm Supabase pool
-  try {
-    const { getPoolStatus } = await import('../lib/supabase-pool')
-    const pool = await getPoolStatus()
-    const poolSize = Number(process.env.WARM_POOL_SIZE || '5')
-
-    if (pool.available === 0) {
-      checks.warm_pool = { status: 'warning', details: `Pool empty (0/${poolSize} available, ${pool.claimed} claimed)` }
-    } else {
-      checks.warm_pool = { status: 'ok', details: `${pool.available}/${poolSize} available, ${pool.claimed} claimed` }
-    }
-  } catch (error) {
-    checks.warm_pool = { status: 'error', details: error instanceof Error ? error.message : 'Pool check failed' }
-  }
-
-  // 3. Daytona connectivity
+  // 2. Daytona connectivity
   try {
     const { getDaytonaClient } = await import('../lib/sandbox')
     const daytona = getDaytonaClient()
@@ -135,80 +117,6 @@ adminRoutes.get('/health', async (c) => {
     timestamp: new Date().toISOString(),
     checks,
   }, hasErrors ? 503 : 200)
-})
-
-/**
- * GET /api/admin/pool
- * Detailed warm pool status
- */
-adminRoutes.get('/pool', async (c) => {
-  try {
-    const { getPoolStatus } = await import('../lib/supabase-pool')
-    const status = await getPoolStatus()
-    const targetSize = Number(process.env.WARM_POOL_SIZE || '5')
-
-    // Get detailed breakdown
-    const detailed = await db.execute(
-      sql`SELECT
-            status,
-            COUNT(*)::int as count,
-            MIN(created_at) as oldest,
-            MAX(created_at) as newest
-          FROM warm_supabase_projects
-          GROUP BY status
-          ORDER BY status`,
-    )
-
-    return c.json({
-      summary: { ...status, targetSize },
-      breakdown: detailed.rows,
-      timestamp: new Date().toISOString(),
-    })
-  } catch (error) {
-    return c.json({ error: error instanceof Error ? error.message : 'Failed to get pool status' }, 500)
-  }
-})
-
-/**
- * POST /api/admin/pool/replenish
- * Manually trigger pool replenishment
- */
-adminRoutes.post('/pool/replenish', async (c) => {
-  try {
-    const { replenishPool } = await import('../lib/supabase-pool')
-    const result = await replenishPool()
-    return c.json({
-      success: true,
-      created: result.created,
-      errors: result.errors,
-    })
-  } catch (error) {
-    return c.json({ error: error instanceof Error ? error.message : 'Replenishment failed' }, 500)
-  }
-})
-
-/**
- * POST /api/admin/pool/cleanup
- * Clean up zombie and error projects
- */
-adminRoutes.post('/pool/cleanup', async (c) => {
-  try {
-    const { cleanupZombieProjects, cleanupErrorProjects } = await import('../lib/supabase-pool')
-
-    const [zombieResult, errorCount] = await Promise.all([
-      cleanupZombieProjects(),
-      cleanupErrorProjects(),
-    ])
-
-    return c.json({
-      success: true,
-      zombiesReleased: zombieResult.released,
-      errorsRemoved: errorCount,
-      errors: zombieResult.errors,
-    })
-  } catch (error) {
-    return c.json({ error: error instanceof Error ? error.message : 'Cleanup failed' }, 500)
-  }
 })
 
 /**
