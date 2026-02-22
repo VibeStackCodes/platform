@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { runDeterministicChecks, runCodeReview } from '@server/lib/agents/code-review'
 import type { AppBlueprint } from '@server/lib/app-blueprint'
-import type { SchemaContract } from '@server/lib/schema-contract'
 
 // ============================================================================
 // Mock Mastra Agent
@@ -64,29 +63,6 @@ function createMockBlueprint(files: Array<{ path: string; content: string }>): A
   }
 }
 
-function createMockContract(): SchemaContract {
-  return {
-    tables: [
-      {
-        name: 'tasks',
-        columns: [
-          { name: 'id', type: 'uuid', primaryKey: true },
-          { name: 'title', type: 'text' },
-          { name: 'description', type: 'text', nullable: true },
-          { name: 'completed', type: 'boolean', default: 'false' },
-        ],
-      },
-      {
-        name: 'projects',
-        columns: [
-          { name: 'id', type: 'uuid', primaryKey: true },
-          { name: 'name', type: 'text' },
-        ],
-      },
-    ],
-  }
-}
-
 // ============================================================================
 // Deterministic Checks Tests
 // ============================================================================
@@ -106,7 +82,7 @@ function TasksPage() {
       },
     ])
 
-    const issues = runDeterministicChecks(blueprint, createMockContract())
+    const issues = runDeterministicChecks(blueprint)
 
     // Should find: missing route export, missing error boundary, missing loading state (no useQuery in this case)
     const routeExportIssue = issues.find(i => i.type === 'missing_route_export')
@@ -132,7 +108,7 @@ function Tasks() {
       },
     ])
 
-    const issues = runDeterministicChecks(blueprint, createMockContract())
+    const issues = runDeterministicChecks(blueprint)
 
     expect(issues.length).toBeGreaterThanOrEqual(1)
     const secretIssue = issues.find(i => i.type === 'hardcoded_secret')
@@ -157,7 +133,7 @@ function Tasks() {
       },
     ])
 
-    const issues = runDeterministicChecks(blueprint, createMockContract())
+    const issues = runDeterministicChecks(blueprint)
 
     const secretIssue = issues.find(i => i.type === 'hardcoded_secret')
     expect(secretIssue).toBeDefined()
@@ -189,7 +165,7 @@ function ErrorBoundary({ error }: { error: Error }) {
       },
     ])
 
-    const issues = runDeterministicChecks(blueprint, createMockContract())
+    const issues = runDeterministicChecks(blueprint)
 
     const loadingIssue = issues.find(i => i.type === 'missing_loading_state')
     expect(loadingIssue).toBeDefined()
@@ -211,48 +187,12 @@ function Tasks() {
       },
     ])
 
-    const issues = runDeterministicChecks(blueprint, createMockContract())
+    const issues = runDeterministicChecks(blueprint)
 
     const errorBoundaryIssue = issues.find(i => i.type === 'missing_error_boundary')
     expect(errorBoundaryIssue).toBeDefined()
     expect(errorBoundaryIssue?.severity).toBe('warning')
     expect(errorBoundaryIssue?.message).toContain('error boundary')
-  })
-
-  it('detects contract mismatch (missing entity page)', () => {
-    const blueprint = createMockBlueprint([
-      {
-        path: 'src/routes/_authenticated/tasks.tsx',
-        content: `
-export const Route = createFileRoute('/_authenticated/tasks')({ component: Tasks })
-
-function Tasks() {
-  return <div>Tasks</div>
-}
-`,
-      },
-    ])
-
-    const contract: SchemaContract = {
-      tables: [
-        {
-          name: 'tasks',
-          columns: [{ name: 'id', type: 'uuid', primaryKey: true }],
-        },
-        {
-          name: 'projects',
-          columns: [{ name: 'id', type: 'uuid', primaryKey: true }],
-        },
-      ],
-    }
-
-    const issues = runDeterministicChecks(blueprint, contract)
-
-    const contractIssue = issues.find(
-      i => i.type === 'contract_mismatch' && i.message.includes('projects')
-    )
-    expect(contractIssue).toBeDefined()
-    expect(contractIssue?.severity).toBe('warning')
   })
 
   it('returns empty array for clean code', () => {
@@ -284,40 +224,9 @@ function ErrorBoundary({ error }: { error: Error }) {
       },
     ])
 
-    const contract: SchemaContract = {
-      tables: [
-        {
-          name: 'tasks',
-          columns: [{ name: 'id', type: 'uuid', primaryKey: true }],
-        },
-      ],
-    }
-
-    const issues = runDeterministicChecks(blueprint, contract)
+    const issues = runDeterministicChecks(blueprint)
 
     expect(issues).toHaveLength(0)
-  })
-
-  it('skips junction tables (starting with _)', () => {
-    const contract: SchemaContract = {
-      tables: [
-        {
-          name: '_task_tags',
-          columns: [
-            { name: 'task_id', type: 'uuid', references: { table: 'tasks', column: 'id' } },
-            { name: 'tag_id', type: 'uuid', references: { table: 'tags', column: 'id' } },
-          ],
-        },
-      ],
-    }
-
-    const blueprint = createMockBlueprint([])
-
-    const issues = runDeterministicChecks(blueprint, contract)
-
-    // Should not report missing page for junction table
-    const contractIssue = issues.find(i => i.type === 'contract_mismatch')
-    expect(contractIssue).toBeUndefined()
   })
 
   // ============================================================================
@@ -342,7 +251,7 @@ function ErrorBoundary({ error }: { error: Error }) { return <div>{error.message
       },
     ])
 
-    const issues = runDeterministicChecks(blueprint, createMockContract())
+    const issues = runDeterministicChecks(blueprint)
     const issue = issues.find(i => i.type === 'stale_trpc_import')
     expect(issue).toBeDefined()
     expect(issue?.severity).toBe('critical')
@@ -367,7 +276,7 @@ function ErrorBoundary({ error }: { error: Error }) { return <div>{error.message
       },
     ])
 
-    const issues = runDeterministicChecks(blueprint, createMockContract())
+    const issues = runDeterministicChecks(blueprint)
     const issue = issues.find(i => i.type === 'stale_trpc_import')
     expect(issue).toBeDefined()
     expect(issue?.severity).toBe('critical')
@@ -392,7 +301,7 @@ function ErrorBoundary({ error }: { error: Error }) { return <div>{error.message
       },
     ])
 
-    const issues = runDeterministicChecks(blueprint, createMockContract())
+    const issues = runDeterministicChecks(blueprint)
     const issue = issues.find(i => i.type === 'stale_trpc_import')
     expect(issue).toBeDefined()
     expect(issue?.severity).toBe('critical')
@@ -424,7 +333,7 @@ function ErrorBoundary({ error }: { error: Error }) { return <div>{error.message
       },
     ])
 
-    const issues = runDeterministicChecks(blueprint, createMockContract())
+    const issues = runDeterministicChecks(blueprint)
     const issue = issues.find(i => i.type === 'stale_trpc_import')
     expect(issue).toBeUndefined()
   })
@@ -457,7 +366,7 @@ function ErrorBoundary({ error }: { error: Error }) { return <div>{error.message
       },
     ])
 
-    const issues = runDeterministicChecks(blueprint, createMockContract())
+    const issues = runDeterministicChecks(blueprint)
     const issue = issues.find(i => i.type === 'missing_supabase_import')
     expect(issue).toBeDefined()
     expect(issue?.severity).toBe('warning')
@@ -490,7 +399,7 @@ function ErrorBoundary({ error }: { error: Error }) { return <div>{error.message
       },
     ])
 
-    const issues = runDeterministicChecks(blueprint, createMockContract())
+    const issues = runDeterministicChecks(blueprint)
     const issue = issues.find(i => i.type === 'missing_supabase_import')
     expect(issue).toBeUndefined()
   })
@@ -524,7 +433,7 @@ function ErrorBoundary({ error }: { error: Error }) { return <div>{error.message
       },
     ])
 
-    const issues = runDeterministicChecks(blueprint, createMockContract())
+    const issues = runDeterministicChecks(blueprint)
     const issue = issues.find(i => i.type === 'missing_query_key')
     expect(issue).toBeDefined()
     expect(issue?.severity).toBe('warning')
@@ -557,7 +466,7 @@ function ErrorBoundary({ error }: { error: Error }) { return <div>{error.message
       },
     ])
 
-    const issues = runDeterministicChecks(blueprint, createMockContract())
+    const issues = runDeterministicChecks(blueprint)
     const issue = issues.find(i => i.type === 'missing_query_key')
     expect(issue).toBeUndefined()
   })
@@ -590,7 +499,7 @@ function ErrorBoundary({ error }: { error: Error }) { return <div>{error.message
       },
     ])
 
-    const issues = runDeterministicChecks(blueprint, createMockContract())
+    const issues = runDeterministicChecks(blueprint)
     const issue = issues.find(i => i.type === 'missing_mutation_invalidation')
     expect(issue).toBeDefined()
     expect(issue?.severity).toBe('warning')
@@ -623,7 +532,7 @@ function ErrorBoundary({ error }: { error: Error }) { return <div>{error.message
       },
     ])
 
-    const issues = runDeterministicChecks(blueprint, createMockContract())
+    const issues = runDeterministicChecks(blueprint)
     const issue = issues.find(i => i.type === 'missing_mutation_invalidation')
     expect(issue).toBeUndefined()
   })
@@ -659,7 +568,7 @@ function ErrorBoundary({ error }: { error: Error }) { return <div>{error.message
       },
     ])
 
-    const issues = runDeterministicChecks(blueprint, createMockContract())
+    const issues = runDeterministicChecks(blueprint)
     const issue = issues.find(i => i.type === 'missing_single_modifier')
     expect(issue).toBeDefined()
     expect(issue?.severity).toBe('warning')
@@ -693,7 +602,7 @@ function ErrorBoundary({ error }: { error: Error }) { return <div>{error.message
       },
     ])
 
-    const issues = runDeterministicChecks(blueprint, createMockContract())
+    const issues = runDeterministicChecks(blueprint)
     const issue = issues.find(i => i.type === 'missing_single_modifier')
     expect(issue).toBeUndefined()
   })
@@ -724,7 +633,7 @@ function ErrorBoundary({ error }: { error: Error }) { return <div>{error.message
       },
     ])
 
-    const issues = runDeterministicChecks(blueprint, createMockContract())
+    const issues = runDeterministicChecks(blueprint)
     const issue = issues.find(i => i.type === 'missing_single_modifier')
     expect(issue).toBeUndefined()
   })
@@ -759,7 +668,7 @@ function ErrorBoundary({ error }: { error: Error }) { return <div>{error.message
       },
     ])
 
-    const issues = runDeterministicChecks(blueprint, createMockContract())
+    const issues = runDeterministicChecks(blueprint)
     const issue = issues.find(i => i.type === 'unused_import' && i.message.includes('useMutation'))
     expect(issue).toBeDefined()
     expect(issue?.severity).toBe('warning')
@@ -791,7 +700,7 @@ function ErrorBoundary({ error }: { error: Error }) { return <div>{error.message
       },
     ])
 
-    const issues = runDeterministicChecks(blueprint, createMockContract())
+    const issues = runDeterministicChecks(blueprint)
     const issue = issues.find(i => i.type === 'unused_import')
     expect(issue).toBeUndefined()
   })
@@ -835,7 +744,7 @@ function ErrorBoundary({ error }: { error: Error }) { return <div>{error.message
       },
     ])
 
-    const issues = runDeterministicChecks(blueprint, createMockContract())
+    const issues = runDeterministicChecks(blueprint)
     const issue = issues.find(i => i.type === 'missing_form_validation')
     expect(issue).toBeDefined()
     expect(issue?.severity).toBe('warning')
@@ -879,7 +788,7 @@ function ErrorBoundary({ error }: { error: Error }) { return <div>{error.message
       },
     ])
 
-    const issues = runDeterministicChecks(blueprint, createMockContract())
+    const issues = runDeterministicChecks(blueprint)
     const issue = issues.find(i => i.type === 'missing_form_validation')
     expect(issue).toBeUndefined()
   })
@@ -918,7 +827,7 @@ function ErrorBoundary({ error }: { error: Error }) { return <div>{error.message
       },
     ])
 
-    const issues = runDeterministicChecks(blueprint, createMockContract())
+    const issues = runDeterministicChecks(blueprint)
     const issue = issues.find(i => i.type === 'console_log_statement')
     expect(issue).toBeDefined()
     expect(issue?.severity).toBe('warning')
@@ -951,7 +860,7 @@ function ErrorBoundary({ error }: { error: Error }) { return <div>{error.message
       },
     ])
 
-    const issues = runDeterministicChecks(blueprint, createMockContract())
+    const issues = runDeterministicChecks(blueprint)
     const issue = issues.find(i => i.type === 'console_log_statement')
     expect(issue).toBeUndefined()
   })
@@ -978,7 +887,7 @@ function ErrorBoundary({ error }: { error: Error }) { return <div>{error.message
       },
     ])
 
-    const issues = runDeterministicChecks(blueprint, createMockContract())
+    const issues = runDeterministicChecks(blueprint)
     const issue = issues.find(i => i.type === 'hardcoded_localhost')
     expect(issue).toBeDefined()
     expect(issue?.severity).toBe('warning')
@@ -1003,7 +912,7 @@ function ErrorBoundary({ error }: { error: Error }) { return <div>{error.message
       },
     ])
 
-    const issues = runDeterministicChecks(blueprint, createMockContract())
+    const issues = runDeterministicChecks(blueprint)
     const issue = issues.find(i => i.type === 'hardcoded_localhost')
     expect(issue).toBeDefined()
     expect(issue?.severity).toBe('warning')
@@ -1027,7 +936,7 @@ function ErrorBoundary({ error }: { error: Error }) { return <div>{error.message
       },
     ])
 
-    const issues = runDeterministicChecks(blueprint, createMockContract())
+    const issues = runDeterministicChecks(blueprint)
     const issue = issues.find(i => i.type === 'hardcoded_localhost')
     expect(issue).toBeUndefined()
   })
@@ -1060,7 +969,7 @@ function ErrorBoundary({ error }: { error: Error }) { return <div>{error.message
       },
     ])
 
-    const issues = runDeterministicChecks(blueprint, createMockContract())
+    const issues = runDeterministicChecks(blueprint)
     const issue = issues.find(i => i.type === 'hardcoded_localhost')
     expect(issue).toBeUndefined()
   })
@@ -1095,7 +1004,7 @@ function ErrorBoundary({ error }: { error: Error }) { return <div>{error.message
       },
     ])
 
-    const issues = runDeterministicChecks(blueprint, createMockContract())
+    const issues = runDeterministicChecks(blueprint)
     const issue = issues.find(i => i.type === 'missing_key_prop')
     expect(issue).toBeDefined()
     expect(issue?.severity).toBe('warning')
@@ -1128,7 +1037,7 @@ function ErrorBoundary({ error }: { error: Error }) { return <div>{error.message
       },
     ])
 
-    const issues = runDeterministicChecks(blueprint, createMockContract())
+    const issues = runDeterministicChecks(blueprint)
     const issue = issues.find(i => i.type === 'missing_key_prop')
     expect(issue).toBeUndefined()
   })
@@ -1162,7 +1071,6 @@ function Tasks() {
 
     const result = await runCodeReview({
       blueprint,
-      contract: createMockContract(),
       sandboxId: 'sandbox-123',
     })
 
@@ -1210,7 +1118,6 @@ function ErrorBoundary({ error }: { error: Error }) {
 
     const result = await runCodeReview({
       blueprint,
-      contract: createMockContract(),
       sandboxId: 'sandbox-123',
     })
 
@@ -1265,7 +1172,6 @@ function ErrorBoundary({ error }: { error: Error }) {
 
     const result = await runCodeReview({
       blueprint,
-      contract: createMockContract(),
       sandboxId: 'sandbox-123',
     })
 
@@ -1321,7 +1227,6 @@ function ErrorBoundary({ error }: { error: Error }) {
 
     const result = await runCodeReview({
       blueprint,
-      contract: createMockContract(),
       sandboxId: 'sandbox-123',
     })
 
@@ -1367,7 +1272,6 @@ function ErrorBoundary({ error }: { error: Error }) {
 
     const result = await runCodeReview({
       blueprint,
-      contract: createMockContract(),
       sandboxId: 'sandbox-123',
     })
 
@@ -1405,7 +1309,6 @@ import { supabase } from '@/lib/supabase'
 
 export const Route = createFileRoute('/_authenticated/tasks')({
   component: Tasks,
-  // Missing errorComponent
 })
 
 function Tasks() {
@@ -1422,11 +1325,11 @@ function Tasks() {
 
     const result = await runCodeReview({
       blueprint,
-      contract: createMockContract(),
       sandboxId: 'sandbox-123',
     })
 
     expect(result.passed).toBe(true) // No critical issues
+    // 1 warning: missing error boundary (no errorComponent in route config)
     expect(result.deterministicIssues.length).toBeGreaterThan(0)
     expect(result.llmIssues).toHaveLength(1)
     expect(result.tokensUsed).toBe(550)
@@ -1451,7 +1354,6 @@ import { useQuery, useMutation } from '@tanstack/react-query'
 
 export const Route = createFileRoute('/_authenticated/tasks')({
   component: Tasks,
-  // no errorComponent
 })
 
 function Tasks() {
@@ -1480,7 +1382,6 @@ function Tasks() {
 
     const result = await runCodeReview({
       blueprint,
-      contract: createMockContract(),
       sandboxId: 'sandbox-123',
     })
 
@@ -1528,7 +1429,6 @@ function Tasks() {
 
     const result = await runCodeReview({
       blueprint,
-      contract: createMockContract(),
       sandboxId: 'sandbox-123',
     })
 

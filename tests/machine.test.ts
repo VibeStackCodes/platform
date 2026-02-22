@@ -1,7 +1,6 @@
 import { createActor, fromPromise, waitFor } from 'xstate'
 import { appGenerationMachine } from '@server/lib/agents/machine'
 import { describe, expect, it, vi } from 'vitest'
-import type { SchemaContract } from '@server/lib/schema-contract'
 import type { AppBlueprint } from '@server/lib/app-blueprint'
 import type { ValidationGateResult } from '@server/lib/agents/validation'
 
@@ -160,14 +159,12 @@ describe('state transitions', () => {
   })
 
   it('transitions preparing → designing when analysis and provisioning both complete', async () => {
-    const mockContract: SchemaContract = { tables: [], enums: [] }
     const testMachine = appGenerationMachine.provide({
       actors: {
         runAnalysisActor: fromPromise(async () => ({
           type: 'done' as const,
           appName: 'TestApp',
           appDescription: 'Test description',
-          contract: mockContract,
           tokensUsed: 100,
         })),
         runProvisioningActor: fromPromise(async () => ({
@@ -251,7 +248,6 @@ describe('state transitions', () => {
             type: 'done' as const,
             appName: 'TaskApp',
             appDescription: 'Task tracker',
-            contract: { tables: [], enums: [] },
             tokensUsed: 80,
           }
         }),
@@ -292,13 +288,12 @@ describe('state transitions', () => {
   })
 
   it('transitions through full happy path: preparing → designing → architecting → pageGeneration → assembly → validating → reviewing → complete', async () => {
-    const mockContract: SchemaContract = { tables: [], enums: [] }
     const mockBlueprint: AppBlueprint = {
       name: 'TestApp',
       description: 'Test app',
       features: [],
       pages: [],
-      contract: mockContract,
+      contract: { tables: [], enums: [] },
     }
     const mockTokens = {
       name: 'canape',
@@ -320,7 +315,6 @@ describe('state transitions', () => {
           type: 'done' as const,
           appName: 'TestApp',
           appDescription: 'Test app',
-          contract: mockContract,
           tokensUsed: 100,
         })),
         runDesignActor: fromPromise(async () => ({
@@ -395,13 +389,12 @@ describe('state transitions', () => {
 
 // Helper to build a testMachine that gets to validating
 function buildMachineToValidating(overrides: Record<string, ReturnType<typeof fromPromise>>) {
-  const mockContract: SchemaContract = { tables: [], enums: [] }
   const mockBlueprint: AppBlueprint = {
     name: 'TestApp',
     description: 'Test',
     features: [],
     pages: [],
-    contract: mockContract,
+    contract: { tables: [], enums: [] },
   }
   const mockTokens = {
     name: 'canape',
@@ -423,7 +416,6 @@ function buildMachineToValidating(overrides: Record<string, ReturnType<typeof fr
         type: 'done' as const,
         appName: 'TestApp',
         appDescription: 'Test',
-        contract: mockContract,
         tokensUsed: 100,
       })),
       runDesignActor: fromPromise(async () => ({
@@ -671,15 +663,12 @@ describe('error handling', () => {
   })
 
   it('transitions designing → failed on actor error', async () => {
-    const mockContract: SchemaContract = { tables: [], enums: [] }
-
     const testMachine = appGenerationMachine.provide({
       actors: {
         runAnalysisActor: fromPromise(async () => ({
           type: 'done' as const,
           appName: 'TestApp',
           appDescription: 'Test',
-          contract: mockContract,
           tokensUsed: 100,
         })),
         runProvisioningActor: fromPromise(async () => ({
@@ -714,7 +703,6 @@ describe('error handling', () => {
   })
 
   it('transitions provisioning → failed on actor error', async () => {
-    const mockContract: SchemaContract = { tables: [], enums: [] }
     const mockTokens = {
       name: 'canape',
       colors: { background: '#fff', foreground: '#111', primary: '#2b6cb0', primaryForeground: '#fff', secondary: '#e5e7eb', accent: '#f59e0b', muted: '#f3f4f6', border: '#d1d5db' },
@@ -730,7 +718,6 @@ describe('error handling', () => {
           type: 'done' as const,
           appName: 'TestApp',
           appDescription: 'Test',
-          contract: mockContract,
           tokensUsed: 100,
         })),
         runDesignActor: fromPromise(async () => ({
@@ -858,7 +845,6 @@ describe('context updates', () => {
           type: 'done' as const,
           appName: 'TestApp',
           appDescription: 'Test',
-          contract: { tables: [], enums: [] },
           tokensUsed: 100,
         })),
         runDesignActor: fromPromise(async () => ({
@@ -918,62 +904,13 @@ describe('context updates', () => {
     actor.stop()
   })
 
-  it('stores contract in context after analysis', async () => {
-    const mockContract: SchemaContract = {
-      tables: [
-        {
-          name: 'users',
-          columns: [{ name: 'id', type: 'uuid', primaryKey: true, nullable: false }],
-        },
-      ],
-      enums: [],
-    }
-
-    const testMachine = appGenerationMachine.provide({
-      actors: {
-        runAnalysisActor: fromPromise(async () => ({
-          type: 'done' as const,
-          appName: 'TestApp',
-          appDescription: 'Test',
-          contract: mockContract,
-          tokensUsed: 100,
-        })),
-        runProvisioningActor: fromPromise(async () => ({
-          sandboxId: 'sandbox-123',
-          supabaseProjectId: 'supabase-123',
-          supabaseUrl: 'https://test.supabase.co',
-          supabaseAnonKey: 'anon-key',
-          githubCloneUrl: 'https://github.com/test/repo.git',
-          githubHtmlUrl: 'https://github.com/test/repo',
-          repoName: 'test-repo',
-          tokensUsed: 50,
-        })),
-      },
-    })
-
-    const actor = createActor(testMachine)
-    actor.start()
-    actor.send({
-      type: 'START',
-      userMessage: 'Build a blog',
-      projectId: 'test-contract',
-      userId: 'test-user-123',
-    })
-
-    // Both analysis and provisioning complete → designing
-    await waitFor(actor, (state) => state.matches('designing'), { timeout: 1000 })
-    expect(actor.getSnapshot().context.contract).toEqual(mockContract)
-    actor.stop()
-  })
-
   it('stores blueprint in context after assembly', async () => {
-    const mockContract: SchemaContract = { tables: [], enums: [] }
     const mockBlueprint: AppBlueprint = {
       name: 'BlogApp',
       description: 'A blogging platform',
       features: [{ name: 'posts', description: 'Post management' }],
       pages: [],
-      contract: mockContract,
+      contract: { tables: [], enums: [] },
     }
 
     const testMachine = buildMachineToValidating({
@@ -1181,8 +1118,6 @@ describe('code review state transitions', () => {
 
 describe('userId and cleanup', () => {
   it('passes userId through to provisioning actor', async () => {
-    const mockContract: SchemaContract = { tables: [], enums: [] }
-
     let provisioningInput: any = null
 
     const testMachine = appGenerationMachine.provide({
@@ -1191,7 +1126,6 @@ describe('userId and cleanup', () => {
           type: 'done' as const,
           appName: 'TestApp',
           appDescription: 'Test',
-          contract: mockContract,
           tokensUsed: 100,
         })),
         runProvisioningActor: fromPromise(async ({ input }: any) => {

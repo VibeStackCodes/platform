@@ -1,4 +1,3 @@
-import type { SchemaContract } from '../schema-contract'
 import type { AppBlueprint } from '../app-blueprint'
 import { z } from 'zod'
 
@@ -49,7 +48,6 @@ export interface CodeReviewResult {
 
 export function runDeterministicChecks(
   blueprint: AppBlueprint,
-  contract: SchemaContract,
 ): DeterministicIssue[] {
   const issues: DeterministicIssue[] = []
 
@@ -300,24 +298,6 @@ export function runDeterministicChecks(
     }
   }
 
-  // 5. Contract compliance: every non-junction table should have list + detail pages
-  for (const table of contract.tables) {
-    if (table.name.startsWith('_')) continue
-    const entityKebab = table.name.replace(/_/g, '-')
-    // Check for list page
-    const hasListPage = blueprint.fileTree.some(f =>
-      f.path.includes(entityKebab) && f.path.includes('routes')
-    )
-    if (!hasListPage) {
-      issues.push({
-        type: 'contract_mismatch',
-        file: 'src/routes/',
-        message: `No route page found for entity "${table.name}" — contract specifies this table but no UI exists`,
-        severity: 'warning',
-      })
-    }
-  }
-
   return issues
 }
 
@@ -339,7 +319,6 @@ const LLMReviewSchema = z.object({
 
 export async function runLLMReview(
   blueprint: AppBlueprint,
-  contract: SchemaContract,
 ): Promise<{ issues: LLMReviewIssue[]; tokensUsed: number }> {
   // Dynamic imports to avoid circular deps
   const { Agent } = await import('@mastra/core/agent')
@@ -361,16 +340,12 @@ export async function runLLMReview(
 
   const prompt = `Review the following generated application code for functional and UX issues.
 
-## Contract (source of truth)
-Tables: ${contract.tables.map(t => t.name).join(', ')}
-${contract.tables.map(t => `### ${t.name}\nColumns: ${t.columns.map(c => `${c.name} (${c.type}${c.nullable === false ? ', NOT NULL' : ''})`).join(', ')}`).join('\n\n')}
-
 ## Generated Route Files
 ${routeFiles.map(f => `### ${f.path}\n\`\`\`tsx\n${f.content.slice(0, 3000)}\n\`\`\``).join('\n\n')}
 
 ## Review Criteria
 1. **UX**: Forms have proper validation messages, success/error feedback, loading states
-2. **Logic**: CRUD operations match contract (correct fields, types, relationships)
+2. **Logic**: Component logic is correct (proper state management, event handling)
 3. **Security**: No client-side secret exposure, proper auth checks
 4. **Accessibility**: Form labels, ARIA attributes, keyboard navigation
 5. **Performance**: No unnecessary re-renders, proper query caching
@@ -399,11 +374,10 @@ Only report REAL issues. Do not report style preferences or minor improvements.`
 
 export async function runCodeReview(input: {
   blueprint: AppBlueprint
-  contract: SchemaContract
   sandboxId: string
 }): Promise<CodeReviewResult> {
   // 1. Run deterministic checks first (fast, no LLM cost)
-  const deterministicIssues = runDeterministicChecks(input.blueprint, input.contract)
+  const deterministicIssues = runDeterministicChecks(input.blueprint)
 
   // 2. If there are critical deterministic issues, skip LLM review (save cost)
   const hasCriticalDeterministic = deterministicIssues.some(i => i.severity === 'critical')
@@ -429,7 +403,7 @@ export async function runCodeReview(input: {
   }
 
   // 3. Run LLM review
-  const { issues: llmIssues, tokensUsed } = await runLLMReview(input.blueprint, input.contract)
+  const { issues: llmIssues, tokensUsed } = await runLLMReview(input.blueprint)
 
   // 4. Determine pass/fail — only critical issues cause failure
   const hasCriticalLLM = llmIssues.some(i => i.severity === 'critical')

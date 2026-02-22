@@ -2,7 +2,6 @@ import { assign, createActor, fromPromise, setup } from 'xstate'
 import type { ActorOptions } from 'xstate'
 import * as Sentry from '@sentry/node'
 import type { AppBlueprint, BlueprintFile } from '../app-blueprint'
-import type { SchemaContract } from '../schema-contract'
 import type { AssemblyResult } from '../capabilities/assembler'
 import type { ThemeTokens } from '../themed-code-engine'
 import type { ValidationGateResult } from './validation'
@@ -24,7 +23,6 @@ export interface MachineContext {
   // Analyst output
   appName: string
   appDescription: string
-  contract: SchemaContract | null
   capabilityManifest: string[]
   assembly: AssemblyResult | null
 
@@ -80,7 +78,6 @@ type MachineEvent =
       type: 'ANALYST_DONE'
       appName: string
       appDescription: string
-      contract: SchemaContract
     }
   | { type: 'CLARIFICATION_NEEDED'; questions: unknown[] }
   | { type: 'BLUEPRINT_DONE'; blueprint: AppBlueprint }
@@ -188,7 +185,7 @@ export const appGenerationMachine = setup({
       },
     ),
     runCodeReviewActor: fromPromise(
-      async ({ input }: { input: { blueprint: AppBlueprint; contract: SchemaContract; sandboxId: string } }) => {
+      async ({ input }: { input: { blueprint: AppBlueprint; sandboxId: string } }) => {
         const { runCodeReview } = await import('./code-review')
         return runCodeReview(input)
       },
@@ -207,7 +204,6 @@ export const appGenerationMachine = setup({
     userId: '',
     appName: '',
     appDescription: '',
-    contract: null,
     capabilityManifest: [],
     assembly: null,
     clarificationQuestions: null,
@@ -284,7 +280,6 @@ export const appGenerationMachine = setup({
                       appName: ({ event }) => (event.output as Extract<AnalysisResult, { type: 'done' }>).appName,
                       appDescription: ({ event }) => (event.output as Extract<AnalysisResult, { type: 'done' }>).appDescription,
                       prd: ({ event }) => (event.output as Extract<AnalysisResult, { type: 'done' }>).prd,
-                      contract: ({ event }) => (event.output as Extract<AnalysisResult, { type: 'done' }>).contract,
                       capabilityManifest: ({ event }) => (event.output as Extract<AnalysisResult, { type: 'done' }>).capabilityManifest,
                       assembly: ({ event }) => (event.output as Extract<AnalysisResult, { type: 'done' }>).assembly,
                       totalTokens: ({ context, event }) => context.totalTokens + event.output.tokensUsed,
@@ -607,7 +602,6 @@ export const appGenerationMachine = setup({
         src: 'runCodeReviewActor',
         input: ({ context }) => ({
           blueprint: context.blueprint!,
-          contract: context.contract!,
           sandboxId: context.sandboxId!,
         }),
         onDone: [
@@ -719,9 +713,6 @@ export function stopInspector() {
 // ============================================================================
 
 const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
-
-/** Minimal contract for mock pipeline */
-const MOCK_CONTRACT: SchemaContract = { tables: [] }
 
 /** Minimal mock tokens for the mock pipeline */
 const MOCK_TOKENS: ThemeTokens = {
@@ -851,7 +842,6 @@ export const mockAppGenerationMachine = setup({
         type: 'done' as const,
         appName: 'TaskFlow',
         appDescription: 'A modern task management app with categories, priorities, and due dates',
-        contract: MOCK_CONTRACT,
         capabilityManifest: ['auth', 'crud', 'rls'],
         assembly: null,
         tokensUsed: 3500,
@@ -947,7 +937,6 @@ export const mockAppGenerationMachine = setup({
     userId: '',
     appName: '',
     appDescription: '',
-    contract: null,
     capabilityManifest: [],
     assembly: null,
     clarificationQuestions: null,
@@ -1004,7 +993,6 @@ export const mockAppGenerationMachine = setup({
                   actions: assign({
                     appName: ({ event }) => event.output.appName,
                     appDescription: ({ event }) => event.output.appDescription,
-                    contract: ({ event }) => event.output.contract,
                     capabilityManifest: ({ event }) => event.output.capabilityManifest ?? [],
                     assembly: ({ event }) => event.output.assembly ?? null,
                     totalTokens: ({ context, event }) => context.totalTokens + event.output.tokensUsed,
@@ -1202,7 +1190,6 @@ export const mockAppGenerationMachine = setup({
         src: 'runCodeReviewActor',
         input: ({ context }) => ({
           blueprint: context.blueprint!,
-          contract: context.contract!,
           sandboxId: context.sandboxId!,
         }),
         onDone: [

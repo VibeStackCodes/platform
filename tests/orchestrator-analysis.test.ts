@@ -41,7 +41,7 @@ describe('runAnalysis', () => {
     if (result.type === 'done') {
       expect(result.appName).toBe('TaskFlow')
       expect(result.prd).toContain('Hero section')
-      expect(result.contract).toBeDefined()
+      expect(result.capabilityManifest).toBeDefined()
       expect(result.capabilityManifest).toBeDefined()
       expect(result.tokensUsed).toBe(500)
     }

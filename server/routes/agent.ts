@@ -372,7 +372,7 @@ function streamActorStates(
               supabaseAnonKey: ctx.supabaseAnonKey,
               githubRepoUrl: ctx.githubHtmlUrl,
               generationState: {
-                contract: ctx.contract,
+                contract: null,
                 blueprint: ctx.blueprint,
                 sandboxId: ctx.sandboxId,
                 supabaseProjectId: ctx.supabaseProjectId,
@@ -493,7 +493,7 @@ function streamActorStates(
           // In mock mode, emit descriptive agent_progress so cards aren't empty
           if (mockMode) {
             const mockProgress: Record<string, string[]> = {
-              analyst:     ['Parsing user requirements...', 'Extracting entities and features...', 'Building schema contract...'],
+              analyst:     ['Parsing user requirements...', 'Extracting features...', 'Building product requirements...'],
               provisioner: ['Creating Supabase project...', 'Provisioning sandbox...', 'Setting up GitHub repo...'],
               designer:    ['Selecting theme...', 'Generating color palette...', 'Choosing typography...'],
               architect:   ['Analyzing app structure...', 'Creating sitemap...', 'Planning page sections...'],

@@ -3,7 +3,6 @@
 // XState invoke handlers — each function maps to one machine state.
 // The machine calls these via fromPromise actors.
 
-import type { SchemaContract } from '../schema-contract'
 import { inferFeatures } from '../schema-contract'
 import type { AppBlueprint } from '../app-blueprint'
 import { assembleCapabilities, type AssemblyResult } from '../capabilities/assembler'
@@ -25,7 +24,6 @@ export type AnalysisResult =
       appName: string
       appDescription: string
       prd: string
-      contract: SchemaContract
       capabilityManifest: string[]
       assembly: AssemblyResult | null
       tokensUsed: number
@@ -116,7 +114,6 @@ export async function runAnalysis(input: {
           appName: part.input.appName,
           appDescription: part.input.appDescription,
           prd: part.input.prd,
-          contract: assembled.contract,
           capabilityManifest: assembled.capabilityManifest,
           assembly: assembled,
           tokensUsed,
@@ -337,7 +334,6 @@ async function fetchWithTimeout(
 export async function runDeployment(input: {
   sandboxId: string
   projectId: string
-  contract?: SchemaContract | null
   blueprint?: AppBlueprint | null
   capabilityManifest?: string[] | null
   supabaseProjectId?: string | null
@@ -367,7 +363,7 @@ export async function runDeployment(input: {
     // 3. Persist generation state early (enables iterative editing even if deployment fails)
     await updateProject(input.projectId, {
       generationState: {
-        contract: input.contract ?? null,
+        contract: null,
         blueprint: input.blueprint ?? null,
         sandboxId: input.sandboxId,
         supabaseProjectId: input.supabaseProjectId ?? null,
