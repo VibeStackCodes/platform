@@ -8,7 +8,6 @@
 
 import 'dotenv/config'
 import { getDaytonaClient, runCommand, downloadDirectory } from '../server/lib/sandbox'
-import { getProject, updateProject } from '../server/lib/db/queries'
 import { fetchWithTimeout } from '../server/lib/fetch'
 import { buildAppSlug } from '../server/lib/slug'
 

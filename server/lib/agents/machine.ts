@@ -2,7 +2,6 @@ import { assign, createActor, fromPromise, setup } from 'xstate'
 import type { ActorOptions } from 'xstate'
 import * as Sentry from '@sentry/node'
 import type { AppBlueprint, BlueprintFile } from '../app-blueprint'
-import type { AssemblyResult } from '../capabilities/assembler'
 import type { ThemeTokens } from '../themed-code-engine'
 import type { ValidationGateResult } from './validation'
 import type { AnalysisResult } from './orchestrator'
@@ -22,8 +21,6 @@ export interface MachineContext {
   // Analyst output
   appName: string
   appDescription: string
-  capabilityManifest: string[]
-  assembly: AssemblyResult | null
 
   // Clarification
   clarificationQuestions: unknown[] | null
@@ -166,8 +163,6 @@ export const appGenerationMachine = setup({
     userId: '',
     appName: '',
     appDescription: '',
-    capabilityManifest: [],
-    assembly: null,
     clarificationQuestions: null,
     blueprint: null,
     tokens: null,
@@ -237,8 +232,6 @@ export const appGenerationMachine = setup({
                       appName: ({ event }) => (event.output as Extract<AnalysisResult, { type: 'done' }>).appName,
                       appDescription: ({ event }) => (event.output as Extract<AnalysisResult, { type: 'done' }>).appDescription,
                       prd: ({ event }) => (event.output as Extract<AnalysisResult, { type: 'done' }>).prd,
-                      capabilityManifest: ({ event }) => (event.output as Extract<AnalysisResult, { type: 'done' }>).capabilityManifest,
-                      assembly: ({ event }) => (event.output as Extract<AnalysisResult, { type: 'done' }>).assembly,
                       totalTokens: ({ context, event }) => context.totalTokens + event.output.tokensUsed,
                     }),
                   },
@@ -712,8 +705,6 @@ export const mockAppGenerationMachine = setup({
         type: 'done' as const,
         appName: 'TaskFlow',
         appDescription: 'A modern task management app with categories, priorities, and due dates',
-        capabilityManifest: ['auth', 'crud', 'rls'],
-        assembly: null,
         tokensUsed: 3500,
       }
     }),
@@ -788,8 +779,6 @@ export const mockAppGenerationMachine = setup({
     userId: '',
     appName: '',
     appDescription: '',
-    capabilityManifest: [],
-    assembly: null,
     clarificationQuestions: null,
     blueprint: null,
     tokens: null,
@@ -839,8 +828,6 @@ export const mockAppGenerationMachine = setup({
                   actions: assign({
                     appName: ({ event }) => event.output.appName,
                     appDescription: ({ event }) => event.output.appDescription,
-                    capabilityManifest: ({ event }) => event.output.capabilityManifest ?? [],
-                    assembly: ({ event }) => event.output.assembly ?? null,
                     totalTokens: ({ context, event }) => context.totalTokens + event.output.tokensUsed,
                   }),
                 },

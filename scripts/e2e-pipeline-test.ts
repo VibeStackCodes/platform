@@ -721,7 +721,7 @@ async function main() {
     }
 
     trackPhase('1. Analysis', d1, tokens1, 'PASS',
-      `${analysisResult.contract.tables.length} tables, capabilities: ${analysisResult.capabilityManifest.join(', ') || 'none'}`)
+      `app: ${analysisResult.appName}`)
     results.analysis = analysisResult
 
     // --- Phase 2: Blueprint ---

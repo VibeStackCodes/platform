@@ -4,8 +4,6 @@
 // The machine calls these via fromPromise actors.
 
 import type { AppBlueprint } from '../app-blueprint'
-import { assembleCapabilities, type AssemblyResult } from '../capabilities/assembler'
-import { loadCoreRegistry } from '../capabilities/catalog'
 import type { ValidationGateResult } from './validation'
 import { runValidationGate } from './validation'
 import { buildRepairPrompt } from './repair'
@@ -23,8 +21,6 @@ export type AnalysisResult =
       appName: string
       appDescription: string
       prd: string
-      capabilityManifest: string[]
-      assembly: AssemblyResult | null
       tokensUsed: number
     }
   | {
@@ -96,18 +92,11 @@ export async function runAnalysis(input: {
       if (part.type !== 'tool-call') continue
 
       if (part.toolName === 'submitRequirements') {
-        // Hardcode public-website capability — we only generate landing pages
-        const registry = loadCoreRegistry()
-        const resolved = registry.resolve(['public-website'])
-        const assembled = assembleCapabilities(resolved)
-
         return {
           type: 'done',
           appName: part.input.appName,
           appDescription: part.input.appDescription,
           prd: part.input.prd,
-          capabilityManifest: assembled.capabilityManifest,
-          assembly: assembled,
           tokensUsed,
         }
       }
@@ -271,7 +260,6 @@ export async function runDeployment(input: {
   sandboxId: string
   projectId: string
   blueprint?: AppBlueprint | null
-  capabilityManifest?: string[] | null
   supabaseProjectId?: string | null
   githubCloneUrl?: string | null
 }): Promise<DeploymentResult> {
@@ -305,7 +293,6 @@ export async function runDeployment(input: {
         supabaseProjectId: input.supabaseProjectId ?? null,
         githubRepo: input.githubCloneUrl ?? null,
         fileManifest,
-        capabilityManifest: input.capabilityManifest ?? [],
         lastEditedAt: new Date().toISOString(),
       },
     })

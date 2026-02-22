@@ -63,15 +63,10 @@ describe('editMachine', () => {
       expect(context.sandboxId).toBeNull()
       expect(context.supabaseProjectId).toBeNull()
       expect(context.githubRepo).toBeNull()
-      expect(context.capabilityManifest).toEqual([])
-      expect(context.requestedCapabilities).toEqual([])
       expect(context.targetFile).toBeNull()
       expect(context.targetElement).toBeNull()
       expect(context.editResult).toBeNull()
       expect(context.conversationHistory).toEqual([])
-      expect(context.injectAnalysis).toBeNull()
-      expect(context.additiveResult).toBeNull()
-      expect(context.injectionAttempts).toBe(0)
 
       actor.stop()
     })
@@ -370,7 +365,6 @@ describe('editMachine', () => {
             sandboxId: 'sandbox-123',
             supabaseProjectId: null,
             githubRepo: null,
-            capabilityManifest: [],
             conversationHistory: [],
           })),
           reconnectSandboxActor: fromPromise(async () => ({
@@ -378,7 +372,6 @@ describe('editMachine', () => {
           })),
           runAnalystActor: fromPromise(async () => ({
             type: 'done',
-            capabilityManifest: [],
             tokensUsed: 10,
           })),
         },
@@ -422,7 +415,6 @@ describe('editMachine', () => {
             sandboxId: 'sandbox-123',
             supabaseProjectId: null,
             githubRepo: null,
-            capabilityManifest: [],
             conversationHistory: [],
           })),
           reconnectSandboxActor: fromPromise(async () => ({
@@ -430,7 +422,6 @@ describe('editMachine', () => {
           })),
           runAnalystActor: fromPromise(async () => ({
             type: 'done',
-            capabilityManifest: [],
             tokensUsed: 10,
           })),
           applyEditActor: fromPromise(async () => ({
@@ -486,7 +477,6 @@ describe('editMachine', () => {
             sandboxId: 'sandbox-123',
             supabaseProjectId: null,
             githubRepo: null,
-            capabilityManifest: [],
             conversationHistory: [],
           })),
           reconnectSandboxActor: fromPromise(async () => ({
@@ -494,7 +484,6 @@ describe('editMachine', () => {
           })),
           runAnalystActor: fromPromise(async () => ({
             type: 'done',
-            capabilityManifest: [],
             tokensUsed: 10,
           })),
           applyEditActor: fromPromise(async () => ({
@@ -549,7 +538,6 @@ describe('editMachine', () => {
             sandboxId: 'sandbox-123',
             supabaseProjectId: null,
             githubRepo: null,
-            capabilityManifest: [],
             conversationHistory: [],
           })),
           reconnectSandboxActor: fromPromise(async () => ({
@@ -557,7 +545,6 @@ describe('editMachine', () => {
           })),
           runAnalystActor: fromPromise(async () => ({
             type: 'done',
-            capabilityManifest: [],
             tokensUsed: 10,
           })),
           applyEditActor: fromPromise(async () => ({
@@ -615,7 +602,6 @@ describe('editMachine', () => {
             sandboxId: 'sandbox-123',
             supabaseProjectId: null,
             githubRepo: null,
-            capabilityManifest: [],
             conversationHistory: [],
           })),
           reconnectSandboxActor: fromPromise(async () => ({
@@ -623,7 +609,6 @@ describe('editMachine', () => {
           })),
           runAnalystActor: fromPromise(async () => ({
             type: 'done',
-            capabilityManifest: [],
             tokensUsed: 10,
           })),
           applyEditActor: fromPromise(async () => ({
@@ -725,7 +710,6 @@ describe('editMachine', () => {
             sandboxId: 'sandbox-123',
             supabaseProjectId: null,
             githubRepo: null,
-            capabilityManifest: [],
             conversationHistory: [],
           })),
           reconnectSandboxActor: fromPromise(async () => {
@@ -733,7 +717,6 @@ describe('editMachine', () => {
           }),
           runAnalystActor: fromPromise(async () => ({
             type: 'done',
-            capabilityManifest: [],
             tokensUsed: 10,
           })),
         },
@@ -768,7 +751,6 @@ describe('editMachine', () => {
             sandboxId: 'sandbox-123',
             supabaseProjectId: null,
             githubRepo: null,
-            capabilityManifest: [],
             conversationHistory: [],
           })),
           reconnectSandboxActor: fromPromise(async () => ({
@@ -776,7 +758,6 @@ describe('editMachine', () => {
           })),
           runAnalystActor: fromPromise(async () => ({
             type: 'done',
-            capabilityManifest: [],
             tokensUsed: 10,
           })),
           applyEditActor: fromPromise(async () => {

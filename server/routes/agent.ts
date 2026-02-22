@@ -342,7 +342,6 @@ function streamActorStates(
                 contract: null,
                 blueprint: ctx.blueprint,
                 sandboxId: ctx.sandboxId,
-                capabilityManifest: ctx.capabilityManifest,
                 tokens: ctx.tokens,
                 creativeSpec: ctx.creativeSpec,
                 appName: ctx.appName,

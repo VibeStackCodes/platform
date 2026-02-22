@@ -1083,7 +1083,7 @@ describe('cleanup ordering', () => {
       runCodeGenerationActor: fromPromise(async () => {
         throw new Error('Trigger cleanup')
       }),
-      runCleanupActor: fromPromise(async ({ input }: any) => {
+      runCleanupActor: fromPromise(async ({ input }: { input: Record<string, unknown> }) => {
         if (input.sandboxId) executionOrder.push('sandbox_delete')
         return { errors: [] }
       }),
@@ -1121,7 +1121,7 @@ describe('sentry error capture', () => {
       runCodeGenerationActor: fromPromise(async () => {
         throw new Error('Trigger cleanup')
       }),
-      runCleanupActor: fromPromise(async ({ input }: any) => {
+      runCleanupActor: fromPromise(async ({ input }: { input: Record<string, unknown> }) => {
         const errors: string[] = []
 
         // Simulate sandbox deletion failure
