@@ -183,6 +183,10 @@ function streamActorStates(
               if (phase.agentId && phase.agentName) {
                 emit({ type: 'agent_start', agentId: phase.agentId, agentName: phase.agentName, phase: phase.phase })
               }
+              // Emit initial progress for provisioner
+              if (phase.agentId === 'provisioner') {
+                emit({ type: 'agent_progress', agentId: 'provisioner', message: 'Booting sandbox...' })
+              }
             }
           }
         }
@@ -295,11 +299,12 @@ function streamActorStates(
         }
 
         // When leaving 'assembly', emit file_assembled events (populates Backend Engineer card)
+        // Filter out ui-kit files (components/ui/) — they're scaffolded, not authored
         if (previousState === 'assembly') {
-          const assembledFiles = snapshot.context.assembledFiles ?? []
+          const assembledFiles = (snapshot.context.assembledFiles ?? [])
+            .filter((f: { path: string }) => !f.path.includes('components/ui/'))
           for (const file of assembledFiles) {
-            const category = file.path.includes('components/ui/') ? 'ui-kit' as const
-              : file.path.includes('routes/') ? 'route' as const
+            const category = file.path.includes('routes/') ? 'route' as const
               : file.path.includes('vite.config') || file.path.includes('main.tsx') || file.path.includes('__root') ? 'config' as const
               : 'wiring' as const
             emit({ type: 'file_assembled', path: file.path, category })
@@ -309,7 +314,7 @@ function streamActorStates(
         // When leaving 'validating', emit validation_check events (populates QA card)
         if (previousState === 'validating' && snapshot.context.validation) {
           const validation = snapshot.context.validation
-          const checkNames = ['manifest', 'scaffold', 'typecheck', 'lint', 'build'] as const
+          const checkNames = ['typecheck', 'lint', 'build'] as const
           for (const checkName of checkNames) {
             const check = validation[checkName]
             if (check) {
@@ -327,11 +332,22 @@ function streamActorStates(
           emit({ type: 'agent_progress', agentId: 'repair', message: 'Repair cycle complete — re-validating...' })
         }
 
-        // When leaving 'reviewing', emit review summary for reviewer card
-        if (previousState === 'reviewing' && snapshot.context.reviewResult) {
+        // When leaving 'reviewing', emit review summary + scanned files for reviewer card
+        if (previousState === 'reviewing') {
           const review = snapshot.context.reviewResult
-          const summary = review.summary ?? (review.passed ? 'All checks passed' : 'Issues found')
-          emit({ type: 'agent_progress', agentId: 'reviewer', message: summary })
+          if (review) {
+            const summary = review.summary ?? (review.passed ? 'All checks passed' : 'Issues found')
+            emit({ type: 'agent_progress', agentId: 'reviewer', message: summary })
+          }
+          // Emit scanned file list as a single flowing line
+          const pages = snapshot.context.generatedPages ?? []
+          if (pages.length > 0) {
+            const fileNames = pages.map((p: { fileName: string }) => p.fileName)
+            const display = fileNames.length <= 6
+              ? fileNames.join(', ')
+              : `${fileNames.slice(0, 5).join(', ')}, ... (${fileNames.length} files)`
+            emit({ type: 'agent_progress', agentId: 'reviewer', message: `Scanned: ${display}` })
+          }
         }
       }
 
@@ -431,6 +447,7 @@ function streamActorStates(
 
         // Emit sandbox_ready when entering designing (provisioning is complete)
         if (state === 'designing' && snapshot.context.sandboxId) {
+          emit({ type: 'agent_progress', agentId: 'provisioner', message: 'Sandbox ready' })
           emit({ type: 'sandbox_ready', sandboxId: snapshot.context.sandboxId })
           // Persist sandboxId to DB for page reloads (fire-and-forget, skip in mock mode)
           if (!mockMode) {
@@ -450,6 +467,18 @@ function streamActorStates(
               appDescription: snapshot.context.appDescription,
               tables: snapshot.context.contract.tables?.map((t: { name: string }) => t.name) ?? [],
             },
+          })
+        }
+
+        // Emit progress when entering repairing state
+        if (state === 'repairing') {
+          const errorCount = snapshot.context.validation?.typecheck?.errors?.length
+            ?? snapshot.context.validation?.build?.errors?.length
+            ?? 0
+          emit({
+            type: 'agent_progress',
+            agentId: 'repair',
+            message: `Fixing ${errorCount} error${errorCount !== 1 ? 's' : ''}...`,
           })
         }
 
@@ -541,15 +570,15 @@ function streamActorStates(
           }
         }
 
-        // Mock mode: emit file_assembled events during assembly state
+        // Mock mode: emit file_assembled events during assembly state (filter out ui-kit)
         if (state === 'assembly' && mockMode) {
-          const assembledFiles = MOCK_ASSEMBLED_FILES
+          const assembledFiles = MOCK_ASSEMBLED_FILES.filter(f => !f.path.includes('components/ui/'))
           for (let i = 0; i < assembledFiles.length; i++) {
             const file = assembledFiles[i]
             const category = file.isLLMSlot ? 'route' as const
               : file.path.includes('main.tsx') ? 'wiring' as const
               : file.path.includes('__root') ? 'config' as const
-              : 'ui-kit' as const
+              : 'wiring' as const
             setTimeout(() => {
               emit({ type: 'file_assembled', path: file.path, category })
             }, 150 * (i + 1))
@@ -633,10 +662,13 @@ agentRoutes.post('/', async (c) => {
   // Skip credit reservation in mock mode
   const CREDIT_RESERVATION = 50 // Minimum reservation amount
   if (!mockMode) {
+    console.log('[agent] Reserving credits for user:', user.id, 'amount:', CREDIT_RESERVATION)
     const reserved = await reserveCredits(user.id, CREDIT_RESERVATION)
+    console.log('[agent] Reservation result:', reserved)
     if (!reserved) {
       // Check current credits for detailed error message
       const credits = await getUserCredits(user.id)
+      console.log('[agent] getUserCredits result:', credits)
       return c.json(
         {
           error: 'insufficient_credits',

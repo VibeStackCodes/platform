@@ -1,5 +1,5 @@
 import { Badge } from '@/components/ui/badge'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 
 interface ThemeColors {
   background: string
@@ -62,15 +62,11 @@ const STYLE_KEYS: Array<keyof Omit<ThemeStyle, 'borderRadius'>> = [
 ]
 
 function ThemeTokensCard({ tokens }: ThemeTokensCardProps) {
-  const { name, colors, fonts, style } = tokens
+  const { colors, fonts, style } = tokens
 
   return (
     <Card className="gap-4">
       <style>{`@import url(${fonts.googleFontsUrl})`}</style>
-
-      <CardHeader className="pb-0">
-        <CardTitle className="text-base">{name}</CardTitle>
-      </CardHeader>
 
       <CardContent className="flex flex-col gap-5">
         {/* Colors */}

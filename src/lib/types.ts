@@ -590,6 +590,7 @@ export type TimelineEntry =
       plan?: PlanReadyEvent['plan']
       designTokens?: DesignTokensEvent['tokens']
       architecture?: ArchitectureReadyEvent['spec']
+      progressMessages?: string[]
     }
   | { type: 'error'; ts: number; error: string }
   | { type: 'complete'; ts: number; deploymentUrl?: string }

@@ -263,6 +263,7 @@ export function BuilderChat({
   } | null>(null)
   const hasAutoSubmitted = useRef(false)
   const abortControllerRef = useRef<AbortController | null>(null)
+  const sendChatMessageRef = useRef<(text: string) => void>(() => {})
   const { user } = useAuth()
 
   // Fetch credits on mount via Supabase browser client
@@ -376,7 +377,17 @@ export function BuilderChat({
           break
 
         case 'agent_progress':
-          // Agent progress text is streamed into the assistant message via parseSSEBuffer
+          // Store progress messages on the agent's timeline entry for card rendering
+          updateTimeline(
+            (e) => e.type === 'agent' && e.agent.agentId === event.agentId,
+            (e) => {
+              if (e.type !== 'agent') return e
+              return {
+                ...e,
+                progressMessages: [...(e.progressMessages ?? []), event.message],
+              }
+            },
+          )
           break
 
         case 'agent_artifact':
@@ -678,19 +689,24 @@ export function BuilderChat({
     [projectId, model, chatStatus, parseSSEBuffer, handleGenerationEvent, selectedElement, onEditComplete],
   )
 
-  // Auto-submit initial prompt
+  // Keep a ref to the latest sendChatMessage (avoids stale closure)
+  useEffect(() => { sendChatMessageRef.current = sendChatMessage }, [sendChatMessage])
+
+  // Auto-submit initial prompt — deferred to survive React 18 Strict Mode double-mount.
+  // Strict Mode unmounts+remounts in dev, which aborts in-flight fetches via the cleanup effect.
+  // By deferring with setTimeout, the first mount's timer is cleared on unmount, and the
+  // second mount's timer fires successfully (hasAutoSubmitted is still false since we only set
+  // it inside the callback).
   useEffect(() => {
-    if (
-      initialPrompt &&
-      !hasAutoSubmitted.current &&
-      messages.length === 0 &&
-      !initialMessages?.length
-    ) {
+    if (!initialPrompt) return
+    const timer = setTimeout(() => {
+      if (hasAutoSubmitted.current) return
       hasAutoSubmitted.current = true
-      sendChatMessage(initialPrompt)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+      console.log('[builder-chat] Auto-submitting initial prompt:', initialPrompt.slice(0, 50))
+      sendChatMessageRef.current(initialPrompt)
+    }, 100)
+    return () => clearTimeout(timer)
+  }, [initialPrompt])
 
   const handleSubmit = async (
     message: PromptInputMessage,
@@ -879,13 +895,9 @@ export function BuilderChat({
                                 </PlanHeader>
                                 <PlanContent>
                                   <div className="space-y-2 text-sm text-muted-foreground">
-                                    {Array.isArray(entry.plan.tables) &&
-                                      entry.plan.tables.length > 0 && (
-                                        <p>
-                                          Tables:{' '}
-                                          {(entry.plan.tables as string[]).join(', ')}
-                                        </p>
-                                      )}
+                                    {entry.plan.appDescription && (
+                                      <p>{entry.plan.appDescription as string}</p>
+                                    )}
                                   </div>
                                 </PlanContent>
                               </Plan>
@@ -943,6 +955,20 @@ export function BuilderChat({
                           // Legacy Pipeline A fallback
                           if (agentId === 'codegen' && hasFiles) {
                             return <GeneratedFileTree files={generationFiles} />
+                          }
+
+                          // Generic progress messages (provisioner, repair, reviewer, etc.)
+                          if (entry.progressMessages && entry.progressMessages.length > 0) {
+                            return (
+                              <div className="space-y-1.5 text-sm text-muted-foreground">
+                                {entry.progressMessages.map((msg) => (
+                                  <div key={msg} className="flex items-center gap-2">
+                                    <CheckCircle2 className="size-3.5 shrink-0 text-green-500" />
+                                    <span>{msg}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )
                           }
 
                           return null

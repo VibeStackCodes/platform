@@ -75,11 +75,20 @@ Smart defaults when unspecified:
 
 ${capabilityCatalogPrompt()}
 
+When to use askClarifyingQuestions:
+- When the user's prompt is a single sentence without specifics (fewer than ~15 words)
+- When key decisions aren't clear (e.g., "a restaurant app" — website or management system?)
+- When the app could have multiple interpretations
+- When the primary user personas or core workflows are ambiguous
+
 When using askClarifyingQuestions:
 - 1-4 questions, 2-4 options each
 - selectionMode "single" for mutually exclusive choices, "multiple" for pick-many
 - Each option: short label (2-5 words) + description
-- Only ask when genuinely ambiguous — err toward proceeding with smart defaults`,
+
+When to use submitRequirements directly:
+- When the prompt already specifies the app type, key features, and target users
+- When the prompt is detailed enough (>30 words with clear feature descriptions)`,
   tools: {
     searchDocs: searchDocsTool,
     askClarifyingQuestions: askClarifyingQuestionsTool,

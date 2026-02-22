@@ -12,7 +12,7 @@ const indexRoute = createRoute({
   path: '/',
   component: () => (
     <div className="min-h-screen flex flex-col items-center justify-center bg-neutral-950 text-white">
-      <p className="text-lg font-medium text-neutral-300">Building your app...</p>
+      <p className="text-lg font-medium text-neutral-300">Your app will show up here once built</p>
     </div>
   ),
 })

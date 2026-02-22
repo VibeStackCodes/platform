@@ -12,9 +12,9 @@ const mockTokens = {
 }
 
 describe('ThemeTokensCard', () => {
-  it('renders theme name', () => {
+  it('does not render theme name', () => {
     render(<ThemeTokensCard tokens={mockTokens} />)
-    expect(screen.getByText('canape')).toBeDefined()
+    expect(screen.queryByText('canape')).toBeNull()
   })
 
   it('renders 8 color swatches', () => {
