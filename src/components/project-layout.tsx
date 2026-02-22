@@ -62,6 +62,29 @@ export function ProjectLayout({
     }
   }, [sandboxUrls])
 
+  // Handle sandbox_ready SSE event — immediately fetch preview URL
+  const handleSandboxReady = useCallback((newSandboxId: string) => {
+    setSandboxId(newSandboxId)
+    // Clear stale URLs from previous sandbox to avoid 400 errors in iframe
+    setPreviewUrl(undefined)
+    setCodeServerUrl(undefined)
+    setExpiresAt(undefined)
+    // Fetch URLs imperatively (calls fetchSandboxUrls below)
+    apiFetch(`/api/projects/${projectId}/sandbox-urls`)
+      .then(async (res) => {
+        if (!res.ok) return
+        const data = await res.json()
+        if (data?.previewUrl) {
+          setPreviewUrl(data.previewUrl)
+          setCodeServerUrl(data.codeServerUrl)
+          setExpiresAt(data.expiresAt)
+        }
+      })
+      .catch(() => {
+        // URL fetch will be retried by the polling query
+      })
+  }, [projectId])
+
   // Fetch sandbox URLs imperatively when generation completes
   const fetchSandboxUrls = useCallback(async (): Promise<boolean> => {
     try {
@@ -106,6 +129,7 @@ export function ProjectLayout({
           initialPrompt={initialPrompt}
           initialMessages={initialMessages}
           onGenerationComplete={fetchSandboxUrls}
+          onSandboxReady={handleSandboxReady}
           selectedElement={selectedElement}
           onEditComplete={() => setSelectedElement(null)}
         />

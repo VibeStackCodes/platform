@@ -82,9 +82,8 @@ const STATE_PHASES: Record<string, { name: string; phase: number; agentId?: stri
   validating:           { name: 'Validating code',             phase: 4, agentId: 'qa',          agentName: 'Quality Assurance' },
   repairing:            { name: 'Repairing errors',            phase: 4, agentId: 'repair',      agentName: 'Repair Agent' },
   reviewing:            { name: 'Reviewing code',              phase: 5, agentId: 'reviewer',    agentName: 'Code Reviewer' },
-  deploying:            { name: 'Deploying app',               phase: 6, agentId: 'deployer',    agentName: 'Deployer' },
-  complete:             { name: 'Complete',                    phase: 7 },
-  failed:               { name: 'Failed',                      phase: 7 },
+  complete:             { name: 'Complete',                    phase: 6 },
+  failed:               { name: 'Failed',                      phase: 6 },
 }
 
 // Map parallel sub-state paths to STATE_PHASES keys
@@ -112,8 +111,7 @@ const STATE_TO_DB_STATUS: Record<string, string> = {
   validating: 'verifying',
   repairing: 'verifying',
   reviewing: 'verifying',
-  deploying: 'deploying',
-  complete: 'deployed',
+  complete: 'complete',
   failed: 'error',
 }
 
@@ -272,12 +270,68 @@ function streamActorStates(
           }
         }
 
-        // When leaving 'pageGeneration', mark all files as complete (Pipeline B equivalent of 'generating')
+        // When leaving 'pageGeneration', emit page_complete events + file_complete
         if (previousState === 'pageGeneration') {
           const files = snapshot.context.blueprint?.fileTree?.map((f: { path: string }) => f.path) ?? []
           for (const filePath of files) {
             emit({ type: 'file_complete', path: filePath, linesOfCode: 0 })
           }
+          // Emit page_complete for each generated page (populates Frontend Engineer card)
+          const pages = snapshot.context.generatedPages ?? []
+          const totalPages = pages.length
+          for (let i = 0; i < totalPages; i++) {
+            const page = pages[i]
+            emit({
+              type: 'page_complete',
+              fileName: page.fileName,
+              route: page.route,
+              componentName: page.componentName,
+              lineCount: page.content.split('\n').length,
+              code: page.content.split('\n').slice(0, 50).join('\n'),
+              pageIndex: i,
+              totalPages,
+            })
+          }
+        }
+
+        // When leaving 'assembly', emit file_assembled events (populates Backend Engineer card)
+        if (previousState === 'assembly') {
+          const assembledFiles = snapshot.context.assembledFiles ?? []
+          for (const file of assembledFiles) {
+            const category = file.path.includes('components/ui/') ? 'ui-kit' as const
+              : file.path.includes('routes/') ? 'route' as const
+              : file.path.includes('vite.config') || file.path.includes('main.tsx') || file.path.includes('__root') ? 'config' as const
+              : 'wiring' as const
+            emit({ type: 'file_assembled', path: file.path, category })
+          }
+        }
+
+        // When leaving 'validating', emit validation_check events (populates QA card)
+        if (previousState === 'validating' && snapshot.context.validation) {
+          const validation = snapshot.context.validation
+          const checkNames = ['manifest', 'scaffold', 'typecheck', 'lint', 'build'] as const
+          for (const checkName of checkNames) {
+            const check = validation[checkName]
+            if (check) {
+              emit({
+                type: 'validation_check',
+                name: checkName,
+                status: check.passed ? 'passed' : 'failed',
+              })
+            }
+          }
+        }
+
+        // When leaving 'repairing', emit progress for repair agent card
+        if (previousState === 'repairing') {
+          emit({ type: 'agent_progress', agentId: 'repair', message: 'Repair cycle complete — re-validating...' })
+        }
+
+        // When leaving 'reviewing', emit review summary for reviewer card
+        if (previousState === 'reviewing' && snapshot.context.reviewResult) {
+          const review = snapshot.context.reviewResult
+          const summary = review.summary ?? (review.passed ? 'All checks passed' : 'Issues found')
+          emit({ type: 'agent_progress', agentId: 'reviewer', message: summary })
         }
       }
 
@@ -289,6 +343,36 @@ function streamActorStates(
 
       // ── Emit phase events ──
       if (state === 'complete') {
+        // Persist generation state to DB for later edits/deploys (fire-and-forget, skip in mock mode)
+        if (!mockMode) {
+          const ctx = snapshot.context
+          updateProject(
+            projectId,
+            {
+              status: 'complete',
+              sandboxId: ctx.sandboxId,
+              supabaseProjectId: ctx.supabaseProjectId,
+              supabaseUrl: ctx.supabaseUrl,
+              supabaseAnonKey: ctx.supabaseAnonKey,
+              githubRepoUrl: ctx.githubHtmlUrl,
+              generationState: {
+                contract: ctx.contract,
+                blueprint: ctx.blueprint,
+                sandboxId: ctx.sandboxId,
+                supabaseProjectId: ctx.supabaseProjectId,
+                capabilityManifest: ctx.capabilityManifest,
+                tokens: ctx.tokens,
+                creativeSpec: ctx.creativeSpec,
+                appName: ctx.appName,
+                appDescription: ctx.appDescription,
+              },
+            },
+            userId,
+          ).catch((err) => {
+            console.error('[agent] Failed to persist generation state:', err)
+          })
+        }
+
         emit({ type: 'stage_update', stage: 'complete' })
         emit({
           type: 'complete',
@@ -345,6 +429,17 @@ function streamActorStates(
           status: 'active',
         })
 
+        // Emit sandbox_ready when entering designing (provisioning is complete)
+        if (state === 'designing' && snapshot.context.sandboxId) {
+          emit({ type: 'sandbox_ready', sandboxId: snapshot.context.sandboxId })
+          // Persist sandboxId to DB for page reloads (fire-and-forget, skip in mock mode)
+          if (!mockMode) {
+            updateProject(projectId, { sandboxId: snapshot.context.sandboxId }, userId).catch((err) => {
+              console.error('[agent] Failed to persist sandboxId:', err)
+            })
+          }
+        }
+
         // Emit plan_ready when entering designing (Analyst PRD is ready)
         // Shows the Analyst's output: app name, description, and contract tables
         if (state === 'designing' && snapshot.context.contract) {
@@ -379,7 +474,6 @@ function streamActorStates(
               qa:          ['Checking imports...', 'Validating links...', 'Running TypeScript...', 'Building app...'],
               repair:      ['Analyzing errors...', 'Fixing import issues...', 'Retrying build...'],
               reviewer:    ['Running code review...', 'Checking accessibility...', 'Validating design tokens...'],
-              deployer:    ['Building for production...', 'Deploying to Vercel...', 'Setting up domain...'],
             }
             const progressMessages = mockProgress[phaseInfo.agentId]
             if (progressMessages && progressMessages.length > 0) {
@@ -491,6 +585,7 @@ function streamActorStates(
  * Stream agent execution via SSE using XState actor
  */
 agentRoutes.post('/', async (c) => {
+  console.log('[agent] POST /api/agent received')
   // Parse request body
   let body: { message?: string; projectId?: string; model?: string }
   try {
@@ -500,6 +595,7 @@ agentRoutes.post('/', async (c) => {
   }
 
   const { message, projectId, model = 'gpt-5.2' } = body
+  console.log('[agent] projectId:', projectId, 'model:', model, 'message:', message?.slice(0, 50))
 
   // Validate required fields
   if (!message || !projectId) {

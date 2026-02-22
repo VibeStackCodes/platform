@@ -4,7 +4,7 @@
 // The machine calls these via fromPromise actors.
 
 import type { SchemaContract } from '../schema-contract'
-import { SchemaContractSchema, validateContract } from '../schema-contract'
+import { SchemaContractSchema, validateContract, inferFeatures } from '../schema-contract'
 import type { AppBlueprint } from '../app-blueprint'
 import { assembleCapabilities, type AssemblyResult } from '../capabilities/assembler'
 import { loadCoreRegistry } from '../capabilities/catalog'
@@ -93,7 +93,7 @@ export interface PageGenerationResult {
 
 export interface AssemblyResult2 {
   assembledFiles: Array<{ path: string; content: string; layer: number; isLLMSlot: boolean }>
-  blueprint: null
+  blueprint: AppBlueprint
   tokensUsed: number
 }
 
@@ -275,28 +275,33 @@ export async function runCodeGeneration(input: {
   // Apply migration + seed SQL to the real Supabase database
   // so the generated app launches with data already populated.
   // Seed SQL is generated in-memory (not shipped in the user's file tree).
-  const { runMigration } = await import('../supabase-mgmt')
-  const { contractToSeedSQL } = await import('../contract-to-seed')
+  const isStubSupabase = input.supabaseProjectId.startsWith('stub-')
+  if (isStubSupabase) {
+    console.log('[codegen] Supabase is stubbed — skipping migration and seed')
+  } else {
+    const { runMigration } = await import('../supabase-mgmt')
+    const { contractToSeedSQL } = await import('../contract-to-seed')
 
-  const migrationFile = input.blueprint.fileTree.find((f) => f.path === 'supabase/migrations/0001_initial.sql')
-  if (migrationFile) {
-    const migResult = await runMigration(input.supabaseProjectId, migrationFile.content)
-    if (!migResult.success) {
-      // FATAL per CLAUDE.md determinism rules — a bad migration means bad SQL generator.
-      // Never silently continue: the app would launch with no tables and all queries fail.
-      throw new Error(`[codegen] Migration failed — fix the SQL generator, not the symptom: ${migResult.error}`)
+    const migrationFile = input.blueprint.fileTree.find((f) => f.path === 'supabase/migrations/0001_initial.sql')
+    if (migrationFile) {
+      const migResult = await runMigration(input.supabaseProjectId, migrationFile.content)
+      if (!migResult.success) {
+        // FATAL per CLAUDE.md determinism rules — a bad migration means bad SQL generator.
+        // Never silently continue: the app would launch with no tables and all queries fail.
+        throw new Error(`[codegen] Migration failed — fix the SQL generator, not the symptom: ${migResult.error}`)
+      }
+      console.log('[codegen] Migration applied to Supabase')
     }
-    console.log('[codegen] Migration applied to Supabase')
-  }
 
-  const seedSQL = await contractToSeedSQL(input.contract)
-  if (seedSQL) {
-    const seedResult = await runMigration(input.supabaseProjectId, seedSQL)
-    if (!seedResult.success) {
-      console.error(`[codegen] Seed failed: ${seedResult.error}`)
-      // Non-fatal -- app works without seed data, just looks empty
-    } else {
-      console.log('[codegen] Seed data applied to Supabase')
+    const seedSQL = await contractToSeedSQL(input.contract)
+    if (seedSQL) {
+      const seedResult = await runMigration(input.supabaseProjectId, seedSQL)
+      if (!seedResult.success) {
+        console.error(`[codegen] Seed failed: ${seedResult.error}`)
+        // Non-fatal -- app works without seed data, just looks empty
+      } else {
+        console.log('[codegen] Seed data applied to Supabase')
+      }
     }
   }
 
@@ -395,46 +400,53 @@ export async function runProvisioning(input: {
   projectId: string
   userId?: string
 }): Promise<ProvisioningResult> {
-  // Run all three infrastructure operations in parallel -- they have ZERO dependencies on each other
+  // Run infrastructure operations in parallel -- they have ZERO dependencies on each other
+  // NOTE: Supabase provisioning is disabled (returns stubs). Re-enable by removing the stub block below.
   const [supabaseResult, sandboxResult, githubResult] = await Promise.allSettled([
-    // 1. Try warm pool first, fall back to cold creation
+    // 1. Supabase provisioning — DISABLED (returns stubs to skip 60-120s cold creation)
     (async () => {
-      // Try warm pool if userId is available
-      if (input.userId) {
-        try {
-          const { claimWarmProject } = await import('../supabase-pool')
-          const warm = await claimWarmProject(input.userId)
-          if (warm) {
-            return {
-              supabaseProjectId: warm.supabaseProjectId,
-              supabaseUrl: warm.supabaseUrl,
-              anonKey: warm.anonKey,
-              serviceRoleKey: warm.serviceRoleKey,
-              dbHost: warm.dbHost,
-              dbPassword: warm.dbPassword,
-            }
-          }
-        } catch (error) {
-          // Warm pool not available or failed, fall through to cold creation
-          console.warn(
-            '[provisioning] Warm pool unavailable, falling back to cold creation:',
-            error,
-          )
-        }
-      }
-
-      // Fallback: cold creation (60-120s)
-      // Add timestamp suffix to avoid name collisions across runs
-      const { createSupabaseProject } = await import('../supabase-mgmt')
-      const project = await createSupabaseProject(`${input.appName}-${Date.now()}`)
+      console.log('[provisioning] Supabase provisioning disabled — using stubs')
       return {
-        supabaseProjectId: project.id,
-        supabaseUrl: project.url,
-        anonKey: project.anonKey,
-        serviceRoleKey: project.serviceRoleKey,
-        dbHost: project.dbHost,
-        dbPassword: project.dbPassword,
+        supabaseProjectId: `stub-${input.projectId.slice(0, 8)}`,
+        supabaseUrl: 'https://stub.supabase.co',
+        anonKey: 'stub-anon-key',
+        serviceRoleKey: 'stub-service-role-key',
+        dbHost: 'stub-db-host',
+        dbPassword: 'stub-db-password',
       }
+      // --- Original Supabase provisioning (re-enable by uncommenting and removing stub above) ---
+      // // Try warm pool if userId is available
+      // if (input.userId) {
+      //   try {
+      //     const { claimWarmProject } = await import('../supabase-pool')
+      //     const warm = await claimWarmProject(input.userId)
+      //     if (warm) {
+      //       return {
+      //         supabaseProjectId: warm.supabaseProjectId,
+      //         supabaseUrl: warm.supabaseUrl,
+      //         anonKey: warm.anonKey,
+      //         serviceRoleKey: warm.serviceRoleKey,
+      //         dbHost: warm.dbHost,
+      //         dbPassword: warm.dbPassword,
+      //       }
+      //     }
+      //   } catch (error) {
+      //     console.warn(
+      //       '[provisioning] Warm pool unavailable, falling back to cold creation:',
+      //       error,
+      //     )
+      //   }
+      // }
+      // const { createSupabaseProject } = await import('../supabase-mgmt')
+      // const project = await createSupabaseProject(`${input.appName}-${Date.now()}`)
+      // return {
+      //   supabaseProjectId: project.id,
+      //   supabaseUrl: project.url,
+      //   anonKey: project.anonKey,
+      //   serviceRoleKey: project.serviceRoleKey,
+      //   dbHost: project.dbHost,
+      //   dbPassword: project.dbPassword,
+      // }
     })(),
     // 2. Create sandbox (~10-20s)
     (async () => {
@@ -740,20 +752,29 @@ export async function runDesign(input: {
   appName?: string
   appDescription?: string
 }): Promise<DesignResult> {
+  console.log('[design] Starting design phase...')
   const { runDesignAgent } = await import('./design-agent')
 
-  const result = await runDesignAgent(
-    input.userPrompt,
-    input.contract,
-    input.appName,
-    input.appDescription,
-  )
+  try {
+    const result = await runDesignAgent(
+      input.userPrompt,
+      input.contract,
+      input.appName,
+      input.appDescription,
+    )
 
-  return {
-    tokens: result.tokens,
-    selectedTheme: result.selectedTheme,
-    themeReasoning: result.themeReasoning,
-    tokensUsed: 0,
+    console.log(`[design] Theme selected: ${result.selectedTheme}`)
+    console.log(`[design] Theme reasoning: ${result.themeReasoning}`)
+
+    return {
+      tokens: result.tokens,
+      selectedTheme: result.selectedTheme,
+      themeReasoning: result.themeReasoning,
+      tokensUsed: 0,
+    }
+  } catch (error) {
+    console.error('[design] Design agent failed:', error)
+    throw error
   }
 }
 
@@ -772,6 +793,7 @@ export async function runArchitect(input: {
   contract: SchemaContract
   tokens: ThemeTokens
 }): Promise<ArchitectResult> {
+  console.log('[architect] Starting creative director...')
   const { runCreativeDirector } = await import('../creative-director')
   const { fetchHeroImages } = await import('../unsplash')
 
@@ -914,35 +936,49 @@ export async function runAssembly(input: {
     console.warn(`[assembly] bun install exit code: ${installResult.exitCode}`)
   }
 
-  // Step 4: Apply migration + seed SQL to Supabase
-  const { runMigration } = await import('../supabase-mgmt')
-  const { contractToSeedSQL } = await import('../contract-to-seed')
+  // Step 4: Apply migration + seed SQL to Supabase (skip if using stub Supabase)
+  const isStubSupabase = input.supabaseProjectId.startsWith('stub-')
+  if (isStubSupabase) {
+    console.log('[assembly] Supabase is stubbed — skipping migration and seed')
+  } else {
+    const { runMigration } = await import('../supabase-mgmt')
+    const { contractToSeedSQL } = await import('../contract-to-seed')
 
-  // Find migration file in the assembled set
-  const migrationFile = assembledFiles.find((f) => f.path === 'supabase/migrations/0001_initial.sql')
-  if (migrationFile) {
-    const migResult = await runMigration(input.supabaseProjectId, migrationFile.content)
-    if (!migResult.success) {
-      // FATAL per CLAUDE.md determinism rules
-      throw new Error(`[assembly] Migration failed — fix the SQL generator, not the symptom: ${migResult.error}`)
+    // Find migration file in the assembled set
+    const migrationFile = assembledFiles.find((f) => f.path === 'supabase/migrations/0001_initial.sql')
+    if (migrationFile) {
+      const migResult = await runMigration(input.supabaseProjectId, migrationFile.content)
+      if (!migResult.success) {
+        // FATAL per CLAUDE.md determinism rules
+        throw new Error(`[assembly] Migration failed — fix the SQL generator, not the symptom: ${migResult.error}`)
+      }
+      console.log('[assembly] Migration applied to Supabase')
     }
-    console.log('[assembly] Migration applied to Supabase')
+
+    const seedSQL = await contractToSeedSQL(input.contract)
+    if (seedSQL) {
+      const seedResult = await runMigration(input.supabaseProjectId, seedSQL)
+      if (!seedResult.success) {
+        console.error(`[assembly] Seed failed: ${seedResult.error}`)
+        // Non-fatal — app works without seed data, just looks empty
+      } else {
+        console.log('[assembly] Seed data applied to Supabase')
+      }
+    }
   }
 
-  const seedSQL = await contractToSeedSQL(input.contract)
-  if (seedSQL) {
-    const seedResult = await runMigration(input.supabaseProjectId, seedSQL)
-    if (!seedResult.success) {
-      console.error(`[assembly] Seed failed: ${seedResult.error}`)
-      // Non-fatal — app works without seed data, just looks empty
-    } else {
-      console.log('[assembly] Seed data applied to Supabase')
-    }
+  // Construct AppBlueprint from assembled files so downstream states
+  // (validating, repairing, reviewing) have the fileTree they expect.
+  const blueprint: AppBlueprint = {
+    meta: { appName: input.appName, appDescription: '' },
+    features: inferFeatures(input.contract),
+    contract: input.contract,
+    fileTree: assembledFiles,
   }
 
   return {
     assembledFiles,
-    blueprint: null,
+    blueprint,
     tokensUsed: 0,
   }
 }

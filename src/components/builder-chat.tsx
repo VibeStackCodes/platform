@@ -100,6 +100,7 @@ interface BuilderChatProps {
     parts: Array<Record<string, unknown>>
   }>
   onGenerationComplete?: () => void
+  onSandboxReady?: (sandboxId: string) => void
   selectedElement?: ElementContext | null
   onEditComplete?: () => void
 }
@@ -227,6 +228,7 @@ export function BuilderChat({
   initialPrompt,
   initialMessages,
   onGenerationComplete,
+  onSandboxReady,
   selectedElement,
   onEditComplete,
 }: BuilderChatProps) {
@@ -486,17 +488,31 @@ export function BuilderChat({
           break
 
         case 'page_complete':
-          setPageProgress((prev) =>
-            prev.map((p) =>
-              p.fileName === event.fileName
-                ? { ...p, status: 'complete' as const, lineCount: event.lineCount, code: event.code }
-                : p,
-            ),
-          )
+          setPageProgress((prev) => {
+            const idx = prev.findIndex((p) => p.fileName === event.fileName)
+            if (idx === -1) {
+              // Page wasn't added by page_generating (real mode) — add it directly
+              return [...prev, {
+                fileName: event.fileName,
+                route: event.route,
+                componentName: event.componentName,
+                status: 'complete' as const,
+                lineCount: event.lineCount,
+                code: event.code,
+              }]
+            }
+            const updated = [...prev]
+            updated[idx] = { ...updated[idx], status: 'complete' as const, lineCount: event.lineCount, code: event.code }
+            return updated
+          })
           break
 
         case 'file_assembled':
-          setFileAssembly((prev) => [...prev, { path: event.path, category: event.category }])
+          setFileAssembly((prev) =>
+            prev.some((f) => f.path === event.path)
+              ? prev
+              : [...prev, { path: event.path, category: event.category }],
+          )
           break
 
         case 'validation_check':
@@ -511,9 +527,13 @@ export function BuilderChat({
             return updated
           })
           break
+
+        case 'sandbox_ready':
+          onSandboxReady?.(event.sandboxId)
+          break
       }
     },
-    [onGenerationComplete, pushTimeline, updateTimeline],
+    [onGenerationComplete, onSandboxReady, pushTimeline, updateTimeline],
   )
 
   /**
@@ -594,12 +614,14 @@ export function BuilderChat({
         : { message: text, projectId, model }
 
       try {
+        console.log('[builder-chat] Sending to', endpoint, body)
         const response = await apiFetch(endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
           signal: abortController.signal,
         })
+        console.log('[builder-chat] Response status:', response.status)
 
         if (!response.ok || !response.body) {
           if (response.status === 402) {
@@ -646,6 +668,7 @@ export function BuilderChat({
         }
       } catch (err) {
         if (err instanceof Error && err.name === 'AbortError') return
+        console.error('[builder-chat] sendChatMessage error:', err)
         setChatError(err instanceof Error ? err : new Error('Chat failed'))
         setMessages((prev) => prev.filter((m) => m.id !== assistantId || m.content.length > 0))
       } finally {

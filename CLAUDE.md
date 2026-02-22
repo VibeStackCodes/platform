@@ -128,6 +128,25 @@ snapshot/                # Daytona sandbox Docker image (Vite + React base)
    - SSE bridge maps Mastra `NetworkChunkType` → `StreamEvent` types
 2. **Preview** delivered via `BuilderPreview` subscribing to Supabase realtime on `projects` table
 
+### XState Pipeline Orchestration
+
+The generation pipeline is orchestrated by an XState state machine (`server/lib/agents/machine.ts`):
+
+- **State flow**: `idle` → `preparing` (parallel: analysis + provisioning) → `designing` → `architecting` → `pageGeneration` → `assembly` → `validating` → `reviewing` → `deploying` → `complete`
+- **Error path**: Any state can transition to `cleanup` → `failed` (cleanup releases sandbox + Supabase project)
+- **Repair loop**: `validating` ↔ `repairing` (max 2 retries, halts if errors unchanged)
+- **Parallel state**: `preparing` runs `runAnalysisActor` and `runProvisioningActor` concurrently; both must complete before `designing`
+- **Clarification**: `preparing.analysis.running` → `awaitingClarification` (30min timeout) → `USER_ANSWERED` event resumes
+- **Key files**:
+  - `server/lib/agents/machine.ts` — Machine definition, actors, mock pipeline (`MOCK_PIPELINE=true`)
+  - `server/lib/agents/edit-machine.ts` — Edit machine for iterative edits on existing projects
+  - `server/routes/agent.ts` — SSE streaming via `streamActorStates()`, maps XState states → `StreamEvent` types
+  - `server/lib/agents/orchestrator.ts` — Actor implementations (`runAnalysis`, `runDesign`, `runArchitect`, etc.)
+- **Inspection**: `XSTATE_INSPECT=true` env var enables Stately Inspector (streams to stately.ai/inspect)
+- **Mock pipeline**: `MOCK_PIPELINE=true` swaps all actors with fake delays (2-3s each), no external services
+- **SSE mapping**: `STATE_PHASES` maps state names → `{ phase, agentId, agentName }` for client rendering; `streamActorStates()` emits `agent_start`/`agent_complete`/`checkpoint`/`phase_start` events
+- **Context**: `MachineContext` carries all data through the pipeline (contract, tokens, blueprint, sandbox/Supabase IDs, validation results, token counts)
+
 ### Key Patterns
 
 - **Contract-first**: `SchemaContract` → all downstream artifacts (SQL, types, seed). Never retry LLM generation — fix the contract or generator if wrong.

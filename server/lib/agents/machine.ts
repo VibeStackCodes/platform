@@ -150,24 +150,6 @@ export const appGenerationMachine = setup({
         return runRepair(input)
       },
     ),
-    runDeploymentActor: fromPromise(
-      async ({
-        input,
-      }: {
-        input: {
-          sandboxId: string
-          projectId: string
-          contract?: SchemaContract | null
-          blueprint?: AppBlueprint | null
-          capabilityManifest?: string[] | null
-          supabaseProjectId?: string | null
-          githubCloneUrl?: string | null
-        }
-      }) => {
-        const { runDeployment } = await import('./orchestrator')
-        return runDeployment(input)
-      },
-    ),
     runCleanupActor: fromPromise(
       async ({ input }: { input: { sandboxId: string | null; supabaseProjectId: string | null } }) => {
         const errors: string[] = []
@@ -541,6 +523,7 @@ export const appGenerationMachine = setup({
             guard: ({ event }) => event.output.allPassed,
             target: 'reviewing',
             actions: assign({
+              validation: ({ event }) => event.output.validation,
               totalTokens: ({ context, event }) => context.totalTokens + event.output.tokensUsed,
             }),
           },
@@ -641,7 +624,7 @@ export const appGenerationMachine = setup({
         onDone: [
           {
             guard: ({ event }) => event.output.passed,
-            target: 'deploying',
+            target: 'complete',
             actions: assign({
               reviewResult: ({ event }) => event.output,
               totalTokens: ({ context, event }) => context.totalTokens + event.output.tokensUsed,
@@ -664,58 +647,16 @@ export const appGenerationMachine = setup({
           },
         ],
         onError: {
-          // Review failure should NOT block deployment — it's a quality gate, not a hard gate
-          // Log the error but proceed to deploying
-          target: 'deploying',
+          // Review failure should NOT block completion — it's a quality gate, not a hard gate
+          // Log the error but proceed to completion
+          target: 'complete',
           actions: assign({
             reviewSkipped: () => true,
             totalTokens: ({ context }) => context.totalTokens,
           }),
           entry: ({ event }: { event: { error: unknown } }) => {
-            console.error('[machine] Code review crashed, skipping and proceeding to deployment:', event.error)
+            console.error('[machine] Code review crashed, skipping and proceeding to completion:', event.error)
           },
-        },
-      },
-    },
-
-    deploying: {
-      after: {
-        600_000: {
-          target: 'cleanup',
-          actions: assign({
-            error: () => 'Deployment timed out after 10 minutes',
-          }),
-        },
-      },
-      invoke: {
-        src: 'runDeploymentActor',
-        input: ({ context }) => ({
-          sandboxId: context.sandboxId!,
-          projectId: context.projectId,
-          contract: context.contract,
-          blueprint: context.blueprint,
-          capabilityManifest: context.capabilityManifest,
-          supabaseProjectId: context.supabaseProjectId,
-          githubCloneUrl: context.githubCloneUrl,
-        }),
-        onDone: {
-          target: 'complete',
-          actions: assign({
-            deploymentUrl: ({ event }) => event.output.deploymentUrl,
-            totalTokens: ({ context, event }) => context.totalTokens + event.output.tokensUsed,
-          }),
-        },
-        onError: {
-          target: 'cleanup',
-          actions: assign({
-            error: ({ event }) => {
-              const err = event.error
-              if (err instanceof Error) {
-                return `${err.message}${err.stack ? `\n${err.stack}` : ''}`
-              }
-              return String(err)
-            },
-          }),
         },
       },
     },
@@ -1127,7 +1068,19 @@ export const mockAppGenerationMachine = setup({
     }),
     runValidationActor: fromPromise(async () => {
       await delay(1000)
-      return { allPassed: true, validation: null, tokensUsed: 200 }
+      const passedResult = { passed: true, errors: [] }
+      return {
+        allPassed: true,
+        validation: {
+          manifest: passedResult,
+          scaffold: passedResult,
+          typecheck: passedResult,
+          lint: passedResult,
+          build: passedResult,
+          allPassed: true,
+        },
+        tokensUsed: 200,
+      }
     }),
     runRepairActor: fromPromise(async () => {
       await delay(500)
@@ -1142,10 +1095,6 @@ export const mockAppGenerationMachine = setup({
         llmIssues: [],
         summary: 'Mock review — all checks passed',
       }
-    }),
-    runDeploymentActor: fromPromise(async () => {
-      await delay(2000)
-      return { deploymentUrl: 'https://taskflow-mock.vercel.app', tokensUsed: 0 }
     }),
     runCleanupActor: fromPromise(async () => {
       return { errors: [] }
@@ -1390,6 +1339,7 @@ export const mockAppGenerationMachine = setup({
             guard: ({ event }) => event.output.allPassed,
             target: 'reviewing',
             actions: assign({
+              validation: ({ event }) => event.output.validation,
               totalTokens: ({ context, event }) => context.totalTokens + event.output.tokensUsed,
             }),
           },
@@ -1435,7 +1385,7 @@ export const mockAppGenerationMachine = setup({
         onDone: [
           {
             guard: ({ event }) => event.output.passed,
-            target: 'deploying',
+            target: 'complete',
             actions: assign({
               reviewResult: ({ event }) => event.output,
               totalTokens: ({ context, event }) => context.totalTokens + event.output.tokensUsed,
@@ -1447,28 +1397,8 @@ export const mockAppGenerationMachine = setup({
           },
         ],
         onError: {
-          target: 'deploying',
-          actions: assign({ reviewSkipped: () => true }),
-        },
-      },
-    },
-    deploying: {
-      invoke: {
-        src: 'runDeploymentActor',
-        input: ({ context }) => ({
-          sandboxId: context.sandboxId!,
-          projectId: context.projectId,
-        }),
-        onDone: {
           target: 'complete',
-          actions: assign({
-            deploymentUrl: ({ event }) => event.output.deploymentUrl,
-            totalTokens: ({ context, event }) => context.totalTokens + event.output.tokensUsed,
-          }),
-        },
-        onError: {
-          target: 'failed',
-          actions: assign({ error: ({ event }) => String(event.error) }),
+          actions: assign({ reviewSkipped: () => true }),
         },
       },
     },

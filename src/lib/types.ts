@@ -298,6 +298,7 @@ export type StreamEvent =
   | PageCompleteEvent
   | FileAssembledEvent
   | ValidationCheckEvent
+  | SandboxReadyEvent
 
 export interface StageUpdateEvent {
   type: 'stage_update'
@@ -539,7 +540,7 @@ export interface FileAssembledEvent {
 
 export interface ValidationCheckEvent {
   type: 'validation_check'
-  name: 'imports' | 'links' | 'accessibility' | 'hardcoded_colors' | 'typescript' | 'lint' | 'build'
+  name: 'imports' | 'links' | 'accessibility' | 'hardcoded_colors' | 'typescript' | 'lint' | 'build' | 'manifest' | 'scaffold' | 'typecheck'
   status: 'passed' | 'failed' | 'running'
   errors?: Array<{
     file: string
@@ -547,6 +548,11 @@ export interface ValidationCheckEvent {
     message: string
     type: string
   }>
+}
+
+export interface SandboxReadyEvent {
+  type: 'sandbox_ready'
+  sandboxId: string
 }
 
 // ============================================================================

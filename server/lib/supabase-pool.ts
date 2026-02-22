@@ -208,6 +208,11 @@ export async function releaseProject(supabaseProjectId: string): Promise<void> {
 export async function replenishPool(
   targetSize: number = POOL_SIZE,
 ): Promise<{ created: number; errors: string[] }> {
+  // DISABLED: Supabase provisioning is disabled for local dev. Re-enable when needed.
+  if (process.env.DISABLE_SUPABASE_POOL !== 'false') {
+    console.log('[supabase-pool] Pool replenishment disabled (set DISABLE_SUPABASE_POOL=false to re-enable)')
+    return { created: 0, errors: [] }
+  }
   try {
     // Try to acquire advisory lock (non-blocking)
     // Lock ID is a fixed constant — only one replenish can run at a time

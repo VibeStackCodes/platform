@@ -42,7 +42,7 @@ describe('appGenerationMachine', () => {
     expect(states).toContain('validating')
     expect(states).toContain('repairing')
     expect(states).toContain('reviewing')
-    expect(states).toContain('deploying')
+    expect(states).not.toContain('deploying')
     expect(states).toContain('cleanup')
     expect(states).toContain('complete')
     expect(states).toContain('failed')
@@ -291,7 +291,7 @@ describe('state transitions', () => {
     actor.stop()
   })
 
-  it('transitions through full happy path: preparing → designing → architecting → pageGeneration → assembly → validating → reviewing → deploying → complete', async () => {
+  it('transitions through full happy path: preparing → designing → architecting → pageGeneration → assembly → validating → reviewing → complete', async () => {
     const mockContract: SchemaContract = { tables: [], enums: [] }
     const mockBlueprint: AppBlueprint = {
       name: 'TestApp',
@@ -362,10 +362,6 @@ describe('state transitions', () => {
           llmIssues: [],
           tokensUsed: 300,
         })),
-        runDeploymentActor: fromPromise(async () => ({
-          deploymentUrl: 'https://test.vercel.app',
-          tokensUsed: 100,
-        })),
       },
     })
 
@@ -386,11 +382,9 @@ describe('state transitions', () => {
     await waitFor(actor, (state) => state.matches('assembly'), { timeout: 1000 })
     await waitFor(actor, (state) => state.matches('validating'), { timeout: 1000 })
     await waitFor(actor, (state) => state.matches('reviewing'), { timeout: 1000 })
-    await waitFor(actor, (state) => state.matches('deploying'), { timeout: 1000 })
     await waitFor(actor, (state) => state.matches('complete'), { timeout: 1000 })
 
     expect(actor.getSnapshot().value).toBe('complete')
-    expect(actor.getSnapshot().context.deploymentUrl).toBe('https://test.vercel.app')
     actor.stop()
   })
 })
@@ -560,8 +554,8 @@ describe('validation and repair loop', () => {
     })
 
     await waitFor(actor, (state) => state.matches('repairing'), { timeout: 5000 })
-    // After repair, should return to validating, then proceed to deploying since second validation passes
-    await waitFor(actor, (state) => state.matches('deploying') || state.matches('validating'), { timeout: 5000 })
+    // After repair, should return to validating, then proceed to complete since second validation passes
+    await waitFor(actor, (state) => state.matches('complete') || state.matches('validating'), { timeout: 5000 })
     // Verify that validation was called twice (once before repair, once after)
     expect(validationCallCount).toBe(2)
     expect(actor.getSnapshot().context.retryCount).toBe(1)
@@ -802,32 +796,9 @@ describe('error handling', () => {
     actor.stop()
   })
 
-  it('transitions deploying → failed on actor error', async () => {
-    const testMachine = buildMachineToValidating({
-      runValidationActor: fromPromise(async () => ({
-        allPassed: true,
-        validation: { tscErrors: [], buildErrors: [], testErrors: [] },
-        tokensUsed: 150,
-      })),
-      runDeploymentActor: fromPromise(async () => {
-        throw new Error('Deployment failed')
-      }),
-      runCleanupActor: fromPromise(async () => ({ errors: [] })),
-    })
-
-    const actor = createActor(testMachine)
-    actor.start()
-    actor.send({
-      type: 'START',
-      userMessage: 'Build a blog',
-      projectId: 'test-deploy-error',
-      userId: 'test-user-123',
-    })
-
-    await waitFor(actor, (state) => state.matches('failed'), { timeout: 8000 })
-    expect(actor.getSnapshot().value).toBe('failed')
-    expect(actor.getSnapshot().context.error).toContain('Deployment failed')
-    actor.stop()
+  it('does not have a deploying state (deployment is on-demand)', () => {
+    const states = Object.keys(appGenerationMachine.config.states ?? {})
+    expect(states).not.toContain('deploying')
   })
 
   it('preserves error message in context.error', async () => {
@@ -923,9 +894,11 @@ describe('context updates', () => {
           validation: { tscErrors: [], buildErrors: [], testErrors: [] },
           tokensUsed: 150,
         })),
-        runDeploymentActor: fromPromise(async () => ({
-          deploymentUrl: 'https://test.vercel.app',
-          tokensUsed: 100,
+        runCodeReviewActor: fromPromise(async () => ({
+          passed: true,
+          deterministicIssues: [],
+          llmIssues: [],
+          tokensUsed: 0,
         })),
       },
     })
@@ -940,8 +913,8 @@ describe('context updates', () => {
     })
 
     await waitFor(actor, (state) => state.matches('complete'), { timeout: 8000 })
-    // 100 (analysis) + 50 (provisioning) + 50 (design) + 50 (architect) + 200 (pageGen) + 150 (validation) + 100 (deploy) = 700
-    expect(actor.getSnapshot().context.totalTokens).toBeGreaterThanOrEqual(700)
+    // 100 (analysis) + 50 (provisioning) + 50 (design) + 50 (architect) + 200 (pageGen) + 150 (validation) = 600
+    expect(actor.getSnapshot().context.totalTokens).toBeGreaterThanOrEqual(600)
     actor.stop()
   })
 
@@ -1076,7 +1049,7 @@ describe('context updates', () => {
 // ============================================================================
 
 describe('code review state transitions', () => {
-  it('transitions reviewing → deploying when review passes', async () => {
+  it('transitions reviewing → complete when review passes', async () => {
     const testMachine = buildMachineToValidating({
       runValidationActor: fromPromise(async () => ({
         allPassed: true,
@@ -1101,8 +1074,8 @@ describe('code review state transitions', () => {
     })
 
     await waitFor(actor, (state) => state.matches('reviewing'), { timeout: 8000 })
-    await waitFor(actor, (state) => state.matches('deploying'), { timeout: 2000 })
-    expect(actor.getSnapshot().value).toBe('deploying')
+    await waitFor(actor, (state) => state.matches('complete'), { timeout: 2000 })
+    expect(actor.getSnapshot().value).toBe('complete')
     expect(actor.getSnapshot().context.reviewResult?.passed).toBe(true)
     actor.stop()
   })
@@ -1142,7 +1115,7 @@ describe('code review state transitions', () => {
     actor.stop()
   })
 
-  it('transitions reviewing → deploying when review crashes (soft failure)', async () => {
+  it('transitions reviewing → complete when review crashes (soft failure)', async () => {
     const testMachine = buildMachineToValidating({
       runValidationActor: fromPromise(async () => ({
         allPassed: true,
@@ -1164,9 +1137,9 @@ describe('code review state transitions', () => {
     })
 
     await waitFor(actor, (state) => state.matches('reviewing'), { timeout: 8000 })
-    await waitFor(actor, (state) => state.matches('deploying'), { timeout: 2000 })
-    // Review crash should NOT block deployment
-    expect(actor.getSnapshot().value).toBe('deploying')
+    await waitFor(actor, (state) => state.matches('complete'), { timeout: 2000 })
+    // Review crash should NOT block completion
+    expect(actor.getSnapshot().value).toBe('complete')
     expect(actor.getSnapshot().context.error).toBeNull()
     actor.stop()
   })
@@ -1184,10 +1157,6 @@ describe('code review state transitions', () => {
         llmIssues: [],
         tokensUsed: 300,
       })),
-      runDeploymentActor: fromPromise(async () => ({
-        deploymentUrl: 'https://test.vercel.app',
-        tokensUsed: 100,
-      })),
     })
 
     const actor = createActor(testMachine)
@@ -1200,7 +1169,7 @@ describe('code review state transitions', () => {
     })
 
     await waitFor(actor, (state) => state.matches('complete'), { timeout: 10000 })
-    // Total should include all stage tokens including review (300) and deploy (100)
+    // Total should include all stage tokens including review (300)
     expect(actor.getSnapshot().context.totalTokens).toBeGreaterThan(500)
     actor.stop()
   })
@@ -1393,14 +1362,6 @@ describe('state timeouts', () => {
     expect(after['180000'].target).toBe('cleanup')
   })
 
-  it('deploying state has timeout configured to cleanup', () => {
-    const deployingState = appGenerationMachine.config.states?.deploying
-    const after = deployingState?.after as any
-    expect(after).toBeDefined()
-    expect(after).toHaveProperty('600000')
-    expect(after['600000'].target).toBe('cleanup')
-  })
-
   it('cleanup state has timeout configured', () => {
     const cleanupState = appGenerationMachine.config.states?.cleanup
     const after = cleanupState?.after as any
@@ -1511,7 +1472,7 @@ describe('sentry error capture', () => {
 // ============================================================================
 
 describe('code review skip on error', () => {
-  it('reviewing onError sets reviewSkipped and transitions to deploying', async () => {
+  it('reviewing onError sets reviewSkipped and transitions to complete', async () => {
     const testMachine = buildMachineToValidating({
       runValidationActor: fromPromise(async () => ({
         allPassed: true,
@@ -1533,9 +1494,9 @@ describe('code review skip on error', () => {
     })
 
     await waitFor(actor, (state) => state.matches('reviewing'), { timeout: 8000 })
-    await waitFor(actor, (state) => state.matches('deploying'), { timeout: 2000 })
+    await waitFor(actor, (state) => state.matches('complete'), { timeout: 2000 })
 
-    expect(actor.getSnapshot().value).toBe('deploying')
+    expect(actor.getSnapshot().value).toBe('complete')
     expect(actor.getSnapshot().context.reviewSkipped).toBe(true)
     expect(actor.getSnapshot().context.error).toBeNull()
 
