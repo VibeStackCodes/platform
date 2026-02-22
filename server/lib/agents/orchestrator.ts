@@ -35,18 +35,6 @@ export type AnalysisResult =
       tokensUsed: number
     }
 
-export interface BlueprintResult {
-  blueprint: AppBlueprint
-  tokensUsed: number
-}
-
-export interface CodeGenResult {
-  assembledFiles: Array<{ path: string; content: string }>
-  tokensUsed: number
-  warnings?: Array<{ table: string; errors: string[] }>
-  skippedEntities?: string[]
-}
-
 export interface ValidationResult {
   validation: ValidationGateResult
   allPassed: boolean
@@ -198,120 +186,6 @@ export async function runAnalysis(input: {
   }
 
   throw new Error('Analyst agent did not call any tool')
-}
-
-// ============================================================================
-// Blueprint handler (Task 7)
-// ============================================================================
-
-export async function runBlueprint(_input: {
-  userPrompt?: string
-  appName: string
-  appDescription: string
-  contract: SchemaContract
-  assembly?: AssemblyResult | null
-}): Promise<never> {
-  throw new Error('Pipeline A removed. Use runDesign() + runArchitect() + runPageGeneration() + runAssembly() instead.')
-}
-
-// ============================================================================
-// Code Generation handler (Task 8 + E1 jsonrepair)
-// ============================================================================
-
-export async function runCodeGeneration(input: {
-  blueprint: AppBlueprint
-  contract: SchemaContract
-  sandboxId: string
-  supabaseProjectId: string
-  supabaseUrl: string
-  supabaseAnonKey: string
-}): Promise<CodeGenResult> {
-  // Dynamic imports to avoid circular deps
-  const { getSandbox, uploadFiles } = await import('../sandbox')
-
-  // Step 1: Write ALL blueprint files to sandbox (scaffold)
-  const sandbox = await getSandbox(input.sandboxId)
-  console.log(`[codegen] Writing ${input.blueprint.fileTree.length} blueprint files to sandbox...`)
-
-  // Create all needed directories first
-  const dirs = new Set<string>()
-  for (const file of input.blueprint.fileTree) {
-    const dir = `/workspace/${file.path}`.split('/').slice(0, -1).join('/')
-    dirs.add(dir)
-  }
-  for (const dir of dirs) {
-    try {
-      await sandbox.process.executeCommand(`mkdir -p ${dir}`, '/workspace', undefined, 5)
-    } catch {
-      // ignore if exists
-    }
-  }
-
-  // Write blueprint files, replacing .env placeholders with real credentials
-  const blueprintUploads = input.blueprint.fileTree.map((file) => {
-    let content = file.content
-    if (file.path === '.env') {
-      content = content
-        .replace('VITE_SUPABASE_URL=__PLACEHOLDER__', `VITE_SUPABASE_URL=${input.supabaseUrl}`)
-        .replace('VITE_SUPABASE_ANON_KEY=__PLACEHOLDER__', `VITE_SUPABASE_ANON_KEY=${input.supabaseAnonKey}`)
-    }
-    return { content, path: `/workspace/${file.path}` }
-  })
-  await uploadFiles(sandbox, blueprintUploads)
-  console.log(`[codegen] Scaffold complete: ${blueprintUploads.length} files written`)
-
-  // Install dependencies
-  console.log('[codegen] Installing dependencies...')
-  const installResult = await sandbox.process.executeCommand(
-    'bun install --frozen-lockfile 2>&1 || bun install 2>&1',
-    '/workspace',
-    undefined,
-    120,
-  )
-  if (installResult.exitCode !== 0) {
-    console.warn(`[codegen] bun install exit code: ${installResult.exitCode}`)
-  }
-
-  // Apply migration + seed SQL to the real Supabase database
-  // so the generated app launches with data already populated.
-  // Seed SQL is generated in-memory (not shipped in the user's file tree).
-  const isStubSupabase = input.supabaseProjectId.startsWith('stub-')
-  if (isStubSupabase) {
-    console.log('[codegen] Supabase is stubbed — skipping migration and seed')
-  } else {
-    const { runMigration } = await import('../supabase-mgmt')
-    const { contractToSeedSQL } = await import('../contract-to-seed')
-
-    const migrationFile = input.blueprint.fileTree.find((f) => f.path === 'supabase/migrations/0001_initial.sql')
-    if (migrationFile) {
-      const migResult = await runMigration(input.supabaseProjectId, migrationFile.content)
-      if (!migResult.success) {
-        // FATAL per CLAUDE.md determinism rules — a bad migration means bad SQL generator.
-        // Never silently continue: the app would launch with no tables and all queries fail.
-        throw new Error(`[codegen] Migration failed — fix the SQL generator, not the symptom: ${migResult.error}`)
-      }
-      console.log('[codegen] Migration applied to Supabase')
-    }
-
-    const seedSQL = await contractToSeedSQL(input.contract)
-    if (seedSQL) {
-      const seedResult = await runMigration(input.supabaseProjectId, seedSQL)
-      if (!seedResult.success) {
-        console.error(`[codegen] Seed failed: ${seedResult.error}`)
-        // Non-fatal -- app works without seed data, just looks empty
-      } else {
-        console.log('[codegen] Seed data applied to Supabase')
-      }
-    }
-  }
-
-  // Themed route files are already generated in the blueprint.
-  // Do not run legacy design-spec/skill-classifier/assembler overrides.
-  const assembledFiles: Array<{ path: string; content: string }> = []
-  return {
-    assembledFiles,
-    tokensUsed: 0,
-  }
 }
 
 // ============================================================================
