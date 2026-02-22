@@ -1,13 +1,15 @@
 import { assign, createActor, fromPromise, setup } from 'xstate'
 import type { ActorOptions } from 'xstate'
 import * as Sentry from '@sentry/node'
-import type { AppBlueprint } from '../app-blueprint'
+import type { AppBlueprint, BlueprintFile } from '../app-blueprint'
 import type { SchemaContract } from '../schema-contract'
 import type { AssemblyResult } from '../capabilities/assembler'
 import type { ThemeTokens } from '../themed-code-engine'
 import type { ValidationGateResult } from './validation'
 import type { CodeReviewResult } from './code-review'
 import type { AnalysisResult } from './orchestrator'
+import type { CreativeSpec } from './schemas'
+import type { GeneratedPage } from '../page-generator'
 
 // ============================================================================
 // Context type — all data flowing through the machine
@@ -29,8 +31,16 @@ export interface MachineContext {
   // Clarification
   clarificationQuestions: unknown[] | null
 
-  // Blueprint
+  // Blueprint (Pipeline A — kept for validating/reviewing/deploying compatibility)
   blueprint: AppBlueprint | null
+
+  // Pipeline B fields
+  tokens: ThemeTokens | null
+  creativeSpec: CreativeSpec | null
+  generatedPages: GeneratedPage[] | null
+  assembledFiles: BlueprintFile[] | null
+  prd: string | null
+  imagePool: string[]
 
   // Infrastructure
   sandboxId: string | null
@@ -55,7 +65,6 @@ export interface MachineContext {
 
   // Token tracking
   totalTokens: number
-  polishTokens: number
 
   // Error
   error: string | null
@@ -110,32 +119,27 @@ export const appGenerationMachine = setup({
       const { runAnalysis } = await import('./orchestrator')
       return runAnalysis(input)
     }),
-    runBlueprintActor: fromPromise(
-      async ({
-        input,
-      }: {
-        input: { userPrompt?: string; appName: string; appDescription: string; contract: SchemaContract; assembly?: AssemblyResult | null }
-      }) => {
-        const { runBlueprint } = await import('./orchestrator')
-        return runBlueprint(input)
-      },
-    ),
+    runDesignActor: fromPromise(async ({ input }: { input: { userPrompt: string; contract: SchemaContract; appName: string; appDescription: string } }) => {
+      const { runDesign } = await import('./orchestrator')
+      return runDesign(input)
+    }),
+    runArchitectActor: fromPromise(async ({ input }: { input: { userPrompt: string; appName: string; appDescription: string; contract: SchemaContract; tokens: ThemeTokens } }) => {
+      const { runArchitect } = await import('./orchestrator')
+      return runArchitect(input)
+    }),
+    runPageGenerationActor: fromPromise(async ({ input }: { input: { spec: CreativeSpec; contract: SchemaContract | null | undefined; imagePool: string[] } }) => {
+      const { runPageGeneration } = await import('./orchestrator')
+      // Convert null to undefined to match runPageGeneration's optional parameter signature
+      return runPageGeneration({ ...input, contract: input.contract ?? undefined })
+    }),
+    runAssemblyActor: fromPromise(async ({ input }: { input: { spec: CreativeSpec; generatedPages: GeneratedPage[]; appName: string; contract: SchemaContract; sandboxId: string; supabaseProjectId: string; supabaseUrl: string; supabaseAnonKey: string } }) => {
+      const { runAssembly } = await import('./orchestrator')
+      return runAssembly(input)
+    }),
     runProvisioningActor: fromPromise(async ({ input }: { input: { appName: string; projectId: string; userId: string } }) => {
       const { runProvisioning } = await import('./orchestrator')
       return runProvisioning(input)
     }),
-    runCodeGenerationActor: fromPromise(
-      async ({ input }: { input: { blueprint: AppBlueprint; contract: SchemaContract; sandboxId: string; supabaseProjectId: string; supabaseUrl: string; supabaseAnonKey: string } }) => {
-        const { runCodeGeneration } = await import('./orchestrator')
-        return runCodeGeneration(input)
-      },
-    ),
-    runPolishActor: fromPromise(
-      async ({ input }: { input: { sandboxId: string; blueprint: AppBlueprint; assembly: AssemblyResult | null; tokens: ThemeTokens } }) => {
-        const { runPolish } = await import('./polish-agent')
-        return runPolish(input)
-      },
-    ),
     runValidationActor: fromPromise(async ({ input }: { input: { blueprint: AppBlueprint; sandboxId: string } }) => {
       const { runValidation } = await import('./orchestrator')
       return runValidation(input)
@@ -228,6 +232,12 @@ export const appGenerationMachine = setup({
     assembly: null,
     clarificationQuestions: null,
     blueprint: null,
+    tokens: null,
+    creativeSpec: null,
+    generatedPages: null,
+    assembledFiles: null,
+    prd: null,
+    imagePool: [],
     sandboxId: null,
     supabaseProjectId: null,
     supabaseUrl: null,
@@ -242,7 +252,6 @@ export const appGenerationMachine = setup({
     reviewSkipped: false,
     deploymentUrl: null,
     totalTokens: 0,
-    polishTokens: 0,
     error: null,
   },
   states: {
@@ -388,63 +397,110 @@ export const appGenerationMachine = setup({
           },
         },
       },
-      onDone: { target: 'blueprinting' },
+      onDone: { target: 'designing' },
     },
 
-    blueprinting: {
+    designing: {
       after: {
-        120_000: {
+        60_000: {
           target: 'failed',
-          actions: assign({
-            error: () => 'Blueprinting timed out after 2 minutes',
-          }),
+          actions: assign({ error: () => 'Design timed out' }),
         },
       },
       invoke: {
-        src: 'runBlueprintActor',
+        src: 'runDesignActor',
+        input: ({ context }) => ({
+          userPrompt: context.userMessage,
+          contract: context.contract!,
+          appName: context.appName ?? '',
+          appDescription: context.appDescription ?? '',
+        }),
+        onDone: {
+          target: 'architecting',
+          actions: assign({
+            tokens: ({ event }) => event.output.tokens,
+            totalTokens: ({ context, event }) => context.totalTokens + (event.output.tokensUsed ?? 0),
+          }),
+        },
+        onError: {
+          target: 'failed',
+          actions: assign({ error: ({ event }) => String(event.error) }),
+        },
+      },
+    },
+
+    architecting: {
+      after: {
+        120_000: {
+          target: 'failed',
+          actions: assign({ error: () => 'Architect timed out' }),
+        },
+      },
+      invoke: {
+        src: 'runArchitectActor',
         input: ({ context }) => ({
           userPrompt: context.userMessage,
           appName: context.appName ?? '',
           appDescription: context.appDescription ?? '',
           contract: context.contract!,
-          assembly: context.assembly,
+          tokens: context.tokens!,
         }),
         onDone: {
-          target: 'generating',
+          target: 'pageGeneration',
           actions: assign({
-            blueprint: ({ event }) => event.output.blueprint,
-            contract: ({ event }) => event.output.blueprint.contract,
-            totalTokens: ({ context, event }) => context.totalTokens + event.output.tokensUsed,
+            creativeSpec: ({ event }) => event.output.spec,
+            imagePool: ({ event }) => event.output.imagePool ?? [],
+            totalTokens: ({ context, event }) => context.totalTokens + (event.output.tokensUsed ?? 0),
           }),
         },
         onError: {
           target: 'failed',
-          actions: assign({
-            error: ({ event }) => {
-              const err = event.error
-              if (err instanceof Error) {
-                return `${err.message}${err.stack ? `\n${err.stack}` : ''}`
-              }
-              return String(err)
-            },
-          }),
+          actions: assign({ error: ({ event }) => String(event.error) }),
         },
       },
     },
 
-    generating: {
+    pageGeneration: {
       after: {
-        600_000: {
+        300_000: {
           target: 'cleanup',
-          actions: assign({
-            error: () => 'Code generation timed out after 10 minutes',
-          }),
+          actions: assign({ error: () => 'Page generation timed out' }),
         },
       },
       invoke: {
-        src: 'runCodeGenerationActor',
+        src: 'runPageGenerationActor',
         input: ({ context }) => ({
-          blueprint: context.blueprint!,
+          spec: context.creativeSpec!,
+          contract: context.contract,
+          imagePool: context.imagePool,
+        }),
+        onDone: {
+          target: 'assembly',
+          actions: assign({
+            generatedPages: ({ event }) => event.output.pages,
+            totalTokens: ({ context, event }) => context.totalTokens + (event.output.tokensUsed ?? 0),
+          }),
+        },
+        onError: {
+          target: 'cleanup',
+          actions: assign({ error: ({ event }) => String(event.error) }),
+        },
+      },
+    },
+
+    assembly: {
+      after: {
+        120_000: {
+          target: 'cleanup',
+          actions: assign({ error: () => 'Assembly timed out' }),
+        },
+      },
+      invoke: {
+        src: 'runAssemblyActor',
+        input: ({ context }) => ({
+          spec: context.creativeSpec!,
+          generatedPages: context.generatedPages!,
+          appName: context.appName ?? '',
           contract: context.contract!,
           sandboxId: context.sandboxId!,
           supabaseProjectId: context.supabaseProjectId!,
@@ -452,77 +508,15 @@ export const appGenerationMachine = setup({
           supabaseAnonKey: context.supabaseAnonKey!,
         }),
         onDone: {
-          target: 'polishing',
+          target: 'validating',
           actions: assign({
-            totalTokens: ({ context, event }) => context.totalTokens + event.output.tokensUsed,
+            assembledFiles: ({ event }) => event.output.assembledFiles,
+            blueprint: ({ event }) => event.output.blueprint,
           }),
         },
         onError: {
           target: 'cleanup',
-          actions: assign({
-            error: ({ event }) => {
-              const err = event.error
-              if (err instanceof Error) {
-                return `${err.message}${err.stack ? `\n${err.stack}` : ''}`
-              }
-              return String(err)
-            },
-          }),
-        },
-      },
-    },
-
-    polishing: {
-      invoke: {
-        src: 'runPolishActor',
-        input: ({ context }) => ({
-          sandboxId: context.sandboxId!,
-          blueprint: context.blueprint!,
-          assembly: context.assembly,
-          tokens: (context.blueprint?.meta as { tokens?: ThemeTokens } | undefined)?.tokens ?? {
-            name: 'public-website',
-            fonts: { display: 'Inter', body: 'Inter', googleFontsUrl: '' },
-            colors: {
-              background: '#ffffff',
-              foreground: '#111111',
-              primary: '#2b6cb0',
-              primaryForeground: '#ffffff',
-              secondary: '#e5e7eb',
-              accent: '#f59e0b',
-              muted: '#f3f4f6',
-              border: '#d1d5db',
-            },
-            style: {
-              borderRadius: '0.5rem',
-              cardStyle: 'elevated',
-              navStyle: 'top-bar',
-              heroLayout: 'split',
-              spacing: 'normal',
-              motion: 'subtle',
-              imagery: 'minimal',
-            },
-            authPosture: 'hybrid',
-            heroImages: [],
-            heroQuery: 'modern web app',
-            textSlots: {
-              hero_headline: 'Welcome',
-              hero_subtext: 'Generated app',
-              about_paragraph: 'Generated app experience.',
-              cta_label: 'Get started',
-              empty_state: 'No items yet.',
-              footer_tagline: 'Built with care.',
-            },
-          },
-        }),
-        onDone: {
-          target: 'validating',
-          actions: assign({
-            totalTokens: ({ context, event }) => context.totalTokens + (event.output?.tokensUsed ?? 0),
-            polishTokens: ({ context, event }) => context.polishTokens + (event.output?.tokensUsed ?? 0),
-          }),
-        },
-        onError: {
-          target: 'validating',
+          actions: assign({ error: ({ event }) => String(event.error) }),
         },
       },
     },
@@ -834,33 +828,236 @@ const MOCK_CONTRACT: SchemaContract = {
   ],
 }
 
-/** Minimal blueprint for mock pipeline */
-const MOCK_BLUEPRINT: AppBlueprint = {
-  meta: {
-    appName: 'TaskFlow',
-    appDescription: 'A modern task management app with categories, priorities, and due dates',
+/** Minimal mock tokens for the mock pipeline */
+const MOCK_TOKENS: ThemeTokens = {
+  name: 'canape',
+  colors: {
+    background: '#ffffff',
+    foreground: '#111111',
+    primary: '#2b6cb0',
+    primaryForeground: '#ffffff',
+    secondary: '#e5e7eb',
+    accent: '#f59e0b',
+    muted: '#f3f4f6',
+    border: '#d1d5db',
   },
-  features: { auth: true, crud: true, realtime: false, rls: true, search: false, imageUpload: false },
-  contract: MOCK_CONTRACT,
-  fileTree: [
-    { path: 'src/main.tsx', content: '', layer: 0, isLLMSlot: false },
-    { path: 'src/routes/__root.tsx', content: '', layer: 0, isLLMSlot: false },
-    { path: 'src/routes/index.tsx', content: '', layer: 1, isLLMSlot: false },
-    { path: 'src/routes/_authenticated/route.tsx', content: '', layer: 1, isLLMSlot: false },
-    { path: 'src/routes/_authenticated/dashboard.tsx', content: '', layer: 2, isLLMSlot: false },
-    { path: 'src/routes/_authenticated/todos/index.tsx', content: '', layer: 2, isLLMSlot: true },
-    { path: 'src/routes/_authenticated/todos/$id.tsx', content: '', layer: 2, isLLMSlot: true },
-    { path: 'src/routes/_authenticated/categories/index.tsx', content: '', layer: 2, isLLMSlot: true },
-    { path: 'src/lib/supabase.ts', content: '', layer: 0, isLLMSlot: false },
-    { path: 'src/lib/hooks.ts', content: '', layer: 1, isLLMSlot: false },
-    { path: 'src/components/ui/button.tsx', content: '', layer: 0, isLLMSlot: false },
-    { path: 'src/components/ui/input.tsx', content: '', layer: 0, isLLMSlot: false },
-    { path: 'src/components/ui/card.tsx', content: '', layer: 0, isLLMSlot: false },
-  ],
+  fonts: {
+    display: 'Playfair Display',
+    body: 'Inter',
+    googleFontsUrl: 'https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Inter:wght@400;500;600&display=swap',
+  },
+  style: {
+    borderRadius: '0.5rem',
+    cardStyle: 'bordered',
+    navStyle: 'top-bar',
+    heroLayout: 'fullbleed',
+    spacing: 'normal',
+    motion: 'subtle',
+    imagery: 'photography-heavy',
+  },
+  authPosture: 'public',
+  heroImages: [],
+  heroQuery: 'modern task management app',
+  textSlots: {
+    hero_headline: 'Welcome',
+    hero_subtext: 'Your app',
+    about_paragraph: 'About us',
+    cta_label: 'Get Started',
+    empty_state: 'Nothing here yet.',
+    footer_tagline: 'Built with VibeStack',
+  },
 }
 
-/** Mock files emitted during code generation (simulates file_start/file_complete) */
-export const MOCK_FILE_LIST = MOCK_BLUEPRINT.fileTree.map((f) => f.path)
+/** Minimal mock CreativeSpec for the mock pipeline */
+const MOCK_CREATIVE_SPEC: CreativeSpec = {
+  archetype: 'crud',
+  visualDna: {
+    typography: {
+      displayFont: 'Playfair Display',
+      bodyFont: 'Inter',
+      googleFontsUrl: 'https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Inter:wght@400;500;600&display=swap',
+      headlineStyle: 'text-5xl font-bold tracking-tight',
+      bodyStyle: 'text-base leading-relaxed',
+    },
+    palette: {
+      background: '#ffffff',
+      foreground: '#111111',
+      primary: '#2b6cb0',
+      primaryForeground: '#ffffff',
+      accent: '#f59e0b',
+      muted: '#f3f4f6',
+      mutedForeground: '#6b7280',
+      border: '#d1d5db',
+      card: '#ffffff',
+      destructive: '#ef4444',
+    },
+    motionPreset: 'subtle',
+    borderRadius: '0.5rem',
+    cardStyle: 'flat',
+    imagery: 'minimal',
+    visualTexture: 'none',
+    moodBoard: 'Clean, minimal, and professional. Focus on content with clear hierarchy.',
+  },
+  sitemap: [
+    {
+      route: '/',
+      fileName: 'routes/index.tsx',
+      componentName: 'Homepage',
+      purpose: 'Landing page showcasing app features',
+      dataRequirements: 'none',
+      entities: [],
+      brief: {
+        sections: ['Hero section', 'Features overview'],
+        copyDirection: 'Professional and clear',
+        keyInteractions: 'CTA button to sign up',
+        lucideIcons: ['ArrowRight', 'CheckCircle'],
+        shadcnComponents: ['Button', 'Card'],
+      },
+    },
+    {
+      route: '/todos/',
+      fileName: 'routes/todos/index.tsx',
+      componentName: 'TodoList',
+      purpose: 'List all todos with filtering and sorting',
+      dataRequirements: 'read-write',
+      entities: ['todos'],
+      brief: {
+        sections: ['Todo list with filters', 'Create todo form'],
+        copyDirection: 'Action-oriented',
+        keyInteractions: 'Create, complete, delete todos',
+        lucideIcons: ['Plus', 'Check', 'Trash2'],
+        shadcnComponents: ['Button', 'Input', 'Card', 'Checkbox'],
+      },
+    },
+    {
+      route: '/categories/',
+      fileName: 'routes/categories/index.tsx',
+      componentName: 'CategoryList',
+      purpose: 'Manage todo categories',
+      dataRequirements: 'read-write',
+      entities: ['categories'],
+      brief: {
+        sections: ['Category grid', 'Create category form'],
+        copyDirection: 'Organizational and clear',
+        keyInteractions: 'Create, edit, delete categories',
+        lucideIcons: ['FolderPlus', 'Edit', 'Trash2'],
+        shadcnComponents: ['Button', 'Input', 'Card', 'Badge'],
+      },
+    },
+    {
+      route: '/dashboard/',
+      fileName: 'routes/dashboard.tsx',
+      componentName: 'Dashboard',
+      purpose: 'Overview stats and quick actions',
+      dataRequirements: 'read-only',
+      entities: ['todos', 'categories'],
+      brief: {
+        sections: ['Stats cards', 'Recent todos'],
+        copyDirection: 'Informative and at-a-glance',
+        keyInteractions: 'Navigate to todo list, view stats',
+        lucideIcons: ['BarChart', 'TrendingUp', 'ListTodo'],
+        shadcnComponents: ['Card', 'Badge'],
+      },
+    },
+  ],
+  nav: {
+    style: 'sticky-blur',
+    logo: 'TaskFlow',
+    links: [
+      { label: 'Dashboard', href: '/dashboard/' },
+      { label: 'Todos', href: '/todos/' },
+      { label: 'Categories', href: '/categories/' },
+    ],
+    cta: { label: 'Sign In', href: '/auth/login' },
+    mobileStyle: 'sheet',
+  },
+  footer: {
+    style: 'minimal',
+    columns: [],
+    showNewsletter: false,
+    socialLinks: [],
+    copyright: '© 2026 TaskFlow. Built with VibeStack.',
+  },
+  auth: {
+    required: true,
+    publicRoutes: ['/'],
+    privateRoutes: ['/todos/', '/categories/', '/dashboard/'],
+    loginRoute: '/auth/login',
+  },
+}
+
+/** Mock generated pages for the mock pipeline */
+const MOCK_GENERATED_PAGES: GeneratedPage[] = [
+  {
+    fileName: 'routes/index.tsx',
+    componentName: 'Homepage',
+    route: '/',
+    content: `import { Link } from '@tanstack/react-router'
+export default function Homepage() {
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center">
+      <h1 className="text-5xl font-bold tracking-tight mb-4">TaskFlow</h1>
+      <p className="text-base leading-relaxed text-muted-foreground mb-8">Manage your tasks with ease</p>
+      <Link to="/todos/" className="inline-flex items-center px-6 py-3 bg-primary text-primary-foreground rounded-lg">
+        Get Started
+      </Link>
+    </div>
+  )
+}`,
+  },
+  {
+    fileName: 'routes/todos/index.tsx',
+    componentName: 'TodoList',
+    route: '/todos/',
+    content: `export default function TodoList() {
+  return (
+    <div className="container mx-auto py-8">
+      <h1 className="text-3xl font-bold mb-6">Todos</h1>
+      <p className="text-muted-foreground">Your todo list will appear here.</p>
+    </div>
+  )
+}`,
+  },
+  {
+    fileName: 'routes/categories/index.tsx',
+    componentName: 'CategoryList',
+    route: '/categories/',
+    content: `export default function CategoryList() {
+  return (
+    <div className="container mx-auto py-8">
+      <h1 className="text-3xl font-bold mb-6">Categories</h1>
+      <p className="text-muted-foreground">Your categories will appear here.</p>
+    </div>
+  )
+}`,
+  },
+  {
+    fileName: 'routes/dashboard.tsx',
+    componentName: 'Dashboard',
+    route: '/dashboard/',
+    content: `export default function Dashboard() {
+  return (
+    <div className="container mx-auto py-8">
+      <h1 className="text-3xl font-bold mb-6">Dashboard</h1>
+      <p className="text-muted-foreground">Your overview stats will appear here.</p>
+    </div>
+  )
+}`,
+  },
+]
+
+/** Mock assembled files for the mock pipeline */
+const MOCK_ASSEMBLED_FILES: BlueprintFile[] = [
+  { path: 'src/main.tsx', content: '// mock main.tsx', layer: 0, isLLMSlot: false },
+  { path: 'src/routes/__root.tsx', content: '// mock root', layer: 0, isLLMSlot: false },
+  { path: 'src/routes/index.tsx', content: MOCK_GENERATED_PAGES[0].content, layer: 1, isLLMSlot: true },
+  { path: 'src/routes/todos/index.tsx', content: MOCK_GENERATED_PAGES[1].content, layer: 1, isLLMSlot: true },
+  { path: 'src/routes/categories/index.tsx', content: MOCK_GENERATED_PAGES[2].content, layer: 1, isLLMSlot: true },
+  { path: 'src/routes/dashboard.tsx', content: MOCK_GENERATED_PAGES[3].content, layer: 1, isLLMSlot: true },
+]
+
+/** Mock file paths emitted during assembly (simulates file_start/file_complete) */
+export const MOCK_FILE_LIST = MOCK_ASSEMBLED_FILES.map((f) => f.path)
 
 export const mockAppGenerationMachine = setup({
   types: {
@@ -880,9 +1077,40 @@ export const mockAppGenerationMachine = setup({
         tokensUsed: 3500,
       }
     }),
-    runBlueprintActor: fromPromise(async () => {
+    runDesignActor: fromPromise(async () => {
       await delay(1000)
-      return { blueprint: MOCK_BLUEPRINT, tokensUsed: 1200 }
+      return {
+        tokens: MOCK_TOKENS,
+        selectedTheme: 'canape',
+        themeReasoning: 'Mock theme selection — canape for clean task management UI',
+        tokensUsed: 500,
+      }
+    }),
+    runArchitectActor: fromPromise(async () => {
+      await delay(1500)
+      return {
+        spec: MOCK_CREATIVE_SPEC,
+        imagePool: [
+          'https://images.unsplash.com/photo-1484480974693-6ca0a78fb36b?w=1200',
+          'https://images.unsplash.com/photo-1507925921958-8a62f3d1a50d?w=1200',
+        ],
+        tokensUsed: 1200,
+      }
+    }),
+    runPageGenerationActor: fromPromise(async () => {
+      await delay(3000)
+      return {
+        pages: MOCK_GENERATED_PAGES,
+        tokensUsed: 4000,
+      }
+    }),
+    runAssemblyActor: fromPromise(async () => {
+      await delay(1500)
+      return {
+        assembledFiles: MOCK_ASSEMBLED_FILES,
+        blueprint: null,
+        tokensUsed: 0,
+      }
     }),
     runProvisioningActor: fromPromise(async () => {
       await delay(1500)
@@ -896,14 +1124,6 @@ export const mockAppGenerationMachine = setup({
         repoName: 'taskflow',
         tokensUsed: 0,
       }
-    }),
-    runCodeGenerationActor: fromPromise(async () => {
-      await delay(3000)
-      return { tokensUsed: 5000 }
-    }),
-    runPolishActor: fromPromise(async () => {
-      await delay(1000)
-      return { tokensUsed: 500 }
     }),
     runValidationActor: fromPromise(async () => {
       await delay(1000)
@@ -936,7 +1156,7 @@ export const mockAppGenerationMachine = setup({
     cannotRetry: ({ context }) => context.retryCount >= 2,
   },
 }).createMachine({
-  // Reuse the exact same machine definition — only actors are swapped
+  // Reuse the same state topology as the real machine — only actors are swapped
   id: 'appGeneration',
   initial: 'idle',
   context: {
@@ -950,6 +1170,12 @@ export const mockAppGenerationMachine = setup({
     assembly: null,
     clarificationQuestions: null,
     blueprint: null,
+    tokens: null,
+    creativeSpec: null,
+    generatedPages: null,
+    assembledFiles: null,
+    prd: null,
+    imagePool: [],
     sandboxId: null,
     supabaseProjectId: null,
     supabaseUrl: null,
@@ -964,7 +1190,6 @@ export const mockAppGenerationMachine = setup({
     reviewSkipped: false,
     deploymentUrl: null,
     totalTokens: 0,
-    polishTokens: 0,
     error: null,
   },
   states: {
@@ -1058,22 +1283,22 @@ export const mockAppGenerationMachine = setup({
           },
         },
       },
-      onDone: { target: 'blueprinting' },
+      onDone: { target: 'designing' },
     },
-    blueprinting: {
+    designing: {
       invoke: {
-        src: 'runBlueprintActor',
+        src: 'runDesignActor',
         input: ({ context }) => ({
+          userPrompt: context.userMessage,
+          contract: context.contract!,
           appName: context.appName ?? '',
           appDescription: context.appDescription ?? '',
-          contract: context.contract!,
         }),
         onDone: {
-          target: 'generating',
+          target: 'architecting',
           actions: assign({
-            blueprint: ({ event }) => event.output.blueprint,
-            contract: ({ event }) => event.output.blueprint.contract,
-            totalTokens: ({ context, event }) => context.totalTokens + event.output.tokensUsed,
+            tokens: ({ event }) => event.output.tokens,
+            totalTokens: ({ context, event }) => context.totalTokens + (event.output.tokensUsed ?? 0),
           }),
         },
         onError: {
@@ -1082,11 +1307,58 @@ export const mockAppGenerationMachine = setup({
         },
       },
     },
-    generating: {
+    architecting: {
       invoke: {
-        src: 'runCodeGenerationActor',
+        src: 'runArchitectActor',
         input: ({ context }) => ({
-          blueprint: context.blueprint!,
+          userPrompt: context.userMessage,
+          appName: context.appName ?? '',
+          appDescription: context.appDescription ?? '',
+          contract: context.contract!,
+          tokens: context.tokens!,
+        }),
+        onDone: {
+          target: 'pageGeneration',
+          actions: assign({
+            creativeSpec: ({ event }) => event.output.spec,
+            imagePool: ({ event }) => event.output.imagePool ?? [],
+            totalTokens: ({ context, event }) => context.totalTokens + (event.output.tokensUsed ?? 0),
+          }),
+        },
+        onError: {
+          target: 'failed',
+          actions: assign({ error: ({ event }) => String(event.error) }),
+        },
+      },
+    },
+    pageGeneration: {
+      invoke: {
+        src: 'runPageGenerationActor',
+        input: ({ context }) => ({
+          spec: context.creativeSpec!,
+          contract: context.contract,
+          imagePool: context.imagePool,
+        }),
+        onDone: {
+          target: 'assembly',
+          actions: assign({
+            generatedPages: ({ event }) => event.output.pages,
+            totalTokens: ({ context, event }) => context.totalTokens + (event.output.tokensUsed ?? 0),
+          }),
+        },
+        onError: {
+          target: 'failed',
+          actions: assign({ error: ({ event }) => String(event.error) }),
+        },
+      },
+    },
+    assembly: {
+      invoke: {
+        src: 'runAssemblyActor',
+        input: ({ context }) => ({
+          spec: context.creativeSpec!,
+          generatedPages: context.generatedPages!,
+          appName: context.appName ?? '',
           contract: context.contract!,
           sandboxId: context.sandboxId!,
           supabaseProjectId: context.supabaseProjectId!,
@@ -1094,54 +1366,16 @@ export const mockAppGenerationMachine = setup({
           supabaseAnonKey: context.supabaseAnonKey!,
         }),
         onDone: {
-          target: 'polishing',
+          target: 'validating',
           actions: assign({
-            totalTokens: ({ context, event }) => context.totalTokens + event.output.tokensUsed,
+            assembledFiles: ({ event }) => event.output.assembledFiles,
+            blueprint: ({ event }) => event.output.blueprint,
           }),
         },
         onError: {
           target: 'failed',
           actions: assign({ error: ({ event }) => String(event.error) }),
         },
-      },
-    },
-    polishing: {
-      invoke: {
-        src: 'runPolishActor',
-        input: ({ context }) => ({
-          sandboxId: context.sandboxId!,
-          blueprint: context.blueprint!,
-          assembly: context.assembly,
-          tokens: (context.blueprint?.meta as { tokens?: ThemeTokens } | undefined)?.tokens ?? {
-            name: 'public-website',
-            fonts: { display: 'Inter', body: 'Inter', googleFontsUrl: '' },
-            colors: {
-              background: '#ffffff', foreground: '#111111', primary: '#2b6cb0',
-              primaryForeground: '#ffffff', secondary: '#e5e7eb', accent: '#f59e0b',
-              muted: '#f3f4f6', border: '#d1d5db',
-            },
-            style: {
-              borderRadius: '0.5rem', cardStyle: 'elevated', navStyle: 'top-bar',
-              heroLayout: 'split', spacing: 'normal', motion: 'subtle', imagery: 'minimal',
-            },
-            authPosture: 'hybrid',
-            heroImages: [],
-            heroQuery: 'modern web app',
-            textSlots: {
-              hero_headline: 'Welcome', hero_subtext: 'Generated app',
-              about_paragraph: 'Generated app experience.', cta_label: 'Get started',
-              empty_state: 'No items yet.', footer_tagline: 'Built with care.',
-            },
-          },
-        }),
-        onDone: {
-          target: 'validating',
-          actions: assign({
-            totalTokens: ({ context, event }) => context.totalTokens + (event.output?.tokensUsed ?? 0),
-            polishTokens: ({ context, event }) => context.polishTokens + (event.output?.tokensUsed ?? 0),
-          }),
-        },
-        onError: { target: 'validating' },
       },
     },
     validating: {
@@ -1265,7 +1499,8 @@ export function isMockPipeline(): boolean {
 export async function createMockOrRealActor(options?: ActorOptions<typeof appGenerationMachine>) {
   if (isMockPipeline()) {
     console.log('[mock-pipeline] Using mock actors — no LLMs or external services')
-    return createActor(mockAppGenerationMachine, options)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return createActor(mockAppGenerationMachine, options as any)
   }
   return createInspectedActor(options)
 }
