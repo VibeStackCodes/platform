@@ -357,10 +357,10 @@ User request: ${input.userMessage}
       }) => {
         const { analyzeInjection } = await import('../capabilities/inject')
         const { computeAdditiveDelta } = await import('../capabilities/additive')
-        const { contractToBlueprintCreative } = await import('../app-blueprint')
+        const { contractToBlueprintWithDesignAgent } = await import('../app-blueprint')
 
         const analysis = analyzeInjection(input.existingManifest, input.requestedCapabilities)
-        const blueprint = await contractToBlueprintCreative({
+        const blueprint = await contractToBlueprintWithDesignAgent({
           appName: input.appName,
           appDescription: input.appDescription,
           userPrompt: input.userPrompt,
@@ -378,7 +378,7 @@ User request: ${input.userMessage}
           analysis,
           delta,
           blueprint,
-          tokensUsed: 0, // contractToBlueprintCreative tokens are tracked internally
+          tokensUsed: 0, // contractToBlueprintWithDesignAgent tokens are tracked internally
         } satisfies InjectionAnalysisResult
       },
     ),

@@ -6,6 +6,7 @@
 import type { SchemaContract } from '../schema-contract'
 import { SchemaContractSchema, validateContract } from '../schema-contract'
 import type { AppBlueprint } from '../app-blueprint'
+import { contractToBlueprintWithDesignAgent } from '../app-blueprint'
 import { assembleCapabilities, type AssemblyResult } from '../capabilities/assembler'
 import { loadCoreRegistry } from '../capabilities/catalog'
 import type { ValidationGateResult } from './validation'
@@ -177,14 +178,15 @@ export async function runAnalysis(input: {
 // Blueprint handler (Task 7)
 // ============================================================================
 
-export async function runBlueprint(_input: {
+export async function runBlueprint(input: {
   userPrompt?: string
   appName: string
   appDescription: string
   contract: SchemaContract
   assembly?: AssemblyResult | null
-}): Promise<never> {
-  throw new Error('Pipeline A removed. Use runDesign() + runArchitect() + runPageGeneration() + runAssembly() instead.')
+}): Promise<BlueprintResult> {
+  const blueprint = await contractToBlueprintWithDesignAgent(input)
+  return { blueprint, tokensUsed: 0 }
 }
 
 // ============================================================================
