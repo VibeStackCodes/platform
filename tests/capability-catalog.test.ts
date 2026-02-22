@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { loadCoreRegistry } from '@server/capabilities/catalog/index'
-import { assembleCapabilities } from '@server/capabilities/assembler'
+import { loadCoreRegistry } from '@server/lib/capabilities/catalog/index'
+import { assembleCapabilities } from '@server/lib/capabilities/assembler'
 
 describe('Core capability catalog', () => {
   it('loads all 5 core capabilities', () => {

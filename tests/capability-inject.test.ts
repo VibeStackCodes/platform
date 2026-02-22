@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { analyzeInjection } from '@server/capabilities/inject'
+import { analyzeInjection } from '@server/lib/capabilities/inject'
 
 describe('analyzeInjection', () => {
   it('identifies new capabilities not in existing manifest', () => {

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { CapabilityRegistry } from '@server/capabilities/registry'
-import type { Capability } from '@server/capabilities/types'
+import { CapabilityRegistry } from '@server/lib/capabilities/registry'
+import type { Capability } from '@server/lib/capabilities/types'
 
 const authCap: Capability = {
   name: 'auth',

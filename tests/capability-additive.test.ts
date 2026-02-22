@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { computeAdditiveDelta } from '@server/capabilities/additive'
-import type { InjectAnalysis } from '@server/capabilities/inject'
+import { computeAdditiveDelta } from '@server/lib/capabilities/additive'
+import type { InjectAnalysis } from '@server/lib/capabilities/inject'
 import type { AppBlueprint } from '@server/lib/app-blueprint'
 
 // Helper to make a minimal InjectAnalysis

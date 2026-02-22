@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { CapabilitySchema, type Capability, type PageDef } from '@server/capabilities/types'
+import { CapabilitySchema, type Capability, type PageDef } from '@server/lib/capabilities/types'
 
 describe('Capability contract types', () => {
   it('validates a minimal capability', () => {

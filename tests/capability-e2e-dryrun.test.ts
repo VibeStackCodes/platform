@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { loadCoreRegistry } from '@server/capabilities/catalog'
-import { assembleCapabilities } from '@server/capabilities/assembler'
-import { analyzeInjection } from '@server/capabilities/inject'
-import { computeAdditiveDelta } from '@server/capabilities/additive'
+import { loadCoreRegistry } from '@server/lib/capabilities/catalog'
+import { assembleCapabilities } from '@server/lib/capabilities/assembler'
+import { analyzeInjection } from '@server/lib/capabilities/inject'
+import { computeAdditiveDelta } from '@server/lib/capabilities/additive'
 
 describe('Capability E2E dry run', () => {
   it('generate + inject flow produces correct delta', () => {

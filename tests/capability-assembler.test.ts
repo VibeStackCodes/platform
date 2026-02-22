@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { assembleCapabilities } from '@server/capabilities/assembler'
-import type { Capability } from '@server/capabilities/types'
+import { assembleCapabilities } from '@server/lib/capabilities/assembler'
+import type { Capability } from '@server/lib/capabilities/types'
 
 const authCap: Capability = {
   name: 'auth',

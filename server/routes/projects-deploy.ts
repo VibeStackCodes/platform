@@ -194,6 +194,7 @@ projectDeployRoutes.post('/', async (c) => {
 interface VercelFile {
   file: string
   data: string // base64-encoded content
+  encoding: 'base64'
 }
 
 interface VercelDeployment {
@@ -223,6 +224,7 @@ async function deployToVercel(
   const vercelFiles: VercelFile[] = files.map((f) => ({
     file: f.path,
     data: f.content.toString('base64'),
+    encoding: 'base64' as const,
   }))
 
   // Create deployment

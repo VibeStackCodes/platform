@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { loadCoreRegistry } from '@server/capabilities/catalog'
+import { loadCoreRegistry } from '@server/lib/capabilities/catalog'
 
 describe('Capability selection guards', () => {
   it('filters out invalid capability names', () => {
