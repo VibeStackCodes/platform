@@ -47,6 +47,7 @@ interface PromptBarProps {
     message: PromptInputMessage,
     options: { model: string; webSearch: boolean },
   ) => void | Promise<void>
+  onStop?: () => void
   placeholder?: string
   status?: ChatStatus
   disabled?: boolean
@@ -54,6 +55,7 @@ interface PromptBarProps {
 
 export function PromptBar({
   onSubmit,
+  onStop,
   placeholder = 'Describe the app you want to build...',
   status,
   disabled,
@@ -134,7 +136,7 @@ export function PromptBar({
             </ModelSelectorContent>
           </ModelSelector>
         </PromptInputTools>
-        <PromptInputSubmit disabled={disabled || !text.trim()} status={status} />
+        <PromptInputSubmit disabled={disabled || !text.trim()} status={status} onStop={onStop} />
       </PromptInputFooter>
     </PromptInput>
   )

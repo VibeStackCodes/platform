@@ -31,9 +31,22 @@ export function createSSEStream(
           }
         }
       }
+
+      // SSE keepalive: send comment ping every 15s to prevent proxy/server idle timeouts
+      const keepalive = setInterval(() => {
+        if (!abortController.signal.aborted) {
+          try {
+            controller.enqueue(encoder.encode(': keepalive\n\n'))
+          } catch {
+            clearInterval(keepalive)
+          }
+        }
+      }, 15_000)
+
       try {
         await handler(emit, abortController.signal)
       } finally {
+        clearInterval(keepalive)
         try {
           controller.close()
         } catch {

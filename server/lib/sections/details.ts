@@ -170,7 +170,7 @@ export const detailHeroOverlay: SectionRenderer = (ctx: SectionContext): Section
   const displayCol = ctx.displayColumn ?? 'id'
   const metaCols = ctx.metadataColumns ?? []
   const bg = resolveBg(ctx.config)
-  const spacing = resolveSpacing(ctx.config)
+  const _spacing = resolveSpacing(ctx.config)
 
   const imgBlock = imageBlock(
     itemVar,
@@ -401,7 +401,7 @@ export const detailArticle: SectionRenderer = (ctx: SectionContext): SectionOutp
   const displayCol = ctx.displayColumn ?? 'id'
   const metaCols = ctx.metadataColumns ?? []
   const bg = resolveBg(ctx.config)
-  const spacing = resolveSpacing(ctx.config)
+  const _spacing = resolveSpacing(ctx.config)
 
   // Pick a date-like column for article byline, fallback to first meta col
   const dateCol = metaCols.find((c) => /date|published|created/.test(c))
@@ -668,7 +668,7 @@ export const detailGallery: SectionRenderer = (ctx: SectionContext): SectionOutp
   const metaCols = ctx.metadataColumns ?? []
   const hasImage = Boolean(ctx.imageColumn)
   const bg = resolveBg(ctx.config)
-  const spacing = resolveSpacing(ctx.config)
+  const _spacing = resolveSpacing(ctx.config)
 
   const metaDl = metadataBadgeRows(metaCols, itemVar)
   const entranceAnim = animateEntrance(ctx, { direction: 'bottom', durationMs: 500 })

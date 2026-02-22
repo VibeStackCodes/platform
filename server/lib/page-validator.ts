@@ -27,13 +27,17 @@ export interface ValidationWarning {
   message: string
 }
 
-interface ValidatorInput {
+export interface ValidatorInput {
   /** Map of file path → file content */
   files: Map<string, string>
   /** Valid route paths from the sitemap */
   validRoutes: string[]
   /** Whether the app uses Supabase (archetype !== 'static') */
   hasSupabase: boolean
+  /** Called when a check group starts */
+  onCheckStart?: (name: string) => void
+  /** Called when a check group finishes */
+  onCheckComplete?: (name: string, status: 'passed' | 'failed', errors?: ValidationError[]) => void
 }
 
 // ============================================================================
@@ -569,24 +573,73 @@ function checkLucideIcons(
  * Warnings are quality suggestions (hardcoded colors, a11y hints, icon typos).
  */
 export function validateGeneratedApp(input: ValidatorInput): ValidationResult {
-  const errors: ValidationError[] = []
-  const warnings: ValidationWarning[] = []
+  const allErrors: ValidationError[] = []
+  const allWarnings: ValidationWarning[] = []
 
   for (const [filePath, content] of input.files) {
     if (!filePath.endsWith('.tsx') && !filePath.endsWith('.ts')) continue
     // Skip build-config files — they use Node/Vite APIs not in the app runtime
     if (filePath === 'vite.config.ts' || filePath === 'tsconfig.json') continue
 
-    checkImports(filePath, content, input, errors)
-    checkLinks(filePath, content, input.validRoutes, errors)
-    checkHardcodedColors(filePath, content, warnings)
-    checkAccessibility(filePath, content, errors, warnings)
-    checkLucideIcons(filePath, content, warnings)
+    // --- imports check ---
+    input.onCheckStart?.('imports')
+    const importErrors: ValidationError[] = []
+    checkImports(filePath, content, input, importErrors)
+    allErrors.push(...importErrors)
+    input.onCheckComplete?.(
+      'imports',
+      importErrors.length === 0 ? 'passed' : 'failed',
+      importErrors.length > 0 ? importErrors : undefined,
+    )
+
+    // --- links check ---
+    input.onCheckStart?.('links')
+    const linkErrors: ValidationError[] = []
+    checkLinks(filePath, content, input.validRoutes, linkErrors)
+    allErrors.push(...linkErrors)
+    input.onCheckComplete?.(
+      'links',
+      linkErrors.length === 0 ? 'passed' : 'failed',
+      linkErrors.length > 0 ? linkErrors : undefined,
+    )
+
+    // --- hardcoded colors check ---
+    input.onCheckStart?.('hardcoded_colors')
+    const colorWarningsBefore = allWarnings.length
+    checkHardcodedColors(filePath, content, allWarnings)
+    const newColorWarnings = allWarnings.length - colorWarningsBefore
+    input.onCheckComplete?.(
+      'hardcoded_colors',
+      newColorWarnings === 0 ? 'passed' : 'failed',
+    )
+
+    // --- accessibility check ---
+    input.onCheckStart?.('accessibility')
+    const a11yErrors: ValidationError[] = []
+    const a11yWarningsBefore = allWarnings.length
+    checkAccessibility(filePath, content, a11yErrors, allWarnings)
+    allErrors.push(...a11yErrors)
+    const newA11yWarnings = allWarnings.length - a11yWarningsBefore
+    input.onCheckComplete?.(
+      'accessibility',
+      a11yErrors.length === 0 && newA11yWarnings === 0 ? 'passed' : 'failed',
+      a11yErrors.length > 0 ? a11yErrors : undefined,
+    )
+
+    // --- lucide icons check ---
+    input.onCheckStart?.('lucide_icons')
+    const lucideWarningsBefore = allWarnings.length
+    checkLucideIcons(filePath, content, allWarnings)
+    const newLucideWarnings = allWarnings.length - lucideWarningsBefore
+    input.onCheckComplete?.(
+      'lucide_icons',
+      newLucideWarnings === 0 ? 'passed' : 'failed',
+    )
   }
 
   return {
-    valid: errors.length === 0,
-    errors,
-    warnings,
+    valid: allErrors.length === 0,
+    errors: allErrors,
+    warnings: allWarnings,
   }
 }

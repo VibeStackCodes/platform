@@ -20,12 +20,12 @@ import { createActor } from 'xstate'
 import { Hono } from 'hono'
 import * as Sentry from '@sentry/node'
 import { createHeliconeProvider, isAllowedModel } from '../lib/agents/provider'
-import { createInspectedActor } from '../lib/agents/machine'
+import { createMockOrRealActor, isMockPipeline, MOCK_FILE_LIST, MOCK_GENERATED_PAGES, MOCK_ASSEMBLED_FILES } from '../lib/agents/machine'
 import type { MachineContext } from '../lib/agents/machine'
 import { editMachine } from '../lib/agents/edit-machine'
 import type { EditMachineContext } from '../lib/agents/edit-machine'
 import { RequestContext } from '../lib/agents/registry'
-import { getProject, getUserCredits, getProjectGenerationState, updateProject } from '../lib/db/queries'
+import { getProject, getUserCredits, getProjectGenerationState, updateProject, insertChatMessage } from '../lib/db/queries'
 import { reserveCredits, settleCredits } from '../lib/credits'
 import { createSSEStream } from '../lib/sse'
 import type { StreamEvent } from '../lib/types'
@@ -70,29 +70,45 @@ if (process.env.NODE_ENV !== 'production') {
   }, 1800_000)
 }
 
-/** Map XState states to human-readable phase names */
-const STATE_PHASES: Record<string, { name: string; phase: number }> = {
-  analyzing: { name: 'Analyzing requirements', phase: 1 },
-  awaitingClarification: { name: 'Awaiting clarification', phase: 1 },
-  blueprinting: { name: 'Creating blueprint', phase: 2 },
-  provisioning: { name: 'Provisioning infrastructure', phase: 3 },
-  generating: { name: 'Generating code', phase: 4 },
-  polishing: { name: 'Polishing design', phase: 4 },
-  validating: { name: 'Validating code', phase: 5 },
-  repairing: { name: 'Repairing errors', phase: 5 },
-  deploying: { name: 'Deploying application', phase: 6 },
-  complete: { name: 'Complete', phase: 7 },
-  failed: { name: 'Failed', phase: 7 },
+/** Map XState states to human-readable phase names + agent identifiers */
+const STATE_PHASES: Record<string, { name: string; phase: number; agentId?: string; agentName?: string }> = {
+  analyzing:            { name: 'Analyzing requirements',      phase: 1, agentId: 'analyst',     agentName: 'Analyst' },
+  awaitingClarification:{ name: 'Awaiting clarification',     phase: 1 },
+  provisioning:         { name: 'Provisioning infrastructure', phase: 1, agentId: 'provisioner', agentName: 'Provisioner' },
+  designing:            { name: 'Designing theme',             phase: 2, agentId: 'designer',    agentName: 'Design Agent' },
+  architecting:         { name: 'Architecting app',            phase: 2, agentId: 'architect',   agentName: 'Architect Agent' },
+  pageGeneration:       { name: 'Generating pages',            phase: 3, agentId: 'frontend',    agentName: 'Frontend Engineer' },
+  assembly:             { name: 'Assembling app',              phase: 3, agentId: 'backend',     agentName: 'Backend Engineer' },
+  validating:           { name: 'Validating code',             phase: 4, agentId: 'qa',          agentName: 'Quality Assurance' },
+  repairing:            { name: 'Repairing errors',            phase: 4, agentId: 'repair',      agentName: 'Repair Agent' },
+  reviewing:            { name: 'Reviewing code',              phase: 5, agentId: 'reviewer',    agentName: 'Code Reviewer' },
+  deploying:            { name: 'Deploying app',               phase: 6, agentId: 'deployer',    agentName: 'Deployer' },
+  complete:             { name: 'Complete',                    phase: 7 },
+  failed:               { name: 'Failed',                      phase: 7 },
+}
+
+// Map parallel sub-state paths to STATE_PHASES keys
+const PARALLEL_STATE_MAP: Record<string, Record<string, string>> = {
+  analysis: {
+    running: 'analyzing',
+    awaitingClarification: 'awaitingClarification',
+    done: '', // skip
+  },
+  infrastructure: {
+    provisioning: 'provisioning',
+    done: '', // skip
+  },
 }
 
 /** Map XState states to DB status values for project updates */
 const STATE_TO_DB_STATUS: Record<string, string> = {
   analyzing: 'planning',
   awaitingClarification: 'planning',
-  blueprinting: 'planning',
   provisioning: 'generating',
-  generating: 'generating',
-  polishing: 'generating',
+  designing: 'planning',
+  architecting: 'planning',
+  pageGeneration: 'generating',
+  assembly: 'generating',
   validating: 'verifying',
   repairing: 'verifying',
   reviewing: 'verifying',
@@ -103,6 +119,8 @@ const STATE_TO_DB_STATUS: Record<string, string> = {
 
 /**
  * Subscribe to XState actor and emit SSE events for state transitions.
+ * Emits rich events: agent_start/complete with duration, file events during
+ * generating phase, plan_ready on blueprint→generating transition.
  * Returns a Promise that resolves when the actor reaches a final state.
  */
 function streamActorStates(
@@ -113,8 +131,15 @@ function streamActorStates(
   runId: string,
   projectId: string,
   userId: string,
+  mockMode = false,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
+    // Track when each agent-state was entered for duration calculation
+    const stateEntryTimes = new Map<string, number>()
+    let previousState: string | null = null
+    let fileEventsEmitted = false
+    let previousParallelSubStates = new Set<string>()
+
     const subscription = actor.subscribe((snapshot: { value: string; context: MachineContext; status?: string }) => {
       if (signal.aborted) {
         subscription.unsubscribe()
@@ -125,34 +150,162 @@ function streamActorStates(
       const state = snapshot.value as string
       const phaseInfo = STATE_PHASES[state]
 
+      // Handle parallel state (preparing): snapshot.value is an object, not a string
+      if (typeof snapshot.value === 'object' && snapshot.value !== null) {
+        const currentSubStates = new Set<string>()
+        const stateObj = snapshot.value as Record<string, Record<string, string>>
+
+        for (const [branch, subStateMap] of Object.entries(PARALLEL_STATE_MAP)) {
+          const subVal = stateObj.preparing?.[branch]
+          if (typeof subVal === 'string') {
+            const mappedKey = subStateMap[subVal]
+            if (mappedKey) currentSubStates.add(mappedKey)
+          }
+        }
+
+        // Emit agent_complete for sub-states that just finished
+        for (const prev of previousParallelSubStates) {
+          if (!currentSubStates.has(prev)) {
+            const prevPhase = STATE_PHASES[prev]
+            if (prevPhase?.agentId) {
+              const entryTime = stateEntryTimes.get(prev)
+              const durationMs = entryTime ? Date.now() - entryTime : 0
+              emit({ type: 'agent_complete', agentId: prevPhase.agentId, tokensUsed: 0, durationMs })
+            }
+          }
+        }
+
+        // Emit agent_start for newly appeared sub-states
+        for (const curr of currentSubStates) {
+          if (!previousParallelSubStates.has(curr)) {
+            stateEntryTimes.set(curr, Date.now())
+            const phase = STATE_PHASES[curr]
+            if (phase) {
+              emit({ type: 'phase_start', phase: phase.phase, phaseName: phase.name, agentCount: 1 })
+              if (phase.agentId && phase.agentName) {
+                emit({ type: 'agent_start', agentId: phase.agentId, agentName: phase.agentName, phase: phase.phase })
+              }
+            }
+          }
+        }
+
+        previousParallelSubStates = currentSubStates
+        return // Skip the flat-string logic below
+      }
+
+      // Reset parallel tracking when leaving parallel state
+      if (previousParallelSubStates.size > 0) {
+        for (const prev of previousParallelSubStates) {
+          const prevPhase = STATE_PHASES[prev]
+          if (prevPhase?.agentId) {
+            const entryTime = stateEntryTimes.get(prev)
+            const durationMs = entryTime ? Date.now() - entryTime : 0
+            emit({ type: 'agent_complete', agentId: prevPhase.agentId, tokensUsed: 0, durationMs })
+          }
+        }
+        previousParallelSubStates = new Set()
+      }
+
       // Update project status in DB based on state transition (fire-and-forget)
-      const dbStatus = STATE_TO_DB_STATUS[state]
-      if (dbStatus) {
-        updateProject(projectId, { status: dbStatus }, userId).catch((err) => {
-          console.error('[agent] Failed to update project status:', err)
-        })
+      // Skip DB updates in mock mode
+      if (!mockMode) {
+        const dbStatus = STATE_TO_DB_STATUS[state]
+        if (dbStatus) {
+          updateProject(projectId, { status: dbStatus }, userId).catch((err) => {
+            console.error('[agent] Failed to update project status:', err)
+          })
+        }
       }
 
       if (!phaseInfo) {
         return
       }
 
-      // Emit phase events
+      // ── Emit agent_complete for the previous state ──
+      if (previousState && previousState !== state) {
+        const prevPhase = STATE_PHASES[previousState]
+        if (prevPhase?.agentId) {
+          const entryTime = stateEntryTimes.get(previousState)
+          const durationMs = entryTime ? Date.now() - entryTime : 0
+          emit({
+            type: 'agent_complete',
+            agentId: prevPhase.agentId,
+            tokensUsed: 0,
+            durationMs,
+          })
+          // Mark the previous checkpoint complete
+          emit({
+            type: 'checkpoint',
+            label: prevPhase.name,
+            status: 'complete',
+          })
+        }
+
+        // Pipeline B: emit design_tokens when transitioning FROM designing
+        // context.tokens is added by the Pipeline B machine rewrite
+        if (previousState === 'designing') {
+          // biome-ignore lint/suspicious/noExplicitAny: Pipeline B context field not yet on MachineContext
+          const tokens = (snapshot.context as any).tokens
+          if (tokens) {
+            emit({ type: 'design_tokens', tokens: tokens as Record<string, unknown> })
+          }
+        }
+
+        // Pipeline B: emit architecture_ready when transitioning FROM architecting
+        // context.creativeSpec is added by the Pipeline B machine rewrite
+        if (previousState === 'architecting') {
+          // biome-ignore lint/suspicious/noExplicitAny: Pipeline B context field not yet on MachineContext
+          const creativeSpec = (snapshot.context as any).creativeSpec
+          if (creativeSpec) {
+            const spec = {
+              archetype: creativeSpec.archetype as string,
+              sitemap: (creativeSpec.sitemap as Array<Record<string, unknown>>).map((p) => ({
+                route: p.route as string,
+                componentName: p.componentName as string,
+                purpose: p.purpose as string,
+                sections: (p.brief as { sections?: string[] } | undefined)?.sections ?? [],
+                dataRequirements: (p.dataRequirements as string | undefined) ?? 'none',
+              })),
+              auth: creativeSpec.auth as boolean,
+            }
+            emit({ type: 'architecture_ready', spec })
+          }
+        }
+
+        // When leaving 'pageGeneration', mark all files as complete (Pipeline B equivalent of 'generating')
+        if (previousState === 'pageGeneration') {
+          const files = snapshot.context.blueprint?.fileTree?.map((f: { path: string }) => f.path) ?? []
+          for (const filePath of files) {
+            emit({ type: 'file_complete', path: filePath, linesOfCode: 0 })
+          }
+        }
+      }
+
+      // Track entry time for duration calculation
+      if (state !== previousState) {
+        stateEntryTimes.set(state, Date.now())
+      }
+      previousState = state
+
+      // ── Emit phase events ──
       if (state === 'complete') {
         emit({ type: 'stage_update', stage: 'complete' })
         emit({
-          type: 'checkpoint',
-          label: 'Pipeline complete',
-          status: 'complete',
+          type: 'complete',
+          projectId,
+          urls: { deploy: snapshot.context.deploymentUrl ?? undefined },
+          requirementResults: [],
         })
         subscription.unsubscribe()
         resolve()
       } else if (state === 'failed') {
         const errorMsg = snapshot.context.error ?? 'Pipeline failed'
-        Sentry.captureMessage(errorMsg, {
-          level: 'error',
-          tags: { operation: 'state_machine', state: 'failed' },
-        })
+        if (!mockMode) {
+          Sentry.captureMessage(errorMsg, {
+            level: 'error',
+            tags: { operation: 'state_machine', state: 'failed' },
+          })
+        }
         emit({
           type: 'error',
           message: errorMsg,
@@ -161,7 +314,6 @@ function streamActorStates(
         subscription.unsubscribe()
         reject(new Error(errorMsg))
       } else if (state === 'awaitingClarification') {
-        // Special handling for clarification state
         const questions = snapshot.context.clarificationQuestions
         if (questions) {
           emit({
@@ -192,6 +344,137 @@ function streamActorStates(
           label: phaseInfo.name,
           status: 'active',
         })
+
+        // Emit plan_ready when entering designing (Analyst PRD is ready)
+        // Shows the Analyst's output: app name, description, and contract tables
+        if (state === 'designing' && snapshot.context.contract) {
+          emit({
+            type: 'plan_ready',
+            plan: {
+              appName: snapshot.context.appName,
+              appDescription: snapshot.context.appDescription,
+              tables: snapshot.context.contract.tables?.map((t: { name: string }) => t.name) ?? [],
+            },
+          })
+        }
+
+        // Emit agent_start for states that have an agent
+        if (phaseInfo.agentId && phaseInfo.agentName) {
+          emit({
+            type: 'agent_start',
+            agentId: phaseInfo.agentId,
+            agentName: phaseInfo.agentName,
+            phase: phaseInfo.phase,
+          })
+
+          // In mock mode, emit descriptive agent_progress so cards aren't empty
+          if (mockMode) {
+            const mockProgress: Record<string, string[]> = {
+              analyst:     ['Parsing user requirements...', 'Extracting entities and features...', 'Building schema contract...'],
+              provisioner: ['Creating Supabase project...', 'Provisioning sandbox...', 'Setting up GitHub repo...'],
+              designer:    ['Selecting theme...', 'Generating color palette...', 'Choosing typography...'],
+              architect:   ['Analyzing app structure...', 'Creating sitemap...', 'Planning page sections...'],
+              frontend:    ['Generating homepage...', 'Generating menu page...', 'Generating contact page...', 'Generating about page...'],
+              backend:     ['Assembling config files...', 'Copying UI kit...', 'Writing route files...', 'Applying SQL migration...'],
+              qa:          ['Checking imports...', 'Validating links...', 'Running TypeScript...', 'Building app...'],
+              repair:      ['Analyzing errors...', 'Fixing import issues...', 'Retrying build...'],
+              reviewer:    ['Running code review...', 'Checking accessibility...', 'Validating design tokens...'],
+              deployer:    ['Building for production...', 'Deploying to Vercel...', 'Setting up domain...'],
+            }
+            const progressMessages = mockProgress[phaseInfo.agentId]
+            if (progressMessages && progressMessages.length > 0) {
+              emit({ type: 'agent_progress', agentId: phaseInfo.agentId, message: progressMessages[0] })
+            }
+          }
+        }
+
+        // Emit file events during pageGeneration state (mock: emit from blueprint file list)
+        if (state === 'pageGeneration' && !fileEventsEmitted) {
+          fileEventsEmitted = true
+          const files = mockMode
+            ? MOCK_FILE_LIST
+            : snapshot.context.blueprint?.fileTree?.map((f: { path: string }) => f.path) ?? []
+
+          // Emit file_start for all files immediately
+          for (const filePath of files) {
+            emit({ type: 'file_start', path: filePath, layer: 0 })
+          }
+
+          // In mock mode, schedule file_complete events with staggered delays
+          if (mockMode) {
+            for (let i = 0; i < files.length; i++) {
+              setTimeout(() => {
+                emit({
+                  type: 'file_complete',
+                  path: files[i],
+                  linesOfCode: 20 + Math.floor(Math.random() * 80),
+                })
+              }, 200 * (i + 1))
+            }
+          }
+
+          // Mock mode: emit per-page progress events (page_generating → page_complete)
+          if (mockMode) {
+            const pages = MOCK_GENERATED_PAGES
+            const total = pages.length
+            for (let i = 0; i < total; i++) {
+              const page = pages[i]
+              // Stagger: page_generating at 300ms intervals, page_complete 400ms later
+              setTimeout(() => {
+                emit({
+                  type: 'page_generating',
+                  fileName: page.fileName,
+                  route: page.route,
+                  componentName: page.componentName,
+                  pageIndex: i,
+                  totalPages: total,
+                })
+              }, 300 * i)
+              setTimeout(() => {
+                const lineCount = page.content.split('\n').length
+                emit({
+                  type: 'page_complete',
+                  fileName: page.fileName,
+                  route: page.route,
+                  componentName: page.componentName,
+                  lineCount,
+                  code: page.content.split('\n').slice(0, 50).join('\n'),
+                  pageIndex: i,
+                  totalPages: total,
+                })
+              }, 300 * i + 400)
+            }
+          }
+        }
+
+        // Mock mode: emit file_assembled events during assembly state
+        if (state === 'assembly' && mockMode) {
+          const assembledFiles = MOCK_ASSEMBLED_FILES
+          for (let i = 0; i < assembledFiles.length; i++) {
+            const file = assembledFiles[i]
+            const category = file.isLLMSlot ? 'route' as const
+              : file.path.includes('main.tsx') ? 'wiring' as const
+              : file.path.includes('__root') ? 'config' as const
+              : 'ui-kit' as const
+            setTimeout(() => {
+              emit({ type: 'file_assembled', path: file.path, category })
+            }, 150 * (i + 1))
+          }
+        }
+
+        // Mock mode: emit validation_check events during validating state
+        if (state === 'validating' && mockMode) {
+          const checks = ['imports', 'links', 'accessibility', 'hardcoded_colors', 'typescript', 'lint', 'build'] as const
+          for (let i = 0; i < checks.length; i++) {
+            // Emit 'running' then 'passed' with stagger
+            setTimeout(() => {
+              emit({ type: 'validation_check', name: checks[i], status: 'running' })
+            }, 200 * i)
+            setTimeout(() => {
+              emit({ type: 'validation_check', name: checks[i], status: 'passed' })
+            }, 200 * i + 150)
+          }
+        }
       }
     })
 
@@ -237,6 +520,8 @@ agentRoutes.post('/', async (c) => {
     return c.json({ error: 'Project not found' }, 404)
   }
 
+  const mockMode = isMockPipeline()
+
   // M4: Check concurrent generation limit FIRST (before reserving credits)
   const userRuns = [...activeRuns.values()].filter((r) => r.userId === user.id).length
   if (userRuns >= 3) {
@@ -249,57 +534,61 @@ agentRoutes.post('/', async (c) => {
     )
   }
 
-  // Reserve credits atomically to prevent race conditions
+  // Skip credit reservation in mock mode
   const CREDIT_RESERVATION = 50 // Minimum reservation amount
-  const reserved = await reserveCredits(user.id, CREDIT_RESERVATION)
-  if (!reserved) {
-    // Check current credits for detailed error message
-    const credits = await getUserCredits(user.id)
-    return c.json(
-      {
-        error: 'insufficient_credits',
-        message: 'Not enough credits to start generation',
-        credits_remaining: credits?.creditsRemaining ?? 0,
-        credits_reset_at: credits?.creditsResetAt ?? null,
-      },
-      402,
-    )
+  if (!mockMode) {
+    const reserved = await reserveCredits(user.id, CREDIT_RESERVATION)
+    if (!reserved) {
+      // Check current credits for detailed error message
+      const credits = await getUserCredits(user.id)
+      return c.json(
+        {
+          error: 'insufficient_credits',
+          message: 'Not enough credits to start generation',
+          credits_remaining: credits?.creditsRemaining ?? 0,
+          credits_reset_at: credits?.creditsResetAt ?? null,
+        },
+        402,
+      )
+    }
   }
 
-  // Inject per-request Helicone context via RequestContext.
-  // Each agent resolves its own model from PIPELINE_MODELS using this context.
-  const heliconeContext = {
-    userId: user.id,
-    projectId,
-    sessionId: `${projectId}:${Date.now()}`,
+  // Inject per-request Helicone context via RequestContext (skip in mock mode).
+  if (!mockMode) {
+    const heliconeContext = {
+      userId: user.id,
+      projectId,
+      sessionId: `${projectId}:${Date.now()}`,
+    }
+    const requestContext = new RequestContext()
+    requestContext.set('heliconeContext', heliconeContext)
+    requestContext.set(
+      'llm',
+      createHeliconeProvider({ ...heliconeContext, agentName: 'app-generation' })(model),
+    )
+    requestContext.set('userId', user.id)
   }
-  const requestContext = new RequestContext()
-  requestContext.set('heliconeContext', heliconeContext)
-  // Legacy 'llm' key — kept for backward compat with any code reading it directly
-  requestContext.set(
-    'llm',
-    createHeliconeProvider({ ...heliconeContext, agentName: 'app-generation' })(model),
-  )
-  requestContext.set('userId', user.id)
 
   // H1: Create XState actor with error handling to refund credits on failure
   const runId = crypto.randomUUID()
   let actor: any
   try {
-    actor = await createInspectedActor()
+    actor = await createMockOrRealActor()
     activeRuns.set(runId, {
       actor,
       userId: user.id,
       projectId,
       model,
       createdAt: Date.now(),
-      reservedCredits: CREDIT_RESERVATION,
-      settled: false,
+      reservedCredits: mockMode ? 0 : CREDIT_RESERVATION,
+      settled: mockMode, // Mock mode: already settled (no credits to settle)
     })
     actor.start()
   } catch (error) {
-    // Refund reserved credits if actor creation fails
-    await settleCredits(user.id, CREDIT_RESERVATION, 0)
+    // Refund reserved credits if actor creation fails (skip in mock mode)
+    if (!mockMode) {
+      await settleCredits(user.id, CREDIT_RESERVATION, 0)
+    }
     Sentry.captureException(error, {
       tags: { route: '/api/agent', operation: 'actor_creation' },
       extra: { projectId, model, userId: user.id },
@@ -316,18 +605,43 @@ agentRoutes.post('/', async (c) => {
   // Return SSE stream
   return createSSEStream(async (emit: (event: StreamEvent) => void, signal: AbortSignal) => {
     try {
+      // Persist user message to DB (fire-and-forget, skip in mock mode)
+      if (!mockMode) {
+        insertChatMessage(`user-${runId}`, projectId, 'user', [{ text: message }]).catch((err) => {
+          console.error('[agent] Failed to save user message:', err)
+        })
+      }
+
       emit({ type: 'stage_update', stage: 'generating' })
 
-      // Send START event to actor
+      // Subscribe BEFORE sending START to avoid missing initial state transitions.
+      // XState's subscribe() only fires on future snapshot changes, so if START
+      // triggers synchronous transitions (idle → preparing → parallel sub-states),
+      // subscribing after send() would miss the initial agent_start events.
+      const streamPromise = streamActorStates(actor, emit, signal, runId, projectId, user.id, mockMode)
+
+      // Now send START — the subscription above will catch all transitions
       actor.send({ type: 'START', userMessage: message, projectId, userId: user.id })
 
-      // Stream state transitions
-      await streamActorStates(actor, emit, signal, runId, projectId, user.id)
+      // Wait for actor to reach final state
+      await streamPromise
 
       // Get final snapshot to read totalTokens from machine context
       const finalSnapshot = actor.getSnapshot()
       const totalTokens = finalSnapshot.context.totalTokens
       const creditsUsed = Math.ceil(totalTokens / 1000) // 1 credit = 1,000 tokens
+
+      // Persist assistant message to DB (fire-and-forget, skip in mock mode)
+      if (!mockMode) {
+        const appName = finalSnapshot.context.appName || 'App'
+        const appDesc = finalSnapshot.context.appDescription || ''
+        const assistantText = appDesc
+          ? `I'll build **${appName}** — ${appDesc}`
+          : `Building ${appName}...`
+        insertChatMessage(`assistant-${runId}`, projectId, 'assistant', [{ text: assistantText }]).catch((err) => {
+          console.error('[agent] Failed to save assistant message:', err)
+        })
+      }
 
       // B2: Check settled flag to prevent double-settlement
       const activeRun = activeRuns.get(runId)
@@ -341,6 +655,14 @@ agentRoutes.post('/', async (c) => {
           type: 'credits_used',
           creditsUsed,
           creditsRemaining: settlement.creditsRemaining,
+          tokensTotal: totalTokens,
+        })
+      } else if (mockMode) {
+        // In mock mode, emit synthetic credits_used event
+        emit({
+          type: 'credits_used',
+          creditsUsed: 0,
+          creditsRemaining: 999,
           tokensTotal: totalTokens,
         })
       }
@@ -410,11 +732,14 @@ agentRoutes.post('/resume', async (c) => {
 
   return createSSEStream(async (emit: (event: StreamEvent) => void, signal: AbortSignal) => {
     try {
+      // Subscribe BEFORE sending event to avoid missing state transitions
+      const streamPromise = streamActorStates(stored.actor, emit, signal, runId, stored.projectId, stored.userId)
+
       // Send USER_ANSWERED event to actor
       stored.actor.send({ type: 'USER_ANSWERED', answers })
 
-      // Stream state transitions
-      await streamActorStates(stored.actor, emit, signal, runId, stored.projectId, stored.userId)
+      // Wait for actor to reach final state
+      await streamPromise
 
       // Get final snapshot to read totalTokens from machine context
       const finalSnapshot = stored.actor.getSnapshot()
@@ -594,17 +919,8 @@ agentRoutes.post('/edit', async (c) => {
     try {
       emit({ type: 'stage_update', stage: 'generating' })
 
-      // Send START event with element context
-      actor.send({
-        type: 'START',
-        userMessage: message,
-        projectId,
-        userId: user.id,
-        targetElement,
-      })
-
-      // Stream edit machine states
-      await new Promise<void>((resolve, reject) => {
+      // Subscribe BEFORE sending START to avoid missing initial state transitions
+      const editStreamPromise = new Promise<void>((resolve, reject) => {
         const subscription = actor.subscribe(
           (snapshot: { value: string; context: EditMachineContext }) => {
             if (signal.aborted) {
@@ -654,6 +970,18 @@ agentRoutes.post('/edit', async (c) => {
           resolve()
         })
       })
+
+      // Now send START — the subscription above catches all transitions
+      actor.send({
+        type: 'START',
+        userMessage: message,
+        projectId,
+        userId: user.id,
+        targetElement,
+      })
+
+      // Wait for edit stream to complete
+      await editStreamPromise
 
       // Settle credits
       const finalSnapshot = actor.getSnapshot()

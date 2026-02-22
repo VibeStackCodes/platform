@@ -1,6 +1,11 @@
 /**
  * VibeStack Shared Types
  * Core type definitions for the generation pipeline
+ *
+ * TODO: Unify with src/lib/types.ts — SSE event types are duplicated across
+ * client and server due to dual-tsconfig (server can't import from src/).
+ * Extract shared types into a `shared/` package or a single file that both
+ * tsconfigs include.
  */
 
 // ============================================================================
@@ -292,6 +297,12 @@ export type StreamEvent =
   | PlanReadyEvent
   | CreditsUsedEvent
   | ClarificationRequestEvent
+  | DesignTokensEvent
+  | ArchitectureReadyEvent
+  | PageGeneratingEvent
+  | PageCompleteEvent
+  | FileAssembledEvent
+  | ValidationCheckEvent
 
 export interface StageUpdateEvent {
   type: 'stage_update'
@@ -442,3 +453,79 @@ export interface ClarificationRequestEvent {
   questions: ClarificationQuestion[]
   runId: string
 }
+
+export interface DesignTokensEvent {
+  type: 'design_tokens'
+  tokens: Record<string, unknown>
+}
+
+export interface ArchitectureReadyEvent {
+  type: 'architecture_ready'
+  spec: {
+    archetype: string
+    sitemap: Array<{
+      route: string
+      componentName: string
+      purpose: string
+      sections: string[]
+      dataRequirements: string
+    }>
+    auth: boolean
+  }
+}
+
+export interface PageGeneratingEvent {
+  type: 'page_generating'
+  fileName: string
+  route: string
+  componentName: string
+  pageIndex: number
+  totalPages: number
+}
+
+export interface PageCompleteEvent {
+  type: 'page_complete'
+  fileName: string
+  route: string
+  componentName: string
+  lineCount: number
+  code: string
+  pageIndex: number
+  totalPages: number
+}
+
+export interface FileAssembledEvent {
+  type: 'file_assembled'
+  path: string
+  category: 'config' | 'ui-kit' | 'route' | 'migration' | 'style' | 'wiring'
+}
+
+export interface ValidationCheckEvent {
+  type: 'validation_check'
+  name: 'imports' | 'links' | 'accessibility' | 'hardcoded_colors' | 'typescript' | 'lint' | 'build'
+  status: 'passed' | 'failed' | 'running'
+  errors?: Array<{
+    file: string
+    line?: number
+    message: string
+    type: string
+  }>
+}
+
+// ============================================================================
+// Timeline Entries (unified chat + pipeline event stream)
+// ============================================================================
+
+export type TimelineEntry =
+  | {
+      type: 'agent'
+      ts: number
+      agent: AgentStartEvent
+      status: 'running' | 'complete'
+      durationMs?: number
+      plan?: Record<string, unknown>
+      designTokens?: Record<string, unknown>
+      architecture?: ArchitectureReadyEvent['spec']
+    }
+  | { type: 'error'; ts: number; error: string }
+  | { type: 'complete'; ts: number; deploymentUrl?: string }

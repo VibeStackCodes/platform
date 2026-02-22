@@ -6,12 +6,14 @@
 import type { SchemaContract } from '../schema-contract'
 import { SchemaContractSchema, validateContract } from '../schema-contract'
 import type { AppBlueprint } from '../app-blueprint'
-import { contractToBlueprintWithDesignAgent } from '../app-blueprint'
 import { assembleCapabilities, type AssemblyResult } from '../capabilities/assembler'
 import { loadCoreRegistry } from '../capabilities/catalog'
 import type { ValidationGateResult } from './validation'
 import { runValidationGate } from './validation'
 import { buildRepairPrompt } from './repair'
+import type { ThemeTokens } from '../themed-code-engine'
+import type { CreativeSpec } from './schemas'
+import type { GeneratedPage } from '../page-generator'
 
 // ============================================================================
 // Result types for each handler
@@ -68,6 +70,30 @@ export interface ProvisioningResult {
 
 export interface DeploymentResult {
   deploymentUrl: string
+  tokensUsed: number
+}
+
+export interface DesignResult {
+  tokens: ThemeTokens
+  selectedTheme: string
+  themeReasoning: string
+  tokensUsed: number
+}
+
+export interface ArchitectResult {
+  spec: CreativeSpec
+  imagePool: string[]
+  tokensUsed: number
+}
+
+export interface PageGenerationResult {
+  pages: GeneratedPage[]
+  tokensUsed: number
+}
+
+export interface AssemblyResult2 {
+  assembledFiles: Array<{ path: string; content: string; layer: number; isLLMSlot: boolean }>
+  blueprint: null
   tokensUsed: number
 }
 
@@ -178,15 +204,14 @@ export async function runAnalysis(input: {
 // Blueprint handler (Task 7)
 // ============================================================================
 
-export async function runBlueprint(input: {
+export async function runBlueprint(_input: {
   userPrompt?: string
   appName: string
   appDescription: string
   contract: SchemaContract
   assembly?: AssemblyResult | null
-}): Promise<BlueprintResult> {
-  const blueprint = await contractToBlueprintWithDesignAgent(input)
-  return { blueprint, tokensUsed: 0 }
+}): Promise<never> {
+  throw new Error('Pipeline A removed. Use runDesign() + runArchitect() + runPageGeneration() + runAssembly() instead.')
 }
 
 // ============================================================================
@@ -698,5 +723,226 @@ export async function runDeployment(input: {
       extra: { sandboxId: input.sandboxId, projectId: input.projectId },
     })
     throw error
+  }
+}
+
+// ============================================================================
+// Pipeline B: Design handler
+// ============================================================================
+
+/**
+ * Run the Design Agent to select a theme and produce ThemeTokens.
+ * Pipeline B step 1: userPrompt + contract → tokens + theme metadata.
+ */
+export async function runDesign(input: {
+  userPrompt: string
+  contract: SchemaContract
+  appName?: string
+  appDescription?: string
+}): Promise<DesignResult> {
+  const { runDesignAgent } = await import('./design-agent')
+
+  const result = await runDesignAgent(
+    input.userPrompt,
+    input.contract,
+    input.appName,
+    input.appDescription,
+  )
+
+  return {
+    tokens: result.tokens,
+    selectedTheme: result.selectedTheme,
+    themeReasoning: result.themeReasoning,
+    tokensUsed: 0,
+  }
+}
+
+// ============================================================================
+// Pipeline B: Architect handler
+// ============================================================================
+
+/**
+ * Run the Creative Director to produce a CreativeSpec (visual identity + sitemap).
+ * Pipeline B step 2: tokens + contract → spec + imagePool.
+ */
+export async function runArchitect(input: {
+  userPrompt: string
+  appName: string
+  appDescription: string
+  contract: SchemaContract
+  tokens: ThemeTokens
+}): Promise<ArchitectResult> {
+  const { runCreativeDirector } = await import('../creative-director')
+  const { fetchHeroImages } = await import('../unsplash')
+
+  const result = await runCreativeDirector({
+    userPrompt: input.userPrompt,
+    appName: input.appName,
+    appDescription: input.appDescription,
+    contract: input.contract,
+    tokens: input.tokens,
+  })
+
+  // Fetch a pool of hero images for use in page generation
+  const imagePool = await fetchHeroImages(input.tokens.heroQuery, 5)
+  const imageUrls = imagePool.map((img) => img.url)
+
+  const tokensUsed = (result.usage.inputTokens ?? 0) + (result.usage.outputTokens ?? 0)
+
+  return {
+    spec: result.spec,
+    imagePool: imageUrls,
+    tokensUsed,
+  }
+}
+
+// ============================================================================
+// Pipeline B: Page Generation handler
+// ============================================================================
+
+/**
+ * Generate all page route files in parallel from a CreativeSpec.
+ * Pipeline B step 3: spec → GeneratedPage[].
+ */
+export async function runPageGeneration(input: {
+  spec: CreativeSpec
+  contract?: SchemaContract
+  imagePool?: string[]
+  onPageStart?: (fileName: string, route: string, componentName: string, index: number, total: number) => void
+  onPageComplete?: (fileName: string, route: string, componentName: string, lineCount: number, code: string, index: number, total: number) => void
+}): Promise<PageGenerationResult> {
+  const { generatePages } = await import('../page-generator')
+
+  const result = await generatePages({
+    spec: input.spec,
+    contract: input.contract,
+    imagePool: input.imagePool,
+    onPageStart: input.onPageStart,
+    onPageComplete: input.onPageComplete,
+  })
+
+  const tokensUsed = (result.usage.inputTokens ?? 0) + (result.usage.outputTokens ?? 0)
+
+  return {
+    pages: result.pages,
+    tokensUsed,
+  }
+}
+
+// ============================================================================
+// Pipeline B: Assembly handler
+// ============================================================================
+
+/**
+ * Assemble all app files deterministically and upload them to the Daytona sandbox.
+ * Runs bun install, applies the SQL migration, and seeds the Supabase database.
+ * Pipeline B step 4: spec + generatedPages → files in sandbox + DB populated.
+ */
+export async function runAssembly(input: {
+  spec: CreativeSpec
+  generatedPages: GeneratedPage[]
+  appName: string
+  contract: SchemaContract
+  sandboxId: string
+  supabaseProjectId: string
+  supabaseUrl: string
+  supabaseAnonKey: string
+  onFileAssembled?: (path: string, category: string) => void
+}): Promise<AssemblyResult2> {
+  // Dynamic imports to avoid circular deps
+  const { assembleApp } = await import('../deterministic-assembly')
+  const { getSandbox, uploadFiles } = await import('../sandbox')
+
+  // Step 1: Deterministic assembly — zero LLM calls
+  const assembledFiles = assembleApp({
+    spec: input.spec,
+    generatedPages: input.generatedPages,
+    appName: input.appName,
+    includeUiKit: true,
+  })
+
+  console.log(`[assembly] Assembled ${assembledFiles.length} files deterministically`)
+
+  // Notify caller about each file assembled
+  if (input.onFileAssembled) {
+    for (const file of assembledFiles) {
+      const category = file.isLLMSlot ? 'llm-page' : 'deterministic'
+      input.onFileAssembled(file.path, category)
+    }
+  }
+
+  // Step 2: Upload all files to Daytona sandbox
+  const sandbox = await getSandbox(input.sandboxId)
+  console.log(`[assembly] Writing ${assembledFiles.length} files to sandbox...`)
+
+  // Create all needed directories first
+  const dirs = new Set<string>()
+  for (const file of assembledFiles) {
+    const dir = `/workspace/${file.path}`.split('/').slice(0, -1).join('/')
+    dirs.add(dir)
+  }
+  for (const dir of dirs) {
+    try {
+      await sandbox.process.executeCommand(`mkdir -p ${dir}`, '/workspace', undefined, 5)
+    } catch {
+      // ignore if exists
+    }
+  }
+
+  // Write files, replacing .env placeholders with real credentials
+  const uploads = assembledFiles.map((file) => {
+    let content = file.content
+    if (file.path === '.env') {
+      content = content
+        .replace('VITE_SUPABASE_URL=__PLACEHOLDER__', `VITE_SUPABASE_URL=${input.supabaseUrl}`)
+        .replace('VITE_SUPABASE_ANON_KEY=__PLACEHOLDER__', `VITE_SUPABASE_ANON_KEY=${input.supabaseAnonKey}`)
+    }
+    return { content, path: `/workspace/${file.path}` }
+  })
+  await uploadFiles(sandbox, uploads)
+  console.log(`[assembly] Upload complete: ${uploads.length} files written`)
+
+  // Step 3: Install dependencies
+  console.log('[assembly] Installing dependencies...')
+  const installResult = await sandbox.process.executeCommand(
+    'bun install --frozen-lockfile 2>&1 || bun install 2>&1',
+    '/workspace',
+    undefined,
+    120,
+  )
+  if (installResult.exitCode !== 0) {
+    console.warn(`[assembly] bun install exit code: ${installResult.exitCode}`)
+  }
+
+  // Step 4: Apply migration + seed SQL to Supabase
+  const { runMigration } = await import('../supabase-mgmt')
+  const { contractToSeedSQL } = await import('../contract-to-seed')
+
+  // Find migration file in the assembled set
+  const migrationFile = assembledFiles.find((f) => f.path === 'supabase/migrations/0001_initial.sql')
+  if (migrationFile) {
+    const migResult = await runMigration(input.supabaseProjectId, migrationFile.content)
+    if (!migResult.success) {
+      // FATAL per CLAUDE.md determinism rules
+      throw new Error(`[assembly] Migration failed — fix the SQL generator, not the symptom: ${migResult.error}`)
+    }
+    console.log('[assembly] Migration applied to Supabase')
+  }
+
+  const seedSQL = await contractToSeedSQL(input.contract)
+  if (seedSQL) {
+    const seedResult = await runMigration(input.supabaseProjectId, seedSQL)
+    if (!seedResult.success) {
+      console.error(`[assembly] Seed failed: ${seedResult.error}`)
+      // Non-fatal — app works without seed data, just looks empty
+    } else {
+      console.log('[assembly] Seed data applied to Supabase')
+    }
+  }
+
+  return {
+    assembledFiles,
+    blueprint: null,
+    tokensUsed: 0,
   }
 }

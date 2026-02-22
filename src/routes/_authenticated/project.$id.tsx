@@ -21,8 +21,6 @@ function ProjectPage() {
         prompt: string | null
         status: string
         sandboxId: string | null
-        supabaseUrl: string | null
-        supabaseProjectId: string | null
       }>
     },
   })
@@ -73,6 +71,7 @@ function ProjectPage() {
       projectId={id}
       initialPrompt={project.status === 'pending' ? (project.prompt ?? undefined) : undefined}
       initialMessages={initialMessages}
+      initialSandboxId={project.sandboxId ?? undefined}
     />
   )
 }

@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
   SectionVisualSpecSchema,
-  RouteSpecSchema,
   PageCompositionPlanV2Schema,
 } from '@server/lib/agents/schemas'
 

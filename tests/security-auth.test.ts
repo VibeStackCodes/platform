@@ -24,6 +24,7 @@ vi.mock('@server/lib/db/queries', () => ({
   getUserCredits: vi.fn(),
   updateProject: vi.fn().mockResolvedValue({}),
   getProject: vi.fn().mockResolvedValue({ id: 'proj-1', userId: 'user-123' }),
+  insertChatMessage: vi.fn().mockResolvedValue({ id: 'msg-1' }),
 }))
 
 vi.mock('@server/lib/agents/provider', () => ({
