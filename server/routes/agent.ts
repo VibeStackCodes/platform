@@ -72,18 +72,19 @@ if (process.env.NODE_ENV !== 'production') {
 
 /** Map XState states to human-readable phase names + agent identifiers */
 const STATE_PHASES: Record<string, { name: string; phase: number; agentId?: string; agentName?: string }> = {
-  analyzing: { name: 'Analyzing requirements', phase: 1, agentId: 'analyst', agentName: 'Analyst' },
-  awaitingClarification: { name: 'Awaiting clarification', phase: 1 },
-  blueprinting: { name: 'Creating blueprint', phase: 2 }, // No agentId — internal step, not shown in timeline
-  provisioning: { name: 'Provisioning infrastructure', phase: 3, agentId: 'provisioner', agentName: 'Provisioner' },
-  generating: { name: 'Generating code', phase: 4, agentId: 'codegen', agentName: 'Code Generator' },
-  polishing: { name: 'Polishing design', phase: 4, agentId: 'polish', agentName: 'Design Polish' },
-  validating: { name: 'Validating code', phase: 5, agentId: 'validator', agentName: 'Validator' },
-  repairing: { name: 'Repairing errors', phase: 5, agentId: 'repair', agentName: 'Repair Agent' },
-  reviewing: { name: 'Reviewing code', phase: 5, agentId: 'reviewer', agentName: 'Code Reviewer' },
-  deploying: { name: 'Deploying app', phase: 6, agentId: 'deployer', agentName: 'Deployer' },
-  complete: { name: 'Complete', phase: 7 },
-  failed: { name: 'Failed', phase: 7 },
+  analyzing:            { name: 'Analyzing requirements',      phase: 1, agentId: 'analyst',     agentName: 'Analyst' },
+  awaitingClarification:{ name: 'Awaiting clarification',     phase: 1 },
+  provisioning:         { name: 'Provisioning infrastructure', phase: 1, agentId: 'provisioner', agentName: 'Provisioner' },
+  designing:            { name: 'Designing theme',             phase: 2, agentId: 'designer',    agentName: 'Design Agent' },
+  architecting:         { name: 'Architecting app',            phase: 2, agentId: 'architect',   agentName: 'Architect Agent' },
+  pageGeneration:       { name: 'Generating pages',            phase: 3, agentId: 'frontend',    agentName: 'Frontend Engineer' },
+  assembly:             { name: 'Assembling app',              phase: 3, agentId: 'backend',     agentName: 'Backend Engineer' },
+  validating:           { name: 'Validating code',             phase: 4, agentId: 'qa',          agentName: 'Quality Assurance' },
+  repairing:            { name: 'Repairing errors',            phase: 4, agentId: 'repair',      agentName: 'Repair Agent' },
+  reviewing:            { name: 'Reviewing code',              phase: 5, agentId: 'reviewer',    agentName: 'Code Reviewer' },
+  deploying:            { name: 'Deploying app',               phase: 6, agentId: 'deployer',    agentName: 'Deployer' },
+  complete:             { name: 'Complete',                    phase: 7 },
+  failed:               { name: 'Failed',                      phase: 7 },
 }
 
 // Map parallel sub-state paths to STATE_PHASES keys
@@ -103,10 +104,11 @@ const PARALLEL_STATE_MAP: Record<string, Record<string, string>> = {
 const STATE_TO_DB_STATUS: Record<string, string> = {
   analyzing: 'planning',
   awaitingClarification: 'planning',
-  blueprinting: 'planning',
   provisioning: 'generating',
-  generating: 'generating',
-  polishing: 'generating',
+  designing: 'planning',
+  architecting: 'planning',
+  pageGeneration: 'generating',
+  assembly: 'generating',
   validating: 'verifying',
   repairing: 'verifying',
   reviewing: 'verifying',
@@ -238,8 +240,40 @@ function streamActorStates(
             status: 'complete',
           })
         }
-        // When leaving 'generating', mark all files as complete
-        if (previousState === 'generating') {
+
+        // Pipeline B: emit design_tokens when transitioning FROM designing
+        // context.tokens is added by the Pipeline B machine rewrite
+        if (previousState === 'designing') {
+          // biome-ignore lint/suspicious/noExplicitAny: Pipeline B context field not yet on MachineContext
+          const tokens = (snapshot.context as any).tokens
+          if (tokens) {
+            emit({ type: 'design_tokens', tokens: tokens as Record<string, unknown> })
+          }
+        }
+
+        // Pipeline B: emit architecture_ready when transitioning FROM architecting
+        // context.creativeSpec is added by the Pipeline B machine rewrite
+        if (previousState === 'architecting') {
+          // biome-ignore lint/suspicious/noExplicitAny: Pipeline B context field not yet on MachineContext
+          const creativeSpec = (snapshot.context as any).creativeSpec
+          if (creativeSpec) {
+            const spec = {
+              archetype: creativeSpec.archetype as string,
+              sitemap: (creativeSpec.sitemap as Array<Record<string, unknown>>).map((p) => ({
+                route: p.route as string,
+                componentName: p.componentName as string,
+                purpose: p.purpose as string,
+                sections: (p.brief as { sections?: string[] } | undefined)?.sections ?? [],
+                dataRequirements: (p.dataRequirements as string | undefined) ?? 'none',
+              })),
+              auth: creativeSpec.auth as boolean,
+            }
+            emit({ type: 'architecture_ready', spec })
+          }
+        }
+
+        // When leaving 'pageGeneration', mark all files as complete (Pipeline B equivalent of 'generating')
+        if (previousState === 'pageGeneration') {
           const files = snapshot.context.blueprint?.fileTree?.map((f: { path: string }) => f.path) ?? []
           for (const filePath of files) {
             emit({ type: 'file_complete', path: filePath, linesOfCode: 0 })
@@ -311,9 +345,9 @@ function streamActorStates(
           status: 'active',
         })
 
-        // Emit plan_ready when entering blueprinting (Analyst PRD is ready)
+        // Emit plan_ready when entering designing (Analyst PRD is ready)
         // Shows the Analyst's output: app name, description, and contract tables
-        if (state === 'blueprinting' && snapshot.context.contract) {
+        if (state === 'designing' && snapshot.context.contract) {
           emit({
             type: 'plan_ready',
             plan: {
@@ -335,23 +369,27 @@ function streamActorStates(
 
           // In mock mode, emit descriptive agent_progress so cards aren't empty
           if (mockMode) {
-            const mockProgress: Record<string, string> = {
-              analyst: 'Analyzing your requirements and extracting app features, database schema, and authentication needs...',
-              codegen: 'Generating React components, routes, and database hooks...',
-              polish: 'Applying design tokens and refining visual consistency...',
-              validator: 'Running build validation and type checks...',
-              reviewer: 'Reviewing generated code for quality and security...',
-              deployer: 'Deploying to Vercel and configuring custom domain...',
+            const mockProgress: Record<string, string[]> = {
+              analyst:     ['Parsing user requirements...', 'Extracting entities and features...', 'Building schema contract...'],
+              provisioner: ['Creating Supabase project...', 'Provisioning sandbox...', 'Setting up GitHub repo...'],
+              designer:    ['Selecting theme...', 'Generating color palette...', 'Choosing typography...'],
+              architect:   ['Analyzing app structure...', 'Creating sitemap...', 'Planning page sections...'],
+              frontend:    ['Generating homepage...', 'Generating menu page...', 'Generating contact page...', 'Generating about page...'],
+              backend:     ['Assembling config files...', 'Copying UI kit...', 'Writing route files...', 'Applying SQL migration...'],
+              qa:          ['Checking imports...', 'Validating links...', 'Running TypeScript...', 'Building app...'],
+              repair:      ['Analyzing errors...', 'Fixing import issues...', 'Retrying build...'],
+              reviewer:    ['Running code review...', 'Checking accessibility...', 'Validating design tokens...'],
+              deployer:    ['Building for production...', 'Deploying to Vercel...', 'Setting up domain...'],
             }
-            const progressText = mockProgress[phaseInfo.agentId]
-            if (progressText) {
-              emit({ type: 'agent_progress', agentId: phaseInfo.agentId, message: progressText })
+            const progressMessages = mockProgress[phaseInfo.agentId]
+            if (progressMessages && progressMessages.length > 0) {
+              emit({ type: 'agent_progress', agentId: phaseInfo.agentId, message: progressMessages[0] })
             }
           }
         }
 
-        // Emit file events during generating state (mock: emit from blueprint file list)
-        if (state === 'generating' && !fileEventsEmitted) {
+        // Emit file events during pageGeneration state (mock: emit from blueprint file list)
+        if (state === 'pageGeneration' && !fileEventsEmitted) {
           fileEventsEmitted = true
           const files = mockMode
             ? MOCK_FILE_LIST

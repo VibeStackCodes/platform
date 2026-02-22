@@ -292,6 +292,8 @@ export type StreamEvent =
   | PlanReadyEvent
   | CreditsUsedEvent
   | ClarificationRequestEvent
+  | DesignTokensEvent
+  | ArchitectureReadyEvent
 
 export interface StageUpdateEvent {
   type: 'stage_update'
@@ -441,6 +443,26 @@ export interface ClarificationRequestEvent {
   type: 'clarification_request'
   questions: ClarificationQuestion[]
   runId: string
+}
+
+export interface DesignTokensEvent {
+  type: 'design_tokens'
+  tokens: Record<string, unknown>
+}
+
+export interface ArchitectureReadyEvent {
+  type: 'architecture_ready'
+  spec: {
+    archetype: string
+    sitemap: Array<{
+      route: string
+      componentName: string
+      purpose: string
+      sections: string[]
+      dataRequirements: string
+    }>
+    auth: boolean
+  }
 }
 
 // ============================================================================
