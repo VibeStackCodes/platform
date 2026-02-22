@@ -3,6 +3,7 @@
 import {
   Bot,
   CheckCircle2,
+  ChevronDown,
   Clock,
   Cog,
   Loader2,
@@ -50,7 +51,20 @@ import {
   StackTraceHeader,
 } from '@/components/ai-elements/stack-trace'
 import { Suggestion, Suggestions } from '@/components/ai-elements/suggestion'
-import { Task, TaskContent, TaskTrigger } from '@/components/ai-elements/task'
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible'
+import { Agent, AgentContent } from '@/components/ai-elements/agent'
+import {
+  TestResults,
+  TestResultsContent,
+  TestResultsHeader,
+  TestResultsProgress,
+  TestResultsSummary,
+  Test,
+} from '@/components/ai-elements/test-results'
 import { ClarificationQuestions } from '@/components/clarification-questions'
 import { CreditDisplay } from '@/components/credit-display'
 import { PromptBar } from '@/components/prompt-bar'
@@ -58,7 +72,7 @@ import { ThemeTokensCard } from '@/components/ai-elements/theme-tokens-card'
 import type { ThemeTokens as ThemeTokensCardTokens } from '@/components/ai-elements/theme-tokens-card'
 import { ArchitectureCard } from '@/components/ai-elements/architecture-card'
 import { PageProgressCard } from '@/components/ai-elements/page-progress-card'
-import { ValidationCard } from '@/components/ai-elements/validation-card'
+import { FileAssemblyCard } from '@/components/ai-elements/file-assembly-card'
 import type {
   BuildError,
   ClarificationQuestion,
@@ -229,7 +243,7 @@ export function BuilderChat({
 
   // Pipeline B state — live tracking during generation
   const [pageProgress, setPageProgress] = useState<PageProgressEntry[]>([])
-  const [_fileAssembly, setFileAssembly] = useState<FileAssemblyEntry[]>([])
+  const [fileAssembly, setFileAssembly] = useState<FileAssemblyEntry[]>([])
   const [validationChecks, setValidationChecks] = useState<ValidationCheckEntry[]>([])
 
   // Unified timeline — ordered array of all pipeline events
@@ -367,7 +381,11 @@ export function BuilderChat({
           break
 
         case 'plan_ready':
-          pushTimeline({ type: 'plan', ts: now, plan: event.plan })
+          // Attach plan to the analyst agent card
+          updateTimeline(
+            (e) => e.type === 'agent' && e.agent.agentId === 'analyst',
+            (e) => ({ ...e, plan: event.plan }),
+          )
           break
 
         case 'file_start':
@@ -434,11 +452,19 @@ export function BuilderChat({
           break
 
         case 'design_tokens':
-          pushTimeline({ type: 'design_tokens', tokens: event.tokens, ts: now })
+          // Attach tokens to the designer agent card
+          updateTimeline(
+            (e) => e.type === 'agent' && e.agent.agentId === 'designer',
+            (e) => ({ ...e, designTokens: event.tokens }),
+          )
           break
 
         case 'architecture_ready':
-          pushTimeline({ type: 'architecture', spec: event.spec, ts: now })
+          // Attach architecture to the architect agent card
+          updateTimeline(
+            (e) => e.type === 'agent' && e.agent.agentId === 'architect',
+            (e) => ({ ...e, architecture: event.spec }),
+          )
           break
 
         case 'page_generating':
@@ -460,34 +486,17 @@ export function BuilderChat({
           break
 
         case 'page_complete':
-          setPageProgress((prev) => {
-            const updated = prev.map((p) =>
+          setPageProgress((prev) =>
+            prev.map((p) =>
               p.fileName === event.fileName
                 ? { ...p, status: 'complete' as const, lineCount: event.lineCount, code: event.code }
                 : p,
-            )
-            if (updated.every((p) => p.status === 'complete')) {
-              pushTimeline({ type: 'page_progress', pages: updated, ts: now })
-            }
-            return updated
-          })
+            ),
+          )
           break
 
         case 'file_assembled':
-          setFileAssembly((prev) => {
-            const updated = [...prev, { path: event.path, category: event.category }]
-            // Update or push the file_assembly timeline entry with the growing list
-            setTimelineEvents((prevEntries) => {
-              const lastIdx = prevEntries.findLastIndex((e) => e.type === 'file_assembly')
-              if (lastIdx >= 0) {
-                const entries = [...prevEntries]
-                entries[lastIdx] = { type: 'file_assembly', files: updated, ts: now }
-                return entries
-              }
-              return [...prevEntries, { type: 'file_assembly', files: updated, ts: now }]
-            })
-            return updated
-          })
+          setFileAssembly((prev) => [...prev, { path: event.path, category: event.category }])
           break
 
         case 'validation_check':
@@ -821,72 +830,138 @@ export function BuilderChat({
                     switch (entry.type) {
                       case 'agent': {
                         const isComplete = entry.status === 'complete'
-                        const isCodegen = entry.agent.agentId === 'codegen'
+                        const agentId = entry.agent.agentId
+
+                        // Build embedded content for this agent
+                        const embeddedContent = (() => {
+                          // Analyst → Plan card
+                          if (agentId === 'analyst' && entry.plan) {
+                            return (
+                              <Plan defaultOpen>
+                                <PlanHeader>
+                                  <div>
+                                    <PlanTitle>
+                                      {(entry.plan.appName as string) || 'App Blueprint'}
+                                    </PlanTitle>
+                                    <PlanDescription>
+                                      {(entry.plan.appDescription as string) ||
+                                        (Array.isArray(entry.plan.tables) && entry.plan.tables.length > 0
+                                          ? `${entry.plan.tables.length} tables`
+                                          : 'Generation plan ready')}
+                                    </PlanDescription>
+                                  </div>
+                                  <PlanAction>
+                                    <PlanTrigger />
+                                  </PlanAction>
+                                </PlanHeader>
+                                <PlanContent>
+                                  <div className="space-y-2 text-sm text-muted-foreground">
+                                    {Array.isArray(entry.plan.tables) &&
+                                      entry.plan.tables.length > 0 && (
+                                        <p>
+                                          Tables:{' '}
+                                          {(entry.plan.tables as string[]).join(', ')}
+                                        </p>
+                                      )}
+                                  </div>
+                                </PlanContent>
+                              </Plan>
+                            )
+                          }
+
+                          // Designer → ThemeTokensCard
+                          if (agentId === 'designer' && entry.designTokens) {
+                            return (
+                              <ThemeTokensCard
+                                tokens={entry.designTokens as unknown as ThemeTokensCardTokens}
+                              />
+                            )
+                          }
+
+                          // Architect → ArchitectureCard
+                          if (agentId === 'architect' && entry.architecture) {
+                            return <ArchitectureCard spec={entry.architecture} />
+                          }
+
+                          // Frontend → PageProgressCard
+                          if (agentId === 'frontend' && pageProgress.length > 0) {
+                            return <PageProgressCard pages={pageProgress} className="border-0 shadow-none" />
+                          }
+
+                          // Backend → FileAssemblyCard (matches PageProgressCard style)
+                          if (agentId === 'backend' && fileAssembly.length > 0) {
+                            return <FileAssemblyCard files={fileAssembly} className="border-0 shadow-none" />
+                          }
+
+                          // QA → TestResults (matches Vercel AI Elements pattern)
+                          if (agentId === 'qa' && validationChecks.length > 0) {
+                            const passed = validationChecks.filter((c) => c.status === 'passed').length
+                            const failed = validationChecks.filter((c) => c.status === 'failed').length
+                            const total = validationChecks.length
+                            return (
+                              <TestResults summary={{ passed, failed, skipped: 0, total }}>
+                                <TestResultsHeader>
+                                  <TestResultsSummary />
+                                </TestResultsHeader>
+                                <TestResultsProgress />
+                                <TestResultsContent>
+                                  {validationChecks.map((check) => (
+                                    <Test
+                                      key={check.name}
+                                      name={check.name}
+                                      status={check.status === 'running' ? 'running' : check.status === 'failed' ? 'failed' : 'passed'}
+                                    />
+                                  ))}
+                                </TestResultsContent>
+                              </TestResults>
+                            )
+                          }
+
+                          // Legacy Pipeline A fallback
+                          if (agentId === 'codegen' && hasFiles) {
+                            return <GeneratedFileTree files={generationFiles} />
+                          }
+
+                          return null
+                        })()
+
+                        const hasContent = !!embeddedContent
+
                         return (
-                          <Task
-                            key={`agent-${entry.agent.agentId}-${entry.ts}`}
-                            defaultOpen={!isComplete}
+                          <Collapsible
+                            key={`agent-${agentId}-${entry.ts}`}
+                            defaultOpen={hasContent || !isComplete}
                           >
-                            <TaskTrigger title={entry.agent.agentName}>
-                              <div className="flex w-full cursor-pointer items-center gap-2 text-sm transition-colors hover:text-foreground">
-                                {isComplete ? (
-                                  <CheckCircle2 className="size-4 shrink-0 text-green-500" />
-                                ) : (
-                                  <Cog className="size-4 shrink-0 animate-spin text-muted-foreground" />
-                                )}
-                                <span className={isComplete ? 'text-muted-foreground' : 'text-foreground'}>
-                                  {entry.agent.agentName}
-                                </span>
-                                {isComplete && entry.durationMs != null && (
-                                  <span className="ml-auto flex items-center gap-1 text-xs text-muted-foreground">
-                                    <Clock className="size-3" />
-                                    {formatDuration(entry.durationMs)}
+                            <Agent>
+                              <CollapsibleTrigger className="group w-full text-left">
+                                <div className="flex w-full items-center gap-2 p-3">
+                                  {isComplete ? (
+                                    <CheckCircle2 className="size-4 shrink-0 text-green-500" />
+                                  ) : (
+                                    <Cog className="size-4 shrink-0 animate-spin text-muted-foreground" />
+                                  )}
+                                  <Bot className="size-4 text-muted-foreground" />
+                                  <span className="font-medium text-sm">
+                                    {entry.agent.agentName}
                                   </span>
-                                )}
-                              </div>
-                            </TaskTrigger>
-                            {/* Show file tree inside Code Generator */}
-                            {isCodegen && hasFiles && (
-                              <TaskContent>
-                                <GeneratedFileTree files={generationFiles} />
-                              </TaskContent>
-                            )}
-                          </Task>
+                                  {isComplete && entry.durationMs != null && (
+                                    <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                                      <Clock className="size-3" />
+                                      {formatDuration(entry.durationMs)}
+                                    </span>
+                                  )}
+                                  <ChevronDown className="ml-auto size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+                                </div>
+                              </CollapsibleTrigger>
+                              <CollapsibleContent>
+                                <AgentContent>
+                                  {embeddedContent}
+                                </AgentContent>
+                              </CollapsibleContent>
+                            </Agent>
+                          </Collapsible>
                         )
                       }
-
-                      case 'plan':
-                        return (
-                          <Plan key={`plan-${entry.ts}`} defaultOpen>
-                            <PlanHeader>
-                              <div>
-                                <PlanTitle>
-                                  {(entry.plan.appName as string) || 'App Blueprint'}
-                                </PlanTitle>
-                                <PlanDescription>
-                                  {(entry.plan.appDescription as string) ||
-                                    (Array.isArray(entry.plan.tables) && entry.plan.tables.length > 0
-                                      ? `${entry.plan.tables.length} tables`
-                                      : 'Generation plan ready')}
-                                </PlanDescription>
-                              </div>
-                              <PlanAction>
-                                <PlanTrigger />
-                              </PlanAction>
-                            </PlanHeader>
-                            <PlanContent>
-                              <div className="space-y-2 text-sm text-muted-foreground">
-                                {Array.isArray(entry.plan.tables) &&
-                                  entry.plan.tables.length > 0 && (
-                                    <p>
-                                      Tables:{' '}
-                                      {(entry.plan.tables as string[]).join(', ')}
-                                    </p>
-                                  )}
-                              </div>
-                            </PlanContent>
-                          </Plan>
-                        )
 
                       case 'error':
                         return (
@@ -913,62 +988,6 @@ export function BuilderChat({
                           </StackTrace>
                         )
 
-                      case 'design_tokens':
-                        return (
-                          <ThemeTokensCard
-                            key={`design_tokens-${entry.ts}`}
-                            tokens={entry.tokens as unknown as ThemeTokensCardTokens}
-                          />
-                        )
-
-                      case 'architecture':
-                        return (
-                          <ArchitectureCard
-                            key={`architecture-${entry.ts}`}
-                            spec={entry.spec}
-                          />
-                        )
-
-                      case 'page_progress':
-                        return (
-                          <PageProgressCard
-                            key={`page_progress-${entry.ts}`}
-                            pages={entry.pages}
-                          />
-                        )
-
-                      case 'file_assembly':
-                        return (
-                          <div
-                            key={`file_assembly-${entry.ts}`}
-                            className="rounded-lg border bg-muted/30 p-3"
-                          >
-                            <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                              Files Assembled
-                            </p>
-                            <ul className="space-y-1">
-                              {entry.files.map((f) => (
-                                <li
-                                  key={f.path}
-                                  className="flex items-center gap-2 font-mono text-xs text-foreground"
-                                >
-                                  <CheckCircle2 className="size-3 shrink-0 text-green-500" />
-                                  {f.path}
-                                  <span className="ml-auto text-muted-foreground">{f.category}</span>
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        )
-
-                      case 'validation':
-                        return (
-                          <ValidationCard
-                            key={`validation-${entry.ts}`}
-                            checks={entry.checks}
-                          />
-                        )
-
                       case 'complete':
                         return (
                           <div
@@ -984,17 +1003,6 @@ export function BuilderChat({
                         return null
                     }
                   })}
-
-                  {/* Live page generation progress (shown while pages are still being generated) */}
-                  {pageProgress.length > 0 && !pageProgress.every((p) => p.status === 'complete') && (
-                    <PageProgressCard pages={pageProgress} />
-                  )}
-
-                  {/* Live validation progress (shown while checks are still running) */}
-                  {validationChecks.length > 0 &&
-                    !validationChecks.every(
-                      (c) => c.status === 'passed' || c.status === 'failed',
-                    ) && <ValidationCard checks={validationChecks} />}
 
                   {/* Build Errors (outside timeline entries) */}
                   {buildErrors.length > 0 && (

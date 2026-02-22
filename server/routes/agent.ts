@@ -20,7 +20,7 @@ import { createActor } from 'xstate'
 import { Hono } from 'hono'
 import * as Sentry from '@sentry/node'
 import { createHeliconeProvider, isAllowedModel } from '../lib/agents/provider'
-import { createMockOrRealActor, isMockPipeline, MOCK_FILE_LIST } from '../lib/agents/machine'
+import { createMockOrRealActor, isMockPipeline, MOCK_FILE_LIST, MOCK_GENERATED_PAGES, MOCK_ASSEMBLED_FILES } from '../lib/agents/machine'
 import type { MachineContext } from '../lib/agents/machine'
 import { editMachine } from '../lib/agents/edit-machine'
 import type { EditMachineContext } from '../lib/agents/edit-machine'
@@ -411,6 +411,68 @@ function streamActorStates(
                 })
               }, 200 * (i + 1))
             }
+          }
+
+          // Mock mode: emit per-page progress events (page_generating → page_complete)
+          if (mockMode) {
+            const pages = MOCK_GENERATED_PAGES
+            const total = pages.length
+            for (let i = 0; i < total; i++) {
+              const page = pages[i]
+              // Stagger: page_generating at 300ms intervals, page_complete 400ms later
+              setTimeout(() => {
+                emit({
+                  type: 'page_generating',
+                  fileName: page.fileName,
+                  route: page.route,
+                  componentName: page.componentName,
+                  pageIndex: i,
+                  totalPages: total,
+                })
+              }, 300 * i)
+              setTimeout(() => {
+                const lineCount = page.content.split('\n').length
+                emit({
+                  type: 'page_complete',
+                  fileName: page.fileName,
+                  route: page.route,
+                  componentName: page.componentName,
+                  lineCount,
+                  code: page.content.split('\n').slice(0, 50).join('\n'),
+                  pageIndex: i,
+                  totalPages: total,
+                })
+              }, 300 * i + 400)
+            }
+          }
+        }
+
+        // Mock mode: emit file_assembled events during assembly state
+        if (state === 'assembly' && mockMode) {
+          const assembledFiles = MOCK_ASSEMBLED_FILES
+          for (let i = 0; i < assembledFiles.length; i++) {
+            const file = assembledFiles[i]
+            const category = file.isLLMSlot ? 'route' as const
+              : file.path.includes('main.tsx') ? 'wiring' as const
+              : file.path.includes('__root') ? 'config' as const
+              : 'ui-kit' as const
+            setTimeout(() => {
+              emit({ type: 'file_assembled', path: file.path, category })
+            }, 150 * (i + 1))
+          }
+        }
+
+        // Mock mode: emit validation_check events during validating state
+        if (state === 'validating' && mockMode) {
+          const checks = ['imports', 'links', 'accessibility', 'hardcoded_colors', 'typescript', 'lint', 'build'] as const
+          for (let i = 0; i < checks.length; i++) {
+            // Emit 'running' then 'passed' with stagger
+            setTimeout(() => {
+              emit({ type: 'validation_check', name: checks[i], status: 'running' })
+            }, 200 * i)
+            setTimeout(() => {
+              emit({ type: 'validation_check', name: checks[i], status: 'passed' })
+            }, 200 * i + 150)
           }
         }
       }

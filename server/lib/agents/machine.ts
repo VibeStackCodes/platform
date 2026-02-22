@@ -987,7 +987,7 @@ const MOCK_CREATIVE_SPEC: CreativeSpec = {
 }
 
 /** Mock generated pages for the mock pipeline */
-const MOCK_GENERATED_PAGES: GeneratedPage[] = [
+export const MOCK_GENERATED_PAGES: GeneratedPage[] = [
   {
     fileName: 'routes/index.tsx',
     componentName: 'Homepage',
@@ -1047,7 +1047,7 @@ export default function Homepage() {
 ]
 
 /** Mock assembled files for the mock pipeline */
-const MOCK_ASSEMBLED_FILES: BlueprintFile[] = [
+export const MOCK_ASSEMBLED_FILES: BlueprintFile[] = [
   { path: 'src/main.tsx', content: '// mock main.tsx', layer: 0, isLLMSlot: false },
   { path: 'src/routes/__root.tsx', content: '// mock root', layer: 0, isLLMSlot: false },
   { path: 'src/routes/index.tsx', content: MOCK_GENERATED_PAGES[0].content, layer: 1, isLLMSlot: true },

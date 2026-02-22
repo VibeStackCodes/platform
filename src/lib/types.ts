@@ -574,13 +574,17 @@ export type ValidationCheckEntry = {
 }
 
 export type TimelineEntry =
-  | { type: 'agent'; ts: number; agent: AgentStartEvent; status: 'running' | 'complete'; durationMs?: number }
-  | { type: 'plan'; ts: number; plan: PlanReadyEvent['plan'] }
-  | { type: 'design_tokens'; ts: number; tokens: DesignTokensEvent['tokens'] }
-  | { type: 'architecture'; ts: number; spec: ArchitectureReadyEvent['spec'] }
-  | { type: 'page_progress'; ts: number; pages: PageProgressEntry[] }
-  | { type: 'file_assembly'; ts: number; files: FileAssemblyEntry[] }
-  | { type: 'validation'; ts: number; checks: ValidationCheckEntry[] }
+  | {
+      type: 'agent'
+      ts: number
+      agent: AgentStartEvent
+      status: 'running' | 'complete'
+      durationMs?: number
+      // Artifacts attached to agent cards (rendered inside collapsible content)
+      plan?: PlanReadyEvent['plan']
+      designTokens?: DesignTokensEvent['tokens']
+      architecture?: ArchitectureReadyEvent['spec']
+    }
   | { type: 'error'; ts: number; error: string }
   | { type: 'complete'; ts: number; deploymentUrl?: string }
 
