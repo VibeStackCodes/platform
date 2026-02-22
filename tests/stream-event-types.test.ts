@@ -1,14 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import type {
-  StreamEvent,
-  DesignTokensEvent,
-  ArchitectureReadyEvent,
-  PageGeneratingEvent,
-  PageCompleteEvent,
-  FileAssembledEvent,
-  ValidationCheckEvent,
-  TimelineEntry,
-} from '@/lib/types'
+import type { StreamEvent, TimelineEntry } from '@/lib/types'
 
 describe('new SSE event types', () => {
   it('DesignTokensEvent is assignable to StreamEvent', () => {
