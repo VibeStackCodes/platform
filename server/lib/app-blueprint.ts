@@ -659,11 +659,7 @@ export async function contractToBlueprintCreative(input: BlueprintInput): Promis
   const userPrompt = input.userPrompt?.trim() || `${input.appName}. ${input.appDescription}`
 
   // 1. Run Design Agent — generates color palette, fonts, and page styles
-  const { tokens } = await runDesignAgent(
-    userPrompt,
-    input.appName,
-    input.appDescription,
-  )
+  const { tokens } = await runDesignAgent(input.appName, userPrompt)
 
   // 2. Run Creative Director
   const cdResult = await runCreativeDirector({

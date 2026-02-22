@@ -140,11 +140,7 @@ async function main() {
   const { runDesignAgent } = await import('../server/lib/agents/design-agent')
 
   const t2 = Date.now()
-  const designResult = await runDesignAgent(
-    userPrompt,
-    analysisResult.appName,
-    analysisResult.appDescription,
-  )
+  const designResult = await runDesignAgent(analysisResult.appName, userPrompt)
   trackUsage('design', 'gpt-5.2', 0, 0, Date.now() - t2)
 
   const tokens = designResult.tokens

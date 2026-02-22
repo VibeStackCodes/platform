@@ -68,20 +68,18 @@ Match the visual tone to the app's domain and audience. A law firm wants "elevat
 })
 
 export async function runDesignAgent(
-  userPrompt: string,
-  appName?: string,
-  appDescription?: string,
+  appName: string,
+  prd: string,
 ): Promise<{
   tokens: ThemeTokens
   tokensUsed: number
 }> {
   const prompt = `Design the visual identity for this web application.
 
-App name: ${appName ?? 'My App'}
-App description: ${appDescription ?? userPrompt}
+App name: ${appName}
 
-User's original request:
-${userPrompt}`
+Product requirements:
+${prd}`
 
   const result = await designAgent.generate(prompt, {
     structuredOutput: { schema: designOutputSchema },

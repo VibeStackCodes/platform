@@ -60,7 +60,7 @@ import { DEFAULT_TEXT_SLOTS } from '@server/lib/themed-code-engine'
 
 describe('runDesignAgent', () => {
   it('returns tokens and tokensUsed', async () => {
-    const result = await runDesignAgent('Build a recipe website', 'RecipePress', 'A recipe sharing platform')
+    const result = await runDesignAgent('RecipePress', 'Build a recipe website for sharing and discovering recipes')
 
     expect(result).toHaveProperty('tokens')
     expect(result).toHaveProperty('tokensUsed')
@@ -68,7 +68,7 @@ describe('runDesignAgent', () => {
   })
 
   it('tokens.colors has all 8 required hex fields', async () => {
-    const { tokens } = await runDesignAgent('Build an app')
+    const { tokens } = await runDesignAgent('TestApp', 'Build an app')
 
     const hexRegex = /^#[0-9a-fA-F]{6}$/
     expect(tokens.colors.background).toMatch(hexRegex)
@@ -82,7 +82,7 @@ describe('runDesignAgent', () => {
   })
 
   it('tokens.fonts has display, body, and valid googleFontsUrl', async () => {
-    const { tokens } = await runDesignAgent('Build an app')
+    const { tokens } = await runDesignAgent('TestApp', 'Build an app')
 
     expect(tokens.fonts.display).toBe('Playfair Display')
     expect(tokens.fonts.body).toBe('Source Sans 3')
@@ -92,7 +92,7 @@ describe('runDesignAgent', () => {
   })
 
   it('tokens.style has all 6 enum fields with valid values', async () => {
-    const { tokens } = await runDesignAgent('Build an app')
+    const { tokens } = await runDesignAgent('TestApp', 'Build an app')
 
     expect(['flat', 'bordered', 'elevated', 'glass']).toContain(tokens.style.cardStyle)
     expect(['top-bar', 'sidebar', 'editorial', 'minimal', 'centered']).toContain(tokens.style.navStyle)
@@ -104,22 +104,22 @@ describe('runDesignAgent', () => {
   })
 
   it('authPosture is always public', async () => {
-    const { tokens } = await runDesignAgent('Build an app')
+    const { tokens } = await runDesignAgent('TestApp', 'Build an app')
     expect(tokens.authPosture).toBe('public')
   })
 
   it('textSlots defaults to DEFAULT_TEXT_SLOTS', async () => {
-    const { tokens } = await runDesignAgent('Build an app')
+    const { tokens } = await runDesignAgent('TestApp', 'Build an app')
     expect(tokens.textSlots).toEqual(DEFAULT_TEXT_SLOTS)
   })
 
   it('heroImages is empty array', async () => {
-    const { tokens } = await runDesignAgent('Build an app')
+    const { tokens } = await runDesignAgent('TestApp', 'Build an app')
     expect(tokens.heroImages).toEqual([])
   })
 
   it('name is empty string', async () => {
-    const { tokens } = await runDesignAgent('Build an app')
+    const { tokens } = await runDesignAgent('TestApp', 'Build an app')
     expect(tokens.name).toBe('')
   })
 })

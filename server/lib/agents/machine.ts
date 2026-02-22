@@ -5,7 +5,6 @@ import type { AppBlueprint, BlueprintFile } from '../app-blueprint'
 import type { AssemblyResult } from '../capabilities/assembler'
 import type { ThemeTokens } from '../themed-code-engine'
 import type { ValidationGateResult } from './validation'
-import type { CodeReviewResult } from './code-review'
 import type { AnalysisResult } from './orchestrator'
 import type { CreativeSpec } from './schemas'
 import type { GeneratedPage } from '../page-generator'
@@ -41,9 +40,6 @@ export interface MachineContext {
 
   // Infrastructure
   sandboxId: string | null
-  supabaseProjectId: string | null
-  supabaseUrl: string | null
-  supabaseAnonKey: string | null
   githubCloneUrl: string | null
   githubHtmlUrl: string | null
   repoName: string | null
@@ -52,10 +48,6 @@ export interface MachineContext {
   validation: ValidationGateResult | null
   retryCount: number
   previousValidationErrors: ValidationGateResult | null
-
-  // Code Review
-  reviewResult: CodeReviewResult | null
-  reviewSkipped: boolean
 
   // Deploy
   deploymentUrl: string | null
@@ -84,9 +76,6 @@ type MachineEvent =
   | {
       type: 'PROVISION_DONE'
       sandboxId: string
-      supabaseProjectId: string
-      supabaseUrl: string
-      supabaseAnonKey: string
       githubCloneUrl: string
       githubHtmlUrl: string
       repoName: string
@@ -96,8 +85,6 @@ type MachineEvent =
   | { type: 'VALIDATION_PASS' }
   | { type: 'VALIDATION_FAIL'; validation: ValidationGateResult }
   | { type: 'REPAIR_DONE' }
-  | { type: 'REVIEW_PASS' }
-  | { type: 'REVIEW_FAIL' }
   | { type: 'DEPLOY_DONE'; deploymentUrl: string }
   | { type: 'ERROR'; error: string }
 
@@ -115,7 +102,7 @@ export const appGenerationMachine = setup({
       const { runAnalysis } = await import('./orchestrator')
       return runAnalysis(input)
     }),
-    runDesignActor: fromPromise(async ({ input }: { input: { userPrompt: string; appName: string; appDescription: string } }) => {
+    runDesignActor: fromPromise(async ({ input }: { input: { appName: string; prd: string } }) => {
       const { runDesign } = await import('./orchestrator')
       return runDesign(input)
     }),
@@ -123,15 +110,11 @@ export const appGenerationMachine = setup({
       const { runArchitect } = await import('./orchestrator')
       return runArchitect(input)
     }),
-    runPageGenerationActor: fromPromise(async ({ input }: { input: { spec: CreativeSpec; tokens: ThemeTokens } }) => {
-      const { runPageGeneration } = await import('./orchestrator')
-      return runPageGeneration(input)
+    runCodeGenerationActor: fromPromise(async ({ input }: { input: { spec: CreativeSpec; tokens: ThemeTokens; appName: string; sandboxId: string } }) => {
+      const { runCodeGeneration } = await import('./orchestrator')
+      return runCodeGeneration(input)
     }),
-    runAssemblyActor: fromPromise(async ({ input }: { input: { spec: CreativeSpec; generatedPages: GeneratedPage[]; appName: string; tokens: ThemeTokens; sandboxId: string } }) => {
-      const { runAssembly } = await import('./orchestrator')
-      return runAssembly(input)
-    }),
-    runProvisioningActor: fromPromise(async ({ input }: { input: { appName: string; projectId: string; userId: string } }) => {
+    runProvisioningActor: fromPromise(async ({ input }: { input: { appName: string; projectId: string } }) => {
       const { runProvisioning } = await import('./orchestrator')
       return runProvisioning(input)
     }),
@@ -146,10 +129,9 @@ export const appGenerationMachine = setup({
       },
     ),
     runCleanupActor: fromPromise(
-      async ({ input }: { input: { sandboxId: string | null; supabaseProjectId: string | null } }) => {
+      async ({ input }: { input: { sandboxId: string | null } }) => {
         const errors: string[] = []
 
-        // Delete sandbox FIRST (before releasing pool project)
         if (input.sandboxId) {
           try {
             const { getDaytonaClient, getSandbox } = await import('../sandbox')
@@ -160,7 +142,6 @@ export const appGenerationMachine = setup({
           } catch (e) {
             const errorMsg = `Sandbox cleanup failed: ${e instanceof Error ? e.message : String(e)}`
             errors.push(errorMsg)
-            // Capture sandbox deletion errors to Sentry
             Sentry.captureException(e, {
               tags: { cleanup_stage: 'sandbox_deletion' },
               extra: { sandboxId: input.sandboxId },
@@ -168,26 +149,7 @@ export const appGenerationMachine = setup({
           }
         }
 
-        // Try to release warm pool project back to pool (after sandbox deletion)
-        if (input.supabaseProjectId) {
-          try {
-            const { releaseProject } = await import('../supabase-pool')
-            await releaseProject(input.supabaseProjectId)
-            console.log(`[cleanup] Released warm pool project: ${input.supabaseProjectId}`)
-          } catch (releaseError) {
-            // Release failed — project may not be from warm pool
-            // Just log, don't add to errors since Supabase project still works
-            console.warn(`[cleanup] Could not release to pool (may not be warm project): ${releaseError}`)
-          }
-        }
-
         return { errors }
-      },
-    ),
-    runCodeReviewActor: fromPromise(
-      async ({ input }: { input: { blueprint: AppBlueprint; sandboxId: string } }) => {
-        const { runCodeReview } = await import('./code-review')
-        return runCodeReview(input)
       },
     ),
   },
@@ -214,17 +176,12 @@ export const appGenerationMachine = setup({
     assembledFiles: null,
     prd: null,
     sandboxId: null,
-    supabaseProjectId: null,
-    supabaseUrl: null,
-    supabaseAnonKey: null,
     githubCloneUrl: null,
     githubHtmlUrl: null,
     repoName: null,
     validation: null,
     retryCount: 0,
     previousValidationErrors: null,
-    reviewResult: null,
-    reviewSkipped: false,
     deploymentUrl: null,
     totalTokens: 0,
     error: null,
@@ -339,15 +296,11 @@ export const appGenerationMachine = setup({
                 input: ({ context }) => ({
                   appName: context.appName || `project-${context.projectId.slice(0, 8)}`,
                   projectId: context.projectId,
-                  userId: context.userId,
                 }),
                 onDone: {
                   target: 'done',
                   actions: assign({
                     sandboxId: ({ event }) => event.output.sandboxId,
-                    supabaseProjectId: ({ event }) => event.output.supabaseProjectId,
-                    supabaseUrl: ({ event }) => event.output.supabaseUrl,
-                    supabaseAnonKey: ({ event }) => event.output.supabaseAnonKey,
                     githubCloneUrl: ({ event }) => event.output.githubCloneUrl,
                     githubHtmlUrl: ({ event }) => event.output.githubHtmlUrl,
                     repoName: ({ event }) => event.output.repoName,
@@ -385,9 +338,8 @@ export const appGenerationMachine = setup({
       invoke: {
         src: 'runDesignActor',
         input: ({ context }) => ({
-          userPrompt: context.userMessage,
           appName: context.appName ?? '',
-          appDescription: context.appDescription ?? '',
+          prd: context.prd ?? '',
         }),
         onDone: {
           target: 'architecting',
@@ -417,7 +369,7 @@ export const appGenerationMachine = setup({
           prd: context.prd ?? '',
         }),
         onDone: {
-          target: 'pageGeneration',
+          target: 'codeGeneration',
           actions: assign({
             creativeSpec: ({ event }) => event.output.spec,
             totalTokens: ({ context, event }) => context.totalTokens + (event.output.tokensUsed ?? 0),
@@ -430,54 +382,28 @@ export const appGenerationMachine = setup({
       },
     },
 
-    pageGeneration: {
+    codeGeneration: {
       after: {
         300_000: {
           target: 'cleanup',
-          actions: assign({ error: () => 'Page generation timed out' }),
+          actions: assign({ error: () => 'Code generation timed out' }),
         },
       },
       invoke: {
-        src: 'runPageGenerationActor',
+        src: 'runCodeGenerationActor',
         input: ({ context }) => ({
           spec: context.creativeSpec!,
           tokens: context.tokens!,
-        }),
-        onDone: {
-          target: 'assembly',
-          actions: assign({
-            generatedPages: ({ event }) => event.output.pages,
-            totalTokens: ({ context, event }) => context.totalTokens + (event.output.tokensUsed ?? 0),
-          }),
-        },
-        onError: {
-          target: 'cleanup',
-          actions: assign({ error: ({ event }) => String(event.error) }),
-        },
-      },
-    },
-
-    assembly: {
-      after: {
-        120_000: {
-          target: 'cleanup',
-          actions: assign({ error: () => 'Assembly timed out' }),
-        },
-      },
-      invoke: {
-        src: 'runAssemblyActor',
-        input: ({ context }) => ({
-          spec: context.creativeSpec!,
-          generatedPages: context.generatedPages!,
           appName: context.appName ?? '',
-          tokens: context.tokens!,
           sandboxId: context.sandboxId!,
         }),
         onDone: {
           target: 'validating',
           actions: assign({
+            generatedPages: ({ event }) => event.output.pages,
             assembledFiles: ({ event }) => event.output.assembledFiles,
             blueprint: ({ event }) => event.output.blueprint,
+            totalTokens: ({ context, event }) => context.totalTokens + (event.output.tokensUsed ?? 0),
           }),
         },
         onError: {
@@ -505,7 +431,7 @@ export const appGenerationMachine = setup({
         onDone: [
           {
             guard: ({ event }) => event.output.allPassed,
-            target: 'reviewing',
+            target: 'complete',
             actions: assign({
               validation: ({ event }) => event.output.validation,
               totalTokens: ({ context, event }) => context.totalTokens + event.output.tokensUsed,
@@ -589,61 +515,6 @@ export const appGenerationMachine = setup({
       },
     },
 
-    reviewing: {
-      after: {
-        180_000: {
-          target: 'cleanup',
-          actions: assign({
-            error: () => 'Code review timed out after 3 minutes',
-          }),
-        },
-      },
-      invoke: {
-        src: 'runCodeReviewActor',
-        input: ({ context }) => ({
-          blueprint: context.blueprint!,
-          sandboxId: context.sandboxId!,
-        }),
-        onDone: [
-          {
-            guard: ({ event }) => event.output.passed,
-            target: 'complete',
-            actions: assign({
-              reviewResult: ({ event }) => event.output,
-              totalTokens: ({ context, event }) => context.totalTokens + event.output.tokensUsed,
-            }),
-          },
-          {
-            // Review found critical issues — fail the pipeline
-            target: 'cleanup',
-            actions: assign({
-              reviewResult: ({ event }) => event.output,
-              totalTokens: ({ context, event }) => context.totalTokens + event.output.tokensUsed,
-              error: ({ event }) => {
-                const criticals = [
-                  ...event.output.deterministicIssues.filter((i: any) => i.severity === 'critical'),
-                  ...event.output.llmIssues.filter((i: any) => i.severity === 'critical'),
-                ]
-                return `Code review failed with ${criticals.length} critical issue(s): ${criticals.map((i: any) => i.message || i.description).join('; ')}`
-              },
-            }),
-          },
-        ],
-        onError: {
-          // Review failure should NOT block completion — it's a quality gate, not a hard gate
-          // Log the error but proceed to completion
-          target: 'complete',
-          actions: assign({
-            reviewSkipped: () => true,
-            totalTokens: ({ context }) => context.totalTokens,
-          }),
-          entry: ({ event }: { event: { error: unknown } }) => {
-            console.error('[machine] Code review crashed, skipping and proceeding to completion:', event.error)
-          },
-        },
-      },
-    },
-
     complete: {
       type: 'final',
     },
@@ -664,7 +535,6 @@ export const appGenerationMachine = setup({
         src: 'runCleanupActor',
         input: ({ context }) => ({
           sandboxId: context.sandboxId,
-          supabaseProjectId: context.supabaseProjectId,
         }),
         onDone: { target: 'failed' },
         onError: { target: 'failed' }, // Cleanup failure shouldn't block failure reporting
@@ -861,28 +731,19 @@ export const mockAppGenerationMachine = setup({
         tokensUsed: 1200,
       }
     }),
-    runPageGenerationActor: fromPromise(async () => {
+    runCodeGenerationActor: fromPromise(async () => {
       await delay(3000)
       return {
         pages: MOCK_GENERATED_PAGES,
-        tokensUsed: 4000,
-      }
-    }),
-    runAssemblyActor: fromPromise(async () => {
-      await delay(1500)
-      return {
         assembledFiles: MOCK_ASSEMBLED_FILES,
         blueprint: null,
-        tokensUsed: 0,
+        tokensUsed: 4000,
       }
     }),
     runProvisioningActor: fromPromise(async () => {
       await delay(1500)
       return {
         sandboxId: 'mock-sandbox-001',
-        supabaseProjectId: 'mock-supabase-001',
-        supabaseUrl: 'https://mock-project.supabase.co',
-        supabaseAnonKey: 'mock-anon-key-xxxx',
         githubCloneUrl: 'https://github.com/mock-org/taskflow.git',
         githubHtmlUrl: 'https://github.com/mock-org/taskflow',
         repoName: 'taskflow',
@@ -908,16 +769,6 @@ export const mockAppGenerationMachine = setup({
     runRepairActor: fromPromise(async () => {
       await delay(500)
       return { tokensUsed: 0 }
-    }),
-    runCodeReviewActor: fromPromise(async () => {
-      await delay(1000)
-      return {
-        passed: true,
-        tokensUsed: 300,
-        deterministicIssues: [],
-        llmIssues: [],
-        summary: 'Mock review — all checks passed',
-      }
     }),
     runCleanupActor: fromPromise(async () => {
       return { errors: [] }
@@ -947,17 +798,12 @@ export const mockAppGenerationMachine = setup({
     assembledFiles: null,
     prd: null,
     sandboxId: null,
-    supabaseProjectId: null,
-    supabaseUrl: null,
-    supabaseAnonKey: null,
     githubCloneUrl: null,
     githubHtmlUrl: null,
     repoName: null,
     validation: null,
     retryCount: 0,
     previousValidationErrors: null,
-    reviewResult: null,
-    reviewSkipped: false,
     deploymentUrl: null,
     totalTokens: 0,
     error: null,
@@ -1027,15 +873,11 @@ export const mockAppGenerationMachine = setup({
                 input: ({ context }) => ({
                   appName: context.appName || `project-${context.projectId.slice(0, 8)}`,
                   projectId: context.projectId,
-                  userId: context.userId,
                 }),
                 onDone: {
                   target: 'done',
                   actions: assign({
                     sandboxId: ({ event }) => event.output.sandboxId,
-                    supabaseProjectId: ({ event }) => event.output.supabaseProjectId,
-                    supabaseUrl: ({ event }) => event.output.supabaseUrl,
-                    supabaseAnonKey: ({ event }) => event.output.supabaseAnonKey,
                     githubCloneUrl: ({ event }) => event.output.githubCloneUrl,
                     githubHtmlUrl: ({ event }) => event.output.githubHtmlUrl,
                     repoName: ({ event }) => event.output.repoName,
@@ -1058,9 +900,8 @@ export const mockAppGenerationMachine = setup({
       invoke: {
         src: 'runDesignActor',
         input: ({ context }) => ({
-          userPrompt: context.userMessage,
           appName: context.appName ?? '',
-          appDescription: context.appDescription ?? '',
+          prd: context.prd ?? '',
         }),
         onDone: {
           target: 'architecting',
@@ -1083,7 +924,7 @@ export const mockAppGenerationMachine = setup({
           prd: context.prd ?? '',
         }),
         onDone: {
-          target: 'pageGeneration',
+          target: 'codeGeneration',
           actions: assign({
             creativeSpec: ({ event }) => event.output.spec,
             totalTokens: ({ context, event }) => context.totalTokens + (event.output.tokensUsed ?? 0),
@@ -1095,41 +936,22 @@ export const mockAppGenerationMachine = setup({
         },
       },
     },
-    pageGeneration: {
+    codeGeneration: {
       invoke: {
-        src: 'runPageGenerationActor',
+        src: 'runCodeGenerationActor',
         input: ({ context }) => ({
           spec: context.creativeSpec!,
           tokens: context.tokens!,
-        }),
-        onDone: {
-          target: 'assembly',
-          actions: assign({
-            generatedPages: ({ event }) => event.output.pages,
-            totalTokens: ({ context, event }) => context.totalTokens + (event.output.tokensUsed ?? 0),
-          }),
-        },
-        onError: {
-          target: 'failed',
-          actions: assign({ error: ({ event }) => String(event.error) }),
-        },
-      },
-    },
-    assembly: {
-      invoke: {
-        src: 'runAssemblyActor',
-        input: ({ context }) => ({
-          spec: context.creativeSpec!,
-          generatedPages: context.generatedPages!,
           appName: context.appName ?? '',
-          tokens: context.tokens!,
           sandboxId: context.sandboxId!,
         }),
         onDone: {
           target: 'validating',
           actions: assign({
+            generatedPages: ({ event }) => event.output.pages,
             assembledFiles: ({ event }) => event.output.assembledFiles,
             blueprint: ({ event }) => event.output.blueprint,
+            totalTokens: ({ context, event }) => context.totalTokens + (event.output.tokensUsed ?? 0),
           }),
         },
         onError: {
@@ -1148,7 +970,7 @@ export const mockAppGenerationMachine = setup({
         onDone: [
           {
             guard: ({ event }) => event.output.allPassed,
-            target: 'reviewing',
+            target: 'complete',
             actions: assign({
               validation: ({ event }) => event.output.validation,
               totalTokens: ({ context, event }) => context.totalTokens + event.output.tokensUsed,
@@ -1185,40 +1007,12 @@ export const mockAppGenerationMachine = setup({
         },
       },
     },
-    reviewing: {
-      invoke: {
-        src: 'runCodeReviewActor',
-        input: ({ context }) => ({
-          blueprint: context.blueprint!,
-          sandboxId: context.sandboxId!,
-        }),
-        onDone: [
-          {
-            guard: ({ event }) => event.output.passed,
-            target: 'complete',
-            actions: assign({
-              reviewResult: ({ event }) => event.output,
-              totalTokens: ({ context, event }) => context.totalTokens + event.output.tokensUsed,
-            }),
-          },
-          {
-            target: 'failed',
-            actions: assign({ error: () => 'Mock review failed' }),
-          },
-        ],
-        onError: {
-          target: 'complete',
-          actions: assign({ reviewSkipped: () => true }),
-        },
-      },
-    },
     complete: { type: 'final' },
     cleanup: {
       invoke: {
         src: 'runCleanupActor',
         input: ({ context }) => ({
           sandboxId: context.sandboxId,
-          supabaseProjectId: context.supabaseProjectId,
         }),
         onDone: { target: 'failed' },
         onError: { target: 'failed' },

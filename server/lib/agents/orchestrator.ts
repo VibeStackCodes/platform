@@ -3,7 +3,6 @@
 // XState invoke handlers — each function maps to one machine state.
 // The machine calls these via fromPromise actors.
 
-import { inferFeatures } from '../schema-contract'
 import type { AppBlueprint } from '../app-blueprint'
 import { assembleCapabilities, type AssemblyResult } from '../capabilities/assembler'
 import { loadCoreRegistry } from '../capabilities/catalog'
@@ -46,9 +45,6 @@ export interface RepairResult {
 
 export interface ProvisioningResult {
   sandboxId: string
-  supabaseProjectId: string
-  supabaseUrl: string
-  supabaseAnonKey: string
   githubCloneUrl: string
   githubHtmlUrl: string
   repoName: string
@@ -70,12 +66,8 @@ export interface ArchitectResult {
   tokensUsed: number
 }
 
-export interface PageGenerationResult {
+export interface CodeGenerationResult {
   pages: GeneratedPage[]
-  tokensUsed: number
-}
-
-export interface AssemblyResult2 {
   assembledFiles: Array<{ path: string; content: string; layer: number; isLLMSlot: boolean }>
   blueprint: AppBlueprint
   tokensUsed: number
@@ -217,57 +209,9 @@ Rules:
 export async function runProvisioning(input: {
   appName: string
   projectId: string
-  userId?: string
 }): Promise<ProvisioningResult> {
-  // Run infrastructure operations in parallel -- they have ZERO dependencies on each other
-  // NOTE: Supabase provisioning is disabled (returns stubs). Re-enable by removing the stub block below.
-  const [supabaseResult, sandboxResult, githubResult] = await Promise.allSettled([
-    // 1. Supabase provisioning — DISABLED (returns stubs to skip 60-120s cold creation)
-    (async () => {
-      console.log('[provisioning] Supabase provisioning disabled — using stubs')
-      return {
-        supabaseProjectId: `stub-${input.projectId.slice(0, 8)}`,
-        supabaseUrl: 'https://stub.supabase.co',
-        anonKey: 'stub-anon-key',
-        serviceRoleKey: 'stub-service-role-key',
-        dbHost: 'stub-db-host',
-        dbPassword: 'stub-db-password',
-      }
-      // --- Original Supabase provisioning (re-enable by uncommenting and removing stub above) ---
-      // // Try warm pool if userId is available
-      // if (input.userId) {
-      //   try {
-      //     const { claimWarmProject } = await import('../supabase-pool')
-      //     const warm = await claimWarmProject(input.userId)
-      //     if (warm) {
-      //       return {
-      //         supabaseProjectId: warm.supabaseProjectId,
-      //         supabaseUrl: warm.supabaseUrl,
-      //         anonKey: warm.anonKey,
-      //         serviceRoleKey: warm.serviceRoleKey,
-      //         dbHost: warm.dbHost,
-      //         dbPassword: warm.dbPassword,
-      //       }
-      //     }
-      //   } catch (error) {
-      //     console.warn(
-      //       '[provisioning] Warm pool unavailable, falling back to cold creation:',
-      //       error,
-      //     )
-      //   }
-      // }
-      // const { createSupabaseProject } = await import('../supabase-mgmt')
-      // const project = await createSupabaseProject(`${input.appName}-${Date.now()}`)
-      // return {
-      //   supabaseProjectId: project.id,
-      //   supabaseUrl: project.url,
-      //   anonKey: project.anonKey,
-      //   serviceRoleKey: project.serviceRoleKey,
-      //   dbHost: project.dbHost,
-      //   dbPassword: project.dbPassword,
-      // }
-    })(),
-    // 2. Create sandbox (~10-20s)
+  const [sandboxResult, githubResult] = await Promise.allSettled([
+    // 1. Create sandbox (~10-20s)
     (async () => {
       const { createSandbox } = await import('../sandbox')
       return createSandbox({
@@ -276,17 +220,13 @@ export async function runProvisioning(input: {
         labels: { project: input.projectId },
       })
     })(),
-    // 3. Create GitHub repo (~2-5s)
+    // 2. Create GitHub repo (~2-5s)
     (async () => {
       const { createRepo, buildRepoName } = await import('../github')
       return createRepo(buildRepoName(input.appName, input.projectId))
     })(),
   ])
 
-  // Handle failures -- any infrastructure failure is fatal
-  if (supabaseResult.status === 'rejected') {
-    throw new Error(`Supabase provisioning failed: ${supabaseResult.reason}`)
-  }
   if (sandboxResult.status === 'rejected') {
     throw new Error(`Sandbox creation failed: ${sandboxResult.reason}`)
   }
@@ -294,15 +234,11 @@ export async function runProvisioning(input: {
     throw new Error(`GitHub repo creation failed: ${githubResult.reason}`)
   }
 
-  const supabase = supabaseResult.value
   const sandbox = sandboxResult.value
   const github = githubResult.value
 
   return {
     sandboxId: sandbox.id,
-    supabaseProjectId: supabase.supabaseProjectId,
-    supabaseUrl: supabase.supabaseUrl,
-    supabaseAnonKey: supabase.anonKey,
     githubCloneUrl: github.cloneUrl,
     githubHtmlUrl: github.htmlUrl,
     repoName: github.repoName,
@@ -565,19 +501,14 @@ export async function runDeployment(input: {
  * Pipeline B step 1: userPrompt + contract → tokens + theme metadata.
  */
 export async function runDesign(input: {
-  userPrompt: string
-  appName?: string
-  appDescription?: string
+  appName: string
+  prd: string
 }): Promise<DesignResult> {
   console.log('[design] Starting design phase...')
   const { runDesignAgent } = await import('./design-agent')
 
   try {
-    const result = await runDesignAgent(
-      input.userPrompt,
-      input.appName,
-      input.appDescription,
-    )
+    const result = await runDesignAgent(input.appName, input.prd)
 
     return {
       tokens: result.tokens,
@@ -618,6 +549,122 @@ export async function runArchitect(input: {
 }
 
 // ============================================================================
+// Code Generation handler (merged page gen + assembly + sandbox upload)
+// ============================================================================
+
+/**
+ * Generate all page files (LLM) and deterministic assembly files in parallel,
+ * then upload everything to the sandbox and run bun install.
+ */
+export async function runCodeGeneration(input: {
+  spec: CreativeSpec
+  tokens: ThemeTokens
+  appName: string
+  sandboxId: string
+  onPageStart?: (fileName: string, route: string, componentName: string, index: number, total: number) => void
+  onPageComplete?: (fileName: string, route: string, componentName: string, lineCount: number, code: string, index: number, total: number) => void
+  onFileAssembled?: (path: string, category: string) => void
+}): Promise<CodeGenerationResult> {
+  const { generatePages } = await import('../page-generator')
+  const { assembleApp } = await import('../deterministic-assembly')
+  const { getSandbox, uploadFiles } = await import('../sandbox')
+
+  // Run LLM page generation + deterministic assembly in parallel
+  const [pageResult, assembledFiles] = await Promise.all([
+    generatePages({
+      spec: input.spec,
+      tokens: input.tokens,
+      onPageStart: input.onPageStart,
+      onPageComplete: input.onPageComplete,
+    }),
+    (async () => {
+      const files = assembleApp({
+        spec: input.spec,
+        generatedPages: [], // Deterministic files don't need LLM pages
+        appName: input.appName,
+        tokens: input.tokens,
+        includeUiKit: true,
+      })
+      console.log(`[codeGen] Assembled ${files.length} deterministic files`)
+      if (input.onFileAssembled) {
+        for (const file of files) {
+          input.onFileAssembled(file.path, file.isLLMSlot ? 'llm-page' : 'deterministic')
+        }
+      }
+      return files
+    })(),
+  ])
+
+  const tokensUsed = (pageResult.usage.inputTokens ?? 0) + (pageResult.usage.outputTokens ?? 0)
+
+  // Merge: deterministic files + LLM-generated pages
+  // LLM pages overwrite any deterministic placeholder at the same path
+  const fileMap = new Map<string, typeof assembledFiles[0]>()
+  for (const f of assembledFiles) fileMap.set(f.path, f)
+  for (const page of pageResult.pages) {
+    fileMap.set(`src/${page.fileName}`, {
+      path: `src/${page.fileName}`,
+      content: page.content,
+      layer: 1,
+      isLLMSlot: true,
+    })
+  }
+  const allFiles = [...fileMap.values()]
+
+  // Upload to sandbox
+  const sandbox = await getSandbox(input.sandboxId)
+  console.log(`[codeGen] Writing ${allFiles.length} files to sandbox...`)
+
+  const dirs = new Set<string>()
+  for (const file of allFiles) {
+    const dir = `/workspace/${file.path}`.split('/').slice(0, -1).join('/')
+    dirs.add(dir)
+  }
+  for (const dir of dirs) {
+    try {
+      await sandbox.process.executeCommand(`mkdir -p ${dir}`, '/workspace', undefined, 5)
+    } catch {
+      // ignore if exists
+    }
+  }
+
+  const uploads = allFiles.map((file) => ({
+    content: file.content,
+    path: `/workspace/${file.path}`,
+  }))
+  await uploadFiles(sandbox, uploads)
+  console.log(`[codeGen] Upload complete: ${uploads.length} files written`)
+
+  // Install dependencies
+  console.log('[codeGen] Installing dependencies...')
+  const installResult = await sandbox.process.executeCommand(
+    'bun install --frozen-lockfile 2>&1 || bun install 2>&1',
+    '/workspace',
+    undefined,
+    120,
+  )
+  if (installResult.exitCode !== 0) {
+    console.warn(`[codeGen] bun install exit code: ${installResult.exitCode}`)
+  }
+
+  // Construct AppBlueprint for downstream validation/repair
+  const { inferFeatures } = await import('../schema-contract')
+  const blueprint: AppBlueprint = {
+    meta: { appName: input.appName, appDescription: '' },
+    features: inferFeatures({ tables: [] }),
+    contract: { tables: [] },
+    fileTree: allFiles,
+  }
+
+  return {
+    pages: pageResult.pages,
+    assembledFiles: allFiles,
+    blueprint,
+    tokensUsed,
+  }
+}
+
+// ============================================================================
 // Pipeline B: Page Generation handler
 // ============================================================================
 
@@ -630,7 +677,7 @@ export async function runPageGeneration(input: {
   tokens: ThemeTokens
   onPageStart?: (fileName: string, route: string, componentName: string, index: number, total: number) => void
   onPageComplete?: (fileName: string, route: string, componentName: string, lineCount: number, code: string, index: number, total: number) => void
-}): Promise<PageGenerationResult> {
+}): Promise<{ pages: GeneratedPage[]; tokensUsed: number }> {
   const { generatePages } = await import('../page-generator')
 
   const result = await generatePages({
@@ -664,7 +711,7 @@ export async function runAssembly(input: {
   tokens: ThemeTokens
   sandboxId: string
   onFileAssembled?: (path: string, category: string) => void
-}): Promise<AssemblyResult2> {
+}): Promise<{ assembledFiles: Array<{ path: string; content: string; layer: number; isLLMSlot: boolean }>; blueprint: AppBlueprint; tokensUsed: number }> {
   // Dynamic imports to avoid circular deps
   const { assembleApp } = await import('../deterministic-assembly')
   const { getSandbox, uploadFiles } = await import('../sandbox')
@@ -728,6 +775,7 @@ export async function runAssembly(input: {
 
   // Construct AppBlueprint from assembled files so downstream states
   // (validating, repairing, reviewing) have the fileTree they expect.
+  const { inferFeatures } = await import('../schema-contract')
   const blueprint: AppBlueprint = {
     meta: { appName: input.appName, appDescription: '' },
     features: inferFeatures({ tables: [] }),

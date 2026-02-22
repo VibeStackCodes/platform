@@ -36,11 +36,10 @@ describe('appGenerationMachine', () => {
     expect(states).toContain('preparing')
     expect(states).toContain('designing')
     expect(states).toContain('architecting')
-    expect(states).toContain('pageGeneration')
-    expect(states).toContain('assembly')
+    expect(states).toContain('codeGeneration')
     expect(states).toContain('validating')
     expect(states).toContain('repairing')
-    expect(states).toContain('reviewing')
+    expect(states).not.toContain('reviewing')
     expect(states).not.toContain('deploying')
     expect(states).toContain('cleanup')
     expect(states).toContain('complete')
@@ -86,38 +85,14 @@ describe('appGenerationMachine', () => {
     expect(state?.invoke).toBeDefined()
   })
 
-  it('machine has invoke on pageGeneration state', () => {
-    const state = appGenerationMachine.config.states?.pageGeneration
-    expect(state?.invoke).toBeDefined()
-  })
-
-  it('machine has invoke on assembly state', () => {
-    const state = appGenerationMachine.config.states?.assembly
+  it('machine has invoke on codeGeneration state', () => {
+    const state = appGenerationMachine.config.states?.codeGeneration
     expect(state?.invoke).toBeDefined()
   })
 
   it('machine has invoke on validating state', () => {
     const state = appGenerationMachine.config.states?.validating
     expect(state?.invoke).toBeDefined()
-  })
-
-  it('machine has invoke on reviewing state', () => {
-    const state = appGenerationMachine.config.states?.reviewing
-    expect(state?.invoke).toBeDefined()
-  })
-
-  it('context includes reviewResult', () => {
-    const actor = createActor(appGenerationMachine)
-    actor.start()
-    expect(actor.getSnapshot().context.reviewResult).toBe(null)
-    actor.stop()
-  })
-
-  it('context includes reviewSkipped', () => {
-    const actor = createActor(appGenerationMachine)
-    actor.start()
-    expect(actor.getSnapshot().context.reviewSkipped).toBe(false)
-    actor.stop()
   })
 
   it('awaitingClarification still has USER_ANSWERED event', () => {
@@ -169,9 +144,6 @@ describe('state transitions', () => {
         })),
         runProvisioningActor: fromPromise(async () => ({
           sandboxId: 'sandbox-123',
-          supabaseProjectId: 'supabase-123',
-          supabaseUrl: 'https://test.supabase.co',
-          supabaseAnonKey: 'anon-key',
           githubCloneUrl: 'https://github.com/test/repo.git',
           githubHtmlUrl: 'https://github.com/test/repo',
           repoName: 'test-repo',
@@ -204,9 +176,6 @@ describe('state transitions', () => {
         })),
         runProvisioningActor: fromPromise(async () => ({
           sandboxId: 'sandbox-123',
-          supabaseProjectId: 'supabase-123',
-          supabaseUrl: 'https://test.supabase.co',
-          supabaseAnonKey: 'anon-key',
           githubCloneUrl: 'https://github.com/test/repo.git',
           githubHtmlUrl: 'https://github.com/test/repo',
           repoName: 'test-repo',
@@ -253,9 +222,6 @@ describe('state transitions', () => {
         }),
         runProvisioningActor: fromPromise(async () => ({
           sandboxId: 'sandbox-123',
-          supabaseProjectId: 'supabase-123',
-          supabaseUrl: 'https://test.supabase.co',
-          supabaseAnonKey: 'anon-key',
           githubCloneUrl: 'https://github.com/test/repo.git',
           githubHtmlUrl: 'https://github.com/test/repo',
           repoName: 'test-repo',
@@ -287,7 +253,7 @@ describe('state transitions', () => {
     actor.stop()
   })
 
-  it('transitions through full happy path: preparing → designing → architecting → pageGeneration → assembly → validating → reviewing → complete', async () => {
+  it('transitions through full happy path: preparing → designing → architecting → codeGeneration → validating → complete', async () => {
     const mockBlueprint: AppBlueprint = {
       name: 'TestApp',
       description: 'Test app',
@@ -326,20 +292,14 @@ describe('state transitions', () => {
           imagePool: [],
           tokensUsed: 200,
         })),
-        runPageGenerationActor: fromPromise(async () => ({
+        runCodeGenerationActor: fromPromise(async () => ({
           pages: [],
-          tokensUsed: 300,
-        })),
-        runAssemblyActor: fromPromise(async () => ({
           assembledFiles: [],
           blueprint: mockBlueprint,
-          tokensUsed: 100,
+          tokensUsed: 300,
         })),
         runProvisioningActor: fromPromise(async () => ({
           sandboxId: 'sandbox-123',
-          supabaseProjectId: 'supabase-123',
-          supabaseUrl: 'https://test.supabase.co',
-          supabaseAnonKey: 'anon-key',
           githubCloneUrl: 'https://github.com/test/repo.git',
           githubHtmlUrl: 'https://github.com/test/repo',
           repoName: 'test-repo',
@@ -349,12 +309,6 @@ describe('state transitions', () => {
           allPassed: true,
           validation: { tscErrors: [], buildErrors: [], testErrors: [] },
           tokensUsed: 150,
-        })),
-        runCodeReviewActor: fromPromise(async () => ({
-          passed: true,
-          deterministicIssues: [],
-          llmIssues: [],
-          tokensUsed: 300,
         })),
       },
     })
@@ -372,10 +326,8 @@ describe('state transitions', () => {
     await waitFor(actor, (state) => state.matches('preparing'), { timeout: 1000 })
     await waitFor(actor, (state) => state.matches('designing'), { timeout: 1000 })
     await waitFor(actor, (state) => state.matches('architecting'), { timeout: 1000 })
-    await waitFor(actor, (state) => state.matches('pageGeneration'), { timeout: 1000 })
-    await waitFor(actor, (state) => state.matches('assembly'), { timeout: 1000 })
+    await waitFor(actor, (state) => state.matches('codeGeneration'), { timeout: 1000 })
     await waitFor(actor, (state) => state.matches('validating'), { timeout: 1000 })
-    await waitFor(actor, (state) => state.matches('reviewing'), { timeout: 1000 })
     await waitFor(actor, (state) => state.matches('complete'), { timeout: 1000 })
 
     expect(actor.getSnapshot().value).toBe('complete')
@@ -427,20 +379,14 @@ function buildMachineToValidating(overrides: Record<string, ReturnType<typeof fr
         imagePool: [],
         tokensUsed: 50,
       })),
-      runPageGenerationActor: fromPromise(async () => ({
+      runCodeGenerationActor: fromPromise(async () => ({
         pages: [],
-        tokensUsed: 50,
-      })),
-      runAssemblyActor: fromPromise(async () => ({
         assembledFiles: [],
         blueprint: mockBlueprint,
         tokensUsed: 50,
       })),
       runProvisioningActor: fromPromise(async () => ({
         sandboxId: 'sandbox-123',
-        supabaseProjectId: 'supabase-123',
-        supabaseUrl: 'https://test.supabase.co',
-        supabaseAnonKey: 'anon-key',
         githubCloneUrl: 'https://github.com/test/repo.git',
         githubHtmlUrl: 'https://github.com/test/repo',
         repoName: 'test-repo',
@@ -452,7 +398,7 @@ function buildMachineToValidating(overrides: Record<string, ReturnType<typeof fr
 }
 
 describe('validation and repair loop', () => {
-  it('transitions validating → reviewing when allPassed is true', async () => {
+  it('transitions validating → complete when allPassed is true', async () => {
     const testMachine = buildMachineToValidating({
       runValidationActor: fromPromise(async () => ({
         allPassed: true,
@@ -470,8 +416,8 @@ describe('validation and repair loop', () => {
       userId: 'test-user-123',
     })
 
-    await waitFor(actor, (state) => state.matches('reviewing'), { timeout: 5000 })
-    expect(actor.getSnapshot().value).toBe('reviewing')
+    await waitFor(actor, (state) => state.matches('complete'), { timeout: 5000 })
+    expect(actor.getSnapshot().value).toBe('complete')
     actor.stop()
   })
 
@@ -673,9 +619,6 @@ describe('error handling', () => {
         })),
         runProvisioningActor: fromPromise(async () => ({
           sandboxId: 'sandbox-123',
-          supabaseProjectId: 'supabase-123',
-          supabaseUrl: 'https://test.supabase.co',
-          supabaseAnonKey: 'anon-key',
           githubCloneUrl: 'https://github.com/test/repo.git',
           githubHtmlUrl: 'https://github.com/test/repo',
           repoName: 'test-repo',
@@ -746,25 +689,11 @@ describe('error handling', () => {
     actor.stop()
   })
 
-  it('transitions pageGeneration → failed on actor error', async () => {
-    const mockBlueprint: AppBlueprint = {
-      name: 'TestApp',
-      description: 'Test',
-      features: [],
-      pages: [],
-      contract: { tables: [], enums: [] },
-    }
-
+  it('transitions codeGeneration → failed on actor error', async () => {
     const testMachine = buildMachineToValidating({
-      runPageGenerationActor: fromPromise(async () => {
+      runCodeGenerationActor: fromPromise(async () => {
         throw new Error('Code generation failed')
       }),
-      // Need to prevent assembly from running
-      runAssemblyActor: fromPromise(async () => ({
-        assembledFiles: [],
-        blueprint: mockBlueprint,
-        tokensUsed: 50,
-      })),
       runCleanupActor: fromPromise(async () => ({ errors: [] })),
     })
 
@@ -856,20 +785,14 @@ describe('context updates', () => {
           imagePool: [],
           tokensUsed: 50,
         })),
-        runPageGenerationActor: fromPromise(async () => ({
+        runCodeGenerationActor: fromPromise(async () => ({
           pages: [],
-          tokensUsed: 200,
-        })),
-        runAssemblyActor: fromPromise(async () => ({
           assembledFiles: [],
           blueprint: mockBlueprint,
-          tokensUsed: 0,
+          tokensUsed: 200,
         })),
         runProvisioningActor: fromPromise(async () => ({
           sandboxId: 'sandbox-123',
-          supabaseProjectId: 'supabase-123',
-          supabaseUrl: 'https://test.supabase.co',
-          supabaseAnonKey: 'anon-key',
           githubCloneUrl: 'https://github.com/test/repo.git',
           githubHtmlUrl: 'https://github.com/test/repo',
           repoName: 'test-repo',
@@ -879,12 +802,6 @@ describe('context updates', () => {
           allPassed: true,
           validation: { tscErrors: [], buildErrors: [], testErrors: [] },
           tokensUsed: 150,
-        })),
-        runCodeReviewActor: fromPromise(async () => ({
-          passed: true,
-          deterministicIssues: [],
-          llmIssues: [],
-          tokensUsed: 0,
         })),
       },
     })
@@ -904,7 +821,7 @@ describe('context updates', () => {
     actor.stop()
   })
 
-  it('stores blueprint in context after assembly', async () => {
+  it('stores blueprint in context after codeGeneration', async () => {
     const mockBlueprint: AppBlueprint = {
       name: 'BlogApp',
       description: 'A blogging platform',
@@ -914,7 +831,8 @@ describe('context updates', () => {
     }
 
     const testMachine = buildMachineToValidating({
-      runAssemblyActor: fromPromise(async () => ({
+      runCodeGenerationActor: fromPromise(async () => ({
+        pages: [],
         assembledFiles: [],
         blueprint: mockBlueprint,
         tokensUsed: 200,
@@ -935,8 +853,8 @@ describe('context updates', () => {
       userId: 'test-user-123',
     })
 
-    // assembly → validating
-    await waitFor(actor, (state) => state.matches('reviewing'), { timeout: 8000 })
+    // codeGeneration → validating → complete
+    await waitFor(actor, (state) => state.matches('complete'), { timeout: 8000 })
     expect(actor.getSnapshot().context.blueprint).toEqual(mockBlueprint)
     actor.stop()
   })
@@ -981,143 +899,13 @@ describe('context updates', () => {
   })
 })
 
-// ============================================================================
-// Code Review State Transition Tests
-// ============================================================================
-
-describe('code review state transitions', () => {
-  it('transitions reviewing → complete when review passes', async () => {
-    const testMachine = buildMachineToValidating({
-      runValidationActor: fromPromise(async () => ({
-        allPassed: true,
-        validation: { tscErrors: [], buildErrors: [], testErrors: [] },
-        tokensUsed: 150,
-      })),
-      runCodeReviewActor: fromPromise(async () => ({
-        passed: true,
-        deterministicIssues: [],
-        llmIssues: [{ severity: 'info', category: 'ux', file: 'test.tsx', description: 'Minor suggestion', suggestion: 'Add tooltip' }],
-        tokensUsed: 300,
-      })),
-    })
-
-    const actor = createActor(testMachine)
-    actor.start()
-    actor.send({
-      type: 'START',
-      userMessage: 'Build a blog',
-      projectId: 'test-review-pass',
-      userId: 'test-user-123',
-    })
-
-    await waitFor(actor, (state) => state.matches('reviewing'), { timeout: 8000 })
-    await waitFor(actor, (state) => state.matches('complete'), { timeout: 2000 })
-    expect(actor.getSnapshot().value).toBe('complete')
-    expect(actor.getSnapshot().context.reviewResult?.passed).toBe(true)
-    actor.stop()
-  })
-
-  it('transitions reviewing → cleanup when review finds critical issues', async () => {
-    const testMachine = buildMachineToValidating({
-      runValidationActor: fromPromise(async () => ({
-        allPassed: true,
-        validation: { tscErrors: [], buildErrors: [], testErrors: [] },
-        tokensUsed: 150,
-      })),
-      runCodeReviewActor: fromPromise(async () => ({
-        passed: false,
-        deterministicIssues: [
-          { type: 'missing_route_export', file: 'routes/tasks.tsx', message: 'Missing Route export', severity: 'critical' },
-        ],
-        llmIssues: [],
-        tokensUsed: 300,
-      })),
-      runCleanupActor: fromPromise(async () => ({ errors: [] })),
-    })
-
-    const actor = createActor(testMachine)
-    actor.start()
-    actor.send({
-      type: 'START',
-      userMessage: 'Build a blog',
-      projectId: 'test-review-fail',
-      userId: 'test-user-123',
-    })
-
-    await waitFor(actor, (state) => state.matches('reviewing'), { timeout: 8000 })
-    await waitFor(actor, (state) => state.matches('failed'), { timeout: 3000 })
-    expect(actor.getSnapshot().value).toBe('failed')
-    expect(actor.getSnapshot().context.error).toContain('Code review failed')
-    expect(actor.getSnapshot().context.reviewResult?.passed).toBe(false)
-    actor.stop()
-  })
-
-  it('transitions reviewing → complete when review crashes (soft failure)', async () => {
-    const testMachine = buildMachineToValidating({
-      runValidationActor: fromPromise(async () => ({
-        allPassed: true,
-        validation: { tscErrors: [], buildErrors: [], testErrors: [] },
-        tokensUsed: 150,
-      })),
-      runCodeReviewActor: fromPromise(async () => {
-        throw new Error('LLM service unavailable')
-      }),
-    })
-
-    const actor = createActor(testMachine)
-    actor.start()
-    actor.send({
-      type: 'START',
-      userMessage: 'Build a blog',
-      projectId: 'test-review-crash',
-      userId: 'test-user-123',
-    })
-
-    await waitFor(actor, (state) => state.matches('reviewing'), { timeout: 8000 })
-    await waitFor(actor, (state) => state.matches('complete'), { timeout: 2000 })
-    // Review crash should NOT block completion
-    expect(actor.getSnapshot().value).toBe('complete')
-    expect(actor.getSnapshot().context.error).toBeNull()
-    actor.stop()
-  })
-
-  it('accumulates reviewResult tokens in totalTokens', async () => {
-    const testMachine = buildMachineToValidating({
-      runValidationActor: fromPromise(async () => ({
-        allPassed: true,
-        validation: { tscErrors: [], buildErrors: [], testErrors: [] },
-        tokensUsed: 150,
-      })),
-      runCodeReviewActor: fromPromise(async () => ({
-        passed: true,
-        deterministicIssues: [],
-        llmIssues: [],
-        tokensUsed: 300,
-      })),
-    })
-
-    const actor = createActor(testMachine)
-    actor.start()
-    actor.send({
-      type: 'START',
-      userMessage: 'Build a blog',
-      projectId: 'test-review-tokens',
-      userId: 'test-user-123',
-    })
-
-    await waitFor(actor, (state) => state.matches('complete'), { timeout: 10000 })
-    // Total should include all stage tokens including review (300)
-    expect(actor.getSnapshot().context.totalTokens).toBeGreaterThan(500)
-    actor.stop()
-  })
-})
 
 // ============================================================================
 // userId and Cleanup Tests
 // ============================================================================
 
 describe('userId and cleanup', () => {
-  it('passes userId through to provisioning actor', async () => {
+  it('passes projectId through to provisioning actor', async () => {
     let provisioningInput: any = null
 
     const testMachine = appGenerationMachine.provide({
@@ -1132,9 +920,6 @@ describe('userId and cleanup', () => {
           provisioningInput = input
           return {
             sandboxId: 'sandbox-123',
-            supabaseProjectId: 'supabase-123',
-            supabaseUrl: 'https://test.supabase.co',
-            supabaseAnonKey: 'anon-key',
             githubCloneUrl: 'https://github.com/test/repo.git',
             githubHtmlUrl: 'https://github.com/test/repo',
             repoName: 'test-repo',
@@ -1156,7 +941,6 @@ describe('userId and cleanup', () => {
     // Provisioning runs in parallel with analysis during preparing
     await waitFor(actor, (state) => state.matches('designing'), { timeout: 2000 })
     expect(provisioningInput).toBeDefined()
-    expect(provisioningInput.userId).toBe('user-456')
     expect(provisioningInput.projectId).toBe('test-userid')
     // appName is not yet available when provisioning starts (runs in parallel with analysis)
     // so it uses the projectId fallback
@@ -1177,13 +961,12 @@ describe('userId and cleanup', () => {
     actor.stop()
   })
 
-  it('cleanup actor attempts to release warm pool project', async () => {
+  it('cleanup actor receives sandboxId', async () => {
     const testMachine = buildMachineToValidating({
-      runPageGenerationActor: fromPromise(async () => {
+      runCodeGenerationActor: fromPromise(async () => {
         throw new Error('Trigger cleanup')
       }),
       runCleanupActor: fromPromise(async ({ input }: any) => {
-        // Track input for assertions below
         ;(global as any).__cleanupInput = input
         return { errors: [] }
       }),
@@ -1202,7 +985,6 @@ describe('userId and cleanup', () => {
     const cleanupInput = (global as any).__cleanupInput
     expect(cleanupInput).toBeDefined()
     expect(cleanupInput.sandboxId).toBe('sandbox-123')
-    expect(cleanupInput.supabaseProjectId).toBe('supabase-123')
     delete (global as any).__cleanupInput
     actor.stop()
   })
@@ -1247,20 +1029,12 @@ describe('state timeouts', () => {
     expect(after['300000'].target).toBe('#appGeneration.cleanup')
   })
 
-  it('pageGeneration state has timeout configured to cleanup', () => {
-    const pageGenerationState = appGenerationMachine.config.states?.pageGeneration
-    const after = pageGenerationState?.after as any
+  it('codeGeneration state has timeout configured to cleanup', () => {
+    const codeGenerationState = appGenerationMachine.config.states?.codeGeneration
+    const after = codeGenerationState?.after as any
     expect(after).toBeDefined()
     expect(after).toHaveProperty('300000')
     expect(after['300000'].target).toBe('cleanup')
-  })
-
-  it('assembly state has timeout configured to cleanup', () => {
-    const assemblyState = appGenerationMachine.config.states?.assembly
-    const after = assemblyState?.after as any
-    expect(after).toBeDefined()
-    expect(after).toHaveProperty('120000')
-    expect(after['120000'].target).toBe('cleanup')
   })
 
   it('validating state has timeout configured to cleanup', () => {
@@ -1288,14 +1062,6 @@ describe('state timeouts', () => {
     expect(after['300000'].target).toBe('cleanup')
   })
 
-  it('reviewing state has timeout configured to cleanup', () => {
-    const reviewingState = appGenerationMachine.config.states?.reviewing
-    const after = reviewingState?.after as any
-    expect(after).toBeDefined()
-    expect(after).toHaveProperty('180000')
-    expect(after['180000'].target).toBe('cleanup')
-  })
-
   it('cleanup state has timeout configured', () => {
     const cleanupState = appGenerationMachine.config.states?.cleanup
     const after = cleanupState?.after as any
@@ -1310,19 +1076,15 @@ describe('state timeouts', () => {
 // ============================================================================
 
 describe('cleanup ordering', () => {
-  it('cleanup deletes sandbox BEFORE releasing pool project', async () => {
+  it('cleanup deletes sandbox on error', async () => {
     const executionOrder: string[] = []
 
-    // The actual implementation order is verified in the machine.ts code
-    // This test verifies that cleanup actor receives both IDs
     const fullMachine = buildMachineToValidating({
-      runPageGenerationActor: fromPromise(async () => {
+      runCodeGenerationActor: fromPromise(async () => {
         throw new Error('Trigger cleanup')
       }),
       runCleanupActor: fromPromise(async ({ input }: any) => {
-        // Track order
         if (input.sandboxId) executionOrder.push('sandbox_delete')
-        if (input.supabaseProjectId) executionOrder.push('pool_release')
         return { errors: [] }
       }),
     })
@@ -1338,9 +1100,7 @@ describe('cleanup ordering', () => {
 
     await waitFor(fullActor, (state) => state.matches('failed'), { timeout: 5000 })
 
-    // Verify both operations were tracked (order is enforced in implementation)
     expect(executionOrder).toContain('sandbox_delete')
-    expect(executionOrder).toContain('pool_release')
 
     fullActor.stop()
   })
@@ -1358,7 +1118,7 @@ describe('sentry error capture', () => {
     const sandboxError = new Error('Sandbox deletion failed - network timeout')
 
     const testMachine = buildMachineToValidating({
-      runPageGenerationActor: fromPromise(async () => {
+      runCodeGenerationActor: fromPromise(async () => {
         throw new Error('Trigger cleanup')
       }),
       runCleanupActor: fromPromise(async ({ input }: any) => {
@@ -1401,49 +1161,3 @@ describe('sentry error capture', () => {
   })
 })
 
-// ============================================================================
-// Review Skip Tests (H7: Silent Code Review Failure)
-// ============================================================================
-
-describe('code review skip on error', () => {
-  it('reviewing onError sets reviewSkipped and transitions to complete', async () => {
-    const testMachine = buildMachineToValidating({
-      runValidationActor: fromPromise(async () => ({
-        allPassed: true,
-        validation: { tscErrors: [], buildErrors: [], testErrors: [] },
-        tokensUsed: 150,
-      })),
-      runCodeReviewActor: fromPromise(async () => {
-        throw new Error('LLM service unavailable')
-      }),
-    })
-
-    const actor = createActor(testMachine)
-    actor.start()
-    actor.send({
-      type: 'START',
-      userMessage: 'Build a blog',
-      projectId: 'test-review-skip',
-      userId: 'test-user-123',
-    })
-
-    await waitFor(actor, (state) => state.matches('reviewing'), { timeout: 8000 })
-    await waitFor(actor, (state) => state.matches('complete'), { timeout: 2000 })
-
-    expect(actor.getSnapshot().value).toBe('complete')
-    expect(actor.getSnapshot().context.reviewSkipped).toBe(true)
-    expect(actor.getSnapshot().context.error).toBeNull()
-
-    actor.stop()
-  })
-
-  it('reviewing state has entry action that logs errors', () => {
-    const reviewingState = appGenerationMachine.config.states?.reviewing
-    expect(reviewingState?.invoke).toBeDefined()
-    const invokeConfig = reviewingState?.invoke as any
-    expect(invokeConfig.onError).toBeDefined()
-    expect(invokeConfig.onError.entry).toBeDefined()
-    // Verify entry action is a function that logs
-    expect(typeof invokeConfig.onError.entry).toBe('function')
-  })
-})

@@ -20,7 +20,7 @@ import { createActor } from 'xstate'
 import { Hono } from 'hono'
 import * as Sentry from '@sentry/node'
 import { createHeliconeProvider, isAllowedModel } from '../lib/agents/provider'
-import { createMockOrRealActor, isMockPipeline, MOCK_FILE_LIST, MOCK_GENERATED_PAGES, MOCK_ASSEMBLED_FILES } from '../lib/agents/machine'
+import { createMockOrRealActor, isMockPipeline, MOCK_FILE_LIST, MOCK_GENERATED_PAGES } from '../lib/agents/machine'
 import type { MachineContext } from '../lib/agents/machine'
 import { editMachine } from '../lib/agents/edit-machine'
 import type { EditMachineContext } from '../lib/agents/edit-machine'
@@ -74,16 +74,14 @@ if (process.env.NODE_ENV !== 'production') {
 const STATE_PHASES: Record<string, { name: string; phase: number; agentId?: string; agentName?: string }> = {
   analyzing:            { name: 'Analyzing requirements',      phase: 1, agentId: 'analyst',     agentName: 'Analyst' },
   awaitingClarification:{ name: 'Awaiting clarification',     phase: 1 },
-  provisioning:         { name: 'Provisioning infrastructure', phase: 1, agentId: 'provisioner', agentName: 'Provisioner' },
+  provisioning:         { name: 'Provisioning infrastructure', phase: 1, agentId: 'provisioner', agentName: 'DevOps Agent' },
   designing:            { name: 'Designing theme',             phase: 2, agentId: 'designer',    agentName: 'Design Agent' },
   architecting:         { name: 'Architecting app',            phase: 2, agentId: 'architect',   agentName: 'Architect Agent' },
-  pageGeneration:       { name: 'Generating pages',            phase: 3, agentId: 'frontend',    agentName: 'Frontend Engineer' },
-  assembly:             { name: 'Assembling app',              phase: 3, agentId: 'backend',     agentName: 'Backend Engineer' },
+  codeGeneration:       { name: 'Generating code',             phase: 3, agentId: 'codegen',     agentName: 'Code Agent' },
   validating:           { name: 'Validating code',             phase: 4, agentId: 'qa',          agentName: 'Quality Assurance' },
   repairing:            { name: 'Repairing errors',            phase: 4, agentId: 'repair',      agentName: 'Repair Agent' },
-  reviewing:            { name: 'Reviewing code',              phase: 5, agentId: 'reviewer',    agentName: 'Code Reviewer' },
-  complete:             { name: 'Complete',                    phase: 6 },
-  failed:               { name: 'Failed',                      phase: 6 },
+  complete:             { name: 'Complete',                    phase: 5 },
+  failed:               { name: 'Failed',                      phase: 5 },
 }
 
 // Map parallel sub-state paths to STATE_PHASES keys
@@ -106,11 +104,9 @@ const STATE_TO_DB_STATUS: Record<string, string> = {
   provisioning: 'generating',
   designing: 'planning',
   architecting: 'planning',
-  pageGeneration: 'generating',
-  assembly: 'generating',
+  codeGeneration: 'generating',
   validating: 'verifying',
   repairing: 'verifying',
-  reviewing: 'verifying',
   complete: 'complete',
   failed: 'error',
 }
@@ -274,13 +270,9 @@ function streamActorStates(
           }
         }
 
-        // When leaving 'pageGeneration', emit page_complete events + file_complete
-        if (previousState === 'pageGeneration') {
-          const files = snapshot.context.blueprint?.fileTree?.map((f: { path: string }) => f.path) ?? []
-          for (const filePath of files) {
-            emit({ type: 'file_complete', path: filePath, linesOfCode: 0 })
-          }
-          // Emit page_complete for each generated page (populates Frontend Engineer card)
+        // When leaving 'codeGeneration', emit page_complete + file_assembled events
+        if (previousState === 'codeGeneration') {
+          // Emit page_complete for each generated page
           const pages = snapshot.context.generatedPages ?? []
           const totalPages = pages.length
           for (let i = 0; i < totalPages; i++) {
@@ -296,11 +288,7 @@ function streamActorStates(
               totalPages,
             })
           }
-        }
-
-        // When leaving 'assembly', emit file_assembled events (populates Backend Engineer card)
-        // Filter out ui-kit files (components/ui/) — they're scaffolded, not authored
-        if (previousState === 'assembly') {
+          // Emit file_assembled for deterministic files (filter out ui-kit)
           const assembledFiles = (snapshot.context.assembledFiles ?? [])
             .filter((f: { path: string }) => !f.path.includes('components/ui/'))
           for (const file of assembledFiles) {
@@ -331,24 +319,6 @@ function streamActorStates(
         if (previousState === 'repairing') {
           emit({ type: 'agent_progress', agentId: 'repair', message: 'Repair cycle complete — re-validating...' })
         }
-
-        // When leaving 'reviewing', emit review summary + scanned files for reviewer card
-        if (previousState === 'reviewing') {
-          const review = snapshot.context.reviewResult
-          if (review) {
-            const summary = review.summary ?? (review.passed ? 'All checks passed' : 'Issues found')
-            emit({ type: 'agent_progress', agentId: 'reviewer', message: summary })
-          }
-          // Emit scanned file list as a single flowing line
-          const pages = snapshot.context.generatedPages ?? []
-          if (pages.length > 0) {
-            const fileNames = pages.map((p: { fileName: string }) => p.fileName)
-            const display = fileNames.length <= 6
-              ? fileNames.join(', ')
-              : `${fileNames.slice(0, 5).join(', ')}, ... (${fileNames.length} files)`
-            emit({ type: 'agent_progress', agentId: 'reviewer', message: `Scanned: ${display}` })
-          }
-        }
       }
 
       // Track entry time for duration calculation
@@ -367,15 +337,11 @@ function streamActorStates(
             {
               status: 'complete',
               sandboxId: ctx.sandboxId,
-              supabaseProjectId: ctx.supabaseProjectId,
-              supabaseUrl: ctx.supabaseUrl,
-              supabaseAnonKey: ctx.supabaseAnonKey,
               githubRepoUrl: ctx.githubHtmlUrl,
               generationState: {
                 contract: null,
                 blueprint: ctx.blueprint,
                 sandboxId: ctx.sandboxId,
-                supabaseProjectId: ctx.supabaseProjectId,
                 capabilityManifest: ctx.capabilityManifest,
                 tokens: ctx.tokens,
                 creativeSpec: ctx.creativeSpec,
@@ -494,14 +460,12 @@ function streamActorStates(
           if (mockMode) {
             const mockProgress: Record<string, string[]> = {
               analyst:     ['Parsing user requirements...', 'Extracting features...', 'Building product requirements...'],
-              provisioner: ['Creating Supabase project...', 'Provisioning sandbox...', 'Setting up GitHub repo...'],
+              provisioner: ['Booting sandbox...', 'Setting up GitHub repo...'],
               designer:    ['Selecting theme...', 'Generating color palette...', 'Choosing typography...'],
               architect:   ['Analyzing app structure...', 'Creating sitemap...', 'Planning page sections...'],
-              frontend:    ['Generating homepage...', 'Generating menu page...', 'Generating contact page...', 'Generating about page...'],
-              backend:     ['Assembling config files...', 'Copying UI kit...', 'Writing route files...', 'Applying SQL migration...'],
-              qa:          ['Checking imports...', 'Validating links...', 'Running TypeScript...', 'Building app...'],
+              codegen:     ['Generating pages...', 'Assembling config files...', 'Uploading to sandbox...', 'Installing dependencies...'],
+              qa:          ['Running TypeScript check...', 'Running linter...', 'Building app...'],
               repair:      ['Analyzing errors...', 'Fixing import issues...', 'Retrying build...'],
-              reviewer:    ['Running code review...', 'Checking accessibility...', 'Validating design tokens...'],
             }
             const progressMessages = mockProgress[phaseInfo.agentId]
             if (progressMessages && progressMessages.length > 0) {
@@ -510,8 +474,8 @@ function streamActorStates(
           }
         }
 
-        // Emit file events during pageGeneration state (mock: emit from blueprint file list)
-        if (state === 'pageGeneration' && !fileEventsEmitted) {
+        // Emit file events during codeGeneration state (mock: emit from blueprint file list)
+        if (state === 'codeGeneration' && !fileEventsEmitted) {
           fileEventsEmitted = true
           const files = mockMode
             ? MOCK_FILE_LIST
@@ -569,24 +533,9 @@ function streamActorStates(
           }
         }
 
-        // Mock mode: emit file_assembled events during assembly state (filter out ui-kit)
-        if (state === 'assembly' && mockMode) {
-          const assembledFiles = MOCK_ASSEMBLED_FILES.filter(f => !f.path.includes('components/ui/'))
-          for (let i = 0; i < assembledFiles.length; i++) {
-            const file = assembledFiles[i]
-            const category = file.isLLMSlot ? 'route' as const
-              : file.path.includes('main.tsx') ? 'wiring' as const
-              : file.path.includes('__root') ? 'config' as const
-              : 'wiring' as const
-            setTimeout(() => {
-              emit({ type: 'file_assembled', path: file.path, category })
-            }, 150 * (i + 1))
-          }
-        }
-
         // Mock mode: emit validation_check events during validating state
         if (state === 'validating' && mockMode) {
-          const checks = ['imports', 'links', 'accessibility', 'hardcoded_colors', 'typescript', 'lint', 'build'] as const
+          const checks = ['typecheck', 'lint', 'build'] as const
           for (let i = 0; i < checks.length; i++) {
             // Emit 'running' then 'passed' with stagger
             setTimeout(() => {
