@@ -614,11 +614,17 @@ agentRoutes.post('/', async (c) => {
 
       emit({ type: 'stage_update', stage: 'generating' })
 
-      // Send START event to actor
+      // Subscribe BEFORE sending START to avoid missing initial state transitions.
+      // XState's subscribe() only fires on future snapshot changes, so if START
+      // triggers synchronous transitions (idle → preparing → parallel sub-states),
+      // subscribing after send() would miss the initial agent_start events.
+      const streamPromise = streamActorStates(actor, emit, signal, runId, projectId, user.id, mockMode)
+
+      // Now send START — the subscription above will catch all transitions
       actor.send({ type: 'START', userMessage: message, projectId, userId: user.id })
 
-      // Stream state transitions
-      await streamActorStates(actor, emit, signal, runId, projectId, user.id, mockMode)
+      // Wait for actor to reach final state
+      await streamPromise
 
       // Get final snapshot to read totalTokens from machine context
       const finalSnapshot = actor.getSnapshot()
@@ -726,11 +732,14 @@ agentRoutes.post('/resume', async (c) => {
 
   return createSSEStream(async (emit: (event: StreamEvent) => void, signal: AbortSignal) => {
     try {
+      // Subscribe BEFORE sending event to avoid missing state transitions
+      const streamPromise = streamActorStates(stored.actor, emit, signal, runId, stored.projectId, stored.userId)
+
       // Send USER_ANSWERED event to actor
       stored.actor.send({ type: 'USER_ANSWERED', answers })
 
-      // Stream state transitions
-      await streamActorStates(stored.actor, emit, signal, runId, stored.projectId, stored.userId)
+      // Wait for actor to reach final state
+      await streamPromise
 
       // Get final snapshot to read totalTokens from machine context
       const finalSnapshot = stored.actor.getSnapshot()
@@ -910,17 +919,8 @@ agentRoutes.post('/edit', async (c) => {
     try {
       emit({ type: 'stage_update', stage: 'generating' })
 
-      // Send START event with element context
-      actor.send({
-        type: 'START',
-        userMessage: message,
-        projectId,
-        userId: user.id,
-        targetElement,
-      })
-
-      // Stream edit machine states
-      await new Promise<void>((resolve, reject) => {
+      // Subscribe BEFORE sending START to avoid missing initial state transitions
+      const editStreamPromise = new Promise<void>((resolve, reject) => {
         const subscription = actor.subscribe(
           (snapshot: { value: string; context: EditMachineContext }) => {
             if (signal.aborted) {
@@ -970,6 +970,18 @@ agentRoutes.post('/edit', async (c) => {
           resolve()
         })
       })
+
+      // Now send START — the subscription above catches all transitions
+      actor.send({
+        type: 'START',
+        userMessage: message,
+        projectId,
+        userId: user.id,
+        targetElement,
+      })
+
+      // Wait for edit stream to complete
+      await editStreamPromise
 
       // Settle credits
       const finalSnapshot = actor.getSnapshot()

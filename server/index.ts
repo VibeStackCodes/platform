@@ -25,6 +25,7 @@ declare const Bun: {
   serve: (options: {
     port: number
     fetch: (request: Request) => Response | Promise<Response>
+    idleTimeout?: number
   }) => unknown
 }
 
@@ -123,6 +124,6 @@ export { app }
 // Dev server — Bun runtime (Vite proxies /api → localhost:8787)
 if (typeof Bun !== 'undefined' && !process.env.VERCEL) {
   const port = Number(process.env.PORT) || 8787
-  Bun.serve({ port, fetch: app.fetch })
+  Bun.serve({ port, fetch: app.fetch, idleTimeout: 255 })
   console.log(`[server] API running on http://localhost:${port}`)
 }
