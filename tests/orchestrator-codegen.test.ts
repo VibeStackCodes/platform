@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest'
-import { runCodeGeneration } from '@server/lib/agents/orchestrator'
 import { inferPageConfig } from '@server/lib/agents/feature-schema'
 import type { SchemaContract } from '@server/lib/schema-contract'
 
@@ -68,8 +67,3 @@ describe('inferPageConfig (deterministic — no LLM)', () => {
   })
 })
 
-describe('runCodeGeneration', () => {
-  it('is a function', () => {
-    expect(typeof runCodeGeneration).toBe('function')
-  })
-})

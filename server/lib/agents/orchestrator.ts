@@ -4,7 +4,7 @@
 // The machine calls these via fromPromise actors.
 
 import type { SchemaContract } from '../schema-contract'
-import { SchemaContractSchema, validateContract, inferFeatures } from '../schema-contract'
+import { inferFeatures } from '../schema-contract'
 import type { AppBlueprint } from '../app-blueprint'
 import { assembleCapabilities, type AssemblyResult } from '../capabilities/assembler'
 import { loadCoreRegistry } from '../capabilities/catalog'
@@ -24,9 +24,10 @@ export type AnalysisResult =
       type: 'done'
       appName: string
       appDescription: string
+      prd: string
       contract: SchemaContract
-      capabilityManifest?: string[]
-      assembly?: AssemblyResult | null
+      capabilityManifest: string[]
+      assembly: AssemblyResult | null
       tokensUsed: number
     }
   | {
@@ -86,16 +87,8 @@ export interface AssemblyResult2 {
 }
 
 // ============================================================================
-// Analysis handler (Task 6 + E1 jsonrepair)
+// Analysis handler
 // ============================================================================
-
-function mergeExtraTables(base: SchemaContract, extraTables: SchemaContract['tables']): SchemaContract {
-  const tableMap = new Map(base.tables.map((table) => [table.name, table]))
-  for (const table of extraTables) {
-    if (!tableMap.has(table.name)) tableMap.set(table.name, table)
-  }
-  return { tables: [...tableMap.values()] }
-}
 
 export async function runAnalysis(input: {
   userMessage: string
@@ -116,61 +109,19 @@ export async function runAnalysis(input: {
       if (part.type !== 'tool-call') continue
 
       if (part.toolName === 'submitRequirements') {
-        // Parse contract through Zod schema to apply all z.preprocess() coercions
-        // (strips invalid FK refs, normalizes nulls, coerces string defaults, etc.)
-        const contractParsed = SchemaContractSchema.safeParse(part.input.contract)
-        if (!contractParsed.success) {
-          console.error('[analysis] Contract schema validation failed:', contractParsed.error.format())
-          throw new Error(`Analyst produced invalid contract: ${contractParsed.error.issues.map(i => i.message).join(', ')}`)
-        }
-
-        // Semantic validation: FK references must point to existing tables
-        const contractValidation = validateContract(contractParsed.data)
-        if (!contractValidation.valid) {
-          console.error('[analysis] Contract semantic validation failed:', contractValidation.errors)
-          throw new Error(`Analyst produced invalid contract: ${contractValidation.errors.join('; ')}`)
-        }
-
-        const selectedCapabilities = Array.isArray(part.input.selectedCapabilities)
-          ? part.input.selectedCapabilities
-          : []
-
-        // Filter to only valid registered capability names
+        // Hardcode public-website capability — we only generate landing pages
         const registry = loadCoreRegistry()
-        const validNames = new Set(registry.list().map((c) => c.name))
-        const validatedCapabilities = selectedCapabilities.filter((name: string) => validNames.has(name))
-
-        if (validatedCapabilities.length !== selectedCapabilities.length) {
-          console.warn(
-            '[analysis] Analyst selected unknown capabilities:',
-            selectedCapabilities.filter((name: string) => !validNames.has(name)),
-          )
-        }
-
-        // Ensure 'public-website' is always included if any capabilities selected
-        if (validatedCapabilities.length > 0 && !validatedCapabilities.includes('public-website')) {
-          validatedCapabilities.unshift('public-website')
-        }
-
-        let assembly: AssemblyResult | null = null
-        let finalContract = contractParsed.data
-        let capabilityManifest: string[] = []
-
-        if (validatedCapabilities.length > 0) {
-          const resolved = registry.resolve(validatedCapabilities)
-          const assembled = assembleCapabilities(resolved)
-          finalContract = mergeExtraTables(assembled.contract, contractParsed.data.tables)
-          assembly = { ...assembled, contract: finalContract }
-          capabilityManifest = assembled.capabilityManifest
-        }
+        const resolved = registry.resolve(['public-website'])
+        const assembled = assembleCapabilities(resolved)
 
         return {
           type: 'done',
           appName: part.input.appName,
           appDescription: part.input.appDescription,
-          contract: finalContract,
-          capabilityManifest,
-          assembly,
+          prd: part.input.prd,
+          contract: assembled.contract,
+          capabilityManifest: assembled.capabilityManifest,
+          assembly: assembled,
           tokensUsed,
         }
       }

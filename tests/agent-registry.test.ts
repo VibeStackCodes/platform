@@ -22,11 +22,11 @@ describe('Agent Registry (Reduced Roster: 2+1)', () => {
     expect(repairAgent).toBeDefined()
   })
 
-  it('analyst has searchDocs, askClarifyingQuestions, submitRequirements tools', () => {
+  it('analyst has askClarifyingQuestions and submitRequirements tools', () => {
     const tools = Object.keys(analystAgent.listTools())
-    expect(tools).toContain('searchDocs')
     expect(tools).toContain('askClarifyingQuestions')
     expect(tools).toContain('submitRequirements')
+    expect(tools).not.toContain('searchDocs')
   })
 
   it('repair agent has writeFile, readFile, runCommand tools', () => {

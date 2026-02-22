@@ -1,13 +1,11 @@
 import { Agent } from '@mastra/core/agent'
 import { RequestContext } from '@mastra/core/di'
-import { loadCoreRegistry } from '../capabilities/catalog'
 import { createAgentModelResolver } from './provider'
 import {
   askClarifyingQuestionsTool,
   submitRequirementsTool,
   readFileTool,
   runCommandTool,
-  searchDocsTool,
   writeFileTool,
 } from './tools'
 
@@ -21,59 +19,34 @@ const repairModel = createAgentModelResolver('repair')             // gpt-5.2-co
 const editModel = createAgentModelResolver('edit')                 // gpt-5.2-codex
 
 // ============================================================================
-// Agent Definitions (2-agent architecture)
+// Agent Definitions
 // ============================================================================
-//
-// Current workflow:
-// 1. analystAgent: Extracts requirements, produces SchemaContract
-// 2. Infrastructure provisioning (parallel): Sandbox + Supabase + GitHub repo
-// 3. AppBlueprint generation: contract → SQL + supabase-js client + routes + pages
-// 4. Code generation: Fully deterministic
-//    - inferPageConfig(): ColumnClassifier → PageConfig (no LLM)
-//    - Deterministic assembler: PageConfig + contract → full React components
-// 5. repairAgent: Fixes validation errors (TypeScript, lint, build)
-// 6. Deployment: Push to GitHub + Vercel
-
-function capabilityCatalogPrompt(): string {
-  const registry = loadCoreRegistry()
-  const caps = registry.list()
-  const lines = caps.map((cap) => {
-    return `- **${cap.name}**: ${cap.description}`
-  })
-  return `## Available Capabilities
-
-Select capabilities that match the user's request. Each capability provides pre-built schema tables, pages, and navigation.
-
-Always select 'public-website'. Select 'auth' when the app has user accounts or per-user data. Select additional capabilities that match the app's domain.
-
-${lines.join('\n')}
-
-Pass selected names in the \`selectedCapabilities\` array of your submitRequirements tool call.`
-}
 
 export const analystAgent = new Agent({
   id: 'analyst',
   name: 'Analyst',
   model: orchestratorModel,
-  description: 'Converses with users to extract and clarify app requirements',
-  instructions: `You are a requirements analyst for VibeStack, an AI app builder that generates Vite + React + Supabase applications.
+  description: 'Extracts app requirements and produces a short PRD',
+  instructions: `You are a requirements analyst for VibeStack, an AI app builder that generates landing pages and websites.
 
 You MUST call exactly one of these tools — never respond with plain text:
-- submitRequirements: when the request is clear enough to define app name and database schema
+- submitRequirements: when the request is clear enough to write a PRD
 - askClarifyingQuestions: when the request is vague and needs refinement
 
-Guidelines for extracting requirements:
-1. App name and one-line description
-2. Database schema: tables with columns (name, type, nullable, default), foreign keys, RLS policies, enums
+Your job is to produce a short Product Requirements Document (PRD). The PRD format is:
+- 2 lines of introduction (what the app is, who it's for)
+- 5 bullet points of key requirements (features, content sections, target audience, tone)
 
-DO NOT include design preferences (colors, fonts, styles). A separate Design Agent handles all visual identity decisions.
+Example PRD:
+"A modern portfolio website for a freelance photographer. Showcases work, attracts new clients, and provides contact info.
+- Hero section with full-bleed featured photo and tagline
+- Gallery grid displaying project categories (weddings, portraits, commercial)
+- About section with bio, skills, and years of experience
+- Testimonials carousel from past clients
+- Contact form with email, phone, and booking inquiry"
 
-Smart defaults when unspecified:
-- Auth: Supabase Auth with email/password. Include user_id FK on tables that should be user-owned, with RLS policy using auth.uid()
-- Database: PostgreSQL via Supabase, RLS enabled on all user-owned tables
-- Every table gets id (uuid, default gen_random_uuid()), created_at, updated_at columns
-
-${capabilityCatalogPrompt()}
+DO NOT include database schemas, tables, columns, or technical infrastructure. A separate pipeline handles all technical decisions.
+DO NOT include design preferences (colors, fonts, styles). A separate Design Agent handles all visual identity.
 
 When to use askClarifyingQuestions:
 - When the user's prompt is a single sentence without specifics (fewer than ~15 words)
@@ -90,7 +63,6 @@ When to use submitRequirements directly:
 - When the prompt already specifies the app type, key features, and target users
 - When the prompt is detailed enough (>30 words with clear feature descriptions)`,
   tools: {
-    searchDocs: searchDocsTool,
     askClarifyingQuestions: askClarifyingQuestionsTool,
     submitRequirements: submitRequirementsTool,
   },

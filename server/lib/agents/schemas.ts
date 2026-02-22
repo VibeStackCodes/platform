@@ -1,5 +1,4 @@
 import { z } from 'zod'
-import { SchemaContractSchema } from '../schema-contract'
 
 /**
  * Zod schemas for agent structured output.
@@ -14,14 +13,14 @@ import { SchemaContractSchema } from '../schema-contract'
  * can produce structured output via tool calling (allowing it to also call
  * askClarifyingQuestions in the same generate() invocation).
  *
- * Design decisions (colors, fonts, layout) are NOT part of the analyst output.
- * The Design Agent is the sole authority for visual identity.
+ * The analyst produces a short PRD (product requirements document) — NOT a database
+ * schema. Downstream agents (Design, Architect, Page Generator) use the PRD to
+ * inform page generation. An empty SchemaContract is created automatically.
  */
 export const AnalystOutputSchema = z.object({
   appName: z.string().describe('Short application name (e.g., "TaskFlow")'),
   appDescription: z.string().describe('One-line app description'),
-  selectedCapabilities: z.array(z.string()).default([]).describe('Capability names selected from the core catalog'),
-  contract: SchemaContractSchema.describe('Database schema contract'),
+  prd: z.string().describe('Short PRD: 2-line introduction followed by 5 bullet points of key requirements'),
 })
 
 export const ThemeSelectorInputSchema = z.object({

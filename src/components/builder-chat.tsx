@@ -875,6 +875,11 @@ export function BuilderChat({
                         const embeddedContent = (() => {
                           // Analyst → Plan card
                           if (agentId === 'analyst' && entry.plan) {
+                            const prdText = (entry.plan.prd as string) || ''
+                            const prdLines = prdText.split('\n').filter((l: string) => l.trim())
+                            // First 1-2 lines are intro, bullet lines start with "- "
+                            const intro = prdLines.filter((l: string) => !l.trim().startsWith('- ')).join(' ')
+                            const bullets = prdLines.filter((l: string) => l.trim().startsWith('- '))
                             return (
                               <Plan defaultOpen>
                                 <PlanHeader>
@@ -883,10 +888,7 @@ export function BuilderChat({
                                       {(entry.plan.appName as string) || 'App Blueprint'}
                                     </PlanTitle>
                                     <PlanDescription>
-                                      {(entry.plan.appDescription as string) ||
-                                        (Array.isArray(entry.plan.tables) && entry.plan.tables.length > 0
-                                          ? `${entry.plan.tables.length} tables`
-                                          : 'Generation plan ready')}
+                                      {(entry.plan.appDescription as string) || 'Generation plan ready'}
                                     </PlanDescription>
                                   </div>
                                   <PlanAction>
@@ -895,8 +897,13 @@ export function BuilderChat({
                                 </PlanHeader>
                                 <PlanContent>
                                   <div className="space-y-2 text-sm text-muted-foreground">
-                                    {entry.plan.appDescription && (
-                                      <p>{entry.plan.appDescription as string}</p>
+                                    {intro && <p>{intro}</p>}
+                                    {bullets.length > 0 && (
+                                      <ul className="list-disc pl-4 space-y-1">
+                                        {bullets.map((b: string, i: number) => (
+                                          <li key={i}>{b.replace(/^-\s*/, '')}</li>
+                                        ))}
+                                      </ul>
                                     )}
                                   </div>
                                 </PlanContent>

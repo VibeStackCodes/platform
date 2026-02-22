@@ -286,9 +286,10 @@ export const appGenerationMachine = setup({
                     actions: assign({
                       appName: ({ event }) => (event.output as Extract<AnalysisResult, { type: 'done' }>).appName,
                       appDescription: ({ event }) => (event.output as Extract<AnalysisResult, { type: 'done' }>).appDescription,
+                      prd: ({ event }) => (event.output as Extract<AnalysisResult, { type: 'done' }>).prd,
                       contract: ({ event }) => (event.output as Extract<AnalysisResult, { type: 'done' }>).contract,
-                      capabilityManifest: ({ event }) => (event.output as Extract<AnalysisResult, { type: 'done' }>).capabilityManifest ?? [],
-                      assembly: ({ event }) => (event.output as Extract<AnalysisResult, { type: 'done' }>).assembly ?? null,
+                      capabilityManifest: ({ event }) => (event.output as Extract<AnalysisResult, { type: 'done' }>).capabilityManifest,
+                      assembly: ({ event }) => (event.output as Extract<AnalysisResult, { type: 'done' }>).assembly,
                       totalTokens: ({ context, event }) => context.totalTokens + event.output.tokensUsed,
                     }),
                   },

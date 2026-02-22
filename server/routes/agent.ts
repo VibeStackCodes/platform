@@ -458,14 +458,13 @@ function streamActorStates(
         }
 
         // Emit plan_ready when entering designing (Analyst PRD is ready)
-        // Shows the Analyst's output: app name, description, and contract tables
-        if (state === 'designing' && snapshot.context.contract) {
+        if (state === 'designing') {
           emit({
             type: 'plan_ready',
             plan: {
               appName: snapshot.context.appName,
               appDescription: snapshot.context.appDescription,
-              tables: snapshot.context.contract.tables?.map((t: { name: string }) => t.name) ?? [],
+              prd: snapshot.context.prd ?? '',
             },
           })
         }

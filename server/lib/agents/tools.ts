@@ -996,11 +996,10 @@ export const submitRequirementsTool = createTool({
   id: 'submit-requirements',
   description: `Submit the final extracted requirements when the user's request is clear enough to proceed.
 Call this tool (instead of askClarifyingQuestions) when you have enough information to define:
-- App name and description
-- Database schema (tables, columns, types, relationships, RLS policies)
-- Design preferences (style, colors, fonts)
+- App name and one-line description
+- A short PRD (2-line intro + 5 bullet points)
 
-The input must be complete and valid — the pipeline uses this directly to generate SQL and code.`,
+The PRD drives all downstream page generation. Keep it concise but specific.`,
   inputSchema: AnalystOutputSchema,
   outputSchema: z.object({ submitted: z.literal(true) }),
   execute: async () => ({ submitted: true as const }),

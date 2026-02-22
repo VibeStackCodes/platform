@@ -9,7 +9,7 @@ vi.mock('@server/lib/agents/registry', () => ({
 }))
 
 describe('runAnalysis', () => {
-  it('extracts contract from submitRequirements tool call', async () => {
+  it('extracts PRD from submitRequirements tool call', async () => {
     const { analystAgent } = await import('@server/lib/agents/registry')
     const mockGenerate = vi.mocked(analystAgent.generate)
 
@@ -23,10 +23,7 @@ describe('runAnalysis', () => {
               input: {
                 appName: 'TaskFlow',
                 appDescription: 'Task management app',
-                selectedCapabilities: ['auth'],
-                contract: {
-                  tables: [{ name: 'task', columns: [{ name: 'id', type: 'uuid', primaryKey: true }] }],
-                },
+                prd: 'A task management landing page.\n- Hero section with CTA\n- Feature grid\n- Pricing table\n- Testimonials\n- Contact form',
               },
             },
           ],
@@ -43,9 +40,9 @@ describe('runAnalysis', () => {
     expect(result.type).toBe('done')
     if (result.type === 'done') {
       expect(result.appName).toBe('TaskFlow')
-      expect(result.capabilityManifest).toContain('auth')
-      expect(result.contract.tables.map((t) => t.name)).toContain('task')
-      expect(result.contract.tables.map((t) => t.name)).toContain('profiles')
+      expect(result.prd).toContain('Hero section')
+      expect(result.contract).toBeDefined()
+      expect(result.capabilityManifest).toBeDefined()
       expect(result.tokensUsed).toBe(500)
     }
   })
