@@ -54,12 +54,20 @@ import { Task, TaskContent, TaskTrigger } from '@/components/ai-elements/task'
 import { ClarificationQuestions } from '@/components/clarification-questions'
 import { CreditDisplay } from '@/components/credit-display'
 import { PromptBar } from '@/components/prompt-bar'
+import { ThemeTokensCard } from '@/components/ai-elements/theme-tokens-card'
+import type { ThemeTokens as ThemeTokensCardTokens } from '@/components/ai-elements/theme-tokens-card'
+import { ArchitectureCard } from '@/components/ai-elements/architecture-card'
+import { PageProgressCard } from '@/components/ai-elements/page-progress-card'
+import { ValidationCard } from '@/components/ai-elements/validation-card'
 import type {
   BuildError,
   ClarificationQuestion,
   ElementContext,
+  FileAssemblyEntry,
+  PageProgressEntry,
   StreamEvent,
   TimelineEntry,
+  ValidationCheckEntry,
 } from '@/lib/types'
 
 // Custom message type — replaces UIMessage from Vercel AI SDK
@@ -218,6 +226,11 @@ export function BuilderChat({
     { path: string; status: 'pending' | 'generating' | 'complete' | 'error'; lines?: number }[]
   >([])
   const [buildErrors, setBuildErrors] = useState<BuildError[]>([])
+
+  // Pipeline B state — live tracking during generation
+  const [pageProgress, setPageProgress] = useState<PageProgressEntry[]>([])
+  const [_fileAssembly, setFileAssembly] = useState<FileAssemblyEntry[]>([])
+  const [validationChecks, setValidationChecks] = useState<ValidationCheckEntry[]>([])
 
   // Unified timeline — ordered array of all pipeline events
   const [timelineEvents, setTimelineEvents] = useState<TimelineEntry[]>([])
@@ -419,6 +432,76 @@ export function BuilderChat({
           setPendingClarification(event.questions)
           setResumeRunId(event.runId)
           break
+
+        case 'design_tokens':
+          pushTimeline({ type: 'design_tokens', tokens: event.tokens, ts: now })
+          break
+
+        case 'architecture_ready':
+          pushTimeline({ type: 'architecture', spec: event.spec, ts: now })
+          break
+
+        case 'page_generating':
+          setPageProgress((prev) => {
+            const updated = [...prev]
+            const idx = updated.findIndex((p) => p.fileName === event.fileName)
+            if (idx === -1) {
+              updated.push({
+                fileName: event.fileName,
+                route: event.route,
+                componentName: event.componentName,
+                status: 'generating',
+              })
+            } else {
+              updated[idx] = { ...updated[idx], status: 'generating' }
+            }
+            return updated
+          })
+          break
+
+        case 'page_complete':
+          setPageProgress((prev) => {
+            const updated = prev.map((p) =>
+              p.fileName === event.fileName
+                ? { ...p, status: 'complete' as const, lineCount: event.lineCount, code: event.code }
+                : p,
+            )
+            if (updated.every((p) => p.status === 'complete')) {
+              pushTimeline({ type: 'page_progress', pages: updated, ts: now })
+            }
+            return updated
+          })
+          break
+
+        case 'file_assembled':
+          setFileAssembly((prev) => {
+            const updated = [...prev, { path: event.path, category: event.category }]
+            // Update or push the file_assembly timeline entry with the growing list
+            setTimelineEvents((prevEntries) => {
+              const lastIdx = prevEntries.findLastIndex((e) => e.type === 'file_assembly')
+              if (lastIdx >= 0) {
+                const entries = [...prevEntries]
+                entries[lastIdx] = { type: 'file_assembly', files: updated, ts: now }
+                return entries
+              }
+              return [...prevEntries, { type: 'file_assembly', files: updated, ts: now }]
+            })
+            return updated
+          })
+          break
+
+        case 'validation_check':
+          setValidationChecks((prev) => {
+            const updated = [...prev]
+            const idx = updated.findIndex((c) => c.name === event.name)
+            if (idx === -1) {
+              updated.push({ name: event.name, status: event.status, errors: event.errors })
+            } else {
+              updated[idx] = { name: event.name, status: event.status, errors: event.errors }
+            }
+            return updated
+          })
+          break
       }
     },
     [onGenerationComplete, pushTimeline, updateTimeline],
@@ -484,6 +567,9 @@ export function BuilderChat({
       setGenerationFiles([])
       setTimelineEvents([])
       setBuildErrors([])
+      setPageProgress([])
+      setFileAssembly([])
+      setValidationChecks([])
 
       const assistantId = `assistant-${Date.now()}`
       setMessages((prev) => [...prev, { id: assistantId, role: 'assistant' as const, content: '' }])
@@ -827,6 +913,62 @@ export function BuilderChat({
                           </StackTrace>
                         )
 
+                      case 'design_tokens':
+                        return (
+                          <ThemeTokensCard
+                            key={`design_tokens-${entry.ts}`}
+                            tokens={entry.tokens as unknown as ThemeTokensCardTokens}
+                          />
+                        )
+
+                      case 'architecture':
+                        return (
+                          <ArchitectureCard
+                            key={`architecture-${entry.ts}`}
+                            spec={entry.spec}
+                          />
+                        )
+
+                      case 'page_progress':
+                        return (
+                          <PageProgressCard
+                            key={`page_progress-${entry.ts}`}
+                            pages={entry.pages}
+                          />
+                        )
+
+                      case 'file_assembly':
+                        return (
+                          <div
+                            key={`file_assembly-${entry.ts}`}
+                            className="rounded-lg border bg-muted/30 p-3"
+                          >
+                            <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                              Files Assembled
+                            </p>
+                            <ul className="space-y-1">
+                              {entry.files.map((f) => (
+                                <li
+                                  key={f.path}
+                                  className="flex items-center gap-2 font-mono text-xs text-foreground"
+                                >
+                                  <CheckCircle2 className="size-3 shrink-0 text-green-500" />
+                                  {f.path}
+                                  <span className="ml-auto text-muted-foreground">{f.category}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )
+
+                      case 'validation':
+                        return (
+                          <ValidationCard
+                            key={`validation-${entry.ts}`}
+                            checks={entry.checks}
+                          />
+                        )
+
                       case 'complete':
                         return (
                           <div
@@ -842,6 +984,17 @@ export function BuilderChat({
                         return null
                     }
                   })}
+
+                  {/* Live page generation progress (shown while pages are still being generated) */}
+                  {pageProgress.length > 0 && !pageProgress.every((p) => p.status === 'complete') && (
+                    <PageProgressCard pages={pageProgress} />
+                  )}
+
+                  {/* Live validation progress (shown while checks are still running) */}
+                  {validationChecks.length > 0 &&
+                    !validationChecks.every(
+                      (c) => c.status === 'passed' || c.status === 'failed',
+                    ) && <ValidationCard checks={validationChecks} />}
 
                   {/* Build Errors (outside timeline entries) */}
                   {buildErrors.length > 0 && (
