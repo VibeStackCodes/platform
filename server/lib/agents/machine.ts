@@ -1002,11 +1002,11 @@ export const mockAppGenerationMachine = setup({
 })
 
 /**
- * Create the appropriate actor based on MOCK_PIPELINE env var.
- * When MOCK_PIPELINE=true, uses mock actors with fake delays.
+ * Create the appropriate actor based on VITE_MOCK_MODE env var.
+ * When VITE_MOCK_MODE=true, uses mock actors with fake delays.
  */
 export function isMockPipeline(): boolean {
-  return process.env.MOCK_PIPELINE === 'true'
+  return process.env.VITE_MOCK_MODE === 'true' || process.env.MOCK_PIPELINE === 'true'
 }
 
 export async function createMockOrRealActor(options?: ActorOptions<typeof appGenerationMachine>) {

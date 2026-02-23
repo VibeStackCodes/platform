@@ -9,30 +9,15 @@ export function useAuth() {
   useEffect(() => {
     let mounted = true
 
-    supabase.auth
-      .getUser()
-      .then(({ data, error }) => {
-        if (!mounted) return
-        if (error) {
-          console.error('[auth] getUser failed:', error.message)
-          setUser(null)
-        } else {
-          setUser(data.user)
-        }
-        setLoading(false)
-      })
-      .catch(() => {
-        if (mounted) {
-          setUser(null)
-          setLoading(false)
-        }
-      })
-
+    // onAuthStateChange is the single source of truth.
+    // It fires once on subscribe with the current session (INITIAL_SESSION),
+    // so we use that first event to set loading=false — no separate getUser() needed.
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
       if (mounted) {
         setUser(session?.user ?? null)
+        setLoading(false)
       }
     })
 

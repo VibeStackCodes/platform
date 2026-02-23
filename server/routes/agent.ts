@@ -30,6 +30,7 @@ import { reserveCredits, settleCredits } from '../lib/credits'
 import { createSSEStream } from '../lib/sse'
 import type { StreamEvent } from '../lib/types'
 import { authMiddleware } from '../middleware/auth'
+import { log } from '../lib/logger'
 
 export const agentRoutes = new Hono()
 
@@ -131,6 +132,7 @@ function streamActorStates(
     let previousState: string | null = null
     let fileEventsEmitted = false
     let previousParallelSubStates = new Set<string>()
+    let clarificationEmitted = false
 
     const subscription = actor.subscribe((snapshot: { value: string; context: MachineContext; status?: string }) => {
       if (signal.aborted) {
@@ -186,6 +188,21 @@ function streamActorStates(
         }
 
         previousParallelSubStates = currentSubStates
+
+        // Detect awaitingClarification nested inside preparing.analysis
+        const analysisVal = stateObj.preparing?.analysis
+        if (typeof analysisVal === 'string' && analysisVal === 'awaitingClarification' && !clarificationEmitted) {
+          const questions = snapshot.context.clarificationQuestions
+          if (questions) {
+            clarificationEmitted = true
+            emit({
+              type: 'clarification_request',
+              questions: questions as any[],
+              runId,
+            })
+          }
+        }
+
         return // Skip the flat-string logic below
       }
 
@@ -208,7 +225,7 @@ function streamActorStates(
         const dbStatus = STATE_TO_DB_STATUS[state]
         if (dbStatus) {
           updateProject(projectId, { status: dbStatus }, userId).catch((err) => {
-            console.error('[agent] Failed to update project status:', err)
+            log.error(`Failed to update project status: ${String(err)}`, { module: 'agent', projectId, error: String(err) })
           })
         }
       }
@@ -216,6 +233,18 @@ function streamActorStates(
       if (!phaseInfo) {
         return
       }
+
+      // Structured log for every state transition
+      const agentLabel = phaseInfo.agentName ? ` [${phaseInfo.agentName}]` : ''
+      log.info(`Pipeline ${previousState ?? 'idle'} → ${state}${agentLabel}`, {
+        module: 'pipeline',
+        projectId,
+        runId,
+        from: previousState,
+        to: state,
+        phase: phaseInfo.phase,
+        agentName: phaseInfo.agentName,
+      })
 
       // ── Emit agent_complete for the previous state ──
       if (previousState && previousState !== state) {
@@ -347,7 +376,7 @@ function streamActorStates(
             },
             userId,
           ).catch((err) => {
-            console.error('[agent] Failed to persist generation state:', err)
+            log.error(`Failed to persist generation state: ${String(err)}`, { module: 'agent', projectId, error: String(err) })
           })
         }
 
@@ -414,7 +443,7 @@ function streamActorStates(
           // Persist sandboxId to DB for page reloads (fire-and-forget, skip in mock mode)
           if (!mockMode) {
             updateProject(projectId, { sandboxId: snapshot.context.sandboxId }, userId).catch((err) => {
-              console.error('[agent] Failed to persist sandboxId:', err)
+              log.error(`Failed to persist sandboxId: ${String(err)}`, { module: 'agent', projectId, error: String(err) })
             })
           }
         }
@@ -558,7 +587,8 @@ function streamActorStates(
  * Stream agent execution via SSE using XState actor
  */
 agentRoutes.post('/', async (c) => {
-  console.log('[agent] POST /api/agent received')
+  const agentLog = log.child({ module: 'agent' })
+  agentLog.info('POST /api/agent received')
   // Parse request body
   let body: { message?: string; projectId?: string; model?: string }
   try {
@@ -568,7 +598,7 @@ agentRoutes.post('/', async (c) => {
   }
 
   const { message, projectId, model = 'gpt-5.2-codex' } = body
-  console.log('[agent] projectId:', projectId, 'model:', model, 'message:', message?.slice(0, 50))
+  agentLog.info(`New generation: project=${projectId} model=${model} prompt="${message?.slice(0, 60)}"`, { projectId, model, prompt: message?.slice(0, 200) })
 
   // Validate required fields
   if (!message || !projectId) {
@@ -606,13 +636,12 @@ agentRoutes.post('/', async (c) => {
   // Skip credit reservation in mock mode
   const CREDIT_RESERVATION = 50 // Minimum reservation amount
   if (!mockMode) {
-    console.log('[agent] Reserving credits for user:', user.id, 'amount:', CREDIT_RESERVATION)
+    agentLog.info(`Reserving ${CREDIT_RESERVATION} credits for user=${user.id}`, { userId: user.id, amount: CREDIT_RESERVATION })
     const reserved = await reserveCredits(user.id, CREDIT_RESERVATION)
-    console.log('[agent] Reservation result:', reserved)
+    agentLog.info(`Credit reservation ${reserved ? 'OK' : 'FAILED'} for user=${user.id}`, { reserved, userId: user.id })
     if (!reserved) {
-      // Check current credits for detailed error message
       const credits = await getUserCredits(user.id)
-      console.log('[agent] getUserCredits result:', credits)
+      agentLog.warn('Insufficient credits', { userId: user.id, credits })
       return c.json(
         {
           error: 'insufficient_credits',
@@ -680,7 +709,7 @@ agentRoutes.post('/', async (c) => {
       // Persist user message to DB (fire-and-forget, skip in mock mode)
       if (!mockMode) {
         insertChatMessage(`user-${runId}`, projectId, 'user', [{ text: message }]).catch((err) => {
-          console.error('[agent] Failed to save user message:', err)
+          log.error('Failed to save user message', { module: 'agent', error: String(err) })
         })
       }
 
@@ -711,7 +740,7 @@ agentRoutes.post('/', async (c) => {
           ? `I'll build **${appName}** — ${appDesc}`
           : `Building ${appName}...`
         insertChatMessage(`assistant-${runId}`, projectId, 'assistant', [{ text: assistantText }]).catch((err) => {
-          console.error('[agent] Failed to save assistant message:', err)
+          log.error('Failed to save assistant message', { module: 'agent', error: String(err) })
         })
       }
 
@@ -740,7 +769,7 @@ agentRoutes.post('/', async (c) => {
       }
     } catch (error) {
       if (signal.aborted) {
-        console.log('[agent] Stream aborted by client')
+        log.info(`Stream aborted by client project=${projectId}`, { module: 'agent', projectId, runId })
         // Refund reserved credits on abort (check settled flag)
         const activeRun = activeRuns.get(runId)
         if (activeRun && !activeRun.settled) {
@@ -765,12 +794,22 @@ agentRoutes.post('/', async (c) => {
         stage: 'error',
       })
     } finally {
-      try {
-        actor.stop()
-      } catch {
-        // Already stopped
+      // Don't clean up if actor is awaiting clarification — /resume route needs the active run
+      const snapshot = actor.getSnapshot()
+      const stateVal = snapshot.value
+      const isAwaitingClarification =
+        typeof stateVal === 'object' &&
+        stateVal !== null &&
+        (stateVal as Record<string, any>).preparing?.analysis === 'awaitingClarification'
+
+      if (!isAwaitingClarification) {
+        try {
+          actor.stop()
+        } catch {
+          // Already stopped
+        }
+        activeRuns.delete(runId)
       }
-      activeRuns.delete(runId)
     }
   })
 })
@@ -834,7 +873,7 @@ agentRoutes.post('/resume', async (c) => {
       }
     } catch (error) {
       if (signal.aborted) {
-        console.log('[agent] Resume stream aborted by client')
+        log.info(`Resume stream aborted by client runId=${runId}`, { module: 'agent', runId })
         // Refund reserved credits on abort (check settled flag)
         if (!stored.settled) {
           await settleCredits(user.id, stored.reservedCredits, 0)
@@ -1008,7 +1047,7 @@ agentRoutes.post('/edit', async (c) => {
             const dbStatus = EDIT_STATE_TO_DB_STATUS[state]
             if (dbStatus) {
               updateProject(projectId, { status: dbStatus }, user.id).catch((err) => {
-                console.error('[agent:edit] Failed to update project status:', err)
+                log.error('Failed to update project status', { module: 'agent:edit', error: String(err) })
               })
             }
 

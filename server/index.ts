@@ -1,6 +1,7 @@
 // server/index.ts — must import sentry first for instrumentation
 import './sentry'
 import './lib/env'
+import { flushLogs, log } from './lib/logger'
 import { sentry } from '@hono/sentry'
 import { sql } from 'drizzle-orm'
 import { Hono } from 'hono'
@@ -125,5 +126,15 @@ export { app }
 if (typeof Bun !== 'undefined' && !process.env.VERCEL) {
   const port = Number(process.env.PORT) || 8787
   Bun.serve({ port, fetch: app.fetch, idleTimeout: 255 })
-  console.log(`[server] API running on http://localhost:${port}`)
+  log.info(`API running on http://localhost:${port}`, { module: 'server', port })
+
+  // Flush logs on shutdown
+  process.on('SIGINT', async () => {
+    await flushLogs()
+    process.exit(0)
+  })
+  process.on('SIGTERM', async () => {
+    await flushLogs()
+    process.exit(0)
+  })
 }

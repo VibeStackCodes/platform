@@ -462,6 +462,11 @@ export function BuilderChat({
         case 'clarification_request':
           setPendingClarification(event.questions)
           setResumeRunId(event.runId)
+          // Attach questions to the analyst agent card
+          updateTimeline(
+            (e) => e.type === 'agent' && e.agent.agentId === 'analyst',
+            (e) => ({ ...e, clarificationQuestions: event.questions }),
+          )
           break
 
         case 'design_tokens':
@@ -843,15 +848,6 @@ export function BuilderChat({
                 ) : null
               })()}
 
-              {/* Clarification Questions */}
-              {pendingClarification && (
-                <ClarificationQuestions
-                  questions={pendingClarification}
-                  onSubmit={handleClarificationSubmit}
-                  disabled={chatStatus === 'streaming'}
-                />
-              )}
-
               {/* Chat error */}
               {chatError && (
                 <div
@@ -873,6 +869,16 @@ export function BuilderChat({
 
                         // Build embedded content for this agent
                         const embeddedContent = (() => {
+                          // Analyst → Clarification questions (if awaiting)
+                          if (agentId === 'analyst' && entry.clarificationQuestions && pendingClarification) {
+                            return (
+                              <ClarificationQuestions
+                                questions={entry.clarificationQuestions}
+                                onSubmit={handleClarificationSubmit}
+                              />
+                            )
+                          }
+
                           // Analyst → Plan card
                           if (agentId === 'analyst' && entry.plan) {
                             const prdText = (entry.plan.prd as string) || ''

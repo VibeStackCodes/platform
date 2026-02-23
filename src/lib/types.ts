@@ -591,6 +591,7 @@ export type TimelineEntry =
       designTokens?: DesignTokensEvent['tokens']
       architecture?: ArchitectureReadyEvent['spec']
       progressMessages?: string[]
+      clarificationQuestions?: ClarificationQuestion[]
     }
   | { type: 'error'; ts: number; error: string }
   | { type: 'complete'; ts: number; deploymentUrl?: string }

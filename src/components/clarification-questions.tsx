@@ -79,7 +79,7 @@ export function ClarificationQuestions({
   if (!question) return null
 
   return (
-    <Card className="mx-4 my-3 gap-0 border-border/50 py-0 shadow-none">
+    <Card className="gap-0 border-border/50 py-0 shadow-none">
       <CardHeader className="pb-3 pt-4">
         <div className="flex items-center justify-between">
           <CardTitle className="text-sm">{question.question}</CardTitle>

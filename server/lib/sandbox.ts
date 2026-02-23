@@ -116,6 +116,7 @@ export async function createSandbox(config: SandboxConfig = {}): Promise<Sandbox
         autoStopInterval: config.autoStopInterval || 60, // 1 hour default
         labels: config.labels || {},
         ephemeral: false,
+        public: true,
         snapshot: snapshotId,
       },
       {
@@ -246,7 +247,9 @@ export async function getPreviewUrl(
 ): Promise<PreviewUrlResult> {
   try {
     const expiresInSeconds = 3600 // 1 hour
-    const preview = await sandbox.getSignedPreviewUrl(port, expiresInSeconds)
+    // Use preview link instead of signed URL — signed URLs redirect to
+    // Daytona's auth0 login page which blocks iframe embedding (X-Frame-Options: DENY)
+    const preview = await sandbox.getPreviewLink(port)
 
     return {
       url: preview.url,
