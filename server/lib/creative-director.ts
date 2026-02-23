@@ -49,9 +49,25 @@ You MUST commit to these before writing any architecture:
 
 1. **Aesthetic direction** — Pick ONE: editorial, brutalist, soft-organic, luxury, retro-futuristic, playful-bold, minimal-swiss, dark-cinematic, glassmorphic, neo-corporate, hand-drawn, art-deco, cyberpunk, warm-neutral, dashboard-dense. NEVER default to "clean and modern" — that produces AI slop.
 
-2. **Color palette** — Define exactly 5 colors (hex): primary, secondary, accent, background, text. Commit to a dominant color with sharp accents. AVOID: purple-gradient-on-white, blue-gradient-on-white, or any default template palette.
+2. **Color palette** — Define all 9 color tokens (hex): primary, secondary, accent, background, text, primaryForeground, foreground, muted, border.
+   - background + text must have WCAG AA contrast (4.5:1 minimum)
+   - primaryForeground must contrast against primary (usually white or very dark)
+   - secondary: subtle surface color (slightly tinted background)
+   - muted: desaturated background for sidebars, table headers, disabled states
+   - border: subtle line color between sections
+   - AVOID: purple-gradient-on-white, blue-gradient-on-white, or any default template palette
 
 3. **Typography** — Choose a display font and a body font. NEVER use Inter, Roboto, Arial, or system-ui. Prefer distinctive fonts: Space Mono, DM Serif Display, Playfair Display, Instrument Serif, Syne, Clash Display, Outfit, Crimson Pro, Source Serif 4, Libre Baskerville, Geist, Satoshi, General Sans, Cabinet Grotesk.
+
+4b. **Style tokens** — Commit to all style decisions:
+   - cardStyle: "flat" (no shadow/border), "bordered" (subtle border), "elevated" (shadow), "glass" (translucent blur)
+   - navStyle: "top-bar" (horizontal nav), "sidebar" (vertical), "editorial" (minimal top), "minimal" (just logo + links), "centered" (logo center, links around)
+   - heroLayout: "fullbleed" (full-width image), "split" (text left, image right), "centered" (centered text over image), "editorial" (text-heavy, minimal image), "none" (no hero)
+   - spacing: "compact" (dense), "normal" (standard), "airy" (generous whitespace)
+   - motion: "none" (static), "subtle" (fade-in, hover effects), "expressive" (scroll animations, parallax)
+   - imagery: "photography-heavy" (full-bleed photos), "illustration" (custom art), "minimal" (sparse images), "icon-focused" (icons over photos)
+   - borderRadius: "0" for brutalist, "0.375rem" for standard, "0.75rem" for soft, "1rem" for very rounded
+   Match the visual tone to the domain: law firm → "elevated" cards, serif fonts, muted colors; kids app → rounded corners, playful fonts, vibrant accents.
 
 4. **Layout strategy** — Choose: asymmetric-grid, full-bleed, card-based, sidebar-main, bento-grid, single-column-editorial, split-screen, overlapping-layers, scroll-driven.
 
@@ -142,7 +158,7 @@ App Name: ${input.appName}
 Product Requirements:
 ${input.prd}
 
-Produce: five design decisions (aestheticDirection, colorPalette, typography, layoutStrategy, signatureDetail), a complete sitemap (1-3 pages) with per-page image manifests, navigation contract, and footer contract.`
+Produce: all design decisions (aestheticDirection, colorPalette with 9 tokens, typography with display/body fonts, style tokens including cardStyle/navStyle/heroLayout/spacing/motion/imagery/borderRadius, layoutStrategy, signatureDetail), a complete sitemap (1-3 pages) with per-page image manifests, navigation contract, and footer contract.`
 
   const result = await creativeDirectorAgent.generate(prompt, {
     structuredOutput: { schema: CreativeSpecSchema },

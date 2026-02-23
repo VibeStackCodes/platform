@@ -6,8 +6,7 @@ import { contractToPages } from './contract-to-pages'
 import { contractToSQL } from './contract-to-sql'
 import { snakeToPascal, snakeToKebab, pluralize } from './naming-utils'
 import { generateThemedApp, type DesignSystem, DEFAULT_TEXT_SLOTS } from './themed-code-engine'
-import { runDesignAgent } from './agents/design-agent'
-import { runCreativeDirector } from './creative-director'
+import { runArchitect } from './agents/orchestrator'
 import { generatePages } from './page-generator'
 import { assembleApp } from './deterministic-assembly'
 import { fetchHeroImages } from './unsplash'
@@ -524,15 +523,8 @@ export async function contractToBlueprint(input: BlueprintInput): Promise<AppBlu
 export async function contractToBlueprintCreative(input: BlueprintInput): Promise<AppBlueprint> {
   const userPrompt = input.userPrompt?.trim() || `${input.appName}. ${input.appDescription}`
 
-  // 1. Run Design Agent — generates color palette, fonts, and page styles
-  const { tokens } = await runDesignAgent(input.appName, userPrompt)
-
-  // 2. Run Creative Director
-  const cdResult = await runCreativeDirector({
-    appName: input.appName,
-    prd: userPrompt,
-  })
-  const spec = cdResult.spec
+  // 1. Run Creative Director (single design authority — produces both spec and tokens)
+  const { spec, tokens } = await runArchitect({ appName: input.appName, prd: userPrompt })
   console.log(`[blueprint:creative] pages: ${spec.sitemap.length}`)
 
   // 2.5. Fetch Unsplash images in parallel with nothing — fast standalone call

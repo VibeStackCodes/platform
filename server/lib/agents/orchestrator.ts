@@ -52,13 +52,9 @@ export interface DeploymentResult {
   tokensUsed: number
 }
 
-export interface DesignResult {
-  tokens: DesignSystem
-  tokensUsed: number
-}
-
 export interface ArchitectResult {
   spec: CreativeSpec
+  tokens: DesignSystem
   tokensUsed: number
 }
 
@@ -480,40 +476,14 @@ export async function runDeployment(input: {
 }
 
 // ============================================================================
-// Pipeline B: Design handler
+// Pipeline B: Architect handler (Creative Director — single design authority)
 // ============================================================================
 
 /**
- * Run the Design Agent to select a theme and produce DesignSystem.
- * Pipeline B step 1: userPrompt + contract → tokens + theme metadata.
- */
-export async function runDesign(input: {
-  appName: string
-  prd: string
-}): Promise<DesignResult> {
-  console.log('[design] Starting design phase...')
-  const { runDesignAgent } = await import('./design-agent')
-
-  try {
-    const result = await runDesignAgent(input.appName, input.prd)
-
-    return {
-      tokens: result.tokens,
-      tokensUsed: result.tokensUsed,
-    }
-  } catch (error) {
-    console.error('[design] Design agent failed:', error)
-    throw error
-  }
-}
-
-// ============================================================================
-// Pipeline B: Architect handler
-// ============================================================================
-
-/**
- * Run the Creative Director to produce a CreativeSpec (visual identity + sitemap).
- * Pipeline B step 2: appName + prd → spec.
+ * Run the Creative Director to produce a CreativeSpec (visual identity + sitemap)
+ * AND a fully-populated DesignSystem token set.
+ *
+ * The Creative Director is the single design authority — no separate Design Agent.
  */
 export async function runArchitect(input: {
   appName: string
@@ -521,6 +491,7 @@ export async function runArchitect(input: {
 }): Promise<ArchitectResult> {
   console.log('[architect] Starting creative director...')
   const { runCreativeDirector } = await import('../creative-director')
+  const { DEFAULT_TEXT_SLOTS } = await import('../themed-code-engine')
 
   const result = await runCreativeDirector({
     appName: input.appName,
@@ -528,9 +499,47 @@ export async function runArchitect(input: {
   })
 
   const tokensUsed = (result.usage.inputTokens ?? 0) + (result.usage.outputTokens ?? 0)
+  const { designSystem } = result.spec
+
+  // Build googleFontsUrl from typography if not already provided by the LLM
+  const displayEncoded = encodeURIComponent(designSystem.typography.display).replace(/%20/g, '+')
+  const bodyEncoded = encodeURIComponent(designSystem.typography.body).replace(/%20/g, '+')
+  const googleFontsUrl =
+    designSystem.typography.googleFontsUrl ??
+    `https://fonts.googleapis.com/css2?family=${displayEncoded}:wght@400;500;600;700&family=${bodyEncoded}:wght@300;400;500;600&display=swap`
+
+  const tokens: DesignSystem = {
+    name: '',
+    fonts: {
+      display: designSystem.typography.display,
+      body: designSystem.typography.body,
+      googleFontsUrl,
+    },
+    colors: {
+      primary: designSystem.colorPalette.primary,
+      secondary: designSystem.colorPalette.secondary,
+      accent: designSystem.colorPalette.accent,
+      background: designSystem.colorPalette.background,
+      text: designSystem.colorPalette.text,
+      primaryForeground: designSystem.colorPalette.primaryForeground,
+      foreground: designSystem.colorPalette.foreground ?? designSystem.colorPalette.text,
+      muted: designSystem.colorPalette.muted,
+      border: designSystem.colorPalette.border,
+    },
+    style: designSystem.style,
+    aestheticDirection: designSystem.aestheticDirection,
+    layoutStrategy: designSystem.layoutStrategy,
+    signatureDetail: designSystem.signatureDetail,
+    imageManifest: designSystem.imageManifest,
+    authPosture: 'public',
+    heroImages: [],
+    heroQuery: '',
+    textSlots: { ...DEFAULT_TEXT_SLOTS },
+  }
 
   return {
     spec: result.spec,
+    tokens,
     tokensUsed,
   }
 }

@@ -34,8 +34,8 @@ describe('appGenerationMachine', () => {
     const states = Object.keys(appGenerationMachine.config.states ?? {})
     expect(states).toContain('idle')
     expect(states).toContain('preparing')
-    expect(states).toContain('designing')
     expect(states).toContain('architecting')
+    expect(states).not.toContain('designing')
     expect(states).toContain('codeGeneration')
     expect(states).toContain('validating')
     expect(states).toContain('repairing')
@@ -73,11 +73,6 @@ describe('appGenerationMachine', () => {
     actor.start()
     expect(actor.getSnapshot().context.totalTokens).toBe(0)
     actor.stop()
-  })
-
-  it('machine has invoke on designing state', () => {
-    const state = appGenerationMachine.config.states?.designing
-    expect(state?.invoke).toBeDefined()
   })
 
   it('machine has invoke on architecting state', () => {
@@ -133,7 +128,7 @@ describe('state transitions', () => {
     actor.stop()
   })
 
-  it('transitions preparing → designing when analysis and provisioning both complete', async () => {
+  it('transitions preparing → architecting when analysis and provisioning both complete', async () => {
     const testMachine = appGenerationMachine.provide({
       actors: {
         runAnalysisActor: fromPromise(async () => ({
@@ -161,8 +156,8 @@ describe('state transitions', () => {
       userId: 'test-user-123',
     })
 
-    await waitFor(actor, (state) => state.matches('designing'), { timeout: 1000 })
-    expect(actor.getSnapshot().matches('designing')).toBe(true)
+    await waitFor(actor, (state) => state.matches('architecting'), { timeout: 1000 })
+    expect(actor.getSnapshot().matches('architecting')).toBe(true)
     actor.stop()
   })
 
@@ -246,14 +241,14 @@ describe('state transitions', () => {
       answers: 'Blue theme, unlimited users',
     })
 
-    // After second analysis returns 'done', both regions are final → designing
-    await waitFor(actor, (state) => state.matches('designing'), { timeout: 1000 })
+    // After second analysis returns 'done', both regions are final → architecting
+    await waitFor(actor, (state) => state.matches('architecting'), { timeout: 1000 })
     expect(actor.getSnapshot().context.userMessage).toContain('Blue theme, unlimited users')
     expect(analysisCallCount).toBe(2) // Verify it ran analysis twice
     actor.stop()
   })
 
-  it('transitions through full happy path: preparing → designing → architecting → codeGeneration → validating → complete', async () => {
+  it('transitions through full happy path: preparing → architecting → codeGeneration → validating → complete', async () => {
     const mockBlueprint: AppBlueprint = {
       name: 'TestApp',
       description: 'Test app',
@@ -283,13 +278,9 @@ describe('state transitions', () => {
           appDescription: 'Test app',
           tokensUsed: 100,
         })),
-        runDesignActor: fromPromise(async () => ({
-          tokens: mockTokens,
-          tokensUsed: 150,
-        })),
         runArchitectActor: fromPromise(async () => ({
           spec: mockSpec,
-          imagePool: [],
+          tokens: mockTokens,
           tokensUsed: 200,
         })),
         runCodeGenerationActor: fromPromise(async () => ({
@@ -324,7 +315,6 @@ describe('state transitions', () => {
 
     // Preparing runs analysis + provisioning in parallel
     await waitFor(actor, (state) => state.matches('preparing'), { timeout: 1000 })
-    await waitFor(actor, (state) => state.matches('designing'), { timeout: 1000 })
     await waitFor(actor, (state) => state.matches('architecting'), { timeout: 1000 })
     await waitFor(actor, (state) => state.matches('codeGeneration'), { timeout: 1000 })
     await waitFor(actor, (state) => state.matches('validating'), { timeout: 1000 })
@@ -370,13 +360,9 @@ function buildMachineToValidating(overrides: Record<string, ReturnType<typeof fr
         appDescription: 'Test',
         tokensUsed: 100,
       })),
-      runDesignActor: fromPromise(async () => ({
-        tokens: mockTokens,
-        tokensUsed: 50,
-      })),
       runArchitectActor: fromPromise(async () => ({
         spec: mockSpec,
-        imagePool: [],
+        tokens: mockTokens,
         tokensUsed: 50,
       })),
       runCodeGenerationActor: fromPromise(async () => ({
@@ -608,7 +594,7 @@ describe('error handling', () => {
     actor.stop()
   })
 
-  it('transitions designing → failed on actor error', async () => {
+  it('transitions architecting → failed on actor error', async () => {
     const testMachine = appGenerationMachine.provide({
       actors: {
         runAnalysisActor: fromPromise(async () => ({
@@ -624,7 +610,7 @@ describe('error handling', () => {
           repoName: 'test-repo',
           tokensUsed: 50,
         })),
-        runDesignActor: fromPromise(async () => {
+        runArchitectActor: fromPromise(async () => {
           throw new Error('Design generation failed')
         }),
       },
@@ -662,10 +648,6 @@ describe('error handling', () => {
           appName: 'TestApp',
           appDescription: 'Test',
           tokensUsed: 100,
-        })),
-        runDesignActor: fromPromise(async () => ({
-          tokens: mockTokens,
-          tokensUsed: 50,
         })),
         runProvisioningActor: fromPromise(async () => {
           throw new Error('Provisioning failed')
@@ -776,14 +758,10 @@ describe('context updates', () => {
           appDescription: 'Test',
           tokensUsed: 100,
         })),
-        runDesignActor: fromPromise(async () => ({
-          tokens: mockTokens,
-          tokensUsed: 50,
-        })),
         runArchitectActor: fromPromise(async () => ({
           spec: mockSpec,
-          imagePool: [],
-          tokensUsed: 50,
+          tokens: mockTokens,
+          tokensUsed: 100,
         })),
         runCodeGenerationActor: fromPromise(async () => ({
           pages: [],
@@ -816,7 +794,7 @@ describe('context updates', () => {
     })
 
     await waitFor(actor, (state) => state.matches('complete'), { timeout: 8000 })
-    // 100 (analysis) + 50 (provisioning) + 50 (design) + 50 (architect) + 200 (pageGen) + 150 (validation) = 600
+    // 100 (analysis) + 50 (provisioning) + 100 (architect/creative-director) + 200 (pageGen) + 150 (validation) = 600
     expect(actor.getSnapshot().context.totalTokens).toBeGreaterThanOrEqual(600)
     actor.stop()
   })
@@ -939,7 +917,7 @@ describe('userId and cleanup', () => {
     })
 
     // Provisioning runs in parallel with analysis during preparing
-    await waitFor(actor, (state) => state.matches('designing'), { timeout: 2000 })
+    await waitFor(actor, (state) => state.matches('architecting'), { timeout: 2000 })
     expect(provisioningInput).toBeDefined()
     expect(provisioningInput.projectId).toBe('test-userid')
     // appName is not yet available when provisioning starts (runs in parallel with analysis)
@@ -1002,14 +980,6 @@ describe('state timeouts', () => {
     expect(after).toBeDefined()
     expect(after).toHaveProperty('180000')
     expect(after['180000'].target).toBe('#appGeneration.failed')
-  })
-
-  it('designing state has timeout configured', () => {
-    const designingState = appGenerationMachine.config.states?.designing
-    const after = designingState?.after as any
-    expect(after).toBeDefined()
-    expect(after).toHaveProperty('60000')
-    expect(after['60000'].target).toBe('failed')
   })
 
   it('architecting state has timeout configured', () => {

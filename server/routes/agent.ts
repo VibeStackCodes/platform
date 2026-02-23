@@ -75,8 +75,7 @@ const STATE_PHASES: Record<string, { name: string; phase: number; agentId?: stri
   analyzing:            { name: 'Analyzing requirements',      phase: 1, agentId: 'analyst',     agentName: 'Analyst' },
   awaitingClarification:{ name: 'Awaiting clarification',     phase: 1 },
   provisioning:         { name: 'Provisioning infrastructure', phase: 1, agentId: 'provisioner', agentName: 'DevOps Agent' },
-  designing:            { name: 'Designing theme',             phase: 2, agentId: 'designer',    agentName: 'Design Agent' },
-  architecting:         { name: 'Architecting app',            phase: 2, agentId: 'architect',   agentName: 'Architect Agent' },
+  architecting:         { name: 'Designing & architecting',    phase: 2, agentId: 'architect',   agentName: 'Creative Director' },
   codeGeneration:       { name: 'Generating code',             phase: 3, agentId: 'codegen',     agentName: 'Code Agent' },
   validating:           { name: 'Validating code',             phase: 4, agentId: 'qa',          agentName: 'Quality Assurance' },
   repairing:            { name: 'Repairing errors',            phase: 4, agentId: 'repair',      agentName: 'Repair Agent' },
@@ -102,7 +101,6 @@ const STATE_TO_DB_STATUS: Record<string, string> = {
   analyzing: 'planning',
   awaitingClarification: 'planning',
   provisioning: 'generating',
-  designing: 'planning',
   architecting: 'planning',
   codeGeneration: 'generating',
   validating: 'verifying',
@@ -239,13 +237,12 @@ function streamActorStates(
           })
         }
 
-        // Pipeline B: emit design_tokens when transitioning FROM designing
-        // context.tokens is added by the Pipeline B machine rewrite
-        if (previousState === 'designing') {
-          // biome-ignore lint/suspicious/noExplicitAny: Pipeline B context field not yet on MachineContext
-          const tokens = (snapshot.context as any).tokens
+        // Emit design_tokens when transitioning FROM architecting
+        // Creative Director now produces both spec and tokens in one step
+        if (previousState === 'architecting') {
+          const tokens = snapshot.context.tokens
           if (tokens) {
-            emit({ type: 'design_tokens', tokens: tokens as Record<string, unknown> })
+            emit({ type: 'design_tokens', tokens: tokens as unknown as Record<string, unknown> })
           }
         }
 
@@ -410,8 +407,8 @@ function streamActorStates(
           status: 'active',
         })
 
-        // Emit sandbox_ready when entering designing (provisioning is complete)
-        if (state === 'designing' && snapshot.context.sandboxId) {
+        // Emit sandbox_ready when entering architecting (provisioning is complete)
+        if (state === 'architecting' && snapshot.context.sandboxId) {
           emit({ type: 'agent_progress', agentId: 'provisioner', message: 'Sandbox ready' })
           emit({ type: 'sandbox_ready', sandboxId: snapshot.context.sandboxId })
           // Persist sandboxId to DB for page reloads (fire-and-forget, skip in mock mode)
@@ -422,8 +419,8 @@ function streamActorStates(
           }
         }
 
-        // Emit plan_ready when entering designing (Analyst PRD is ready)
-        if (state === 'designing') {
+        // Emit plan_ready when entering architecting (Analyst PRD is ready)
+        if (state === 'architecting') {
           emit({
             type: 'plan_ready',
             plan: {

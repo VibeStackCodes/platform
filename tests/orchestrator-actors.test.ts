@@ -1,13 +1,13 @@
 import { describe, it, expect } from 'vitest'
 
 describe('pipeline B orchestrator exports', () => {
-  it('exports runDesign', async () => {
-    const mod = await import('@server/lib/agents/orchestrator')
-    expect(typeof mod.runDesign).toBe('function')
-  })
-  it('exports runArchitect', async () => {
+  it('exports runArchitect (Creative Director — single design authority)', async () => {
     const mod = await import('@server/lib/agents/orchestrator')
     expect(typeof mod.runArchitect).toBe('function')
+  })
+  it('does not export runDesign (removed — Design Agent merged into Creative Director)', async () => {
+    const mod = await import('@server/lib/agents/orchestrator')
+    expect((mod as Record<string, unknown>).runDesign).toBeUndefined()
   })
   it('exports runPageGeneration', async () => {
     const mod = await import('@server/lib/agents/orchestrator')

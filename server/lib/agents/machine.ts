@@ -99,10 +99,6 @@ export const appGenerationMachine = setup({
       const { runAnalysis } = await import('./orchestrator')
       return runAnalysis(input)
     }),
-    runDesignActor: fromPromise(async ({ input }: { input: { appName: string; prd: string } }) => {
-      const { runDesign } = await import('./orchestrator')
-      return runDesign(input)
-    }),
     runArchitectActor: fromPromise(async ({ input }: { input: { appName: string; prd: string } }) => {
       const { runArchitect } = await import('./orchestrator')
       return runArchitect(input)
@@ -318,34 +314,7 @@ export const appGenerationMachine = setup({
           },
         },
       },
-      onDone: { target: 'designing' },
-    },
-
-    designing: {
-      after: {
-        60_000: {
-          target: 'failed',
-          actions: assign({ error: () => 'Design timed out' }),
-        },
-      },
-      invoke: {
-        src: 'runDesignActor',
-        input: ({ context }) => ({
-          appName: context.appName ?? '',
-          prd: context.prd ?? '',
-        }),
-        onDone: {
-          target: 'architecting',
-          actions: assign({
-            tokens: ({ event }) => event.output.tokens,
-            totalTokens: ({ context, event }) => context.totalTokens + (event.output.tokensUsed ?? 0),
-          }),
-        },
-        onError: {
-          target: 'failed',
-          actions: assign({ error: ({ event }) => String(event.error) }),
-        },
-      },
+      onDone: { target: 'architecting' },
     },
 
     architecting: {
@@ -365,6 +334,7 @@ export const appGenerationMachine = setup({
           target: 'codeGeneration',
           actions: assign({
             creativeSpec: ({ event }) => event.output.spec,
+            tokens: ({ event }) => event.output.tokens,
             totalTokens: ({ context, event }) => context.totalTokens + (event.output.tokensUsed ?? 0),
           }),
         },
@@ -656,10 +626,23 @@ const MOCK_CREATIVE_SPEC: CreativeSpec = {
       accent: '#6366f1',
       background: '#ffffff',
       text: '#18181b',
+      primaryForeground: '#ffffff',
+      foreground: '#18181b',
+      muted: '#f4f4f5',
+      border: '#e4e4e7',
     },
     typography: {
       display: 'Syne',
       body: 'Outfit',
+    },
+    style: {
+      borderRadius: '0.5rem',
+      cardStyle: 'bordered' as const,
+      navStyle: 'top-bar' as const,
+      heroLayout: 'fullbleed' as const,
+      spacing: 'normal' as const,
+      motion: 'subtle' as const,
+      imagery: 'photography-heavy' as const,
     },
     imageManifest: {},
   },
@@ -741,17 +724,11 @@ export const mockAppGenerationMachine = setup({
         tokensUsed: 3500,
       }
     }),
-    runDesignActor: fromPromise(async () => {
-      await delay(1000)
-      return {
-        tokens: MOCK_TOKENS,
-        tokensUsed: 500,
-      }
-    }),
     runArchitectActor: fromPromise(async () => {
       await delay(1500)
       return {
         spec: MOCK_CREATIVE_SPEC,
+        tokens: MOCK_TOKENS,
         tokensUsed: 1200,
       }
     }),
@@ -915,27 +892,7 @@ export const mockAppGenerationMachine = setup({
           },
         },
       },
-      onDone: { target: 'designing' },
-    },
-    designing: {
-      invoke: {
-        src: 'runDesignActor',
-        input: ({ context }) => ({
-          appName: context.appName ?? '',
-          prd: context.prd ?? '',
-        }),
-        onDone: {
-          target: 'architecting',
-          actions: assign({
-            tokens: ({ event }) => event.output.tokens,
-            totalTokens: ({ context, event }) => context.totalTokens + (event.output.tokensUsed ?? 0),
-          }),
-        },
-        onError: {
-          target: 'failed',
-          actions: assign({ error: ({ event }) => String(event.error) }),
-        },
-      },
+      onDone: { target: 'architecting' },
     },
     architecting: {
       invoke: {
@@ -948,6 +905,7 @@ export const mockAppGenerationMachine = setup({
           target: 'codeGeneration',
           actions: assign({
             creativeSpec: ({ event }) => event.output.spec,
+            tokens: ({ event }) => event.output.tokens,
             totalTokens: ({ context, event }) => context.totalTokens + (event.output.tokensUsed ?? 0),
           }),
         },
