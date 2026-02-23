@@ -1,12 +1,12 @@
 # VibeStack Platform
 
-AI-powered app builder — users describe an app, the platform generates a full Next.js + Supabase project with live preview.
+AI-powered app builder — users describe an app, the platform generates a full Vite + Supabase project with live preview.
 
 ## Commands
 
 ```bash
 bun run dev           # Vite SPA + Hono API server (concurrently)
-bun run build         # Vite client build + server typecheck
+bun run build         # Vite client build + typecheck (single tsconfig)
 bun run preview       # Vite preview of built client
 bun run lint          # OxLint (670+ rules, 50-100x faster than ESLint)
 bun run lint:fix      # OxLint auto-fix
@@ -22,13 +22,13 @@ bun run db:studio     # Drizzle Kit studio (DB browser)
 ## Stack
 
 - **Client**: Vite 8 SPA, React 19, TanStack Router (file-based routing)
-- **Server**: Hono API framework (replaces Next.js API routes)
-- **Language**: TypeScript 5, strict mode, dual tsconfig (client + server)
+- **Server**: Hono API framework
+- **Language**: TypeScript 5, strict mode, single tsconfig
 - **UI**: Tailwind CSS v4, shadcn/ui (Radix), Motion (framer-motion successor)
 - **Auth**: Supabase Auth via `@supabase/supabase-js` (SPA localStorage tokens)
 - **Database**: Drizzle ORM + Supabase (platform DB) + Supabase Management API (generated app DBs)
 - **Sandbox**: Daytona SDK — sandboxed environments from snapshots
-- **AI**: Mastra agent framework, OpenAI + Anthropic providers
+- **AI**: Mastra agent framework, OpenAI providers, XState pipeline orchestration
 - **Payments**: Stripe (checkout, webhooks)
 - **Deployment**: Vercel (Hono via `@hono/vercel`, client via `dist/client/`)
 - **Monitoring**: Sentry (client + server + AI agent instrumentation)
@@ -51,24 +51,21 @@ src/                     # Client SPA (Vite + TanStack Router)
     _authenticated/
       route.tsx           # Auth guard (beforeLoad redirect)
       dashboard.tsx       # Project list
-      project.$id.tsx     # Builder UI (chat + preview + DB manager)
+      project.$id.tsx     # Builder UI (chat + preview)
     auth/
       login.tsx           # Sign in/up page
   components/
     ui/                   # shadcn/ui primitives
-    supabase-manager/     # Database browser/editor for generated apps
+    ai-elements/          # Agent cards, code blocks, theme tokens, etc.
     builder-chat.tsx      # Chat panel in builder
     builder-preview.tsx   # Live preview iframe
-    hero-prompt.tsx       # Landing page prompt bar
     project-layout.tsx    # Builder page layout
-    theme-provider.tsx    # Dark/light/system theme (replaces next-themes)
+    theme-provider.tsx    # Dark/light/system theme
   lib/
     auth.ts              # useAuth() hook (Supabase onAuthStateChange)
     supabase-browser.ts  # Supabase client singleton (import.meta.env.VITE_*)
     utils.ts             # cn() helper, stripCodeFences()
     types.ts             # Client-side type definitions
-    platform-kit/        # Management API client + pg-meta types
-  contexts/              # React contexts
   hooks/                 # Custom hooks
 server/                  # Hono API server
   index.ts               # Hono app entry + Sentry middleware
@@ -76,7 +73,8 @@ server/                  # Hono API server
   middleware/
     auth.ts              # Hono auth middleware (cookie-based Supabase)
   routes/
-    agent.ts             # Mastra agent SSE endpoint (credit-gated)
+    agent.ts             # XState pipeline SSE endpoint (credit-gated)
+    admin.ts             # Admin health check + env check
     projects.ts          # Project CRUD
     projects-deploy.ts   # Vercel deployment
     sandbox-urls.ts      # Sandbox preview URLs
@@ -91,71 +89,74 @@ server/                  # Hono API server
       client.ts          # Drizzle client (pg Pool)
       queries.ts         # Type-safe query functions
     agents/
-      registry.ts        # 9 agents + supervisor network (Mastra)
-      tools.ts           # 18 Mastra tools
+      machine.ts         # XState state machine (main pipeline)
+      edit-machine.ts    # XState machine for iterative edits
+      orchestrator.ts    # Actor implementations (analysis, design, codegen, etc.)
+      registry.ts        # Agent definitions (Mastra)
+      tools.ts           # ~25 Mastra tools (sandbox, GitHub, Supabase, Vercel)
       schemas.ts         # Zod schemas for agent inputs/outputs
-      workflows.ts       # Mastra workflows
+      provider.ts        # Model routing (PIPELINE_MODELS per role)
+      repair.ts          # Repair agent for build errors
+      validation.ts      # Build validation gate
     sandbox.ts           # Daytona sandbox lifecycle
     schema-contract.ts   # SchemaContract type — single source of truth
     contract-to-sql.ts   # SchemaContract → deterministic SQL migration
-    contract-to-types.ts # SchemaContract → TypeScript types
-    contract-to-hooks.ts  # SchemaContract → TanStack Query CRUD hooks
-    contract-to-routes.ts # SchemaContract → TanStack Router route definitions
+    contract-to-seed.ts  # SchemaContract → deterministic seed SQL
+    contract-to-pages.ts # SchemaContract → page route definitions
+    creative-director.ts # Creative Director — visual design spec
+    page-generator.ts    # LLM page generation (section composition)
+    page-assembler.ts    # Deterministic file assembly from generated pages
+    page-validator.ts    # Post-assembly validation
+    themed-code-engine.ts # Theme-specific code generation
     github.ts            # GitHub App integration
     supabase-mgmt.ts     # Supabase Management API
     credits.ts           # Credit checking/deduction
     sse.ts               # SSE stream helper (Hono streamSSE)
+    sections/            # 50 section renderers (heroes, grids, CTAs, etc.)
 supabase/migrations/     # Platform DB migrations
 snapshot/                # Daytona sandbox Docker image (Vite + React base)
 ```
 
-### Dual tsconfig
+### Path Aliases
 
-- **`tsconfig.json`**: Client code (`src/`). `@/` → `./src/*`
-- **`tsconfig.server.json`**: Server code (`server/`). `@/` → `./server/*`
+Single `tsconfig.json` covers both `src/` and `server/`:
+
+- `@/*` → `./src/*` (client imports)
+- `@server/*` → `./server/*` (used in tests)
 - **Never cross-import** between client and server boundaries
-- `src/mastra/` is excluded from client tsconfig (imports server code)
-
-### Generation Pipeline
-
-1. **Agent route** (`/api/agent`) → user describes app → Mastra supervisor network orchestrates 9 agents (credit-gated, 402 on exhaustion):
-   - **Planner**: Extracts requirements, creates `SchemaContract`
-   - **Data Architect**: Generates SQL migration, validates via PGlite
-   - **Frontend Engineer**: Generates React components in sandbox
-   - **QA Engineer**: Runs `bun run build`, fixes errors
-   - **Infra Agent**: Creates Supabase project, GitHub repo
-   - **DevOps Agent**: Deploys to Vercel
-   - SSE bridge maps Mastra `NetworkChunkType` → `StreamEvent` types
-2. **Preview** delivered via `BuilderPreview` subscribing to Supabase realtime on `projects` table
+- Server code uses relative imports internally
 
 ### XState Pipeline Orchestration
 
 The generation pipeline is orchestrated by an XState state machine (`server/lib/agents/machine.ts`):
 
-- **State flow**: `idle` → `preparing` (parallel: analysis + provisioning) → `designing` → `architecting` → `pageGeneration` → `assembly` → `validating` → `reviewing` → `deploying` → `complete`
+- **State flow**: `idle` → `preparing` (parallel: analysis + provisioning) → `designing` → `architecting` → `codeGeneration` → `validating` → `deploying` → `complete`
 - **Error path**: Any state can transition to `cleanup` → `failed` (cleanup releases sandbox + Supabase project)
 - **Repair loop**: `validating` ↔ `repairing` (max 2 retries, halts if errors unchanged)
 - **Parallel state**: `preparing` runs `runAnalysisActor` and `runProvisioningActor` concurrently; both must complete before `designing`
 - **Clarification**: `preparing.analysis.running` → `awaitingClarification` (30min timeout) → `USER_ANSWERED` event resumes
-- **Key files**:
-  - `server/lib/agents/machine.ts` — Machine definition, actors, mock pipeline (`MOCK_PIPELINE=true`)
-  - `server/lib/agents/edit-machine.ts` — Edit machine for iterative edits on existing projects
-  - `server/routes/agent.ts` — SSE streaming via `streamActorStates()`, maps XState states → `StreamEvent` types
-  - `server/lib/agents/orchestrator.ts` — Actor implementations (`runAnalysis`, `runDesign`, `runArchitect`, etc.)
-- **Inspection**: `XSTATE_INSPECT=true` env var enables Stately Inspector (streams to stately.ai/inspect)
 - **Mock pipeline**: `MOCK_PIPELINE=true` swaps all actors with fake delays (2-3s each), no external services
 - **SSE mapping**: `STATE_PHASES` maps state names → `{ phase, agentId, agentName }` for client rendering; `streamActorStates()` emits `agent_start`/`agent_complete`/`checkpoint`/`phase_start` events
-- **Context**: `MachineContext` carries all data through the pipeline (contract, tokens, blueprint, sandbox/Supabase IDs, validation results, token counts)
+- **Context**: `MachineContext` carries all data through the pipeline (tokens, blueprint, sandbox/Supabase IDs, validation results, generated pages)
+
+### Model Routing
+
+Per-agent model selection via `PIPELINE_MODELS` in `provider.ts`:
+
+| Role | Model |
+|------|-------|
+| orchestrator, composer, creativeDirector | `gpt-5.2` |
+| codegen, repair, edit, pageGen | `gpt-5.2-codex` |
+| seed | `gpt-5-mini` |
 
 ### Key Patterns
 
 - **Contract-first**: `SchemaContract` → all downstream artifacts (SQL, types, seed). Never retry LLM generation — fix the contract or generator if wrong.
-- **Agent architecture**: 9 Mastra agents created per-request via `createAgentNetwork(model, userId)` with Helicone proxy for observability. Model tiers: `gpt-4o` (orchestrator/codegen), `gpt-4o-mini` (validator).
-- **Credit-Based Billing**: 1 credit = 1,000 tokens. `/api/agent` enforces credits (402 on exhaustion). Stripe meters track usage, credit grants provision per subscription.
+- **Section composition**: Creative Director spec → LLM picks section types → deterministic renderers emit JSX strings → assembled into route files
+- **Credit-Based Billing**: 1 credit = 1,000 tokens. `/api/agent` enforces credits (402 on exhaustion). Stripe meters track usage.
 - **Single-flow frontend**: All AI calls go through `/api/agent` (SSE).
 - **SSE streaming**: Agent route streams progress events to client via Hono `streamSSE()`.
 - **Mock mode**: `VITE_MOCK_MODE=true` bypasses auth and Supabase queries for E2E testing.
-- **Path aliases**: `@/` → `src/` (client), `@/` → `server/` (server tsconfig). Tests use `@server/` → `server/` alias.
 
 ## Environment Variables
 
@@ -168,7 +169,6 @@ Required in `.env.local`:
 | `DATABASE_URL` | PostgreSQL connection string (Supabase pooler URL) |
 | `SUPABASE_ACCESS_TOKEN` | Management API token (for generating app DBs) |
 | `SUPABASE_ORG_ID` | Org for generated Supabase projects |
-| `ANTHROPIC_API_KEY` | Claude API |
 | `OPENAI_API_KEY` | OpenAI API |
 | `DAYTONA_API_KEY` | Daytona sandbox API |
 | `DAYTONA_SNAPSHOT_ID` | Pre-built sandbox snapshot ID |
@@ -227,26 +227,20 @@ git commit
 
 **Why**: Branch tests only cover branch code. Main may have evolved independently — new files importing modules the branch deleted, new deps the branch's `package.json` removed, etc. These **merge-boundary failures** are invisible until you run `tsc` and `test` on the combined result.
 
-**Common merge-boundary issues**:
-- Deps removed by branch but still needed by main's frontend code
-- Main added functions to a module the branch rewrote (e.g., `sandbox.ts`)
-- Test files on main referencing modules the branch deleted
-- Type exports removed by branch but still imported by main's components
-
 ## Gotchas
 
-- **Dual tsconfig**: Client uses `@/` → `src/`, server uses `@/` → `server/`. Never cross-import. Tests use `@server/` for server code.
+- **Path aliases**: `@/` → `src/` (client), `@server/` → `server/` (tests). Server code uses relative imports. Never cross-import between client and server.
 - **Env vars**: Client uses `import.meta.env.VITE_*`, server uses `process.env.*`. Only `VITE_` prefixed vars are exposed to the client.
 - **PGlite validation** requires AUTH_STUBS with `authenticated`, `anon`, and `service_role` roles — omitting these causes migration validation to fail silently.
 - **Daytona sandbox polling** uses a 20s window (10x2s) — shorter windows cause duplicate sandbox creation from race conditions.
-- **Verifier** runs `bun run build` (not `npm run build`) — must match Vercel build command in generated projects.
 - **Preview URL** comes from Supabase realtime subscription on `projects` table, NOT from SSE events.
 - **`d.list()` vs `d.get(id)`**: Daytona's `list()` returns lightweight objects without `process.executeCommand()`. Always use `get(id)` for full sandbox operations.
 - **Signed preview URLs** from Daytona expire in 1 hour.
-- **No `SUPABASE_SERVICE_ROLE_KEY`** in platform env — use Management API for DB queries against generated apps.
 - **Credit deduction** happens post-execution (not pre-execution). In-flight generations always complete even if credits go negative.
 - **Helicone fallback**: When `HELICONE_API_KEY` is unset, LLM calls go directly to OpenAI (no observability).
 - **Sentry** is gated behind `VITE_SENTRY_DSN` / `SENTRY_DSN` — no-op when unset.
+- **Bun.serve idle timeout**: Set to 255s (max) to prevent SSE connection drops during long LLM calls. Keepalive pings every 15s.
+- **SSE subscribe before send**: XState `actor.subscribe()` only fires on future snapshots. Must call `streamActorStates()` BEFORE `actor.send({ type: 'START' })`.
 
 ## Snapshot (Daytona Sandbox Image)
 
@@ -258,8 +252,6 @@ The `snapshot/` directory defines the Docker image used as the Daytona sandbox b
 - **Generated apps use Vite** (not Next.js) — `bun run build` = `tsc -b && vite build`
 - **PGlite** (`@electric-sql/pglite`) is included for in-sandbox SQL migration validation
 - **`warmup-scaffold/`**: Minimal React+Vite app used only for cache warming, cleaned up after build (caches kept)
-
-Key detail: both the platform and generated apps now use Vite + React.
 
 ## Code Style
 
