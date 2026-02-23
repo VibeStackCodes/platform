@@ -207,7 +207,11 @@ ONLY import from the CLOSED VOCABULARY — anything else will cause a build fail
 
 For landing pages and informational pages: hardcode content in JSX with realistic placeholder text (not "Lorem ipsum").
 For interactive apps (to-do lists, calculators, form builders, etc.): use React state (useState, useEffect) for client-side interactivity. All state is local — no external APIs, no database.
-For images, use placeholder URLs like \`https://placehold.co/600x400\` with descriptive alt text.
+For images, use the VibeStack image resolver: \`https://img.vibestack.codes/s/{query}/{width}/{height}\`
+where {query} is a 4-10 word URL-encoded photo description (specific, scenic, with atmosphere).
+Example: \`https://img.vibestack.codes/s/cozy%20coffee%20shop%20morning%20light%20wooden%20tables/800/600\`
+Every <img> tag MUST include: alt text, loading="lazy" (or "eager" for hero), and an onError fallback:
+\`onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; if ((e.target as HTMLImageElement).parentElement) (e.target as HTMLImageElement).parentElement!.style.background = 'linear-gradient(135deg, #1a1a2e, #16213e)' }}\`
 No data fetching, no API calls, no database queries.
 
 ## Route File Structure
@@ -235,6 +239,29 @@ function {ComponentName}() {
 
 ## Design Rules
 ${getStaticDesignRules()}
+
+## ANTI-PATTERNS — Never Do These
+
+VISUAL:
+- Purple/blue gradient hero with centered white text (AI slop)
+- Grid of 3 identical cards with icon + title + description
+- Generic blob/wave SVG decorations
+- Uniform rounded-2xl on everything
+- #f5f5f5 background with white cards
+- Same border-radius/padding/shadow everywhere
+
+CONTENT:
+- "Lorem ipsum" or [Your text here] or [placeholder]
+- Headlines: "Welcome to", "Why Choose Us", "Get Started Today"
+- CTAs all saying "Get Started" or "Learn More" — use domain-specific language
+- Buzzwords: "seamless", "cutting-edge", "revolutionary", "leverage", "synergy"
+- Testimonials from "John D., CEO" with no company — use realistic names and roles
+
+CODE:
+- onClick={() => {}} (empty handlers) — always wire to state or navigation
+- Mixed inline styles + Tailwind on same element
+- Unused imports or state variables
+- console.log statements
 
 ## Critical Rules
 1. Do NOT generate navigation or footer — these are in __root.tsx
