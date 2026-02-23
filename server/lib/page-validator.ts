@@ -563,6 +563,106 @@ function checkLucideIcons(
 }
 
 // ============================================================================
+// Anti-pattern detection
+// ============================================================================
+
+export interface AntiPatternViolation {
+  rule: string
+  message: string
+  line?: number
+}
+
+const BUZZWORDS = [
+  'seamless',
+  'cutting-edge',
+  'revolutionary',
+  'leverage',
+  'synergy',
+  'game-changing',
+  'disruptive',
+  'next-generation',
+]
+
+const GENERIC_CTAS = ['Get Started', 'Learn More', 'Sign Up Now', 'Contact Us']
+
+/**
+ * Detect AI-slop anti-patterns in generated JSX/TSX code.
+ *
+ * Rules checked:
+ * - placeholder-text: Lorem ipsum or [Your text here] / [placeholder]
+ * - buzzword: AI-favoured marketing buzzwords
+ * - generic-cta: 2+ identical generic CTA labels in the same file
+ * - empty-handler: onClick={() => {}} with no-op body
+ * - img-missing-alt: <img> without alt attribute
+ * - img-missing-onerror: <img> without onError fallback
+ */
+export function detectAntiPatterns(code: string): AntiPatternViolation[] {
+  const violations: AntiPatternViolation[] = []
+
+  // Placeholder text
+  if (
+    /lorem ipsum/i.test(code) ||
+    /\[your text here\]/i.test(code) ||
+    /\[placeholder\]/i.test(code)
+  ) {
+    violations.push({
+      rule: 'placeholder-text',
+      message: 'Contains placeholder text (Lorem ipsum or [Your text here])',
+    })
+  }
+
+  // Buzzwords — report only the first match to avoid noise
+  for (const word of BUZZWORDS) {
+    if (code.toLowerCase().includes(word)) {
+      violations.push({
+        rule: 'buzzword',
+        message: `Contains AI-slop buzzword: "${word}"`,
+      })
+      break
+    }
+  }
+
+  // Generic CTAs — flag if 2+ identical instances appear
+  for (const cta of GENERIC_CTAS) {
+    const matches = code.match(new RegExp(`>${cta}<`, 'g'))
+    if (matches && matches.length >= 2) {
+      violations.push({
+        rule: 'generic-cta',
+        message: `Multiple identical generic CTAs: "${cta}"`,
+      })
+      break
+    }
+  }
+
+  // Empty onClick handlers: onClick={() => {}}
+  if (/onClick=\{?\(\)\s*=>\s*\{\s*\}\}?/.test(code)) {
+    violations.push({
+      rule: 'empty-handler',
+      message: 'Empty onClick handler: onClick={() => {}}',
+    })
+  }
+
+  // <img> attribute checks
+  const imgTags = code.match(/<img\b[^>]*\/?>/g) ?? []
+  for (const tag of imgTags) {
+    if (!/\balt[=\s]/.test(tag)) {
+      violations.push({
+        rule: 'img-missing-alt',
+        message: '<img> without alt attribute',
+      })
+    }
+    if (!/\bonError[=\s]/.test(tag)) {
+      violations.push({
+        rule: 'img-missing-onerror',
+        message: '<img> without onError fallback',
+      })
+    }
+  }
+
+  return violations
+}
+
+// ============================================================================
 // Public entry point
 // ============================================================================
 
