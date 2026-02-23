@@ -1,0 +1,13 @@
+{
+  "name": "@vibestack/image-resolver",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@upstash/redis": "^1.34.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "@types/node": "^22.0.0",
+    "@vercel/node": "^5.0.0"
+  }
+}
