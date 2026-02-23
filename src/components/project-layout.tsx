@@ -123,7 +123,7 @@ export function ProjectLayout({
 
   return (
     <div className="flex h-screen">
-      <div className="w-2/5 border-r">
+      <div className="w-[30%] border-r">
         <BuilderChat
           projectId={projectId}
           initialPrompt={initialPrompt}
@@ -134,7 +134,7 @@ export function ProjectLayout({
           onEditComplete={() => setSelectedElement(null)}
         />
       </div>
-      <div className="w-3/5">
+      <div className="w-[70%]">
         <BuilderPreview
           projectId={projectId}
           sandboxId={sandboxId}

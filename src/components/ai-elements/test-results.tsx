@@ -147,7 +147,7 @@ export const TestResultsProgress = ({
   const failedPercent = (summary.failed / summary.total) * 100
 
   return (
-    <div className={cn('space-y-2', className)} {...props}>
+    <div className={cn('space-y-1.5 px-4 py-3', className)} {...props}>
       {children ?? (
         <>
           <div className="flex h-2 overflow-hidden rounded-full bg-muted">
@@ -169,7 +169,7 @@ export const TestResultsProgress = ({
 export type TestResultsContentProps = HTMLAttributes<HTMLDivElement>
 
 export const TestResultsContent = ({ className, children, ...props }: TestResultsContentProps) => (
-  <div className={cn('space-y-2 p-4', className)} {...props}>
+  <div className={cn('space-y-0.5 px-4 pb-3', className)} {...props}>
     {children}
   </div>
 )
@@ -278,7 +278,7 @@ export const Test = ({ name, status, duration, className, children, ...props }: 
 
   return (
     <TestContext.Provider value={contextValue}>
-      <div className={cn('flex items-center gap-2 px-4 py-2 text-sm', className)} {...props}>
+      <div className={cn('flex items-center gap-2 py-1 text-sm', className)} {...props}>
         {children ?? (
           <>
             <TestStatus />
