@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { AESTHETIC_DIRECTIONS, LAYOUT_STRATEGIES, PageImageManifestSchema } from '../design-system'
 
 /**
  * Zod schemas for agent structured output.
@@ -185,6 +186,24 @@ export const CreativeSpecSchema = z.object({
         .describe('Optional CTA button in nav — null if none'),
     ),
     mobileStyle: z.enum(['sheet', 'fullscreen', 'dropdown']).describe('Mobile navigation style'),
+  }),
+
+  designSystem: z.object({
+    aestheticDirection: z.enum(AESTHETIC_DIRECTIONS),
+    layoutStrategy: z.enum(LAYOUT_STRATEGIES),
+    signatureDetail: z.string().min(1),
+    colorPalette: z.object({
+      primary: z.string(),
+      secondary: z.string(),
+      accent: z.string(),
+      background: z.string(),
+      text: z.string(),
+    }),
+    typography: z.object({
+      display: z.string(),
+      body: z.string(),
+    }),
+    imageManifest: z.record(z.string(), PageImageManifestSchema).default({}),
   }),
 
   footer: z.object({

@@ -646,6 +646,23 @@ const MOCK_CREATIVE_SPEC: CreativeSpec = {
     cta: null,
     mobileStyle: 'sheet',
   },
+  designSystem: {
+    aestheticDirection: 'minimal-swiss',
+    layoutStrategy: 'single-column-editorial',
+    signatureDetail: 'Subtle grain texture overlay on hero section',
+    colorPalette: {
+      primary: '#18181b',
+      secondary: '#3f3f46',
+      accent: '#6366f1',
+      background: '#ffffff',
+      text: '#18181b',
+    },
+    typography: {
+      display: 'Syne',
+      body: 'Outfit',
+    },
+    imageManifest: {},
+  },
   footer: {
     style: 'minimal',
     columns: [],
