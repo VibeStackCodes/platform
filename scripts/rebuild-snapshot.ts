@@ -28,7 +28,7 @@ async function main() {
     .runCommands(
       `curl -fsSL https://github.com/gitpod-io/openvscode-server/releases/download/openvscode-server-${OPENVSCODE_VERSION}/openvscode-server-${OPENVSCODE_VERSION}-linux-x64.tar.gz | tar xz -C /opt && mv /opt/openvscode-server-${OPENVSCODE_VERSION}-linux-x64 /opt/openvscode-server`,
     )
-    // Pre-cache common deps (includes PGlite for migration validation)
+    // Pre-cache common deps for static Vite + React + Tailwind apps
     .workdir('/workspace')
     .addLocalFile('snapshot/package-base.json', '/workspace/package.json')
     .runCommands('bun install')
