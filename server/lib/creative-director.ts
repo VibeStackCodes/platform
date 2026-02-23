@@ -107,7 +107,7 @@ Each page MUST have:
 - sections: 3-8 descriptive strings (top to bottom)
 - copyDirection: tone and voice (be specific, not "professional and modern")
 - keyInteractions: primary user actions
-- lucideIcons: 3-6 Lucide icon names
+- lucideIcons: 3-6 Lucide icon names (use ONLY real lucide-react exports like ArrowRight, Star, Heart, MapPin, Phone, Mail, Clock, Shield, Check, ChevronRight, Menu, X, Search, Home, Plus, Trash2, Pencil, Eye, Bookmark, Users, Calendar, Package, Globe, Leaf, Sun, Moon, Code, Sparkles, Flame, BookOpen, FileText, Settings, Filter, Mountain, Coffee, Building2, Store, CreditCard — NOT made-up names like Lotus, Hamburger, Loading)
 - shadcnComponents: 3-8 shadcn/ui component names
 
 ## STEP 4: Image Manifest
@@ -121,7 +121,7 @@ IMAGE QUERY RULES:
 4. AVOID GENERIC STOCK — never "happy people", "diverse team", "innovation", "growth", "success"
 5. MATCH YOUR AESTHETIC — dark aesthetic → "moody, dramatic lighting"; light → "bright, natural light, airy"
 6. SIZE TO CONTAINER — hero: 1600x900, feature: 800x600, avatar: 200x200 (crop=faces), card: 600x400, product: 600x600, background: 1920x1080
-7. 4-10 WORDS PER QUERY — too short = generic, too long = no results
+7. 3-5 WORDS PER QUERY — too short = generic, too long (6+) = Unsplash returns no results
 
 SECTION-SPECIFIC:
 - HERO: Most cinematic image. Full-bleed 1600x900. Convey emotion, not literal screenshots.
@@ -136,13 +136,18 @@ SECTION-SPECIFIC:
 Navigation: sticky-blur | transparent-hero | sidebar | editorial
 Footer: multi-column | minimal | centered | magazine
 
+CRITICAL: nav.links[].href and footer.columns[].links[].href MUST ONLY reference routes that exist in your sitemap.
+If the sitemap has ["/", "/about", "/pricing"], then nav links can only use "/", "/about", "/pricing", or external URLs.
+NEVER invent routes like "/privacy", "/terms", "/contact" unless they are in the sitemap.
+
 ## Critical Rules
 1. Build EXACTLY what the user asked for
 2. Maximum 8 pages
 3. No database, no auth, no API calls — client-side only
 4. Be opinionated — avoid generic "hero + features + CTA" for every app
 5. Every image query is unique — never duplicate on same page
-6. For interactive apps, keyInteractions describe actual app functionality`,
+6. For interactive apps, keyInteractions describe actual app functionality
+7. Nav and footer links MUST only reference sitemap routes or external URLs`,
   defaultOptions: { modelSettings: { temperature: 0.4 } },
 })
 

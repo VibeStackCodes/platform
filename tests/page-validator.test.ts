@@ -550,8 +550,8 @@ describe('validateGeneratedApp — Lucide icon imports', () => {
     expect(result.warnings.filter((w) => w.message.includes('Lucide icon'))).toHaveLength(0)
   })
 
-  it('warns on unknown icon names (possible typos)', () => {
-    const content = `import { NotARealIcon, ArrowRightt } from 'lucide-react'\n`
+  it('warns on renamed icons that have a known replacement', () => {
+    const content = `import { Lotus, AlertTriangle } from 'lucide-react'\n`
     const result = validateGeneratedApp({
       files: makeFiles({ 'src/routes/index.tsx': content }),
       validRoutes: DEFAULT_ROUTES,
@@ -559,8 +559,8 @@ describe('validateGeneratedApp — Lucide icon imports', () => {
     })
     const iconWarnings = result.warnings.filter((w) => w.message.includes('Lucide icon'))
     expect(iconWarnings).toHaveLength(2)
-    expect(iconWarnings.some((w) => w.message.includes('NotARealIcon'))).toBe(true)
-    expect(iconWarnings.some((w) => w.message.includes('ArrowRightt'))).toBe(true)
+    expect(iconWarnings.some((w) => w.message.includes('Lotus'))).toBe(true)
+    expect(iconWarnings.some((w) => w.message.includes('AlertTriangle'))).toBe(true)
   })
 
   it('lucide warnings do not make the result invalid', () => {

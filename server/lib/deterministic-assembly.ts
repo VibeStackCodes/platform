@@ -324,30 +324,46 @@ function generateViteConfig(): string {
 /**
  * Build the Navigation component source (inlined in __root.tsx).
  */
+/**
+ * Filter links to only include those whose href is external, a hash anchor,
+ * or matches a known route in the sitemap. Prevents broken internal links.
+ */
+function filterValidLinks<T extends { href: string }>(links: T[], validRoutes: Set<string>): T[] {
+  return links.filter((link) => {
+    const h = link.href
+    if (h.startsWith('http://') || h.startsWith('https://') || h.startsWith('#') || h.startsWith('mailto:') || h.startsWith('tel:')) return true
+    if (h.includes('#')) return true // e.g. "/#features"
+    const normalised = h.endsWith('/') && h.length > 1 ? h.slice(0, -1) : h
+    return validRoutes.has(normalised)
+  })
+}
+
 function buildNavigation(spec: CreativeSpec): string {
   const { nav } = spec
+  const validRoutes = new Set(spec.sitemap.map(p => p.route))
 
-  // Build nav link JSX lines
-  const navLinks = nav.links
+  // Build nav link JSX lines — filtered to valid routes only
+  const navLinks = filterValidLinks(nav.links, validRoutes)
     .map(
       (link) =>
         `        <Link\n          to="${link.href}"\n          aria-current={router.state.location.pathname === '${link.href}' ? 'page' : undefined}\n          className="text-sm font-medium transition-colors hover:text-primary aria-[current=page]:text-primary"\n        >\n          ${link.label}\n        </Link>`,
     )
     .join('\n')
 
-  const mobileLinks = nav.links
+  const mobileLinks = filterValidLinks(nav.links, validRoutes)
     .map(
       (link) =>
         `          <Link\n            to="${link.href}"\n            onClick={() => setMobileOpen(false)}\n            aria-current={router.state.location.pathname === '${link.href}' ? 'page' : undefined}\n            className="block py-2 text-base font-medium transition-colors hover:text-primary aria-[current=page]:text-primary"\n          >\n            ${link.label}\n          </Link>`,
     )
     .join('\n')
 
-  const ctaBlock = nav.cta
-    ? `\n        <Button asChild size="sm">\n          <Link to="${nav.cta.href}">${nav.cta.label}</Link>\n        </Button>`
+  const ctaValid = nav.cta && filterValidLinks([nav.cta], validRoutes).length > 0
+  const ctaBlock = ctaValid
+    ? `\n        <Button asChild size="sm">\n          <Link to="${nav.cta!.href}">${nav.cta!.label}</Link>\n        </Button>`
     : ''
 
-  const mobileCta = nav.cta
-    ? `\n          <Button asChild className="mt-2 w-full">\n            <Link to="${nav.cta.href}" onClick={() => setMobileOpen(false)}>${nav.cta.label}</Link>\n          </Button>`
+  const mobileCta = ctaValid
+    ? `\n          <Button asChild className="mt-2 w-full">\n            <Link to="${nav.cta!.href}" onClick={() => setMobileOpen(false)}>${nav.cta!.label}</Link>\n          </Button>`
     : ''
 
   return `function Navigation() {
@@ -406,6 +422,7 @@ ${mobileLinks}${mobileCta}
  */
 function buildFooter(spec: CreativeSpec): string {
   const { footer } = spec
+  const validRoutes = new Set(spec.sitemap.map(p => p.route))
 
   // Collect unique social icons needed
   const socialIconNames = footer.socialLinks.map(socialPlatformToIcon)
@@ -444,7 +461,7 @@ ${footer.columns
     (col) => `          <div>
             <h3 className="text-sm font-semibold mb-3">${col.heading}</h3>
             <ul className="space-y-2">
-${col.links
+${filterValidLinks(col.links, validRoutes)
   .map(
     (link) => `              <li>
                 <Link to="${link.href}" className="text-sm text-muted-foreground hover:text-foreground transition-colors">

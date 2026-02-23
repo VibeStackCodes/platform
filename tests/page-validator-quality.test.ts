@@ -32,16 +32,16 @@ describe('detectAntiPatterns', () => {
     expect(violations.some((v: AntiPatternViolation) => v.rule === 'img-missing-alt')).toBe(true)
   })
 
-  it('flags missing img onError', () => {
+  it('does not flag missing img onError (onError causes navy box problem)', () => {
     const code = '<img src="test.jpg" alt="test" />'
     const violations = detectAntiPatterns(code)
-    expect(violations.some((v: AntiPatternViolation) => v.rule === 'img-missing-onerror')).toBe(true)
+    expect(violations.some((v: AntiPatternViolation) => v.rule === 'img-missing-onerror')).toBe(false)
   })
 
   it('passes clean code', () => {
     const code = `
       <section id="hero">
-        <img src={IMAGES.hero.src} alt="Hero image" onError={(e) => { e.target.style.display = 'none' }} />
+        <img src={IMAGES.hero.src} alt="Hero image" />
         <h1>Craft Coffee Roasters</h1>
         <p>Small-batch specialty coffee from Brooklyn</p>
         <Button onClick={() => setView('menu')}>View Our Roasts</Button>

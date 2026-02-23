@@ -283,11 +283,12 @@ describe('assembleApp — routeTree.gen.ts', () => {
 // ---------------------------------------------------------------------------
 
 describe('assembleApp — __root.tsx', () => {
-  it('contains nav links and logo', () => {
+  it('contains nav links and logo (only valid routes)', () => {
     const files = assembleApp(makeInput())
     const root = files.find((f) => f.path === 'src/routes/__root.tsx')!
     expect(root.content).toContain('Home')
-    expect(root.content).toContain('About')
+    // 'About' links to /about which is not in the sitemap — should be filtered out
+    expect(root.content).not.toContain('About')
     expect(root.content).toContain('TestApp')
     expect(root.content).toContain('function Navigation')
   })

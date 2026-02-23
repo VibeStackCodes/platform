@@ -99,25 +99,21 @@ const VALID_SHADCN_COMPONENTS = new Set([
   'tooltip',
 ])
 
-// Common valid Lucide icon names — not exhaustive, but catches obvious typos
-const COMMON_LUCIDE_ICONS = new Set([
-  'ArrowRight', 'ArrowLeft', 'ArrowUp', 'ArrowDown',
-  'ChevronDown', 'ChevronLeft', 'ChevronRight', 'ChevronUp',
-  'Menu', 'X', 'Search', 'Home', 'ExternalLink', 'Plus', 'Pencil',
-  'Trash2', 'Save', 'Download', 'Upload', 'Copy', 'Share2', 'Send',
-  'MoreHorizontal', 'Check', 'AlertCircle', 'Info', 'Clock', 'Loader2',
-  'Star', 'Heart', 'Bookmark', 'MessageSquare', 'Quote', 'Eye',
-  'Mail', 'Phone', 'MapPin', 'Calendar', 'User', 'Users',
-  'ShoppingCart', 'CreditCard', 'DollarSign', 'Tag', 'Package',
-  'UtensilsCrossed', 'ChefHat', 'Wine', 'Coffee', 'Soup', 'Salad',
-  'Image', 'Video', 'Camera', 'Play', 'Github', 'Twitter', 'Linkedin',
-  'Instagram', 'Youtube', 'Facebook', 'Globe', 'Leaf', 'Sun', 'Moon',
-  'Code', 'Terminal', 'Database', 'Shield', 'Lock', 'Building2', 'Store',
-  'Sparkles', 'Flame', 'BookOpen', 'FileText', 'Folder', 'Settings',
-  'LogOut', 'LogIn', 'Filter', 'SlidersHorizontal', 'Grid', 'List',
-  'LayoutGrid', 'Columns', 'Receipt', 'Pizza', 'Mountain', 'TreePine',
-  'Cloud', 'Droplets',
-])
+// Lucide icon rename map — maps old/common misspellings to valid icon names.
+// Used by fixLucideImports() to auto-repair invalid icon names.
+const LUCIDE_ICON_RENAMES: Record<string, string> = {
+  Lotus: 'Flower2',
+  CheckCircle2: 'CircleCheck',
+  HelpCircle: 'CircleHelp',
+  BadgeCheck: 'BadgeCheck', // already valid, kept for documentation
+  AlertTriangle: 'TriangleAlert',
+  ExternalLink: 'ExternalLink', // still valid
+  Trash: 'Trash2',
+  Edit: 'Pencil',
+  Close: 'X',
+  Loading: 'Loader2',
+  Hamburger: 'Menu',
+}
 
 // ============================================================================
 // Regex patterns
@@ -552,14 +548,45 @@ function checkLucideIcons(
     .filter(Boolean)
 
   for (const name of importedNames) {
-    if (!COMMON_LUCIDE_ICONS.has(name)) {
+    // Accept any PascalCase name — tsc catches real typos.
+    // Only warn on names we know are renamed/removed.
+    if (LUCIDE_ICON_RENAMES[name] && LUCIDE_ICON_RENAMES[name] !== name) {
       warnings.push({
         file: filePath,
         type: 'unused-import',
-        message: `Lucide icon "${name}" is not in the known icon set — verify the name is correct`,
+        message: `Lucide icon "${name}" has been renamed to "${LUCIDE_ICON_RENAMES[name]}" — will be auto-fixed`,
       })
     }
   }
+}
+
+/**
+ * Auto-fix Lucide icon imports by replacing known renamed/invalid icons.
+ * Returns the fixed content string.
+ */
+export function fixLucideImports(content: string): string {
+  const match = content.match(LUCIDE_IMPORT_RE)
+  if (!match) return content
+
+  let result = content
+  for (const [oldName, newName] of Object.entries(LUCIDE_ICON_RENAMES)) {
+    if (oldName === newName) continue
+    // Replace in import statement and all JSX usages
+    const importRe = new RegExp(`\\b${oldName}\\b`, 'g')
+    result = result.replace(importRe, newName)
+  }
+  return result
+}
+
+/**
+ * Strip onError handlers from <img> tags.
+ * These cause navy gradient fallback boxes when images load slowly via 302 redirects.
+ */
+export function stripImgOnError(content: string): string {
+  // Match onError={...} on img tags, handling nested braces
+  return content.replace(/<img\b([^>]*)\bonError=\{[^}]*(?:\{[^}]*\}[^}]*)*\}([^>]*)\/?>/g, (match) => {
+    return match.replace(/\s*onError=\{[^}]*(?:\{[^}]*\}[^}]*)*\}/, '')
+  })
 }
 
 // ============================================================================
@@ -651,12 +678,8 @@ export function detectAntiPatterns(code: string): AntiPatternViolation[] {
         message: '<img> without alt attribute',
       })
     }
-    if (!/\bonError[=\s]/.test(tag)) {
-      violations.push({
-        rule: 'img-missing-onerror',
-        message: '<img> without onError fallback',
-      })
-    }
+    // Note: we intentionally do NOT check for onError — navy gradient fallbacks
+    // cause worse UX than a broken image. The edge function handles fallbacks.
   }
 
   return violations

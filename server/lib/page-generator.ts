@@ -208,18 +208,18 @@ ONLY import from the CLOSED VOCABULARY — anything else will cause a build fail
 For landing pages and informational pages: hardcode content in JSX with realistic placeholder text (not "Lorem ipsum").
 For interactive apps (to-do lists, calculators, form builders, etc.): use React state (useState, useEffect) for client-side interactivity. All state is local — no external APIs, no database.
 For images, use the VibeStack image resolver: \`https://img.vibestack.codes/s/{query}/{width}/{height}\`
-where {query} is a 4-10 word URL-encoded photo description (specific, scenic, with atmosphere).
-Example: \`https://img.vibestack.codes/s/cozy%20coffee%20shop%20morning%20light%20wooden%20tables/800/600\`
-Every <img> tag MUST include: alt text, loading="lazy" (or "eager" for hero), and an onError fallback:
-\`onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; if ((e.target as HTMLImageElement).parentElement) (e.target as HTMLImageElement).parentElement!.style.background = 'linear-gradient(135deg, #1a1a2e, #16213e)' }}\`
+where {query} is a 3-5 word URL-encoded photo description (short, specific, scenic).
+Example: \`https://img.vibestack.codes/s/coffee%20shop%20morning%20light/800/600\`
+Every <img> tag MUST include: alt text and loading="lazy" (or "eager" for hero).
+NEVER add onError handlers to <img> tags — the image resolver handles fallbacks server-side.
 No data fetching, no API calls, no database queries.
 
 IMAGE QUERY RULES (critical for visual quality):
-- Every img.vibestack.codes query must be SPECIFIC and DESCRIPTIVE — at least 4-5 words.
-- For people/portraits: include "professional headshot portrait studio lighting" — never just "person" or "agent".
-- For property/real estate: include specific architectural style + lighting, e.g. "modern minimalist home exterior golden hour" not just "house".
-- For food/restaurant: include cooking style + presentation, e.g. "artisan sourdough bread rustic wooden board" not just "bread".
-- For nature/atmosphere: include mood + time of day, e.g. "misty mountain lake sunrise calm reflection" not just "lake".
+- Queries MUST be 3-5 words maximum. Longer queries fail to match Unsplash photos and show placeholders.
+- Good: "harbor penthouse evening light", "coffee shop warm interior", "mountain lake sunrise"
+- Bad (too long): "marina promenade morning mist sailboats wooden docks", "female real estate agent portrait modern office light"
+- For people/portraits: use direct Unsplash URLs instead of img.vibestack.codes (the resolver cannot find portraits reliably).
+  Use format: \`https://images.unsplash.com/photo-{id}?w={width}&h={height}&fit=crop&crop=face\`
 - NEVER use single-word queries like "office", "team", "food", "house".
 - For hero images: use WIDE aspect ratios (1600/900 or 1920/1080) and include "wide angle" or "panoramic" in the query.
 - For card thumbnails: use SQUARE or 4:3 aspect ratios (600/400 or 400/400).

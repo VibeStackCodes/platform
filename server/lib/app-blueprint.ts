@@ -10,7 +10,7 @@ import { runArchitect } from './agents/orchestrator'
 import { generatePages } from './page-generator'
 import { assembleApp } from './deterministic-assembly'
 import { fetchHeroImages } from './unsplash'
-import { validateGeneratedApp } from './page-validator'
+import { validateGeneratedApp, fixLucideImports, stripImgOnError } from './page-validator'
 
 // ============================================================================
 // UI Kit — shadcn/ui components read from snapshot/ui-kit/ at runtime
@@ -552,6 +552,14 @@ export async function contractToBlueprintCreative(input: BlueprintInput): Promis
     includeUiKit: true,
   })
   console.log(`[blueprint:creative] Assembled ${assembledFiles.length} files`)
+
+  // 4b. Post-process: fix Lucide icon renames + strip onError handlers
+  for (const file of assembledFiles) {
+    if (file.path.endsWith('.tsx')) {
+      file.content = fixLucideImports(file.content)
+      file.content = stripImgOnError(file.content)
+    }
+  }
 
   // 5. Validate
   const fileMap = new Map(assembledFiles.map((f) => [f.path, f.content]))
