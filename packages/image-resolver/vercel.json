@@ -1,13 +1,12 @@
 {
   "rewrites": [
-    { "source": "/s/(.*)", "destination": "/api/s/$1" }
+    { "source": "/(.*)", "destination": "/api" }
   ],
   "headers": [
     {
       "source": "/s/(.*)",
       "headers": [
-        { "key": "Access-Control-Allow-Origin", "value": "*" },
-        { "key": "Cache-Control", "value": "public, max-age=86400, stale-while-revalidate=604800" }
+        { "key": "Access-Control-Allow-Origin", "value": "*" }
       ]
     }
   ]

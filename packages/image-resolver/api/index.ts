@@ -1,14 +1,24 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { Redis } from '@upstash/redis'
-import { searchUnsplash, triggerDownload } from '../_lib/unsplash.js'
-import { generateFallbackSVG } from '../_lib/fallback-svg.js'
+import { searchUnsplash, triggerDownload } from './_lib/unsplash'
+import { generateFallbackSVG } from './_lib/fallback-svg'
 
-const redis = Redis.fromEnv()
-const CACHE_TTL = 86400 // 24 hours
+// Lazy-init Redis to avoid module-level crash if env vars missing
+let redis: any = null
+async function getRedis() {
+  if (redis) return redis
+  try {
+    const { Redis } = await import('@upstash/redis')
+    redis = Redis.fromEnv()
+    return redis
+  } catch {
+    return null
+  }
+}
+
+const CACHE_TTL = 86400
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  const url = new URL(req.url!, `https://${req.headers.host}`)
-  const segments = url.pathname.replace('/api/s/', '').split('/')
+  const segments = (req.url ?? '').replace(/^\/s\//, '').split('/')
 
   if (segments.length < 3) {
     return res.status(400).json({ error: 'Format: /s/{query}/{width}/{height}' })
@@ -19,16 +29,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const height = Math.min(Math.max(parseInt(segments[2], 10) || 600, 100), 2400)
 
   const cacheKey = `img:${query}:${width}:${height}`
+  const r = await getRedis()
 
-  // Check Upstash Redis cache
-  const cached = await redis.get<string>(cacheKey)
-  if (cached) {
-    res.setHeader('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800')
-    res.setHeader('X-Cache', 'HIT')
-    return res.redirect(302, cached)
+  // Check cache
+  if (r) {
+    try {
+      const cached = await r.get(cacheKey)
+      if (cached) {
+        res.setHeader('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800')
+        res.setHeader('X-Cache', 'HIT')
+        return res.redirect(302, cached as string)
+      }
+    } catch { /* skip cache */ }
   }
 
-  // Query Unsplash
   const result = await searchUnsplash(query, width, height)
 
   if (!result) {
@@ -38,13 +52,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.send(generateFallbackSVG(width, height, query))
   }
 
-  // Cache in Upstash Redis
-  await redis.setex(cacheKey, CACHE_TTL, result.imageUrl)
+  // Cache result
+  if (r) {
+    try { await r.setex(cacheKey, CACHE_TTL, result.imageUrl) } catch { /* skip */ }
+  }
 
-  // Trigger Unsplash download tracking (compliance)
   triggerDownload(result.downloadLocation)
 
-  // Redirect to optimized Unsplash URL
   res.setHeader('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800')
   res.setHeader('X-Cache', 'MISS')
   return res.redirect(302, result.imageUrl)
