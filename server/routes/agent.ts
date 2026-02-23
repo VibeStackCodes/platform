@@ -570,7 +570,7 @@ agentRoutes.post('/', async (c) => {
     return c.json({ error: 'Invalid request body' }, 400)
   }
 
-  const { message, projectId, model = 'gpt-5.2' } = body
+  const { message, projectId, model = 'gpt-5.2-codex' } = body
   console.log('[agent] projectId:', projectId, 'model:', model, 'message:', message?.slice(0, 50))
 
   // Validate required fields
@@ -940,7 +940,7 @@ agentRoutes.post('/edit', async (c) => {
       actor,
       userId: user.id,
       projectId,
-      model: body.model || 'gpt-5.2',
+      model: body.model || 'gpt-5.2-codex',
       createdAt: Date.now(),
       reservedCredits: EDIT_CREDIT_RESERVATION,
       settled: false,

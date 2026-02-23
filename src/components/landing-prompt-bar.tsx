@@ -14,10 +14,6 @@ import {
 } from '@/components/ai-elements/model-selector'
 import {
   PromptInput,
-  PromptInputActionAddAttachments,
-  PromptInputActionMenu,
-  PromptInputActionMenuContent,
-  PromptInputActionMenuTrigger,
   PromptInputBody,
   PromptInputButton,
   PromptInputFooter,
@@ -31,9 +27,8 @@ import { cn } from '@/lib/utils'
 export type { PromptInputMessage }
 
 const models = [
-  { id: 'gpt-5.2', name: 'GPT-5.2', provider: 'openai' as const, available: true },
-  { id: 'gpt-5.1-codex-max', name: 'GPT-5.1 Codex Max', provider: 'openai' as const, available: false },
-  { id: 'gpt-5-mini', name: 'GPT-5 Mini', provider: 'openai' as const, available: false },
+  { id: 'gpt-5.2-codex', name: 'GPT-5.2 Codex', provider: 'openai' as const, available: true },
+  { id: 'claude-opus-4-6', name: 'Claude Opus 4.6', provider: 'anthropic' as const, available: false },
 ]
 
 interface LandingPromptBarProps {
@@ -81,12 +76,6 @@ export function LandingPromptBar({
       </PromptInputBody>
       <PromptInputFooter>
         <PromptInputTools>
-          <PromptInputActionMenu>
-            <PromptInputActionMenuTrigger />
-            <PromptInputActionMenuContent>
-              <PromptInputActionAddAttachments />
-            </PromptInputActionMenuContent>
-          </PromptInputActionMenu>
           <ModelSelector open={selectorOpen} onOpenChange={setSelectorOpen}>
             <ModelSelectorTrigger asChild>
               <PromptInputButton tooltip={{ content: 'Select model' }}>
@@ -102,6 +91,28 @@ export function LandingPromptBar({
                 <ModelSelectorGroup heading="OpenAI">
                   {models
                     .filter((m) => m.provider === 'openai')
+                    .map((m) => (
+                      <ModelSelectorItem
+                        key={m.id}
+                        value={m.id}
+                        onSelect={() => {
+                          if (!m.available) return
+                          setModel(m.id)
+                          setSelectorOpen(false)
+                        }}
+                        className={!m.available ? 'opacity-50 cursor-not-allowed' : ''}
+                      >
+                        <ModelSelectorLogo provider={m.provider} />
+                        <ModelSelectorName>{m.name}</ModelSelectorName>
+                        {!m.available && (
+                          <span className="ml-auto text-xs text-muted-foreground">Coming soon</span>
+                        )}
+                      </ModelSelectorItem>
+                    ))}
+                </ModelSelectorGroup>
+                <ModelSelectorGroup heading="Anthropic">
+                  {models
+                    .filter((m) => m.provider === 'anthropic')
                     .map((m) => (
                       <ModelSelectorItem
                         key={m.id}

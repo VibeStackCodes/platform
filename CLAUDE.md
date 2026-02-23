@@ -141,13 +141,7 @@ The generation pipeline is orchestrated by an XState state machine (`server/lib/
 
 ### Model Routing
 
-Per-agent model selection via `PIPELINE_MODELS` in `provider.ts`:
-
-| Role | Model |
-|------|-------|
-| orchestrator, composer, creativeDirector | `gpt-5.2` |
-| codegen, repair, edit, pageGen | `gpt-5.2-codex` |
-| seed | `gpt-5-mini` |
+All pipeline stages use `gpt-5.2-codex` via `PIPELINE_MODELS` in `provider.ts`.
 
 ### Key Patterns
 

@@ -66,13 +66,14 @@ describe('Agent Provider', () => {
   it('isAllowedModel validates correctly', async () => {
     const { isAllowedModel } = await import('@server/lib/agents/provider')
 
-    expect(isAllowedModel('gpt-5.2')).toBe(true)
+    expect(isAllowedModel('gpt-5.2-codex')).toBe(true)
+    expect(isAllowedModel('gpt-5.2')).toBe(false)
     expect(isAllowedModel('gpt-5-mini')).toBe(false)
     expect(isAllowedModel('claude-sonnet')).toBe(false)
   })
 
-  it('ALLOWED_MODELS contains only gpt-5.2', async () => {
+  it('ALLOWED_MODELS contains only gpt-5.2-codex', async () => {
     const { ALLOWED_MODELS } = await import('@server/lib/agents/provider')
-    expect(ALLOWED_MODELS).toEqual(['gpt-5.2'])
+    expect(ALLOWED_MODELS).toEqual(['gpt-5.2-codex'])
   })
 })

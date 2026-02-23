@@ -122,23 +122,17 @@ export function createHeliconeProvider(ctx: HeliconeContext | string) {
 // ---------------------------------------------------------------------------
 
 /**
- * Role-based model routing — each pipeline stage uses the optimal model.
- *
- * - orchestrator (analyst, PM): gpt-5.2 — best reasoning for requirement extraction
- * - codegen (frontend, backend): gpt-5.2-codex — agentic coding, context compaction
- * - review: gpt-5.1 — configurable reasoning, sufficient for code review
- * - repair: gpt-5.2-codex — agentic coding for targeted error fixes
- * - edit: gpt-5.2-codex — agentic coding for single-file edits
+ * Role-based model routing — all pipeline stages use gpt-5.2-codex.
  */
 export const PIPELINE_MODELS = {
-  orchestrator: 'gpt-5.2',
+  orchestrator: 'gpt-5.2-codex',
   codegen: 'gpt-5.2-codex',
-  review: 'gpt-5.2',
+  review: 'gpt-5.2-codex',
   repair: 'gpt-5.2-codex',
   edit: 'gpt-5.2-codex',
-  seed: 'gpt-5-mini',
-  composer: 'gpt-5.2',
-  creativeDirector: 'gpt-5.2',
+  seed: 'gpt-5.2-codex',
+  composer: 'gpt-5.2-codex',
+  creativeDirector: 'gpt-5.2-codex',
   pageGen: 'gpt-5.2-codex',
 } as const
 
@@ -182,7 +176,7 @@ export function createAgentModelResolver(role: PipelineRole) {
 // ---------------------------------------------------------------------------
 
 /** Allowed models the client can request */
-export const ALLOWED_MODELS = ['gpt-5.2'] as const
+export const ALLOWED_MODELS = ['gpt-5.2-codex'] as const
 export type AllowedModel = (typeof ALLOWED_MODELS)[number]
 
 /** Validate that a model string is allowed */

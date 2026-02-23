@@ -65,7 +65,7 @@ function ThemeTokensCard({ tokens }: ThemeTokensCardProps) {
   const { colors, fonts, style } = tokens
 
   return (
-    <Card className="gap-4">
+    <Card className="gap-4 shadow-none">
       <style>{`@import url(${fonts.googleFontsUrl})`}</style>
 
       <CardContent className="flex flex-col gap-5">

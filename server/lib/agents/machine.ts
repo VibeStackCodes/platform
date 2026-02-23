@@ -705,6 +705,17 @@ export const mockAppGenerationMachine = setup({
         type: 'done' as const,
         appName: 'TaskFlow',
         appDescription: 'A modern task management app with categories, priorities, and due dates',
+        prd: [
+          'TaskFlow is a lightweight task management app for individuals and small teams.',
+          '- Create, edit, and delete tasks with titles, descriptions, and due dates',
+          '- Organize tasks into categories (Work, Personal, Shopping, etc.)',
+          '- Set priority levels (Low, Medium, High, Urgent) with color coding',
+          '- Filter and sort tasks by category, priority, status, or due date',
+          '- Mark tasks as complete with a single click',
+          '- Dashboard view showing overdue tasks and upcoming deadlines',
+          '- Responsive design for mobile and desktop',
+          '- Authentication via Supabase (email/password)',
+        ].join('\n'),
         tokensUsed: 3500,
       }
     }),
@@ -828,6 +839,7 @@ export const mockAppGenerationMachine = setup({
                   actions: assign({
                     appName: ({ event }) => event.output.appName,
                     appDescription: ({ event }) => event.output.appDescription,
+                    prd: ({ event }) => event.output.prd,
                     totalTokens: ({ context, event }) => context.totalTokens + event.output.tokensUsed,
                   }),
                 },

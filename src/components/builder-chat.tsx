@@ -232,7 +232,7 @@ export function BuilderChat({
   selectedElement,
   onEditComplete,
 }: BuilderChatProps) {
-  const [model, setModel] = useState('gpt-5.2')
+  const [model, setModel] = useState('gpt-5.2-codex')
   const [generationStatus, setGenerationStatus] = useState<
     'idle' | 'generating' | 'complete' | 'error'
   >('idle')
@@ -710,7 +710,7 @@ export function BuilderChat({
 
   const handleSubmit = async (
     message: PromptInputMessage,
-    options: { model: string; webSearch: boolean },
+    options: { model: string },
   ) => {
     if (!message.text?.trim()) return
     setModel(options.model)
