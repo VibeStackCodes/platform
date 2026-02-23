@@ -583,6 +583,7 @@ const MOCK_TOKENS: ThemeTokens = {
   colors: {
     background: '#ffffff',
     foreground: '#111111',
+    text: '#111111',
     primary: '#2b6cb0',
     primaryForeground: '#ffffff',
     secondary: '#e5e7eb',
@@ -604,6 +605,10 @@ const MOCK_TOKENS: ThemeTokens = {
     motion: 'subtle',
     imagery: 'photography-heavy',
   },
+  aestheticDirection: 'warm-neutral' as const,
+  layoutStrategy: 'full-bleed' as const,
+  signatureDetail: 'Subtle scroll-triggered reveal animations on content sections',
+  imageManifest: {},
   authPosture: 'public',
   heroImages: [],
   heroQuery: '',

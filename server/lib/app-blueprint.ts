@@ -74,6 +74,7 @@ function fallbackThemeTokens(_input: BlueprintInput): ThemeTokens {
     colors: {
       background: '#ffffff',
       foreground: '#111111',
+      text: '#111111',
       primary: '#1e40af',
       primaryForeground: '#ffffff',
       secondary: '#f1f5f9',
@@ -90,6 +91,10 @@ function fallbackThemeTokens(_input: BlueprintInput): ThemeTokens {
       motion: 'subtle',
       imagery: 'minimal',
     },
+    aestheticDirection: 'warm-neutral' as const,
+    layoutStrategy: 'full-bleed' as const,
+    signatureDetail: 'Subtle scroll-triggered reveal animations on content sections',
+    imageManifest: {},
     authPosture: 'hybrid',
     heroImages: [],
     heroQuery: 'modern web application',

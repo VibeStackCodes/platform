@@ -53,6 +53,7 @@ function makeTestContext(overrides?: Partial<SectionContext>): SectionContext {
     colors: {
       background: '#ffffff',
       foreground: '#000000',
+      text: '#000000',
       primary: '#2563eb',
       primaryForeground: '#ffffff',
       secondary: '#f3f4f6',
@@ -69,6 +70,10 @@ function makeTestContext(overrides?: Partial<SectionContext>): SectionContext {
       motion: 'subtle',
       imagery: 'photography-heavy',
     },
+    aestheticDirection: 'warm-neutral' as const,
+    layoutStrategy: 'full-bleed' as const,
+    signatureDetail: 'Subtle scroll-triggered reveal animations on content sections',
+    imageManifest: {},
     authPosture: 'public',
     heroImages: [
       {

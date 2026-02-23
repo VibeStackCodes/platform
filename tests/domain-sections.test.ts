@@ -38,6 +38,7 @@ const canapeTokens: ThemeTokens = {
   colors: {
     background: '#ffffff',
     foreground: '#1a1a1a',
+    text: '#1a1a1a',
     primary: '#2563eb',
     primaryForeground: '#ffffff',
     secondary: '#f3f4f6',
@@ -54,6 +55,10 @@ const canapeTokens: ThemeTokens = {
     motion: 'subtle',
     imagery: 'photography-heavy',
   },
+  aestheticDirection: 'warm-neutral' as const,
+  layoutStrategy: 'full-bleed' as const,
+  signatureDetail: 'Subtle scroll-triggered reveal animations on content sections',
+  imageManifest: {},
   authPosture: 'public',
   heroImages: [{ url: 'https://picsum.photos/1200/800', alt: 'Hero', photographer: 'Test' }],
   heroQuery: 'fine dining restaurant',

@@ -35,6 +35,9 @@ interface ThemeTokens {
   style: ThemeStyle
   authPosture: 'public' | 'authenticated' | 'mixed'
   textSlots: Record<string, string>
+  aestheticDirection?: string
+  layoutStrategy?: string
+  signatureDetail?: string
 }
 
 interface ThemeTokensCardProps {
@@ -124,6 +127,35 @@ function ThemeTokensCard({ tokens }: ThemeTokensCardProps) {
             ))}
           </div>
         </section>
+
+        {/* Design Decisions */}
+        {(tokens.aestheticDirection || tokens.layoutStrategy || tokens.signatureDetail) && (
+          <section>
+            <p className="text-muted-foreground mb-2 text-xs font-medium uppercase tracking-wide">
+              Design Decisions
+            </p>
+            <div className="flex flex-col gap-1">
+              {tokens.aestheticDirection && (
+                <div className="flex items-baseline gap-2">
+                  <span className="text-muted-foreground w-20 shrink-0 text-xs">Aesthetic</span>
+                  <span className="text-sm">{tokens.aestheticDirection}</span>
+                </div>
+              )}
+              {tokens.layoutStrategy && (
+                <div className="flex items-baseline gap-2">
+                  <span className="text-muted-foreground w-20 shrink-0 text-xs">Layout</span>
+                  <span className="text-sm">{tokens.layoutStrategy}</span>
+                </div>
+              )}
+              {tokens.signatureDetail && (
+                <div className="flex items-baseline gap-2">
+                  <span className="text-muted-foreground w-20 shrink-0 text-xs">Signature</span>
+                  <span className="text-sm">{tokens.signatureDetail}</span>
+                </div>
+              )}
+            </div>
+          </section>
+        )}
       </CardContent>
     </Card>
   )

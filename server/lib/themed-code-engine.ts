@@ -5,52 +5,20 @@ import { pluralize, singularize, snakeToKebab, snakeToPascal, snakeToTitle } fro
 import { composeSectionsV2 } from './page-composer'
 import { assemblePagesV2 } from './page-assembler'
 import type { EntityMeta } from './sections/types'
+import type { DesignSystem as ThemeTokens, TextSlots } from './design-system'
+import { DEFAULT_TEXT_SLOTS } from './design-system'
 
-export interface TextSlots {
-  hero_headline: string
-  hero_subtext: string
-  about_paragraph: string
-  cta_label: string
-  empty_state: string
-  footer_tagline: string
-}
-
-export const DEFAULT_TEXT_SLOTS: TextSlots = {
-  hero_headline: 'Welcome to your new app',
-  hero_subtext: 'A modern web application built for speed and simplicity.',
-  about_paragraph: 'This app was built with modern web technologies for a seamless experience. Browse, manage, and explore your data with a clean, purpose-built interface.',
-  cta_label: 'Get started',
-  empty_state: 'No items yet. Create your first one to get started.',
-  footer_tagline: 'Built with care.',
-}
-
-export interface ThemeTokens {
-  name: string
-  fonts: { display: string; body: string; googleFontsUrl: string }
-  colors: {
-    background: string
-    foreground: string
-    primary: string
-    primaryForeground: string
-    secondary: string
-    accent: string
-    muted: string
-    border: string
-  }
-  style: {
-    borderRadius: string
-    cardStyle: 'flat' | 'bordered' | 'elevated' | 'glass'
-    navStyle: 'top-bar' | 'sidebar' | 'editorial' | 'minimal' | 'centered'
-    heroLayout: 'fullbleed' | 'split' | 'centered' | 'editorial' | 'none'
-    spacing: 'compact' | 'normal' | 'airy'
-    motion: 'none' | 'subtle' | 'expressive'
-    imagery: 'photography-heavy' | 'illustration' | 'minimal' | 'icon-focused'
-  }
-  authPosture: 'public' | 'private' | 'hybrid'
-  heroImages: Array<{ url: string; alt: string; photographer: string }>
-  heroQuery: string
-  textSlots: TextSlots
-}
+// Re-export from single source of truth
+export type {
+  DesignSystem as ThemeTokens,  // backward-compat alias
+  DesignSystem,
+  TextSlots,
+  AestheticDirection,
+  LayoutStrategy,
+  PageImageManifest,
+  ImageEntry,
+} from './design-system'
+export { DEFAULT_TEXT_SLOTS, DesignSystemSchema } from './design-system'
 
 export type RouteMeta = {
   table: TableDef

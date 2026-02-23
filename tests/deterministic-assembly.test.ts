@@ -20,6 +20,7 @@ function makeTokens(): ThemeTokens {
     colors: {
       background: '#faf7f2',
       foreground: '#1a1a1a',
+      text: '#1a1a1a',
       primary: '#7c2d12',
       primaryForeground: '#ffffff',
       accent: '#d97706',
@@ -36,6 +37,10 @@ function makeTokens(): ThemeTokens {
       motion: 'subtle',
       imagery: 'photography-heavy',
     },
+    aestheticDirection: 'warm-neutral' as const,
+    layoutStrategy: 'full-bleed' as const,
+    signatureDetail: 'Subtle scroll-triggered reveal animations on content sections',
+    imageManifest: {},
     authPosture: 'public',
     heroImages: [],
     heroQuery: '',

@@ -51,6 +51,7 @@ const baseTokens: ThemeTokens = {
   colors: {
     background: '#ffffff',
     foreground: '#000000',
+    text: '#000000',
     primary: '#3b82f6',
     primaryForeground: '#ffffff',
     secondary: '#6b7280',
@@ -67,6 +68,10 @@ const baseTokens: ThemeTokens = {
     motion: 'subtle',
     imagery: 'photography-heavy',
   },
+  aestheticDirection: 'warm-neutral' as const,
+  layoutStrategy: 'full-bleed' as const,
+  signatureDetail: 'Subtle scroll-triggered reveal animations on content sections',
+  imageManifest: {},
   authPosture: 'hybrid',
   heroImages: [{ url: 'https://picsum.photos/1920/1080', alt: 'Hero', photographer: 'Test' }],
   heroQuery: 'food',
