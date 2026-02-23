@@ -214,6 +214,17 @@ Every <img> tag MUST include: alt text, loading="lazy" (or "eager" for hero), an
 \`onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; if ((e.target as HTMLImageElement).parentElement) (e.target as HTMLImageElement).parentElement!.style.background = 'linear-gradient(135deg, #1a1a2e, #16213e)' }}\`
 No data fetching, no API calls, no database queries.
 
+IMAGE QUERY RULES (critical for visual quality):
+- Every img.vibestack.codes query must be SPECIFIC and DESCRIPTIVE — at least 4-5 words.
+- For people/portraits: include "professional headshot portrait studio lighting" — never just "person" or "agent".
+- For property/real estate: include specific architectural style + lighting, e.g. "modern minimalist home exterior golden hour" not just "house".
+- For food/restaurant: include cooking style + presentation, e.g. "artisan sourdough bread rustic wooden board" not just "bread".
+- For nature/atmosphere: include mood + time of day, e.g. "misty mountain lake sunrise calm reflection" not just "lake".
+- NEVER use single-word queries like "office", "team", "food", "house".
+- For hero images: use WIDE aspect ratios (1600/900 or 1920/1080) and include "wide angle" or "panoramic" in the query.
+- For card thumbnails: use SQUARE or 4:3 aspect ratios (600/400 or 400/400).
+- For portrait photos: use square crop (400/400) and include "headshot" and "studio lighting".
+
 ## Route File Structure
 \`\`\`tsx
 import { createFileRoute } from '@tanstack/react-router'
@@ -262,6 +273,18 @@ CODE:
 - Mixed inline styles + Tailwind on same element
 - Unused imports or state variables
 - console.log statements
+
+## INTERACTIVITY RULES (every page must feel alive)
+
+- Nav links MUST use id-based anchor scrolling. Add id attributes to major sections and use onClick={() => document.getElementById('section-id')?.scrollIntoView({ behavior: 'smooth' })} on nav links.
+- Filter/category controls MUST use useState to filter displayed items. Never render a static <select> that does nothing.
+- CTA buttons that say "Sign up", "Subscribe", "Get started" etc. should scroll to a form section or open a dialog — never be dead links.
+- Cards with "View details" or "Learn more" MUST either expand inline (useState toggle) or navigate to a detail route.
+- Newsletter/email forms MUST have working useState for the input value and a handleSubmit that shows a success toast or state change.
+- Pricing toggle (monthly/annual) MUST use useState to switch displayed prices.
+- Mobile hamburger menu MUST use useState to toggle a Sheet or mobile nav overlay.
+- Add hover:scale-[1.02] transition-transform to all clickable cards.
+- Add hover:underline to all text links.
 
 ## Critical Rules
 1. Do NOT generate navigation or footer — these are in __root.tsx

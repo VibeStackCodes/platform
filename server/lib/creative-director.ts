@@ -41,6 +41,11 @@ const creativeDirectorAgent = new Agent({
 
 You never produce generic, template-looking output. Every generation is bespoke.
 
+CRITICAL — Preserve user-provided specifics:
+- If the user specifies prices, ratings, stats, or metrics, use them EXACTLY as given.
+- Do not reinvent numbers, prices, or statistics. Quote them verbatim in the sitemap page briefs.
+- If the user says "$12/month", the pricing section must show "$12/month" — not a different price.
+
 Given an app name and PRD, you produce a creative spec: design system decisions, sitemap, navigation, footer, and image manifest.
 
 ## STEP 1: Five Design Decisions (BEFORE anything else)
@@ -73,15 +78,16 @@ You MUST commit to these before writing any architecture:
 
 5. **Signature detail** — ONE memorable micro-interaction or visual detail: a hover effect revealing hidden content, scroll-triggered counter animation, gradient shifting on mouse movement, decorative SVG pattern, text reveal animation, parallax section, morphing shape, subtle grain texture overlay.
 
-## STEP 2: Sitemap Design (1-3 pages)
+## STEP 2: Sitemap Design (1-8 pages)
 
 Build EXACTLY what the user asked for. Match scope to the request:
 - "Build a to-do app" → 1 page: functional React app with to-do UI
-- "Build a restaurant website" → 2-3 pages: homepage, menu, contact
-- "Build a portfolio" → 1-2 pages: homepage with projects, optional about
+- "Build a restaurant website" → 3-5 pages: homepage, menu, about, contact, reservations
+- "Build a portfolio" → 2-3 pages: homepage with projects, about, contact
+- "Build a SaaS landing page" → 4-6 pages: homepage, features, pricing, FAQ, blog, contact
 
 NEVER generate auth/login/register routes.
-NEVER generate more than 3 pages.
+NEVER generate more than 8 pages.
 NEVER generate CRUD-style routes like /new, /$id/edit, /admin.
 
 Adapt your page structure to the app type:
@@ -132,7 +138,7 @@ Footer: multi-column | minimal | centered | magazine
 
 ## Critical Rules
 1. Build EXACTLY what the user asked for
-2. Maximum 3 pages
+2. Maximum 8 pages
 3. No database, no auth, no API calls — client-side only
 4. Be opinionated — avoid generic "hero + features + CTA" for every app
 5. Every image query is unique — never duplicate on same page
@@ -158,7 +164,7 @@ App Name: ${input.appName}
 Product Requirements:
 ${input.prd}
 
-Produce: all design decisions (aestheticDirection, colorPalette with 9 tokens, typography with display/body fonts, style tokens including cardStyle/navStyle/heroLayout/spacing/motion/imagery/borderRadius, layoutStrategy, signatureDetail), a complete sitemap (1-3 pages) with per-page image manifests, navigation contract, and footer contract.`
+Produce: all design decisions (aestheticDirection, colorPalette with 9 tokens, typography with display/body fonts, style tokens including cardStyle/navStyle/heroLayout/spacing/motion/imagery/borderRadius, layoutStrategy, signatureDetail), a complete sitemap (1-8 pages, scaled to match the scope the user described) with per-page image manifests, navigation contract, and footer contract.`
 
   const result = await creativeDirectorAgent.generate(prompt, {
     structuredOutput: { schema: CreativeSpecSchema },

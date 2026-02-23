@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { AESTHETIC_DIRECTIONS, LAYOUT_STRATEGIES, PageImageManifestSchema } from '../design-system'
+import { AESTHETIC_DIRECTIONS, LAYOUT_STRATEGIES } from '../design-system'
 
 /**
  * Zod schemas for agent structured output.
@@ -160,7 +160,7 @@ export const CreativeSpecSchema = z.object({
         }),
       }),
     )
-    .max(3)
+    .max(8)
     .describe('Complete sitemap with per-page generation briefs'),
 
   nav: z.object({
@@ -208,15 +208,29 @@ export const CreativeSpecSchema = z.object({
       body: z.string().describe('Google Font name for body text'),
       googleFontsUrl: z.string().optional().describe('Google Fonts CSS import URL'),
     }),
-    style: z.object({
-      borderRadius: z.string().default('0.5rem').describe('CSS border-radius, e.g. "0.5rem"'),
-      cardStyle: z.enum(['flat', 'bordered', 'elevated', 'glass']).default('bordered'),
-      navStyle: z.enum(['top-bar', 'sidebar', 'editorial', 'minimal', 'centered']).default('top-bar'),
-      heroLayout: z.enum(['fullbleed', 'split', 'centered', 'editorial', 'none']).default('fullbleed'),
-      spacing: z.enum(['compact', 'normal', 'airy']).default('normal'),
-      motion: z.enum(['none', 'subtle', 'expressive']).default('subtle'),
-      imagery: z.enum(['photography-heavy', 'illustration', 'minimal', 'icon-focused']).default('photography-heavy'),
-    }).default({
+    style: z.preprocess(
+      (val) => {
+        // LLMs sometimes return style as "cardStyle: elevated; navStyle: editorial; ..." string
+        if (typeof val === 'string') {
+          const obj: Record<string, string> = {}
+          for (const part of val.split(';')) {
+            const [k, ...rest] = part.split(':')
+            if (k && rest.length) obj[k.trim()] = rest.join(':').trim()
+          }
+          return obj
+        }
+        return val
+      },
+      z.object({
+        borderRadius: z.string().default('0.5rem').describe('CSS border-radius, e.g. "0.5rem"'),
+        cardStyle: z.enum(['flat', 'bordered', 'elevated', 'glass']).default('bordered'),
+        navStyle: z.enum(['top-bar', 'sidebar', 'editorial', 'minimal', 'centered']).default('top-bar'),
+        heroLayout: z.enum(['fullbleed', 'split', 'centered', 'editorial', 'none']).default('fullbleed'),
+        spacing: z.enum(['compact', 'normal', 'airy']).default('normal'),
+        motion: z.enum(['none', 'subtle', 'expressive']).default('subtle'),
+        imagery: z.enum(['photography-heavy', 'illustration', 'minimal', 'icon-focused']).default('photography-heavy'),
+      }),
+    ).default({
       borderRadius: '0.5rem',
       cardStyle: 'bordered',
       navStyle: 'top-bar',
@@ -225,7 +239,7 @@ export const CreativeSpecSchema = z.object({
       motion: 'subtle',
       imagery: 'photography-heavy',
     }),
-    imageManifest: z.record(z.string(), PageImageManifestSchema).default({}),
+    imageManifest: z.any().default({}),
   }),
 
   footer: z.object({
