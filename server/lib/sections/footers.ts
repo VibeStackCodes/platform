@@ -105,7 +105,7 @@ export const footerDarkPhoto: SectionRenderer = (ctx: SectionContext): SectionOu
   const tagline =
     (ctx.config.tagline as string) || ctx.tokens.textSlots.footer_tagline
   const bgImage =
-    ctx.heroImages[1]?.url ?? ctx.heroImages[0]?.url ?? 'https://picsum.photos/1920/400'
+    ctx.heroImages[1]?.url ?? ctx.heroImages[0]?.url ?? 'https://img.vibestack.codes/s/footer%20background%20dark%20texture/1920/400'
   const bgAlt = ctx.heroImages[1]?.alt ?? ctx.heroImages[0]?.alt ?? ''
   const navLinks = buildNavLinks(
     ctx,

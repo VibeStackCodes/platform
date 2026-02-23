@@ -131,7 +131,7 @@ function metadataBadgeRows(cols: string[], itemVar: string): string {
             </dl>`
 }
 
-/** Image block: renders the image column or a picsum fallback. */
+/** Image block: renders the image column or an img.vibestack.codes fallback. */
 function imageBlock(
   itemVar: string,
   imageColumn: string | null | undefined,
@@ -140,15 +140,16 @@ function imageBlock(
 ): string {
   if (!imageColumn) {
     return `<img
-                src={\`https://picsum.photos/seed/${tableName}-\${String(${itemVar}.id)}/1200/800\`}
+                src={\`https://img.vibestack.codes/s/${encodeURIComponent(tableName)}%20item%20photo/1200/800\`}
                 alt=""
                 loading="lazy"
                 className="${className}"
+                onError={(e) => { e.currentTarget.style.display = 'none'; }}
               />`
   }
   return `{${itemVar}.${imageColumn}
                 ? <img src={String(${itemVar}.${imageColumn})} alt={String(${itemVar}.${imageColumn} ?? '')} loading="lazy" className="${className}" />
-                : <img src={\`https://picsum.photos/seed/${tableName}-\${String(${itemVar}.id)}/1200/800\`} alt="" loading="lazy" className="${className}" />
+                : <img src={\`https://img.vibestack.codes/s/${encodeURIComponent(tableName)}%20item%20photo/1200/800\`} alt="" loading="lazy" className="${className}" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
               }`
 }
 

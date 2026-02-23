@@ -15,6 +15,7 @@
  */
 
 import type { SectionContext } from './types'
+import { imageTag } from './image-helpers'
 
 // ---------------------------------------------------------------------------
 // Core return type
@@ -580,30 +581,17 @@ export function cardClasses(ctx: SectionContext): string {
   return `${base} border border-border shadow-sm`
 }
 
-/**
- * Returns an `<img>` JSX string with a Picsum fallback `src` for missing
- * images in generated apps that have no image CDN configured.
- *
- * @param opts.src - Primary image src (template literal or literal string)
- * @param opts.alt - Alt text string
- * @param opts.className - Tailwind class string
- * @param opts.loading - 'lazy' (default) or 'eager'
- */
+// Re-export from image-helpers (new image system)
+export { imageSrc, imageTag } from './image-helpers'
+
+/** @deprecated Use imageTag() instead — includes onError fallback + img.vibestack.codes URLs */
 export function imageWithFallback(opts: {
   src: string
   alt: string
   className?: string
   loading?: 'lazy' | 'eager'
 }): string {
-  const loading = opts.loading ?? 'lazy'
-  const classAttr = opts.className ? ` className="${opts.className}"` : ''
-
-  // Emit a JSX expression that falls back to picsum when src is falsy
-  return `<img
-          src={${opts.src} || 'https://picsum.photos/seed/${encodeURIComponent(opts.alt)}/800/600'}
-          alt="${opts.alt}"
-          loading="${loading}"${classAttr}
-        />`
+  return imageTag(opts)
 }
 
 /**

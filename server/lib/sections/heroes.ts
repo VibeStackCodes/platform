@@ -26,9 +26,9 @@ function firstPublicPath(ctx: SectionContext): string {
   return ctx.allEntities.find((e) => !e.isPrivate)?.pluralKebab ?? ''
 }
 
-/** Returns the hero image url with picsum fallback */
+/** Returns the hero image url with img.vibestack.codes fallback */
 function imgUrl(ctx: SectionContext): string {
-  return ctx.heroImages[0]?.url ?? 'https://picsum.photos/1920/1080'
+  return ctx.heroImages[0]?.url ?? 'https://img.vibestack.codes/s/hero%20background%20landscape/1920/1080'
 }
 
 /** Returns the hero image alt text */

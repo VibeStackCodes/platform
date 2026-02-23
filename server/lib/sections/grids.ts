@@ -50,10 +50,11 @@ function displayValue(ctx: SectionContext): string {
   return `{String(${ctx.itemVar ?? 'item'}.${col} ?? '')}`
 }
 
-function imageSrc(ctx: SectionContext): string {
+function gridImageSrc(ctx: SectionContext): string {
   const item = ctx.itemVar ?? 'item'
-  if (!ctx.imageColumn) return `https://picsum.photos/seed/\${${item}.id}/600/400`
-  return `\${${item}.${ctx.imageColumn} || \`https://picsum.photos/seed/\${${item}.id}/600/400\`}`
+  const fallback = `https://img.vibestack.codes/s/${encodeURIComponent(ctx.entitySlug ?? 'item')}%20photo/600/400`
+  if (!ctx.imageColumn) return fallback
+  return `\${${item}.${ctx.imageColumn} || '${fallback}'}`
 }
 
 function itemLink(ctx: SectionContext): string {
@@ -139,7 +140,7 @@ export const gridMasonry: SectionRenderer = (ctx: SectionContext): SectionOutput
   const radius = cardRadius(ctx)
   const link = itemLink(ctx)
   const label = ariaLabel(ctx)
-  const src = imageSrc(ctx)
+  const src = gridImageSrc(ctx)
   const display = displayValue(ctx)
   const meta = metaBadges(ctx)
   const bg = resolveBg(ctx.config)
@@ -218,7 +219,7 @@ export const gridBento: SectionRenderer = (ctx: SectionContext): SectionOutput =
   const radius = cardRadius(ctx)
   const link = itemLink(ctx)
   const label = ariaLabel(ctx)
-  const src = imageSrc(ctx)
+  const src = gridImageSrc(ctx)
   const display = displayValue(ctx)
   const meta = metaBadges(ctx)
   const hasImage = !!ctx.imageColumn
@@ -297,7 +298,7 @@ export const gridMagazine: SectionRenderer = (ctx: SectionContext): SectionOutpu
   const cardCls = cardClasses(ctx)
   const link = itemLink(ctx)
   const label = ariaLabel(ctx)
-  const src = imageSrc(ctx)
+  const src = gridImageSrc(ctx)
   const display = displayValue(ctx)
   const cols = (ctx.metadataColumns ?? []).slice(0, 2)
   const hasImage = !!ctx.imageColumn
@@ -423,7 +424,7 @@ export const gridCards3col: SectionRenderer = (ctx: SectionContext): SectionOutp
   const hover = cardHoverClass(ctx)
   const link = itemLink(ctx)
   const label = ariaLabel(ctx)
-  const src = imageSrc(ctx)
+  const src = gridImageSrc(ctx)
   const display = displayValue(ctx)
   const meta = metaBadges(ctx)
   const hasImage = !!ctx.imageColumn
@@ -530,7 +531,7 @@ export const gridHorizontal: SectionRenderer = (ctx: SectionContext): SectionOut
   const hover = cardHoverClass(ctx)
   const link = itemLink(ctx)
   const label = ariaLabel(ctx)
-  const src = imageSrc(ctx)
+  const src = gridImageSrc(ctx)
   const display = displayValue(ctx)
   const meta = metaBadges(ctx)
   const hasImage = !!ctx.imageColumn
@@ -744,7 +745,7 @@ export const gridImageOverlay: SectionRenderer = (ctx: SectionContext): SectionO
   const radius = cardRadius(ctx)
   const link = itemLink(ctx)
   const label = ariaLabel(ctx)
-  const src = imageSrc(ctx)
+  const src = gridImageSrc(ctx)
   const display = displayValue(ctx)
   const meta = metaSpans(ctx)
   const bg = resolveBg(ctx.config)
@@ -821,7 +822,7 @@ export const gridListEditorial: SectionRenderer = (ctx: SectionContext): Section
   const radius = cardRadius(ctx)
   const link = itemLink(ctx)
   const label = ariaLabel(ctx)
-  const src = imageSrc(ctx)
+  const src = gridImageSrc(ctx)
   const display = displayValue(ctx)
   const cols = (ctx.metadataColumns ?? []).slice(0, 3)
   const hasImage = !!ctx.imageColumn
