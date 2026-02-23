@@ -465,9 +465,9 @@ export function BuilderChat({
           break
 
         case 'design_tokens':
-          // Attach tokens to the designer agent card
+          // Attach tokens to the architect agent card (merged from former Design Agent)
           updateTimeline(
-            (e) => e.type === 'agent' && e.agent.agentId === 'designer',
+            (e) => e.type === 'agent' && e.agent.agentId === 'architect',
             (e) => ({ ...e, designTokens: event.tokens }),
           )
           break
@@ -911,18 +911,22 @@ export function BuilderChat({
                             )
                           }
 
-                          // Designer → ThemeTokensCard
-                          if (agentId === 'designer' && entry.designTokens) {
-                            return (
-                              <ThemeTokensCard
-                                tokens={entry.designTokens as unknown as ThemeTokensCardTokens}
-                              />
-                            )
-                          }
-
-                          // Architect → ArchitectureCard
-                          if (agentId === 'architect' && entry.architecture) {
-                            return <ArchitectureCard spec={entry.architecture} />
+                          // Architect → ThemeTokensCard + ArchitectureCard
+                          if (agentId === 'architect') {
+                            const hasTokens = !!entry.designTokens
+                            const hasArch = !!entry.architecture
+                            if (hasTokens || hasArch) {
+                              return (
+                                <>
+                                  {hasTokens && (
+                                    <ThemeTokensCard
+                                      tokens={entry.designTokens as unknown as ThemeTokensCardTokens}
+                                    />
+                                  )}
+                                  {hasArch && <ArchitectureCard spec={entry.architecture!} />}
+                                </>
+                              )
+                            }
                           }
 
                           // Frontend → PageProgressCard

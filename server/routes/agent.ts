@@ -75,7 +75,7 @@ const STATE_PHASES: Record<string, { name: string; phase: number; agentId?: stri
   analyzing:            { name: 'Analyzing requirements',      phase: 1, agentId: 'analyst',     agentName: 'Analyst' },
   awaitingClarification:{ name: 'Awaiting clarification',     phase: 1 },
   provisioning:         { name: 'Provisioning infrastructure', phase: 1, agentId: 'provisioner', agentName: 'DevOps Agent' },
-  architecting:         { name: 'Designing & architecting',    phase: 2, agentId: 'architect',   agentName: 'Creative Director' },
+  architecting:         { name: 'Designing & architecting',    phase: 2, agentId: 'architect',   agentName: 'Architect Agent' },
   codeGeneration:       { name: 'Generating code',             phase: 3, agentId: 'codegen',     agentName: 'Code Agent' },
   validating:           { name: 'Validating code',             phase: 4, agentId: 'qa',          agentName: 'Quality Assurance' },
   repairing:            { name: 'Repairing errors',            phase: 4, agentId: 'repair',      agentName: 'Repair Agent' },
