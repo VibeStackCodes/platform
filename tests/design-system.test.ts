@@ -90,7 +90,7 @@ describe('DesignSystemSchema', () => {
     expect(result.imageManifest['/']).toBeDefined()
   })
 
-  it('preserves backward-compat fields from ThemeTokens', () => {
+  it('preserves required DesignSystem fields', () => {
     const result = DesignSystemSchema.parse(validDesignSystem)
     expect(result.style.cardStyle).toBe('bordered')
     expect(result.style.motion).toBe('subtle')

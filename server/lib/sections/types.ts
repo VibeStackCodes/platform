@@ -5,7 +5,7 @@
  * producing self-contained JSX fragments that the page assembler composes
  * into complete route files.
  */
-import type { ThemeTokens } from '../themed-code-engine'
+import type { DesignSystem } from '../themed-code-engine'
 import type { z } from 'zod'
 import type {
   SectionVisualSpecSchema,
@@ -33,7 +33,7 @@ export interface EntityMeta {
 // ---------------------------------------------------------------------------
 
 export interface SectionContext {
-  tokens: ThemeTokens
+  tokens: DesignSystem
   appName: string
   heroImages: Array<{ url: string; alt: string; photographer: string }>
   hasAuth: boolean

@@ -27,7 +27,7 @@ import { describe, it, expect } from 'vitest'
 import { SECTION_CATALOG } from '@server/lib/sections/registry'
 import { getSectionRenderer } from '@server/lib/sections'
 import type { SectionContext, EntityMeta, SectionCategory } from '@server/lib/sections/types'
-import type { ThemeTokens } from '@server/lib/themed-code-engine'
+import type { DesignSystem } from '@server/lib/themed-code-engine'
 
 import { checkA11y, assertNoViolations } from './helpers/axe-helper'
 
@@ -43,7 +43,7 @@ import { checkA11y, assertNoViolations } from './helpers/axe-helper'
  * `overrides` to adjust for renderer-specific needs.
  */
 function makeTestContext(overrides?: Partial<SectionContext>): SectionContext {
-  const tokens: ThemeTokens = {
+  const tokens: DesignSystem = {
     name: 'test-theme',
     fonts: {
       display: 'Playfair Display',

@@ -5,7 +5,7 @@ import { inferFeatures, type SchemaContract, type InferredFeatures } from './sch
 import { contractToPages } from './contract-to-pages'
 import { contractToSQL } from './contract-to-sql'
 import { snakeToPascal, snakeToKebab, pluralize } from './naming-utils'
-import { generateThemedApp, type ThemeTokens, DEFAULT_TEXT_SLOTS } from './themed-code-engine'
+import { generateThemedApp, type DesignSystem, DEFAULT_TEXT_SLOTS } from './themed-code-engine'
 import { runDesignAgent } from './agents/design-agent'
 import { runCreativeDirector } from './creative-director'
 import { generatePages } from './page-generator'
@@ -45,7 +45,7 @@ export interface AppBlueprint {
   meta: {
     appName: string
     appDescription: string
-    tokens?: ThemeTokens
+    tokens?: DesignSystem
   }
   features: InferredFeatures
   contract: SchemaContract
@@ -63,7 +63,7 @@ interface BlueprintInput {
  * Fallback theme tokens used when the Design Agent is unavailable.
  * Uses theme-stratton (business/corporate) defaults — neutral and safe.
  */
-function fallbackThemeTokens(_input: BlueprintInput): ThemeTokens {
+function fallbackDesignSystem(_input: BlueprintInput): DesignSystem {
   return {
     name: 'theme-stratton',
     fonts: {
@@ -201,7 +201,7 @@ export const Route = createRootRoute({
  */
 function isPrivateTableForTheme(
   table: SchemaContract['tables'][number],
-  tokens: ThemeTokens,
+  tokens: DesignSystem,
 ): boolean {
   if (tokens.authPosture === 'private') return true
   if (tokens.authPosture === 'public') return false
@@ -217,7 +217,7 @@ function isPrivateTableForTheme(
   return hasUserColumn || hasAuthReference || hasRlsAuthUid
 }
 
-function generateRouteTree(contract: SchemaContract, features: InferredFeatures, tokens: ThemeTokens): string {
+function generateRouteTree(contract: SchemaContract, features: InferredFeatures, tokens: DesignSystem): string {
   const lines: string[] = [
     '/* eslint-disable */',
     '// @ts-nocheck',
@@ -355,7 +355,7 @@ export default defineConfig({
  * Generate a complete AppBlueprint from SchemaContract + design preferences.
  * The blueprint contains every file the generated app needs, organized by dependency layer.
  */
-async function buildBlueprintFromTokens(input: BlueprintInput, tokens: ThemeTokens): Promise<AppBlueprint> {
+async function buildBlueprintFromTokens(input: BlueprintInput, tokens: DesignSystem): Promise<AppBlueprint> {
   const features = inferFeatures(input.contract)
   const themedFiles = await generateThemedApp(input.contract, tokens, input.appName, input.appDescription)
   const fileTree: BlueprintFile[] = []
@@ -518,7 +518,7 @@ Thumbs.db
 }
 
 export async function contractToBlueprint(input: BlueprintInput): Promise<AppBlueprint> {
-  return buildBlueprintFromTokens(input, fallbackThemeTokens(input))
+  return buildBlueprintFromTokens(input, fallbackDesignSystem(input))
 }
 
 export async function contractToBlueprintCreative(input: BlueprintInput): Promise<AppBlueprint> {

@@ -1,10 +1,10 @@
 /**
  * Deterministic Assembly Module
  *
- * Produces all non-LLM files for a generated app from a CreativeSpec and ThemeTokens:
+ * Produces all non-LLM files for a generated app from a CreativeSpec and DesignSystem:
  *   - src/routes/__root.tsx  (root layout: nav + footer)
  *   - src/routeTree.gen.ts   (route tree from sitemap)
- *   - src/index.css          (Tailwind v4 @theme from ThemeTokens colors + fonts)
+ *   - src/index.css          (Tailwind v4 @theme from DesignSystem colors + fonts)
  *   - src/main.tsx           (app entry — static router, no QueryClient)
  *   - vite.config.ts         (Vite + Tailwind + React config)
  *   - src/routes/*.tsx       (generated page files passed in from LLM)
@@ -16,7 +16,7 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { BlueprintFile } from './app-blueprint'
 import type { CreativeSpec } from './agents/schemas'
-import type { ThemeTokens } from './themed-code-engine'
+import type { DesignSystem } from './themed-code-engine'
 
 // ---------------------------------------------------------------------------
 // Public API types
@@ -33,7 +33,7 @@ export interface AssemblyInput {
   spec: CreativeSpec
   generatedPages: GeneratedPage[]
   appName: string
-  tokens: ThemeTokens
+  tokens: DesignSystem
   /** When true, include the shadcn/ui-kit component files in the assembled output */
   includeUiKit?: boolean
 }
@@ -183,7 +183,7 @@ function generateRouteTree(spec: CreativeSpec): string {
 }
 
 /**
- * Generate src/index.css — Tailwind v4 @theme block with palette from ThemeTokens.
+ * Generate src/index.css — Tailwind v4 @theme block with palette from DesignSystem.
  */
 /**
  * Compute missing palette values from the ones we have.
@@ -216,7 +216,7 @@ function isLightColor(hex: string): boolean {
   return (r * 299 + g * 587 + b * 114) / 1000 > 128
 }
 
-function generateIndexCSS(tokens: ThemeTokens): string {
+function generateIndexCSS(tokens: DesignSystem): string {
   const palette = fillPaletteGaps({
     background: tokens.colors.background,
     foreground: tokens.colors.foreground,

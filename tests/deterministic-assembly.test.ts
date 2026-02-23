@@ -2,13 +2,13 @@ import { describe, it, expect } from 'vitest'
 import { assembleApp } from '@server/lib/deterministic-assembly'
 import type { GeneratedPage, AssemblyInput } from '@server/lib/deterministic-assembly'
 import type { CreativeSpec } from '@server/lib/agents/schemas'
-import type { ThemeTokens } from '@server/lib/themed-code-engine'
+import type { DesignSystem } from '@server/lib/themed-code-engine'
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-function makeTokens(): ThemeTokens {
+function makeTokens(): DesignSystem {
   return {
     name: '',
     fonts: {
@@ -151,10 +151,10 @@ describe('assembleApp — basic assembly', () => {
 })
 
 // ---------------------------------------------------------------------------
-// CSS generation — palette from ThemeTokens
+// CSS generation — palette from DesignSystem
 // ---------------------------------------------------------------------------
 
-describe('assembleApp — index.css from ThemeTokens', () => {
+describe('assembleApp — index.css from DesignSystem', () => {
   it('contains palette colors from tokens', () => {
     const tokens = makeTokens()
     const files = assembleApp(makeInput())

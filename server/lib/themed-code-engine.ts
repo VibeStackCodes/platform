@@ -5,12 +5,11 @@ import { pluralize, singularize, snakeToKebab, snakeToPascal, snakeToTitle } fro
 import { composeSectionsV2 } from './page-composer'
 import { assemblePagesV2 } from './page-assembler'
 import type { EntityMeta } from './sections/types'
-import type { DesignSystem as ThemeTokens, TextSlots } from './design-system'
+import type { DesignSystem, TextSlots } from './design-system'
 import { DEFAULT_TEXT_SLOTS } from './design-system'
 
 // Re-export from single source of truth
 export type {
-  DesignSystem as ThemeTokens,  // backward-compat alias
   DesignSystem,
   TextSlots,
   AestheticDirection,
@@ -60,13 +59,13 @@ function routeMetaToEntityMeta(meta: RouteMeta): EntityMeta {
   }
 }
 
-function spacingClass(spacing: ThemeTokens['style']['spacing']): string {
+function spacingClass(spacing: DesignSystem['style']['spacing']): string {
   if (spacing === 'compact') return 'p-4 gap-4'
   if (spacing === 'airy') return 'p-8 gap-8'
   return 'p-6 gap-6'
 }
 
-function cardClass(tokens: ThemeTokens): string {
+function cardClass(tokens: DesignSystem): string {
   const base = `rounded-[${tokens.style.borderRadius}]`
   if (tokens.style.cardStyle === 'flat') return `${base}`
   if (tokens.style.cardStyle === 'bordered') return `${base} border border-border`
@@ -74,19 +73,19 @@ function cardClass(tokens: ThemeTokens): string {
   return `${base} border border-border shadow-sm`
 }
 
-function motionCardClass(tokens: ThemeTokens): string {
+function motionCardClass(tokens: DesignSystem): string {
   if (tokens.style.motion === 'none') return ''
   if (tokens.style.motion === 'subtle') return 'transition-all duration-200 hover:scale-[1.02]'
   return 'transition-all duration-300 hover:scale-105 hover:-translate-y-1 hover:shadow-lg'
 }
 
-function motionButtonClass(tokens: ThemeTokens): string {
+function motionButtonClass(tokens: DesignSystem): string {
   if (tokens.style.motion === 'none') return ''
   if (tokens.style.motion === 'subtle') return 'transition-all duration-200'
   return 'transition-all duration-300 hover:scale-[1.03]'
 }
 
-function isPrivateByTable(table: TableDef, tokens: ThemeTokens): boolean {
+function isPrivateByTable(table: TableDef, tokens: DesignSystem): boolean {
   if (tokens.authPosture === 'private') return true
   if (tokens.authPosture === 'public') return false
 
@@ -145,7 +144,7 @@ function colorToOklch(color: string, fallback: string): string {
   return formatCss(parsed)
 }
 
-function buildThemePalette(tokens: ThemeTokens) {
+function buildThemePalette(tokens: DesignSystem) {
   const primary = toOklch(parseColor(tokens.colors.primary) ?? parseColor('#2b6cb0')!)!
   const accent = toOklch(parseColor(tokens.colors.accent) ?? parseColor('#f59e0b')!)!
   const background = toOklch(parseColor(tokens.colors.background) ?? parseColor('#ffffff')!)!
@@ -196,7 +195,7 @@ function buildThemePalette(tokens: ThemeTokens) {
   }
 }
 
-function themeCss(tokens: ThemeTokens): string {
+function themeCss(tokens: DesignSystem): string {
   const pal = buildThemePalette(tokens)
 
   return `@import url('${tokens.fonts.googleFontsUrl}');
@@ -280,7 +279,7 @@ function escapeJsx(text: string): string {
   })
 }
 
-function aboutRoute(tokens: ThemeTokens, appName: string): string {
+function aboutRoute(tokens: DesignSystem, appName: string): string {
   return `import { createFileRoute } from '@tanstack/react-router'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
@@ -313,7 +312,7 @@ function AboutPage() {
 `
 }
 
-function contactRoute(tokens: ThemeTokens): string {
+function contactRoute(tokens: DesignSystem): string {
   return `import { useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useMutation, useQuery } from '@tanstack/react-query'
@@ -377,7 +376,7 @@ function ContactPage() {
 `
 }
 
-function buildEntityListRoute(meta: RouteMeta, tokens: ThemeTokens): string {
+function buildEntityListRoute(meta: RouteMeta, tokens: DesignSystem): string {
   const entity = meta.table.name
   const pascalPlural = snakeToPascal(pluralize(entity))
   const routePath = `${meta.routePrefix}/${meta.pluralKebab}/`
@@ -639,7 +638,7 @@ function ${pascalPlural}ListPage() {
 `
 }
 
-function buildEntityDetailRoute(meta: RouteMeta, tokens: ThemeTokens): string {
+function buildEntityDetailRoute(meta: RouteMeta, tokens: DesignSystem): string {
   const entity = meta.table.name
   const pascal = snakeToPascal(singularize(entity))
   const routePath = `${meta.routePrefix}/${meta.pluralKebab}/$id`
@@ -711,7 +710,7 @@ function ${pascal}DetailPage() {
 `
 }
 
-function signupRoute(tokens: ThemeTokens): string {
+function signupRoute(tokens: DesignSystem): string {
   return `import { useState } from 'react'
 import { createFileRoute, useNavigate, Link } from '@tanstack/react-router'
 import { useMutation } from '@tanstack/react-query'
@@ -780,7 +779,7 @@ function SignupPage() {
 `
 }
 
-function loginRoute(tokens: ThemeTokens, appName: string): string {
+function loginRoute(tokens: DesignSystem, appName: string): string {
   const heroImg = tokens.heroImages[0]?.url ?? 'https://picsum.photos/seed/login-hero/1200/1800'
   const heroAlt = tokens.heroImages[0]?.alt ?? 'Restaurant ambiance'
   return `import { useState } from 'react'
@@ -873,7 +872,7 @@ function LoginPage() {
 `
 }
 
-function authenticatedRoute(_tokens: ThemeTokens): string {
+function authenticatedRoute(_tokens: DesignSystem): string {
   return `import { Outlet, createFileRoute, redirect } from '@tanstack/react-router'
 import { supabase } from '@/lib/supabase'
 
@@ -887,7 +886,7 @@ export const Route = createFileRoute('/_authenticated')({
 `
 }
 
-function dashboardRoute(meta: RouteMeta | null, tokens: ThemeTokens): string {
+function dashboardRoute(meta: RouteMeta | null, tokens: DesignSystem): string {
   const entity = meta?.table.name ?? 'items'
   const listPath = meta ? `${meta.routePrefix}/${meta.pluralKebab}/` : '/'
   const title = meta?.pluralTitle ?? 'Items'
@@ -941,7 +940,7 @@ function DashboardPage() {
 `
 }
 
-export async function generateThemedApp(contract: SchemaContract, tokens: ThemeTokens, appName: string, appDescription?: string): Promise<Record<string, string>> {
+export async function generateThemedApp(contract: SchemaContract, tokens: DesignSystem, appName: string, appDescription?: string): Promise<Record<string, string>> {
   const files: Record<string, string> = {}
 
   const metas: RouteMeta[] = contract.tables.map((table) => {

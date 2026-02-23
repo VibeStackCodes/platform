@@ -23,7 +23,7 @@ import {
 // Types & IDs
 import { SECTION_IDS } from '@server/lib/sections/types'
 import type { SectionContext, EntityMeta } from '@server/lib/sections/types'
-import type { ThemeTokens } from '@server/lib/themed-code-engine'
+import type { DesignSystem } from '@server/lib/themed-code-engine'
 
 // Renderer lookup
 import { getSectionRenderer } from '@server/lib/sections'
@@ -41,7 +41,7 @@ import { assemblePages } from '@server/lib/page-assembler'
 // Shared fixtures
 // ---------------------------------------------------------------------------
 
-const baseTokens: ThemeTokens = {
+const baseTokens: DesignSystem = {
   name: 'test-theme',
   fonts: {
     display: 'Playfair Display',
@@ -524,7 +524,7 @@ describe('Page Assembler', () => {
 
 describe('Fallback Plan Variants', () => {
   it('editorial theme tokens produce editorial sections in fallback', () => {
-    const editorialTokens: ThemeTokens = {
+    const editorialTokens: DesignSystem = {
       ...baseTokens,
       style: {
         ...baseTokens.style,
@@ -545,7 +545,7 @@ describe('Fallback Plan Variants', () => {
   })
 
   it('photography-heavy imagery produces masonry grid for list pages', () => {
-    const photographyTokens: ThemeTokens = {
+    const photographyTokens: DesignSystem = {
       ...baseTokens,
       style: {
         ...baseTokens.style,
@@ -563,7 +563,7 @@ describe('Fallback Plan Variants', () => {
   })
 
   it('sidebar navStyle produces nav-sidebar in fallback', () => {
-    const dashboardTokens: ThemeTokens = {
+    const dashboardTokens: DesignSystem = {
       ...baseTokens,
       style: {
         ...baseTokens.style,

@@ -16,7 +16,7 @@
 
 import { describe, it, expect } from 'vitest'
 import type { SectionContext } from '@server/lib/sections/types'
-import type { ThemeTokens } from '@server/lib/themed-code-engine'
+import type { DesignSystem } from '@server/lib/themed-code-engine'
 import {
   domainMenuArchive,
   domainMenuCategory,
@@ -28,7 +28,7 @@ import {
 // Shared test fixture
 // ---------------------------------------------------------------------------
 
-const canapeTokens: ThemeTokens = {
+const canapeTokens: DesignSystem = {
   name: 'canape',
   fonts: {
     display: 'Playfair Display',

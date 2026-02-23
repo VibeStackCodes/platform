@@ -584,16 +584,6 @@ export function cardClasses(ctx: SectionContext): string {
 // Re-export from image-helpers (new image system)
 export { imageSrc, imageTag } from './image-helpers'
 
-/** @deprecated Use imageTag() instead — includes onError fallback + img.vibestack.codes URLs */
-export function imageWithFallback(opts: {
-  src: string
-  alt: string
-  className?: string
-  loading?: 'lazy' | 'eager'
-}): string {
-  return imageTag(opts)
-}
-
 /**
  * Returns an empty-state PrimitiveResult: centred icon, heading, description,
  * and an optional CTA link. The icon name is a Lucide PascalCase name;

@@ -41,7 +41,7 @@ export const PageImageManifestSchema = z.record(z.string(), ImageEntrySchema)
 export type PageImageManifest = z.infer<typeof PageImageManifestSchema>
 
 // ---------------------------------------------------------------------------
-// Text slots (preserved from ThemeTokens)
+// Text slots
 // ---------------------------------------------------------------------------
 
 export const TextSlotsSchema = z.object({
@@ -65,7 +65,7 @@ export const DEFAULT_TEXT_SLOTS: TextSlots = {
 }
 
 // ---------------------------------------------------------------------------
-// DesignSystem (replaces ThemeTokens)
+// DesignSystem
 // ---------------------------------------------------------------------------
 
 export const DesignSystemSchema = z.object({

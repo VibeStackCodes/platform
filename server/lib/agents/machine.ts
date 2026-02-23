@@ -2,7 +2,7 @@ import { assign, createActor, fromPromise, setup } from 'xstate'
 import type { ActorOptions } from 'xstate'
 import * as Sentry from '@sentry/node'
 import type { AppBlueprint, BlueprintFile } from '../app-blueprint'
-import type { ThemeTokens } from '../themed-code-engine'
+import type { DesignSystem } from '../themed-code-engine'
 import type { ValidationGateResult } from './validation'
 import type { AnalysisResult } from './orchestrator'
 import type { CreativeSpec } from './schemas'
@@ -29,7 +29,7 @@ export interface MachineContext {
   blueprint: AppBlueprint | null
 
   // Pipeline B fields
-  tokens: ThemeTokens | null
+  tokens: DesignSystem | null
   creativeSpec: CreativeSpec | null
   generatedPages: GeneratedPage[] | null
   assembledFiles: BlueprintFile[] | null
@@ -107,7 +107,7 @@ export const appGenerationMachine = setup({
       const { runArchitect } = await import('./orchestrator')
       return runArchitect(input)
     }),
-    runCodeGenerationActor: fromPromise(async ({ input }: { input: { spec: CreativeSpec; tokens: ThemeTokens; appName: string; sandboxId: string } }) => {
+    runCodeGenerationActor: fromPromise(async ({ input }: { input: { spec: CreativeSpec; tokens: DesignSystem; appName: string; sandboxId: string } }) => {
       const { runCodeGeneration } = await import('./orchestrator')
       return runCodeGeneration(input)
     }),
@@ -578,7 +578,7 @@ export function stopInspector() {
 const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
 
 /** Minimal mock tokens for the mock pipeline */
-const MOCK_TOKENS: ThemeTokens = {
+const MOCK_TOKENS: DesignSystem = {
   name: '',
   colors: {
     background: '#ffffff',

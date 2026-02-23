@@ -7,7 +7,7 @@ import type { AppBlueprint } from '../app-blueprint'
 import type { ValidationGateResult } from './validation'
 import { runValidationGate } from './validation'
 import { buildRepairPrompt } from './repair'
-import type { ThemeTokens } from '../themed-code-engine'
+import type { DesignSystem } from '../themed-code-engine'
 import type { CreativeSpec } from './schemas'
 import type { GeneratedPage } from '../page-generator'
 
@@ -53,7 +53,7 @@ export interface DeploymentResult {
 }
 
 export interface DesignResult {
-  tokens: ThemeTokens
+  tokens: DesignSystem
   tokensUsed: number
 }
 
@@ -484,7 +484,7 @@ export async function runDeployment(input: {
 // ============================================================================
 
 /**
- * Run the Design Agent to select a theme and produce ThemeTokens.
+ * Run the Design Agent to select a theme and produce DesignSystem.
  * Pipeline B step 1: userPrompt + contract → tokens + theme metadata.
  */
 export async function runDesign(input: {
@@ -545,7 +545,7 @@ export async function runArchitect(input: {
  */
 export async function runCodeGeneration(input: {
   spec: CreativeSpec
-  tokens: ThemeTokens
+  tokens: DesignSystem
   appName: string
   sandboxId: string
   onPageStart?: (fileName: string, route: string, componentName: string, index: number, total: number) => void
@@ -661,7 +661,7 @@ export async function runCodeGeneration(input: {
  */
 export async function runPageGeneration(input: {
   spec: CreativeSpec
-  tokens: ThemeTokens
+  tokens: DesignSystem
   onPageStart?: (fileName: string, route: string, componentName: string, index: number, total: number) => void
   onPageComplete?: (fileName: string, route: string, componentName: string, lineCount: number, code: string, index: number, total: number) => void
 }): Promise<{ pages: GeneratedPage[]; tokensUsed: number }> {
@@ -695,7 +695,7 @@ export async function runAssembly(input: {
   spec: CreativeSpec
   generatedPages: GeneratedPage[]
   appName: string
-  tokens: ThemeTokens
+  tokens: DesignSystem
   sandboxId: string
   onFileAssembled?: (path: string, category: string) => void
 }): Promise<{ assembledFiles: Array<{ path: string; content: string; layer: number; isLLMSlot: boolean }>; blueprint: AppBlueprint; tokensUsed: number }> {

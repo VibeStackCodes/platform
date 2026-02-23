@@ -1,6 +1,6 @@
 import { Agent } from '@mastra/core/agent'
 import { z } from 'zod'
-import { type ThemeTokens, DEFAULT_TEXT_SLOTS } from '../themed-code-engine'
+import { type DesignSystem, DEFAULT_TEXT_SLOTS } from '../themed-code-engine'
 import { createAgentModelResolver } from './provider'
 
 const designOutputSchema = z.object({
@@ -71,7 +71,7 @@ export async function runDesignAgent(
   appName: string,
   prd: string,
 ): Promise<{
-  tokens: ThemeTokens
+  tokens: DesignSystem
   tokensUsed: number
 }> {
   const prompt = `Design the visual identity for this web application.
@@ -91,7 +91,7 @@ ${prd}`
   const bodyEncoded = encodeURIComponent(output.fonts.body).replace(/%20/g, '+')
   const googleFontsUrl = `https://fonts.googleapis.com/css2?family=${displayEncoded}:wght@400;500;600;700&family=${bodyEncoded}:wght@300;400;500;600&display=swap`
 
-  const tokens: ThemeTokens = {
+  const tokens: DesignSystem = {
     name: '',
     fonts: {
       display: output.fonts.display,

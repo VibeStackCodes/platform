@@ -3,7 +3,7 @@
  *
  * Parallel React route file (.tsx) generator.
  *
- * Takes a CreativeSpec + ThemeTokens and generates all page route files
+ * Takes a CreativeSpec + DesignSystem and generates all page route files
  * concurrently using generateText() from the Vercel AI SDK. Each page is
  * an independent stateless text generation call — safe for Promise.all().
  *
@@ -18,7 +18,7 @@ import { generateText } from 'ai'
 import { createHeliconeProvider, PIPELINE_MODELS } from './agents/provider'
 import type { CreativeSpec } from './agents/schemas'
 import { getStaticDesignRules } from './design-knowledge'
-import type { ThemeTokens } from './themed-code-engine'
+import type { DesignSystem } from './themed-code-engine'
 
 export interface GeneratedPage {
   /** e.g. "routes/index.tsx" */
@@ -33,7 +33,7 @@ export interface GeneratedPage {
 
 export interface PageGeneratorInput {
   spec: CreativeSpec
-  tokens: ThemeTokens
+  tokens: DesignSystem
   /** Called when a page starts generating */
   onPageStart?: (fileName: string, route: string, componentName: string, index: number, total: number) => void
   /** Called when a page finishes generating */
@@ -95,7 +95,7 @@ export async function generatePages(input: PageGeneratorInput): Promise<PageGene
 async function generateSinglePage(
   page: CreativeSpec['sitemap'][number],
   spec: CreativeSpec,
-  tokens: ThemeTokens,
+  tokens: DesignSystem,
 ): Promise<GeneratedPage & { inputTokens: number; outputTokens: number }> {
   const systemPrompt = buildPageGenSystemPrompt(spec, tokens)
   const userPrompt = buildPageGenUserPrompt(page, spec)
@@ -131,7 +131,7 @@ async function generateSinglePage(
  * Exported so tests can validate the prompt's closed vocabulary, forbidden
  * section, and absence of Supabase / TanStack Query references.
  */
-export function buildPageGenSystemPrompt(spec: CreativeSpec, tokens: ThemeTokens): string {
+export function buildPageGenSystemPrompt(spec: CreativeSpec, tokens: DesignSystem): string {
   return `You are an expert React developer generating a complete TanStack Router page file (.tsx).
 
 ## Output Format

@@ -1,7 +1,7 @@
 /**
  * Design Agent tests
  *
- * Tests that runDesignAgent returns ThemeTokens with:
+ * Tests that runDesignAgent returns DesignSystem with:
  * 1. colors (8 hex fields)
  * 2. fonts (display, body, googleFontsUrl)
  * 3. style (6 enum fields + borderRadius)

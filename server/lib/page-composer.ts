@@ -11,7 +11,7 @@
 import { Agent } from '@mastra/core/agent'
 import { createAgentModelResolver } from './agents/provider'
 import { PageCompositionPlanV2Schema } from './agents/schemas'
-import type { ThemeTokens } from './themed-code-engine'
+import type { DesignSystem } from './themed-code-engine'
 import type { EntityMeta, PageCompositionPlan, PageCompositionPlanV2, SectionSlot } from './sections/types'
 import { SECTION_CATALOG, buildComposerCatalogPrompt, getSectionMeta } from './sections/registry'
 
@@ -80,7 +80,7 @@ Each section has visual properties from closed vocabularies:
  */
 export async function composeSectionsV2(
   entities: EntityMeta[],
-  tokens: ThemeTokens,
+  tokens: DesignSystem,
   appDescription: string,
 ): Promise<PageCompositionPlanV2> {
   const prompt = buildComposerPromptV2(entities, tokens, appDescription)
@@ -207,7 +207,7 @@ export function validateCompositionPlanV2(
 
 function buildComposerPromptV2(
   entities: EntityMeta[],
-  tokens: ThemeTokens,
+  tokens: DesignSystem,
   appDescription: string,
 ): string {
   const publicEntities = entities.filter((e) => !e.isPrivate)
@@ -370,7 +370,7 @@ export function validateCompositionPlan(
  */
 function canapeCompositionPlan(
   entities: EntityMeta[],
-  _tokens: ThemeTokens,
+  _tokens: DesignSystem,
 ): PageCompositionPlan {
   // Canape has fixed routes regardless of entity names
   // The "primary" entity is the one used for homepage featured content
@@ -431,7 +431,7 @@ function canapeCompositionPlan(
  */
 export function fallbackCompositionPlan(
   entities: EntityMeta[],
-  tokens: ThemeTokens,
+  tokens: DesignSystem,
 ): PageCompositionPlan {
   // Canape has a fixed route structure — delegate to domain-specific plan
   if (tokens.name === 'canape') {

@@ -28,7 +28,7 @@
 
 import { describe, it, expect, vi } from 'vitest'
 import type { PageCompositionPlan, PageCompositionPlanV2, SectionVisualSpec } from '@server/lib/sections/types'
-import { generateThemedApp, type ThemeTokens } from '@server/lib/themed-code-engine'
+import { generateThemedApp, type DesignSystem } from '@server/lib/themed-code-engine'
 import type { SchemaContract } from '@server/lib/schema-contract'
 import { checkA11y, type A11yResult } from './helpers/axe-helper'
 
@@ -257,7 +257,7 @@ const restaurantContract: SchemaContract = {
   ],
 }
 
-const restaurantTokens: ThemeTokens = {
+const restaurantTokens: DesignSystem = {
   name: 'theme-gourmetto',
   fonts: { display: 'Playfair Display', body: 'Inter', googleFontsUrl: '' },
   colors: {
@@ -316,7 +316,7 @@ const saasContract: SchemaContract = {
   ],
 }
 
-const saasTokens: ThemeTokens = {
+const saasTokens: DesignSystem = {
   name: 'theme-luxus',
   fonts: { display: 'Playfair Display', body: 'Inter', googleFontsUrl: '' },
   colors: {
@@ -382,7 +382,7 @@ const blogContract: SchemaContract = {
   ],
 }
 
-const blogTokens: ThemeTokens = {
+const blogTokens: DesignSystem = {
   name: 'theme-adventurer',
   fonts: { display: 'Playfair Display', body: 'Inter', googleFontsUrl: '' },
   colors: {
