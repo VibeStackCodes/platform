@@ -13,7 +13,7 @@ RUN curl -fsSL "https://github.com/gitpod-io/openvscode-server/releases/download
 # Install OxLint globally — single Rust binary, much lighter than ESLint + plugins
 RUN bun install -g oxlint
 
-# Pre-cache common deps (includes PGlite for migration validation)
+# Pre-cache common deps for static Vite + React + Tailwind apps
 WORKDIR /workspace
 COPY package-base.json /workspace/package.json
 RUN bun install
