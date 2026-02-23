@@ -11,7 +11,9 @@
  *   4. Deduplicating imports, collecting hooks, and composing the route file
  */
 
-import type { ThemeTokens } from './themed-code-engine'
+import type { DesignSystem } from './themed-code-engine'
+import type { PageImageManifest } from './design-system'
+import { imageSrc } from './sections/image-helpers'
 import type {
   EntityMeta,
   PageCompositionPlan,
@@ -106,7 +108,7 @@ export function routePathToFilePath(path: string): string {
 function buildSectionContext(
   slot: { sectionId: string; entityBinding?: string; config?: Record<string, unknown> },
   entities: EntityMeta[],
-  tokens: ThemeTokens,
+  tokens: DesignSystem,
   appName: string,
 ): SectionContext | null {
   const base: SectionContext = {
@@ -276,7 +278,7 @@ function ${componentName}() {${hooksBlock}
 export function assemblePages(
   plan: PageCompositionPlan,
   entities: EntityMeta[],
-  tokens: ThemeTokens,
+  tokens: DesignSystem,
   appName: string,
 ): Record<string, string> {
   const output: Record<string, string> = {}
@@ -331,7 +333,7 @@ export function assemblePages(
 export function assemblePagesV2(
   plan: PageCompositionPlanV2,
   entities: EntityMeta[],
-  tokens: ThemeTokens,
+  tokens: DesignSystem,
   appName: string,
 ): Record<string, string> {
   const output: Record<string, string> = {}
@@ -450,4 +452,28 @@ function singularVar(plural: string): string {
   }
   if (plural.endsWith('s') && plural.length > 2) return plural.slice(0, -1)
   return plural
+}
+
+// ---------------------------------------------------------------------------
+// IMAGES data layer
+// ---------------------------------------------------------------------------
+
+/**
+ * Generate a `const IMAGES = { ... } as const` block from a PageImageManifest.
+ *
+ * Each entry resolves to a static URL via the img.vibestack.codes resolver.
+ * Section renderers reference `IMAGES.hero.src` instead of inline URLs.
+ *
+ * Returns an empty string if the manifest has no entries.
+ */
+export function generateImagesBlock(manifest: PageImageManifest): string {
+  const entries = Object.entries(manifest)
+  if (entries.length === 0) return ''
+
+  const lines = entries.map(([key, img]) => {
+    const src = imageSrc(img.query, img.width, img.height, img.crop)
+    return `  ${key}: {\n    src: '${src}',\n    alt: '${img.alt.replace(/'/g, "\\'")}',\n  }`
+  })
+
+  return `const IMAGES = {\n${lines.join(',\n')},\n} as const\n`
 }
