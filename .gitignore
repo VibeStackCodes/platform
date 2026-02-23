@@ -50,3 +50,12 @@ yarn-error.log*
 
 # playwright-cli snapshots
 .playwright-cli/
+
+# IDE
+.idea/
+
+# Claude Code
+.claude/
+
+# Supabase CLI temp
+supabase/.temp/

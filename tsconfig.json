@@ -12,9 +12,17 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "baseUrl": ".",
-    "paths": { "@/*": ["./src/*"] },
+    "paths": {
+      "@/*": ["./src/*"],
+      "@server/*": ["./server/*"]
+    },
     "types": ["vite/client"]
   },
-  "include": ["src", "vite.config.ts"],
-  "exclude": ["node_modules", "dist", "src/mastra"]
+  "include": ["src", "server", "vite.config.ts"],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "src/mastra",
+    "server/lib/skills/catalog/theme-*/index.ts"
+  ]
 }
