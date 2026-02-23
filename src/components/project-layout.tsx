@@ -10,11 +10,6 @@ import type { ElementContext } from '@/lib/types'
 interface ProjectLayoutProps {
   projectId: string
   initialPrompt?: string
-  initialMessages?: Array<{
-    id: string
-    role: 'user' | 'assistant' | 'system'
-    parts: Array<Record<string, unknown>>
-  }>
   initialSandboxId?: string
 }
 
@@ -25,7 +20,6 @@ const REFRESH_BEFORE_EXPIRY_MS = 10 * 60 * 1000 // refresh 10 min before expiry
 export function ProjectLayout({
   projectId,
   initialPrompt,
-  initialMessages,
   initialSandboxId,
 }: ProjectLayoutProps) {
   const [sandboxId, setSandboxId] = useState(initialSandboxId)
@@ -127,7 +121,6 @@ export function ProjectLayout({
         <BuilderChat
           projectId={projectId}
           initialPrompt={initialPrompt}
-          initialMessages={initialMessages}
           onGenerationComplete={fetchSandboxUrls}
           onSandboxReady={handleSandboxReady}
           selectedElement={selectedElement}

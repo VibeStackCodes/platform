@@ -25,7 +25,7 @@ import type { MachineContext } from '../lib/agents/machine'
 import { editMachine } from '../lib/agents/edit-machine'
 import type { EditMachineContext } from '../lib/agents/edit-machine'
 import { RequestContext } from '../lib/agents/registry'
-import { getProject, getUserCredits, getProjectGenerationState, updateProject, insertChatMessage } from '../lib/db/queries'
+import { getProject, getUserCredits, getProjectGenerationState, updateProject, insertChatMessage, updateGenerationTimeline } from '../lib/db/queries'
 import { reserveCredits, settleCredits } from '../lib/credits'
 import { createSSEStream } from '../lib/sse'
 import type { StreamEvent } from '../lib/types'
@@ -134,6 +134,49 @@ function streamActorStates(
     let previousParallelSubStates = new Set<string>()
     let clarificationEmitted = false
 
+    // Server-side timeline mirrors — flushed to DB on key transitions
+    const serverTimeline: Array<Record<string, unknown>> = []
+    const serverPageProgress: Array<Record<string, unknown>> = []
+    const serverFileAssembly: Array<Record<string, unknown>> = []
+    const serverValidationChecks: Array<Record<string, unknown>> = []
+    const serverBuildErrors: Array<Record<string, unknown>> = []
+    let serverGenerationStatus = 'generating'
+    let flushTimer: ReturnType<typeof setTimeout> | null = null
+
+    /** Debounced flush of timeline state to DB (2s debounce, fire-and-forget) */
+    function scheduleFlush() {
+      if (mockMode) return
+      if (flushTimer) clearTimeout(flushTimer)
+      flushTimer = setTimeout(() => {
+        updateGenerationTimeline(projectId, userId, {
+          timeline: serverTimeline,
+          pageProgress: serverPageProgress,
+          fileAssembly: serverFileAssembly,
+          validationChecks: serverValidationChecks,
+          buildErrors: serverBuildErrors,
+          generationStatus: serverGenerationStatus,
+        }).catch((err) => {
+          log.error(`Failed to flush timeline: ${String(err)}`, { module: 'agent', projectId })
+        })
+      }, 2000)
+    }
+
+    /** Immediate flush (used on final states: complete/error) */
+    function flushNow() {
+      if (mockMode) return
+      if (flushTimer) clearTimeout(flushTimer)
+      updateGenerationTimeline(projectId, userId, {
+        timeline: serverTimeline,
+        pageProgress: serverPageProgress,
+        fileAssembly: serverFileAssembly,
+        validationChecks: serverValidationChecks,
+        buildErrors: serverBuildErrors,
+        generationStatus: serverGenerationStatus,
+      }).catch((err) => {
+        log.error(`Failed to flush timeline: ${String(err)}`, { module: 'agent', projectId })
+      })
+    }
+
     const subscription = actor.subscribe((snapshot: { value: string; context: MachineContext; status?: string }) => {
       if (signal.aborted) {
         subscription.unsubscribe()
@@ -183,6 +226,32 @@ function streamActorStates(
               if (phase.agentId === 'provisioner') {
                 emit({ type: 'agent_progress', agentId: 'provisioner', message: 'Booting sandbox...' })
               }
+              // Track agent_start server-side
+              serverTimeline.push({
+                type: 'agent',
+                ts: Date.now(),
+                agent: { agentId: phase.agentId, agentName: phase.agentName, phase: phase.phase },
+                status: 'running',
+              })
+              scheduleFlush()
+            }
+          }
+        }
+
+        // Track agent_complete server-side for parallel sub-states
+        for (const prev of previousParallelSubStates) {
+          if (!currentSubStates.has(prev)) {
+            const prevPhase = STATE_PHASES[prev]
+            if (prevPhase?.agentId) {
+              const entryTime = stateEntryTimes.get(prev)
+              const durationMs = entryTime ? Date.now() - entryTime : 0
+              const idx = serverTimeline.findLastIndex(
+                (e) => e.type === 'agent' && (e.agent as Record<string, unknown>)?.agentId === prevPhase.agentId,
+              )
+              if (idx >= 0) {
+                serverTimeline[idx] = { ...serverTimeline[idx], status: 'complete', durationMs }
+              }
+              scheduleFlush()
             }
           }
         }
@@ -258,6 +327,13 @@ function streamActorStates(
             tokensUsed: 0,
             durationMs,
           })
+          // Track agent_complete server-side
+          const tlIdx = serverTimeline.findLastIndex(
+            (e) => e.type === 'agent' && (e.agent as Record<string, unknown>)?.agentId === prevPhase.agentId,
+          )
+          if (tlIdx >= 0) {
+            serverTimeline[tlIdx] = { ...serverTimeline[tlIdx], status: 'complete', durationMs }
+          }
           // Mark the previous checkpoint complete
           emit({
             type: 'checkpoint',
@@ -322,7 +398,20 @@ function streamActorStates(
               : file.path.includes('vite.config') || file.path.includes('main.tsx') || file.path.includes('__root') ? 'config' as const
               : 'wiring' as const
             emit({ type: 'file_assembled', path: file.path, category })
+            serverFileAssembly.push({ path: file.path, category })
           }
+          // Track page progress server-side
+          for (const page of pages) {
+            serverPageProgress.push({
+              fileName: page.fileName,
+              route: page.route,
+              componentName: page.componentName,
+              status: 'complete',
+              lineCount: page.content.split('\n').length,
+              code: page.content.split('\n').slice(0, 50).join('\n'),
+            })
+          }
+          scheduleFlush()
         }
 
         // When leaving 'validating', emit validation_check events (populates QA card)
@@ -332,13 +421,12 @@ function streamActorStates(
           for (const checkName of checkNames) {
             const check = validation[checkName]
             if (check) {
-              emit({
-                type: 'validation_check',
-                name: checkName,
-                status: check.passed ? 'passed' : 'failed',
-              })
+              const status = check.passed ? 'passed' : 'failed'
+              emit({ type: 'validation_check', name: checkName, status })
+              serverValidationChecks.push({ name: checkName, status })
             }
           }
+          scheduleFlush()
         }
 
         // When leaving 'repairing', emit progress for repair agent card
@@ -355,6 +443,10 @@ function streamActorStates(
 
       // ── Emit phase events ──
       if (state === 'complete') {
+        // Track final state server-side
+        serverGenerationStatus = 'complete'
+        serverTimeline.push({ type: 'complete', ts: Date.now() })
+
         // Persist generation state to DB for later edits/deploys (fire-and-forget, skip in mock mode)
         if (!mockMode) {
           const ctx = snapshot.context
@@ -372,6 +464,13 @@ function streamActorStates(
                 creativeSpec: ctx.creativeSpec,
                 appName: ctx.appName,
                 appDescription: ctx.appDescription,
+                // Timeline snapshot for reload hydration
+                timeline: serverTimeline,
+                pageProgress: serverPageProgress,
+                fileAssembly: serverFileAssembly,
+                validationChecks: serverValidationChecks,
+                buildErrors: serverBuildErrors,
+                generationStatus: 'complete',
               },
             },
             userId,
@@ -391,6 +490,9 @@ function streamActorStates(
         resolve()
       } else if (state === 'failed') {
         const errorMsg = snapshot.context.error ?? 'Pipeline failed'
+        serverGenerationStatus = 'error'
+        serverTimeline.push({ type: 'error', ts: Date.now(), error: errorMsg })
+        flushNow()
         if (!mockMode) {
           Sentry.captureMessage(errorMsg, {
             level: 'error',
@@ -480,6 +582,14 @@ function streamActorStates(
             agentName: phaseInfo.agentName,
             phase: phaseInfo.phase,
           })
+          // Track agent_start server-side
+          serverTimeline.push({
+            type: 'agent',
+            ts: Date.now(),
+            agent: { agentId: phaseInfo.agentId, agentName: phaseInfo.agentName, phase: phaseInfo.phase },
+            status: 'running',
+          })
+          scheduleFlush()
 
           // In mock mode, emit descriptive agent_progress so cards aren't empty
           if (mockMode) {

@@ -4,6 +4,7 @@ import {
   Bot,
   CheckCircle2,
   ChevronDown,
+  CircleCheck,
   Clock,
   Cog,
   Loader2,
@@ -84,6 +85,45 @@ import type {
   ValidationCheckEntry,
 } from '@/lib/types'
 
+/** Renders clarification answers as a structured list, or plain text for normal messages */
+function ClarificationAnswersOrText({ content }: { content: string }) {
+  // Detect clarification answer format: "Question?: Answer\nQuestion?: Answer"
+  const lines = content.split('\n').filter(Boolean)
+  const isClarificationAnswers =
+    lines.length >= 2 && lines.every((l) => l.includes('?:') || l.includes(': (skipped)'))
+
+  if (!isClarificationAnswers) {
+    return <div className="whitespace-pre-wrap">{content}</div>
+  }
+
+  const entries = lines.map((line) => {
+    const colonIdx = line.indexOf(':')
+    const question = line.slice(0, colonIdx).replace(/\?$/, '').trim()
+    const answer = line.slice(colonIdx + 1).trim()
+    const skipped = answer === '(skipped)'
+    return { question, answer, skipped }
+  })
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+        <CircleCheck className="h-3.5 w-3.5" />
+        Preferences
+      </div>
+      <div className="grid gap-1.5">
+        {entries.map((e) => (
+          <div key={e.question} className="flex items-baseline gap-2 text-sm">
+            <span className="text-muted-foreground shrink-0">{e.question}:</span>
+            <span className={e.skipped ? 'italic text-muted-foreground/60' : 'font-medium'}>
+              {e.answer}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 // Custom message type — replaces UIMessage from Vercel AI SDK
 interface ChatMessage {
   id: string
@@ -94,11 +134,6 @@ interface ChatMessage {
 interface BuilderChatProps {
   projectId: string
   initialPrompt?: string
-  initialMessages?: Array<{
-    id: string
-    role: 'user' | 'assistant' | 'system'
-    parts: Array<Record<string, unknown>>
-  }>
   onGenerationComplete?: () => void
   onSandboxReady?: (sandboxId: string) => void
   selectedElement?: ElementContext | null
@@ -226,7 +261,6 @@ function GeneratedFileTree({
 export function BuilderChat({
   projectId,
   initialPrompt,
-  initialMessages,
   onGenerationComplete,
   onSandboxReady,
   selectedElement,
@@ -265,6 +299,35 @@ export function BuilderChat({
   const abortControllerRef = useRef<AbortController | null>(null)
   const sendChatMessageRef = useRef<(text: string) => void>(() => {})
   const { user } = useAuth()
+
+  // Fetch project data to hydrate persisted timeline on mount/reload
+  const { data: projectData } = useQuery({
+    queryKey: ['project', projectId],
+    queryFn: async () => {
+      const res = await apiFetch(`/api/projects/${projectId}`)
+      if (!res.ok) return null
+      return res.json()
+    },
+    staleTime: Number.POSITIVE_INFINITY,
+  })
+
+  // Hydrate timeline from persisted generation_state on mount
+  const hasHydrated = useRef(false)
+  useEffect(() => {
+    if (hasHydrated.current || !projectData) return
+    const gs = projectData.generationState
+    if (!gs) return
+    // Only hydrate if there's actual timeline data and we haven't started a new generation
+    if (generationStatus !== 'idle') return
+    hasHydrated.current = true
+    if (gs.timeline?.length) setTimelineEvents(gs.timeline)
+    if (gs.pageProgress?.length) setPageProgress(gs.pageProgress)
+    if (gs.fileAssembly?.length) setFileAssembly(gs.fileAssembly)
+    if (gs.validationChecks?.length) setValidationChecks(gs.validationChecks)
+    if (gs.buildErrors?.length) setBuildErrors(gs.buildErrors)
+    if (gs.generationStatus === 'complete') setGenerationStatus('complete')
+    else if (gs.generationStatus === 'error') setGenerationStatus('error')
+  }, [projectData, generationStatus])
 
   // Fetch credits on mount via Supabase browser client
   const { data: creditsData } = useQuery({
@@ -308,19 +371,41 @@ export function BuilderChat({
     setGenerationStatus('idle')
   }, [])
 
-  // Custom state management — replaces useChat from @ai-sdk/react
-  const [messages, setMessages] = useState<ChatMessage[]>(
-    () =>
-      initialMessages?.map((m) => ({
+  // Fetch persisted chat messages via TanStack Query
+  const { data: persistedMessages } = useQuery({
+    queryKey: ['project-messages', projectId],
+    queryFn: async () => {
+      const res = await apiFetch(`/api/projects/${projectId}/messages`)
+      if (!res.ok) return []
+      const rows = (await res.json()) as Array<{
+        id: string
+        role: string
+        parts: unknown
+        createdAt: string
+      }>
+      return rows.map((m) => ({
         id: m.id,
         role: (m.role === 'system' ? 'assistant' : m.role) as 'user' | 'assistant',
         content:
-          m.parts
-            ?.map((p) => (p as Record<string, unknown>).text || '')
+          (Array.isArray(m.parts) ? m.parts : [])
+            .map((p: Record<string, unknown>) => (p.text as string) || '')
             .filter(Boolean)
             .join('') || '',
-      })) ?? [],
-  )
+      }))
+    },
+    staleTime: Number.POSITIVE_INFINITY, // Only fetch once per mount
+  })
+
+  // Session messages: new messages added during this SSE session
+  const [sessionMessages, setSessionMessages] = useState<ChatMessage[]>([])
+  // Merge: persisted history + current session (deduplicated by id)
+  const messages = useMemo(() => {
+    const history = persistedMessages ?? []
+    if (sessionMessages.length === 0) return history
+    const historyIds = new Set(history.map((m) => m.id))
+    return [...history, ...sessionMessages.filter((m) => !historyIds.has(m.id))]
+  }, [persistedMessages, sessionMessages])
+
   const [chatStatus, setChatStatus] = useState<'ready' | 'streaming'>('ready')
   const [chatError, setChatError] = useState<Error | null>(null)
 
@@ -605,7 +690,7 @@ export function BuilderChat({
         role: 'user',
         content: text,
       }
-      setMessages((prev) => [...prev, userMessage])
+      setSessionMessages((prev) => [...prev, userMessage])
       setChatStatus('streaming')
       setChatError(null)
       setGenerationStatus('generating')
@@ -617,7 +702,7 @@ export function BuilderChat({
       setValidationChecks([])
 
       const assistantId = `assistant-${Date.now()}`
-      setMessages((prev) => [...prev, { id: assistantId, role: 'assistant' as const, content: '' }])
+      setSessionMessages((prev) => [...prev, { id: assistantId, role: 'assistant' as const, content: '' }])
 
       let fullText = ''
       abortControllerRef.current?.abort()
@@ -645,7 +730,7 @@ export function BuilderChat({
             setChatError(
               new Error(`Out of credits. ${errorData.credits_remaining ?? 0} remaining.`),
             )
-            setMessages((prev) => prev.filter((m) => m.id !== assistantId))
+            setSessionMessages((prev) => prev.filter((m) => m.id !== assistantId))
             setChatStatus('ready')
             setGenerationStatus('error')
             return
@@ -668,7 +753,7 @@ export function BuilderChat({
               (delta: string) => {
                 fullText += delta
                 const snapshot = fullText
-                setMessages((prev) =>
+                setSessionMessages((prev) =>
                   prev.map((m) => (m.id === assistantId ? { ...m, content: snapshot } : m)),
                 )
               },
@@ -686,7 +771,7 @@ export function BuilderChat({
         if (err instanceof Error && err.name === 'AbortError') return
         console.error('[builder-chat] sendChatMessage error:', err)
         setChatError(err instanceof Error ? err : new Error('Chat failed'))
-        setMessages((prev) => prev.filter((m) => m.id !== assistantId || m.content.length > 0))
+        setSessionMessages((prev) => prev.filter((m) => m.id !== assistantId || m.content.length > 0))
       } finally {
         setChatStatus('ready')
       }
@@ -740,11 +825,11 @@ export function BuilderChat({
         role: 'user',
         content: answersText,
       }
-      setMessages((prev) => [...prev, userMessage])
+      setSessionMessages((prev) => [...prev, userMessage])
       setChatStatus('streaming')
 
       const assistantId = `assistant-${Date.now()}`
-      setMessages((prev) => [...prev, { id: assistantId, role: 'assistant', content: '' }])
+      setSessionMessages((prev) => [...prev, { id: assistantId, role: 'assistant', content: '' }])
 
       abortControllerRef.current?.abort()
       const abortController = new AbortController()
@@ -779,7 +864,7 @@ export function BuilderChat({
       } catch (err) {
         if (err instanceof Error && err.name === 'AbortError') return
         setChatError(err instanceof Error ? err : new Error('Resume failed'))
-        setMessages((prev) => prev.filter((m) => m.id !== assistantId || m.content.length > 0))
+        setSessionMessages((prev) => prev.filter((m) => m.id !== assistantId || m.content.length > 0))
       } finally {
         setChatStatus('ready')
         setResumeRunId(null)
@@ -818,7 +903,7 @@ export function BuilderChat({
                 <Message from={message.role} key={message.id}>
                   <MessageContent>
                     {message.role === 'user' ? (
-                      <div className="whitespace-pre-wrap">{message.content}</div>
+                      <ClarificationAnswersOrText content={message.content} />
                     ) : (
                       <Suspense
                         fallback={

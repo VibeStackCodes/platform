@@ -1,6 +1,6 @@
 // server/lib/db/queries.ts
 
-import { and, asc, desc, eq } from 'drizzle-orm'
+import { and, asc, desc, eq, sql } from 'drizzle-orm'
 import { db } from './client'
 import { chatMessages, profiles, projects } from './schema'
 
@@ -145,6 +145,23 @@ export async function getStripeCustomerId(userId: string) {
     .from(profiles)
     .where(eq(profiles.id, userId))
     .then((rows) => rows[0]?.stripeCustomerId ?? null)
+}
+
+// ── Generation Timeline Persistence ──────────────────────────────
+
+/** Merge timeline snapshot into project's generation_state JSONB (fire-and-forget) */
+export async function updateGenerationTimeline(
+  projectId: string,
+  userId: string,
+  timeline: Record<string, unknown>,
+) {
+  return db
+    .update(projects)
+    .set({
+      generationState: sql`COALESCE(${projects.generationState}, '{}'::jsonb) || ${JSON.stringify(timeline)}::jsonb`,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(projects.id, projectId), eq(projects.userId, userId)))
 }
 
 // ── Chat Message Queries ──────────────────────────────────────────
