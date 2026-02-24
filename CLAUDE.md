@@ -99,20 +99,16 @@ server/                  # Hono API server
       repair.ts          # Repair agent for build errors
       validation.ts      # Build validation gate
     sandbox.ts           # Daytona sandbox lifecycle
-    schema-contract.ts   # SchemaContract type — single source of truth
-    contract-to-sql.ts   # SchemaContract → deterministic SQL migration
-    contract-to-seed.ts  # SchemaContract → deterministic seed SQL
-    contract-to-pages.ts # SchemaContract → page route definitions
     creative-director.ts # Creative Director — visual design spec
-    page-generator.ts    # LLM page generation (section composition)
-    page-assembler.ts    # Deterministic file assembly from generated pages
+    page-generator.ts    # LLM bespoke page generation (per CreativeSpec sitemap)
+    deterministic-assembly.ts # routeTree, main.tsx, __root.tsx, index.css from CreativeSpec
+    app-blueprint.ts     # AppBlueprint type + loadUIKit()
     page-validator.ts    # Post-assembly validation
-    themed-code-engine.ts # Theme-specific code generation
+    themed-code-engine.ts # themeCss() — CSS generation from DesignSystem tokens
     github.ts            # GitHub App integration
     supabase-mgmt.ts     # Supabase Management API
     credits.ts           # Credit checking/deduction
     sse.ts               # SSE stream helper (Hono streamSSE)
-    sections/            # 50 section renderers (heroes, grids, CTAs, etc.)
 supabase/migrations/     # Platform DB migrations
 snapshot/                # Daytona sandbox Docker image (Vite + React base)
 ```
@@ -145,8 +141,7 @@ All pipeline stages use `gpt-5.2-codex` via `PIPELINE_MODELS` in `provider.ts`.
 
 ### Key Patterns
 
-- **Contract-first**: `SchemaContract` → all downstream artifacts (SQL, types, seed). Never retry LLM generation — fix the contract or generator if wrong.
-- **Section composition**: Creative Director spec → LLM picks section types → deterministic renderers emit JSX strings → assembled into route files
+- **Bespoke LLM code generation**: Creative Director → CreativeSpec → `page-generator.ts` writes complete .tsx per sitemap entry → `deterministic-assembly.ts` generates infrastructure (routeTree, main.tsx, __root.tsx, index.css). No prefab renderers — every page is bespoke.
 - **Credit-Based Billing**: 1 credit = 1,000 tokens. `/api/agent` enforces credits (402 on exhaustion). Stripe meters track usage.
 - **Single-flow frontend**: All AI calls go through `/api/agent` (SSE).
 - **SSE streaming**: Agent route streams progress events to client via Hono `streamSSE()`.

@@ -9,10 +9,9 @@ XState state machines orchestrate app generation; Mastra agents handle LLM calls
 - `provider.ts` — Helicone-proxied OpenAI; `PIPELINE_MODELS` maps roles→model IDs; `createAgentModelResolver(role)` reads RequestContext
 - `registry.ts` — Mastra agent definitions (analyst, repair, edit) with per-role model resolvers
 - `tools.ts` — 18+ Mastra tools: file I/O, sandbox commands, docs search, GitHub/Supabase provisioning
-- `schemas.ts` — Zod schemas for agent I/O: analyst requirements, 50 section IDs, creative specs
+- `schemas.ts` — Zod schemas for agent I/O: analyst requirements, creative specs
 - `repair.ts` — Repair prompt builder: error categorization, max 5 errors, skeleton filtering
 - `validation.ts` — Validation gate: manifest, scaffold detection, tsc, lint, build checks
-- `feature-schema.ts` — PageConfig inference via ColumnSemanticClassifier (deterministic, no LLM)
 - `build-validator.ts` — Post-build Vercel checks: dist/, bundle size, process.env scanning
 - `edit-agent.ts` — Tier 2 LLM edit: reads file + element context + schema, calls editAgent
 - `tailwind-edit.ts` — Tier 1 deterministic: scale arrays, twMerge, color/opacity mutations
