@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { ExternalLink, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { SidebarTrigger } from '@/components/ui/sidebar'
 import { apiFetch } from '@/lib/utils'
 import {
   Card,
@@ -12,7 +13,7 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 
-export const Route = createFileRoute('/_authenticated/dashboard')({
+export const Route = createFileRoute('/_authenticated/_dashboard/dashboard')({
   component: DashboardPage,
 })
 
@@ -37,11 +38,14 @@ function DashboardPage() {
   })
 
   return (
-    <div className="container mx-auto p-8">
+    <div className="flex-1 p-8">
       <div className="mb-8 flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Projects</h1>
-          <p className="text-muted-foreground">Manage and build your AI-powered applications</p>
+        <div className="flex items-center gap-3">
+          <SidebarTrigger className="-ml-1" />
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Projects</h1>
+            <p className="text-muted-foreground">Manage and build your AI-powered applications</p>
+          </div>
         </div>
         <Button asChild size="lg">
           <Link to="/">
