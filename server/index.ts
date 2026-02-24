@@ -20,6 +20,7 @@ import { sandboxUrlRoutes } from './routes/sandbox-urls'
 import { stripeCheckoutRoutes } from './routes/stripe-checkout'
 import { stripeWebhookRoutes } from './routes/stripe-webhook'
 import { adminRoutes } from './routes/admin'
+import { v2AgentRoutes } from './routes/v2-agent'
 
 declare const Bun: {
   serve: (options: {
@@ -113,6 +114,7 @@ app.route('/stripe/checkout', stripeCheckoutRoutes)
 app.route('/stripe/webhook', stripeWebhookRoutes)
 app.route('/auth/callback', authCallbackRoutes)
 app.route('/admin', adminRoutes)
+app.route('/v2/agent', v2AgentRoutes)
 
 // Vercel adapter for production (serverless)
 export default handle(app)
