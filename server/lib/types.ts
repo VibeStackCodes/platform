@@ -491,3 +491,61 @@ export type TimelineEntry =
     }
   | { type: 'error'; ts: number; error: string }
   | { type: 'complete'; ts: number; deploymentUrl?: string }
+
+// ============================================================================
+// V2 Stream Events (Single Orchestrator)
+// ============================================================================
+
+export interface V2ThinkingEvent {
+  type: 'v2_thinking'
+  content: string
+}
+
+export interface V2ToolStartEvent {
+  type: 'v2_tool_start'
+  tool: string
+  /** Human-readable label like "Setting up retro LCD theme" */
+  label?: string
+  args?: Record<string, unknown>
+}
+
+export interface V2ToolCompleteEvent {
+  type: 'v2_tool_complete'
+  tool: string
+  success: boolean
+  /** Summary of what the tool did */
+  result?: string
+  durationMs?: number
+}
+
+export interface V2DoneEvent {
+  type: 'v2_done'
+  summary: string
+  sandboxId?: string
+  tokensUsed?: number
+}
+
+export interface V2ErrorEvent {
+  type: 'v2_error'
+  message: string
+}
+
+export interface V2SandboxReadyEvent {
+  type: 'v2_sandbox_ready'
+  sandboxId: string
+}
+
+export interface V2PackageInstalledEvent {
+  type: 'v2_package_installed'
+  packages: string
+}
+
+export type V2StreamEvent =
+  | V2ThinkingEvent
+  | V2ToolStartEvent
+  | V2ToolCompleteEvent
+  | V2DoneEvent
+  | V2ErrorEvent
+  | V2SandboxReadyEvent
+  | V2PackageInstalledEvent
+  | CreditsUsedEvent
