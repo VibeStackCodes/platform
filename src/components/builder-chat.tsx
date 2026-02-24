@@ -3,10 +3,7 @@
 import {
   Bot,
   CheckCircle2,
-  ChevronDown,
   CircleCheck,
-  Clock,
-  Cog,
   Loader2,
   Rocket,
 } from 'lucide-react'
@@ -23,15 +20,6 @@ import {
 } from '@/components/ai-elements/conversation'
 import { Message, MessageContent, MessageResponse } from '@/components/ai-elements/message'
 import type { PromptInputMessage } from '@/components/ai-elements/prompt-input'
-import {
-  Plan,
-  PlanAction,
-  PlanContent,
-  PlanDescription,
-  PlanHeader,
-  PlanTitle,
-  PlanTrigger,
-} from '@/components/ai-elements/plan'
 import {
   FileTree,
   FileTreeFile,
@@ -52,12 +40,9 @@ import {
   StackTraceHeader,
 } from '@/components/ai-elements/stack-trace'
 import { Suggestion, Suggestions } from '@/components/ai-elements/suggestion'
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from '@/components/ui/collapsible'
-import { Agent, AgentContent } from '@/components/ai-elements/agent'
+import { ActionCard, ActionCardContent, ActionCardHeader, ActionCardTabs } from '@/components/ai-elements/action-card'
+import { ThinkingCard } from '@/components/ai-elements/thinking-card'
+import { OperationSummaryCard } from '@/components/ai-elements/operation-summary-card'
 import {
   TestResults,
   TestResultsContent,
@@ -73,7 +58,6 @@ import { ThemeTokensCard } from '@/components/ai-elements/theme-tokens-card'
 import type { ThemeTokens as ThemeTokensCardTokens } from '@/components/ai-elements/theme-tokens-card'
 import { ArchitectureCard } from '@/components/ai-elements/architecture-card'
 import { PageProgressCard } from '@/components/ai-elements/page-progress-card'
-import { FileAssemblyCard } from '@/components/ai-elements/file-assembly-card'
 import type {
   AgentStartEvent,
   ArchitectureReadyEvent,
@@ -89,9 +73,17 @@ import type {
   ValidationCheckEntry,
 } from '@/lib/types'
 
+/** Maps agentId to ActionCard display config */
+const AGENT_CARD_CONFIG: Record<string, { icon: string; runningLabel: string; completeLabel?: string }> = {
+  analyst: { icon: 'brain', runningLabel: 'Analyzing...', completeLabel: 'Analyzed requirements' },
+  architect: { icon: 'sparkles', runningLabel: 'Designing architecture...', completeLabel: 'Designed app architecture' },
+  frontend: { icon: 'code', runningLabel: 'Generating pages...', completeLabel: 'Generated pages' },
+  backend: { icon: 'package', runningLabel: 'Assembling files...', completeLabel: 'Assembled files' },
+  qa: { icon: 'shield', runningLabel: 'Validating build...', completeLabel: 'Validation complete' },
+}
+
 /** Renders clarification answers as a structured list, or plain text for normal messages */
 function ClarificationAnswersOrText({ content }: { content: string }) {
-  // Detect clarification answer format: "Question?: Answer\nQuestion?: Answer"
   const lines = content.split('\n').filter(Boolean)
   const isClarificationAnswers =
     lines.length >= 2 && lines.every((l) => l.includes('?:') || l.includes(': (skipped)'))
@@ -128,7 +120,7 @@ function ClarificationAnswersOrText({ content }: { content: string }) {
   )
 }
 
-// Custom message type — replaces UIMessage from Vercel AI SDK
+// Custom message type
 interface ChatMessage {
   id: string
   role: 'user' | 'assistant'
@@ -151,12 +143,6 @@ const SUGGESTIONS = [
   'A real-time chat application',
 ]
 
-/** Format milliseconds as human-readable duration */
-function formatDuration(ms: number): string {
-  if (ms < 1000) return `${ms}ms`
-  const secs = (ms / 1000).toFixed(1)
-  return `${secs}s`
-}
 
 /** Build a hierarchical tree from flat file paths for FileTree rendering */
 interface TreeNode {
@@ -275,18 +261,15 @@ export function BuilderChat({
     'idle' | 'generating' | 'complete' | 'error'
   >('idle')
 
-  // File queue — tracked separately for incremental updates
   const [generationFiles, setGenerationFiles] = useState<
     { path: string; status: 'pending' | 'generating' | 'complete' | 'error'; lines?: number }[]
   >([])
   const [buildErrors, setBuildErrors] = useState<BuildError[]>([])
 
-  // Pipeline B state — live tracking during generation
   const [pageProgress, setPageProgress] = useState<PageProgressEntry[]>([])
   const [fileAssembly, setFileAssembly] = useState<FileAssemblyEntry[]>([])
   const [validationChecks, setValidationChecks] = useState<ValidationCheckEntry[]>([])
 
-  // Unified timeline — ordered array of all pipeline events
   const [timelineEvents, setTimelineEvents] = useState<TimelineEntry[]>([])
 
   const [pendingClarification, setPendingClarification] = useState<ClarificationQuestion[] | null>(
@@ -305,7 +288,6 @@ export function BuilderChat({
   const { user } = useAuth()
   const queryClient = useQueryClient()
 
-  // Fetch ALL conversation events (messages + timeline + validation + progress)
   const { data: conversationEvents } = useQuery({
     queryKey: ['project-conversation', projectId],
     queryFn: async () => {
@@ -322,7 +304,6 @@ export function BuilderChat({
     staleTime: Number.POSITIVE_INFINITY,
   })
 
-  // Fetch credits on mount via Supabase browser client
   const { data: creditsData } = useQuery({
     queryKey: ['user-credits', user?.id],
     queryFn: async () => {
@@ -343,14 +324,12 @@ export function BuilderChat({
     enabled: !!user?.id,
   })
 
-  // Sync fetched credits into local state (SSE events update it later)
   useEffect(() => {
     if (creditsData) {
       setUserCredits(creditsData)
     }
   }, [creditsData])
 
-  // Abort in-flight SSE streams on unmount
   useEffect(() => {
     return () => {
       abortControllerRef.current?.abort()
@@ -364,7 +343,6 @@ export function BuilderChat({
     setGenerationStatus('idle')
   }, [])
 
-  // Partition persisted events into messages vs timeline data
   const { persistedMessages, persistedTimeline, persistedValidation, persistedPageProgress, persistedFileAssembly } = useMemo(() => {
     if (!conversationEvents?.length) {
       return {
@@ -379,8 +357,8 @@ export function BuilderChat({
     const messages: ChatMessage[] = []
     const timeline: TimelineEntry[] = []
     const validation: Array<{ name: string; status: string; errors?: string[] }> = []
-    const pageProgress: Array<Record<string, unknown>> = []
-    const fileAssembly: Array<{ path: string; category: string }> = []
+    const pageProgressArr: Array<Record<string, unknown>> = []
+    const fileAssemblyArr: Array<{ path: string; category: string }> = []
 
     for (const evt of conversationEvents) {
       const p = Array.isArray(evt.parts) ? evt.parts[0] : evt.parts
@@ -465,11 +443,11 @@ export function BuilderChat({
           break
         }
         case 'page_complete':
-          pageProgress.push(p as Record<string, unknown>)
+          pageProgressArr.push(p as Record<string, unknown>)
           break
         case 'file_assembled': {
           const data = p as Record<string, unknown>
-          fileAssembly.push({ path: data.path as string, category: data.category as string })
+          fileAssemblyArr.push({ path: data.path as string, category: data.category as string })
           break
         }
         case 'completion':
@@ -493,12 +471,11 @@ export function BuilderChat({
       persistedMessages: messages,
       persistedTimeline: timeline,
       persistedValidation: validation,
-      persistedPageProgress: pageProgress,
-      persistedFileAssembly: fileAssembly,
+      persistedPageProgress: pageProgressArr,
+      persistedFileAssembly: fileAssemblyArr,
     }
   }, [conversationEvents])
 
-  // Hydrate timeline state from persisted events on mount
   const hasHydratedFromEvents = useRef(false)
   useEffect(() => {
     if (hasHydratedFromEvents.current) return
@@ -515,7 +492,6 @@ export function BuilderChat({
     if (persistedFileAssembly.length > 0 && fileAssembly.length === 0) {
       setFileAssembly(persistedFileAssembly as FileAssemblyEntry[])
     }
-    // Detect completed/errored state
     if (persistedTimeline.some((e) => e.type === 'complete')) {
       setGenerationStatus('complete')
     } else if (persistedTimeline.some((e) => e.type === 'error')) {
@@ -523,9 +499,7 @@ export function BuilderChat({
     }
   }, [persistedTimeline, persistedValidation, persistedPageProgress, persistedFileAssembly])
 
-  // Session messages: new messages added during this SSE session
   const [sessionMessages, setSessionMessages] = useState<ChatMessage[]>([])
-  // Merge: persisted history + current session (deduplicated by id)
   const messages = useMemo(() => {
     if (sessionMessages.length === 0) return persistedMessages
     const historyIds = new Set(persistedMessages.map((m) => m.id))
@@ -535,12 +509,10 @@ export function BuilderChat({
   const [chatStatus, setChatStatus] = useState<'ready' | 'streaming'>('ready')
   const [chatError, setChatError] = useState<Error | null>(null)
 
-  /** Push a timeline entry with automatic timestamp */
   const pushTimeline = useCallback((entry: TimelineEntry) => {
     setTimelineEvents((prev) => [...prev, entry])
   }, [])
 
-  /** Update an existing timeline entry by finding it via predicate */
   const updateTimeline = useCallback(
     (predicate: (e: TimelineEntry) => boolean, updater: (e: TimelineEntry) => TimelineEntry) => {
       setTimelineEvents((prev) => {
@@ -588,7 +560,6 @@ export function BuilderChat({
           break
 
         case 'agent_progress':
-          // Store progress messages on the agent's timeline entry for card rendering
           updateTimeline(
             (e) => e.type === 'agent' && e.agent.agentId === event.agentId,
             (e) => {
@@ -605,7 +576,6 @@ export function BuilderChat({
           break
 
         case 'plan_ready':
-          // Attach plan to the analyst agent card
           updateTimeline(
             (e) => e.type === 'agent' && e.agent.agentId === 'analyst',
             (e) => ({ ...e, plan: event.plan }),
@@ -673,7 +643,6 @@ export function BuilderChat({
         case 'clarification_request':
           setPendingClarification(event.questions)
           setResumeRunId(event.runId)
-          // Attach questions to the analyst agent card
           updateTimeline(
             (e) => e.type === 'agent' && e.agent.agentId === 'analyst',
             (e) => ({ ...e, clarificationQuestions: event.questions }),
@@ -681,7 +650,6 @@ export function BuilderChat({
           break
 
         case 'design_tokens':
-          // Attach tokens to the architect agent card (merged from former Design Agent)
           updateTimeline(
             (e) => e.type === 'agent' && e.agent.agentId === 'architect',
             (e) => ({ ...e, designTokens: event.tokens }),
@@ -689,7 +657,6 @@ export function BuilderChat({
           break
 
         case 'architecture_ready':
-          // Attach architecture to the architect agent card
           updateTimeline(
             (e) => e.type === 'agent' && e.agent.agentId === 'architect',
             (e) => ({ ...e, architecture: event.spec }),
@@ -718,7 +685,6 @@ export function BuilderChat({
           setPageProgress((prev) => {
             const idx = prev.findIndex((p) => p.fileName === event.fileName)
             if (idx === -1) {
-              // Page wasn't added by page_generating (real mode) — add it directly
               return [...prev, {
                 fileName: event.fileName,
                 route: event.route,
@@ -763,10 +729,6 @@ export function BuilderChat({
     [onGenerationComplete, onSandboxReady, pushTimeline, updateTimeline],
   )
 
-  /**
-   * Parse an SSE buffer and process chat-relevant events.
-   * Shared between sendChatMessage and handleStartGeneration.
-   */
   const parseSSEBuffer = useCallback(
     (
       buffer: string,
@@ -781,7 +743,6 @@ export function BuilderChat({
         try {
           const event = JSON.parse(eventText.replace(/^data: /, '')) as StreamEvent
 
-          // Chat-relevant: stream analyst/supervisor text into the assistant message
           if (
             onChatText &&
             event.type === 'agent_progress' &&
@@ -790,7 +751,6 @@ export function BuilderChat({
             onChatText(event.message)
           }
 
-          // Everything else goes to the generation event handler
           if (onGenerationEvent) {
             onGenerationEvent(event)
           }
@@ -804,9 +764,6 @@ export function BuilderChat({
     [],
   )
 
-  /**
-   * Send a chat message to /api/agent (or /api/agent/edit if an element is selected).
-   */
   const sendChatMessage = useCallback(
     async (text: string) => {
       if (chatStatus === 'streaming') return
@@ -893,7 +850,6 @@ export function BuilderChat({
         if (selectedElement) {
           onEditComplete?.()
         }
-        // Invalidate conversation cache so next mount gets fresh persisted events
         queryClient.invalidateQueries({ queryKey: ['project-conversation', projectId] })
       } catch (err) {
         if (err instanceof Error && err.name === 'AbortError') return
@@ -907,14 +863,8 @@ export function BuilderChat({
     [projectId, model, chatStatus, parseSSEBuffer, handleGenerationEvent, selectedElement, onEditComplete, queryClient],
   )
 
-  // Keep a ref to the latest sendChatMessage (avoids stale closure)
   useEffect(() => { sendChatMessageRef.current = sendChatMessage }, [sendChatMessage])
 
-  // Auto-submit initial prompt — deferred to survive React 18 Strict Mode double-mount.
-  // Strict Mode unmounts+remounts in dev, which aborts in-flight fetches via the cleanup effect.
-  // By deferring with setTimeout, the first mount's timer is cleared on unmount, and the
-  // second mount's timer fires successfully (hasAutoSubmitted is still false since we only set
-  // it inside the callback).
   useEffect(() => {
     if (!initialPrompt) return
     const timer = setTimeout(() => {
@@ -928,9 +878,10 @@ export function BuilderChat({
 
   const handleSubmit = async (
     message: PromptInputMessage,
-    options: { model: string },
+    options: { model: string; mode: 'edit' | 'chat' | 'plan' },
   ) => {
     if (!message.text?.trim()) return
+    // mode will be used in Phase 2 (Plan Mode)
     setModel(options.model)
     sendChatMessage(message.text)
   }
@@ -1001,10 +952,7 @@ export function BuilderChat({
     [resumeRunId, parseSSEBuffer, handleGenerationEvent, sendChatMessage],
   )
 
-  // Whether we should show the file queue (any file events have occurred)
   const hasFiles = generationFiles.length > 0
-
-  // Whether pipeline is actively running (show timeline section)
   const showTimeline = generationStatus === 'generating' || timelineEvents.length > 0
 
   return (
@@ -1026,7 +974,7 @@ export function BuilderChat({
             </div>
           ) : (
             <>
-              {/* ── Chat Messages ── */}
+              {/* Chat Messages */}
               {messages.map((message) => (
                 <Message from={message.role} key={message.id}>
                   <MessageContent>
@@ -1071,7 +1019,7 @@ export function BuilderChat({
                 </div>
               )}
 
-              {/* ── Inline Timeline ── */}
+              {/* Inline Timeline */}
               {showTimeline && (
                 <div className="space-y-3 px-4 py-3">
                   {timelineEvents.map((entry) => {
@@ -1079,167 +1027,220 @@ export function BuilderChat({
                       case 'agent': {
                         const isComplete = entry.status === 'complete'
                         const agentId = entry.agent.agentId
+                        const cardKey = `agent-${agentId}-${entry.ts}`
+                        const config = AGENT_CARD_CONFIG[agentId]
+                        const cardStatus = isComplete ? 'complete' as const : 'running' as const
 
-                        // Build embedded content for this agent
-                        const embeddedContent = (() => {
-                          // Analyst → Clarification questions (if awaiting)
-                          if (agentId === 'analyst' && entry.clarificationQuestions && pendingClarification) {
-                            return (
-                              <ClarificationQuestions
-                                questions={entry.clarificationQuestions}
-                                onSubmit={handleClarificationSubmit}
+                        // Analyst → ThinkingCard (+ optional clarification questions)
+                        if (agentId === 'analyst') {
+                          const planText = entry.plan
+                            ? [
+                                entry.plan.appName && `**${entry.plan.appName as string}**`,
+                                entry.plan.appDescription as string | undefined,
+                                entry.plan.prd as string | undefined,
+                              ]
+                                .filter(Boolean)
+                                .join('\n\n')
+                            : undefined
+
+                          return (
+                            <div key={cardKey} className="space-y-3">
+                              <ThinkingCard
+                                startedAt={entry.ts}
+                                status={isComplete ? 'complete' : 'thinking'}
+                                durationMs={entry.durationMs}
+                              >
+                                {planText}
+                              </ThinkingCard>
+                              {entry.clarificationQuestions && pendingClarification && (
+                                <ClarificationQuestions
+                                  questions={entry.clarificationQuestions}
+                                  onSubmit={handleClarificationSubmit}
+                                />
+                              )}
+                            </div>
+                          )
+                        }
+
+                        // Backend → OperationSummaryCard
+                        if (agentId === 'backend') {
+                          return (
+                            <OperationSummaryCard
+                              key={cardKey}
+                              files={fileAssembly}
+                              status={cardStatus}
+                              durationMs={entry.durationMs}
+                            />
+                          )
+                        }
+
+                        // Architect → ActionCard with Details + Preview tabs
+                        if (agentId === 'architect') {
+                          const hasTokens = !!entry.designTokens
+                          const hasArch = !!entry.architecture
+                          const colors = entry.designTokens?.colors
+                          const architectLabel = isComplete
+                            ? (config?.completeLabel ?? 'Designed app architecture')
+                            : (config?.runningLabel ?? 'Designing architecture...')
+                          return (
+                            <ActionCard key={cardKey}>
+                              <ActionCardHeader
+                                icon={config?.icon ?? 'sparkles'}
+                                label={architectLabel}
+                                status={cardStatus}
+                                durationMs={entry.durationMs}
                               />
-                            )
-                          }
-
-                          // Analyst → Plan card
-                          if (agentId === 'analyst' && entry.plan) {
-                            const prdText = (entry.plan.prd as string) || ''
-                            const prdLines = prdText.split('\n').filter((l: string) => l.trim())
-                            // First 1-2 lines are intro, bullet lines start with "- "
-                            const intro = prdLines.filter((l: string) => !l.trim().startsWith('- ')).join(' ')
-                            const bullets = prdLines.filter((l: string) => l.trim().startsWith('- '))
-                            return (
-                              <Plan defaultOpen>
-                                <PlanHeader>
-                                  <div>
-                                    <PlanTitle>
-                                      {(entry.plan.appName as string) || 'App Blueprint'}
-                                    </PlanTitle>
-                                    <PlanDescription>
-                                      {(entry.plan.appDescription as string) || 'Generation plan ready'}
-                                    </PlanDescription>
-                                  </div>
-                                  <PlanAction>
-                                    <PlanTrigger />
-                                  </PlanAction>
-                                </PlanHeader>
-                                <PlanContent>
-                                  <div className="space-y-2 text-sm text-muted-foreground">
-                                    {intro && <p>{intro}</p>}
-                                    {bullets.length > 0 && (
-                                      <ul className="list-disc pl-4 space-y-1">
-                                        {bullets.map((b: string, i: number) => (
-                                          <li key={i}>{b.replace(/^-\s*/, '')}</li>
+                              {(hasTokens || hasArch) && (
+                                <ActionCardTabs>
+                                  <ActionCardContent tab="details">
+                                    <div className="space-y-3">
+                                      {hasTokens && (
+                                        <ThemeTokensCard
+                                          tokens={entry.designTokens as unknown as ThemeTokensCardTokens}
+                                        />
+                                      )}
+                                      {hasArch && <ArchitectureCard spec={entry.architecture!} />}
+                                    </div>
+                                  </ActionCardContent>
+                                  {colors && (
+                                    <ActionCardContent tab="preview">
+                                      <div className="flex flex-wrap gap-2">
+                                        {Object.entries(colors).map(([name, value]) => (
+                                          <div key={name} className="flex items-center gap-1.5">
+                                            <div
+                                              className="size-4 rounded-full border border-border"
+                                              style={{ backgroundColor: value }}
+                                              title={value}
+                                            />
+                                            <span className="text-xs text-muted-foreground capitalize">
+                                              {name.replace(/([A-Z])/g, ' $1').toLowerCase()}
+                                            </span>
+                                          </div>
                                         ))}
-                                      </ul>
-                                    )}
-                                  </div>
-                                </PlanContent>
-                              </Plan>
-                            )
-                          }
-
-                          // Architect → ThemeTokensCard + ArchitectureCard
-                          if (agentId === 'architect') {
-                            const hasTokens = !!entry.designTokens
-                            const hasArch = !!entry.architecture
-                            if (hasTokens || hasArch) {
-                              return (
-                                <>
-                                  {hasTokens && (
-                                    <ThemeTokensCard
-                                      tokens={entry.designTokens as unknown as ThemeTokensCardTokens}
-                                    />
+                                      </div>
+                                    </ActionCardContent>
                                   )}
-                                  {hasArch && <ArchitectureCard spec={entry.architecture!} />}
-                                </>
-                              )
-                            }
-                          }
+                                </ActionCardTabs>
+                              )}
+                            </ActionCard>
+                          )
+                        }
 
-                          // Frontend → PageProgressCard
-                          if (agentId === 'frontend' && pageProgress.length > 0) {
-                            return <PageProgressCard pages={pageProgress} className="border-0 shadow-none" />
-                          }
+                        // Frontend → ActionCard with PageProgressCard
+                        if (agentId === 'frontend') {
+                          const completedPages = pageProgress.filter((p) => p.status === 'complete').length
+                          const frontendLabel = isComplete
+                            ? `Generated ${completedPages} page${completedPages !== 1 ? 's' : ''}`
+                            : (config?.runningLabel ?? 'Generating pages...')
+                          return (
+                            <ActionCard key={cardKey}>
+                              <ActionCardHeader
+                                icon={config?.icon ?? 'code'}
+                                label={frontendLabel}
+                                status={cardStatus}
+                                durationMs={entry.durationMs}
+                              />
+                              {pageProgress.length > 0 && (
+                                <ActionCardTabs>
+                                  <ActionCardContent tab="details">
+                                    <PageProgressCard pages={pageProgress} className="border-0 shadow-none p-0" />
+                                  </ActionCardContent>
+                                </ActionCardTabs>
+                              )}
+                            </ActionCard>
+                          )
+                        }
 
-                          // Backend → FileAssemblyCard (matches PageProgressCard style)
-                          if (agentId === 'backend' && fileAssembly.length > 0) {
-                            return <FileAssemblyCard files={fileAssembly} className="border-0 shadow-none" />
-                          }
+                        // QA → ActionCard with TestResults
+                        if (agentId === 'qa') {
+                          const passed = validationChecks.filter((c) => c.status === 'passed').length
+                          const failed = validationChecks.filter((c) => c.status === 'failed').length
+                          const total = validationChecks.length
+                          const qaLabel = isComplete
+                            ? (failed > 0 ? 'Validation failed' : 'Validation passed')
+                            : (config?.runningLabel ?? 'Validating...')
+                          return (
+                            <ActionCard key={cardKey}>
+                              <ActionCardHeader
+                                icon={config?.icon ?? 'shield'}
+                                label={qaLabel}
+                                status={cardStatus}
+                                durationMs={entry.durationMs}
+                              />
+                              {validationChecks.length > 0 && (
+                                <ActionCardTabs>
+                                  <ActionCardContent tab="details">
+                                    <TestResults summary={{ passed, failed, skipped: 0, total }}>
+                                      <TestResultsHeader>
+                                        <TestResultsSummary />
+                                      </TestResultsHeader>
+                                      <TestResultsProgress />
+                                      <TestResultsContent>
+                                        {validationChecks.map((check) => (
+                                          <Test
+                                            key={check.name}
+                                            name={check.name}
+                                            status={check.status === 'running' ? 'running' : check.status === 'failed' ? 'failed' : 'passed'}
+                                          />
+                                        ))}
+                                      </TestResultsContent>
+                                    </TestResults>
+                                  </ActionCardContent>
+                                </ActionCardTabs>
+                              )}
+                            </ActionCard>
+                          )
+                        }
 
-                          // QA → TestResults (matches Vercel AI Elements pattern)
-                          if (agentId === 'qa' && validationChecks.length > 0) {
-                            const passed = validationChecks.filter((c) => c.status === 'passed').length
-                            const failed = validationChecks.filter((c) => c.status === 'failed').length
-                            const total = validationChecks.length
-                            return (
-                              <TestResults summary={{ passed, failed, skipped: 0, total }}>
-                                <TestResultsHeader>
-                                  <TestResultsSummary />
-                                </TestResultsHeader>
-                                <TestResultsProgress />
-                                <TestResultsContent>
-                                  {validationChecks.map((check) => (
-                                    <Test
-                                      key={check.name}
-                                      name={check.name}
-                                      status={check.status === 'running' ? 'running' : check.status === 'failed' ? 'failed' : 'passed'}
-                                    />
-                                  ))}
-                                </TestResultsContent>
-                              </TestResults>
-                            )
-                          }
+                        // Legacy Pipeline A (codegen)
+                        if (agentId === 'codegen' && hasFiles) {
+                          return (
+                            <ActionCard key={cardKey}>
+                              <ActionCardHeader
+                                icon="code"
+                                label={isComplete ? 'Generated files' : 'Generating files...'}
+                                status={cardStatus}
+                                durationMs={entry.durationMs}
+                              />
+                              <ActionCardTabs>
+                                <ActionCardContent tab="details">
+                                  <GeneratedFileTree files={generationFiles} />
+                                </ActionCardContent>
+                              </ActionCardTabs>
+                            </ActionCard>
+                          )
+                        }
 
-                          // Legacy Pipeline A fallback
-                          if (agentId === 'codegen' && hasFiles) {
-                            return <GeneratedFileTree files={generationFiles} />
-                          }
-
-                          // Generic progress messages (provisioner, repair, reviewer, etc.)
-                          if (entry.progressMessages && entry.progressMessages.length > 0) {
-                            return (
-                              <div className="space-y-1.5 text-sm text-muted-foreground">
-                                {entry.progressMessages.map((msg) => (
-                                  <div key={msg} className="flex items-center gap-2">
-                                    <CheckCircle2 className="size-3.5 shrink-0 text-green-500" />
-                                    <span>{msg}</span>
-                                  </div>
-                                ))}
-                              </div>
-                            )
-                          }
-
-                          return null
-                        })()
-
-                        const hasContent = !!embeddedContent
-
-                        return (
-                          <Collapsible
-                            key={`agent-${agentId}-${entry.ts}`}
-                            defaultOpen={hasContent || !isComplete}
-                          >
-                            <Agent>
-                              <CollapsibleTrigger className="group w-full text-left">
-                                <div className="flex w-full items-center gap-2 p-3">
-                                  {isComplete ? (
-                                    <CheckCircle2 className="size-4 shrink-0 text-green-500" />
-                                  ) : (
-                                    <Cog className="size-4 shrink-0 animate-spin text-muted-foreground" />
-                                  )}
-                                  <Bot className="size-4 text-muted-foreground" />
-                                  <span className="font-medium text-sm">
-                                    {entry.agent.agentName}
-                                  </span>
-                                  {isComplete && entry.durationMs != null && (
-                                    <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                                      <Clock className="size-3" />
-                                      {formatDuration(entry.durationMs)}
-                                    </span>
-                                  )}
-                                  <ChevronDown className="ml-auto size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
-                                </div>
-                              </CollapsibleTrigger>
-                              <CollapsibleContent>
-                                <AgentContent>
-                                  {embeddedContent}
-                                </AgentContent>
-                              </CollapsibleContent>
-                            </Agent>
-                          </Collapsible>
-                        )
+                        // Generic agents (provisioner, repair, reviewer, etc.)
+                        {
+                          const genericLabel = isComplete
+                            ? (config?.completeLabel ?? entry.agent.agentName)
+                            : (config?.runningLabel ?? `${entry.agent.agentName}...`)
+                          return (
+                            <ActionCard key={cardKey}>
+                              <ActionCardHeader
+                                icon={config?.icon ?? 'sparkles'}
+                                label={genericLabel}
+                                status={cardStatus}
+                                durationMs={entry.durationMs}
+                              />
+                              {entry.progressMessages && entry.progressMessages.length > 0 && (
+                                <ActionCardTabs>
+                                  <ActionCardContent tab="details">
+                                    <div className="space-y-1.5 text-sm text-muted-foreground">
+                                      {entry.progressMessages.map((msg) => (
+                                        <div key={msg} className="flex items-center gap-2">
+                                          <CheckCircle2 className="size-3.5 shrink-0 text-green-500" />
+                                          <span>{msg}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </ActionCardContent>
+                                </ActionCardTabs>
+                              )}
+                            </ActionCard>
+                          )
+                        }
                       }
 
                       case 'error':

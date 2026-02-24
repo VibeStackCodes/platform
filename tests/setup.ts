@@ -2,6 +2,7 @@
  * Vitest Global Setup
  * Sets up test environment and global mocks
  */
+import '@testing-library/jest-dom'
 
 // Set required environment variables for tests
 process.env.OPENAI_API_KEY = 'test-api-key'
