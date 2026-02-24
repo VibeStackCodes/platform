@@ -1,5 +1,5 @@
 import { Link, useRouterState } from '@tanstack/react-router'
-import { ChevronsUpDown, FolderOpen, Home, LogOut, Plus } from 'lucide-react'
+import { ChevronsUpDown, FolderOpen, Home, LogOut, PanelLeft, Plus } from 'lucide-react'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import {
   DropdownMenu,
@@ -34,22 +34,31 @@ const NAV_ITEMS = [
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const routerState = useRouterState()
   const currentPath = routerState.location.pathname
+  const { toggleSidebar } = useSidebar()
 
   return (
     <Sidebar collapsible="icon" {...props}>
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton size="lg" asChild>
-              <Link to="/">
-                <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-                  <img src="/vibestack-logo.png" alt="VibeStack" className="size-5" />
-                </div>
-                <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-semibold">VibeStack</span>
-                  <span className="truncate text-xs">AI App Builder</span>
-                </div>
-              </Link>
+            <SidebarMenuButton
+              size="lg"
+              className="group/logo"
+              tooltip="Toggle sidebar"
+              onClick={toggleSidebar}
+            >
+              <div className="relative flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
+                <img
+                  src="/vibestack-logo.png"
+                  alt="VibeStack"
+                  className="size-5 transition-opacity group-hover/logo:opacity-0"
+                />
+                <PanelLeft className="absolute size-4 opacity-0 transition-opacity group-hover/logo:opacity-100" />
+              </div>
+              <div className="grid flex-1 text-left text-sm leading-tight">
+                <span className="truncate font-semibold">VibeStack</span>
+                <span className="truncate text-xs">AI App Builder</span>
+              </div>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>

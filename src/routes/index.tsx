@@ -4,11 +4,9 @@ import { AppSidebar } from '@/components/app-sidebar'
 import { HeroPrompt } from '@/components/hero-prompt'
 import { LandingNavbar } from '@/components/landing-navbar'
 import { PerspectiveGrid } from '@/components/perspective-grid'
-import { Separator } from '@/components/ui/separator'
 import {
   SidebarInset,
   SidebarProvider,
-  SidebarTrigger,
 } from '@/components/ui/sidebar'
 import { useAuth } from '@/lib/auth'
 
@@ -31,10 +29,6 @@ function AuthenticatedHome() {
     <SidebarProvider>
       <AppSidebar />
       <SidebarInset>
-        <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
-          <SidebarTrigger className="-ml-1" />
-          <Separator orientation="vertical" className="mr-2 h-4" />
-        </header>
         <div className="relative flex flex-1 flex-col overflow-hidden bg-[#1a0a2e]">
           <PerspectiveGrid />
           <div className="pointer-events-none absolute inset-0 bg-radial-gradient from-transparent via-transparent to-black/20" />
