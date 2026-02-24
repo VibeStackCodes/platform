@@ -1,0 +1,21 @@
+name = "preview-proxy"
+main = "src/index.ts"
+compatibility_date = "2025-02-14"
+workers_dev = true
+
+# KV namespace for token caching (create via: wrangler kv namespace create TOKEN_CACHE)
+# After creation, replace the id below with the actual namespace ID
+[[kv_namespaces]]
+binding = "TOKEN_CACHE"
+id = "e769c2c52de842a7a21a9d43b5407fa2"
+
+# Wildcard route — matches {port}-{sandboxId}-preview.vibestack.site
+# Uses single-level wildcard (*.vibestack.site) covered by free Universal SSL.
+# Requires wildcard DNS record: * AAAA 100:: (proxied) on vibestack.site zone
+[[routes]]
+pattern = "*-preview.vibestack.site/*"
+zone_name = "vibestack.site"
+
+# Environment variables (set via wrangler secret):
+# wrangler secret put DAYTONA_API_KEY
+# wrangler secret put DAYTONA_API_URL

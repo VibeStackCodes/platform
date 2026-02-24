@@ -3,10 +3,10 @@
  * GET /api/projects/[id]/sandbox-urls
  *
  * Returns sandbox preview + code server URLs.
- * Preview URL routes through our reverse proxy (preview.vibestack.codes)
+ * Preview URL routes through our reverse proxy (preview.vibestack.site)
  * which adds Daytona auth headers and supports WebSocket (Vite HMR).
  *
- * Proxy uses subdomain routing: {port}-{sandboxId}.preview.vibestack.codes
+ * Proxy uses subdomain routing: {port}-{sandboxId}-preview.vibestack.site
  * See packages/preview-proxy/ for the proxy implementation.
  */
 
@@ -55,11 +55,12 @@ sandboxUrlRoutes.get('/:id/sandbox-urls', async (c) => {
     ])
 
     // Route preview through our reverse proxy using subdomain routing.
-    // Format: https://{port}-{sandboxId}.preview.vibestack.codes
+    // Format: https://{port}-{sandboxId}-preview.vibestack.site
     // The proxy resolves the Daytona target URL, adds X-Daytona-Preview-Token
     // and X-Daytona-Skip-Preview-Warning headers, and proxies HTTP + WebSocket.
-    const PREVIEW_PROXY_DOMAIN = process.env.PREVIEW_PROXY_DOMAIN ?? 'preview.vibestack.codes'
-    const proxyPreviewUrl = `https://${preview.port}-${sandbox.id}.${PREVIEW_PROXY_DOMAIN}`
+    // Uses single-level wildcard (*.vibestack.site) to stay on free Universal SSL.
+    const PREVIEW_PROXY_BASE = process.env.PREVIEW_PROXY_BASE ?? 'vibestack.site'
+    const proxyPreviewUrl = `https://${preview.port}-${sandbox.id}-preview.${PREVIEW_PROXY_BASE}`
 
     return c.json({
       sandboxId: sandbox.id,

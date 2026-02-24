@@ -1,0 +1,18 @@
+name = "image-resolver"
+main = "src/index.ts"
+compatibility_date = "2025-02-14"
+workers_dev = true
+
+# KV namespace for image URL caching (create via: wrangler kv namespace create IMAGE_CACHE)
+# After creation, replace the id below with the actual namespace ID
+[[kv_namespaces]]
+binding = "IMAGE_CACHE"
+id = "7de3091b960d4680a8f09e1140ae33cf"
+
+# Custom domain — Cloudflare auto-creates DNS + SSL
+[[routes]]
+pattern = "img.vibestack.site"
+custom_domain = true
+
+# Environment variables (set via wrangler secret):
+# wrangler secret put UNSPLASH_ACCESS_KEY

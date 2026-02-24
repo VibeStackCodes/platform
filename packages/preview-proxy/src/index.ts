@@ -1,85 +1,66 @@
 /**
- * VibeStack Preview Proxy
+ * VibeStack Preview Proxy — Cloudflare Worker
  *
  * Full reverse proxy for Daytona sandbox previews.
  * Follows https://www.daytona.io/docs/en/custom-domain-authentication/
- * and https://github.com/daytonaio/daytona-proxy-samples/tree/main/typescript
  *
- * Subdomain routing: {port}-{sandboxId}.preview.vibestack.codes
- *   → proxies to Daytona sandbox with auth headers
- *   → supports HTTP + WebSocket (Vite HMR)
+ * Subdomain routing: {port}-{sandboxId}-preview.vibestack.site
+ *   → resolves Daytona target URL via API
+ *   → proxies HTTP + WebSocket with auth headers
  *
- * Headers injected:
- *   X-Daytona-Preview-Token: {token}  — authenticates the request
- *   X-Daytona-Skip-Preview-Warning: true — bypasses warning interstitial
- *   X-Daytona-Disable-CORS: true — lets iframe embed the content
+ * Uses single-level wildcard (*.vibestack.site) to stay on free Universal SSL.
+ * Two-level wildcards (*.preview.vibestack.site) require Advanced Certificate Manager ($10/mo).
+ *
+ * Headers injected on every proxied request:
+ *   X-Daytona-Preview-Token: {token}
+ *   X-Daytona-Skip-Preview-Warning: true
+ *   X-Daytona-Disable-CORS: true
+ *
+ * Cloudflare Workers WebSocket optimization: once the Worker arranges
+ * the proxy via fetch(), it exits — Cloudflare streams bytes at infra level
+ * with zero duration charges.
  */
 
-import 'dotenv/config'
-import express from 'express'
-import { createProxyMiddleware } from 'http-proxy-middleware'
-import { Configuration, SandboxApi } from '@daytonaio/api-client'
-
-// ---------------------------------------------------------------------------
-// Config
-// ---------------------------------------------------------------------------
-
-const PORT = Number(process.env.PORT ?? 3100)
-const DAYTONA_API_KEY = process.env.DAYTONA_API_KEY
-const DAYTONA_API_URL = process.env.DAYTONA_API_URL ?? 'https://app.daytona.io/api'
-
-if (!DAYTONA_API_KEY) {
-  console.error('DAYTONA_API_KEY is required')
-  process.exit(1)
+export interface Env {
+  DAYTONA_API_KEY: string
+  DAYTONA_API_URL: string // e.g. "https://app.daytona.io/api"
+  TOKEN_CACHE: KVNamespace // Cloudflare KV for token caching
 }
 
-// ---------------------------------------------------------------------------
-// Daytona API client
-// ---------------------------------------------------------------------------
-
-const configuration = new Configuration({
-  apiKey: DAYTONA_API_KEY,
-  basePath: DAYTONA_API_URL,
-})
-
-const sandboxApi = new SandboxApi(configuration)
-
-// ---------------------------------------------------------------------------
-// Token cache — avoids hitting Daytona API on every request
-// ---------------------------------------------------------------------------
-
-interface CachedToken {
+interface DaytonaPreviewResponse {
+  sandboxId: string
   url: string
   token: string
-  expiresAt: number
 }
 
-const TOKEN_CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
-const tokenCache = new Map<string, CachedToken>()
+// ---------------------------------------------------------------------------
+// Subdomain parsing
+// ---------------------------------------------------------------------------
 
 /**
  * Parse subdomain to extract sandboxId and port.
- * Format: {port}-{sandboxId}.preview.vibestack.codes
+ * Format: {port}-{sandboxId}-preview.vibestack.site
  *
- * sandboxId is a UUID like "abc123def456"
- * port is a number like "3000"
+ * The subdomain (before first dot) is "{port}-{sandboxId}-preview".
+ * We strip the trailing "-preview" suffix, then split on the first dash
+ * to get port and sandboxId.
  */
-function parseSandboxFromHost(host: string | undefined): { sandboxId: string; port: number } | null {
-  if (!host) return null
-
-  // Strip port number from host (e.g., "3000-abc123.preview.vibestack.codes:8080")
+function parseSandboxFromHost(host: string): { sandboxId: string; port: number } | null {
   const hostname = host.split(':')[0]
-
-  // Extract first subdomain segment: "3000-abc123"
   const parts = hostname.split('.')
   if (parts.length < 3) return null
 
   const subdomain = parts[0]
-  const dashIndex = subdomain.indexOf('-')
+
+  // Strip "-preview" suffix
+  if (!subdomain.endsWith('-preview')) return null
+  const withoutSuffix = subdomain.slice(0, -'-preview'.length)
+
+  const dashIndex = withoutSuffix.indexOf('-')
   if (dashIndex === -1) return null
 
-  const portStr = subdomain.slice(0, dashIndex)
-  const sandboxId = subdomain.slice(dashIndex + 1)
+  const portStr = withoutSuffix.slice(0, dashIndex)
+  const sandboxId = withoutSuffix.slice(dashIndex + 1)
 
   const port = Number(portStr)
   if (!port || port < 1 || port > 65535) return null
@@ -88,103 +69,108 @@ function parseSandboxFromHost(host: string | undefined): { sandboxId: string; po
   return { sandboxId, port }
 }
 
-/**
- * Get preview URL and token for a sandbox:port, with caching.
- */
-async function getPreviewToken(sandboxId: string, port: number): Promise<CachedToken> {
-  const cacheKey = `${sandboxId}:${port}`
-  const cached = tokenCache.get(cacheKey)
+// ---------------------------------------------------------------------------
+// Daytona API — get preview URL + token (with KV caching)
+// ---------------------------------------------------------------------------
 
-  if (cached && cached.expiresAt > Date.now()) {
-    return cached
+const TOKEN_CACHE_TTL = 300 // 5 minutes
+
+async function getPreviewToken(
+  sandboxId: string,
+  port: number,
+  env: Env,
+): Promise<DaytonaPreviewResponse> {
+  const cacheKey = `preview:${sandboxId}:${port}`
+
+  // Check KV cache first
+  const cached = await env.TOKEN_CACHE.get(cacheKey, 'json')
+  if (cached) return cached as DaytonaPreviewResponse
+
+  // Call Daytona API
+  const apiUrl = `${env.DAYTONA_API_URL}/sandbox/${encodeURIComponent(sandboxId)}/ports/${port}/preview-url`
+  const res = await fetch(apiUrl, {
+    headers: {
+      Authorization: `Bearer ${env.DAYTONA_API_KEY}`,
+      'X-Daytona-Source': 'vibestack-preview-proxy',
+    },
+  })
+
+  if (!res.ok) {
+    throw new Error(`Daytona API error: ${res.status} ${await res.text()}`)
   }
 
-  const response = await sandboxApi.getPortPreviewUrl(sandboxId, port)
-  const entry: CachedToken = {
-    url: response.data.url,
-    token: response.data.token,
-    expiresAt: Date.now() + TOKEN_CACHE_TTL_MS,
-  }
+  const data = (await res.json()) as DaytonaPreviewResponse
 
-  tokenCache.set(cacheKey, entry)
-  return entry
+  // Cache in KV with TTL
+  await env.TOKEN_CACHE.put(cacheKey, JSON.stringify(data), { expirationTtl: TOKEN_CACHE_TTL })
+
+  return data
 }
 
 // ---------------------------------------------------------------------------
-// Express app + proxy middleware
+// Worker entry
 // ---------------------------------------------------------------------------
 
-const app = express()
+export default {
+  async fetch(request: Request, env: Env): Promise<Response> {
+    const url = new URL(request.url)
 
-// Health check (no subdomain needed)
-app.get('/health', (_req, res) => {
-  res.json({ status: 'ok', cached: tokenCache.size })
-})
+    // Health check (no subdomain needed)
+    if (url.pathname === '/health') {
+      return Response.json({ status: 'ok' })
+    }
 
-// Proxy middleware — routes all requests through to Daytona
-const proxyMiddleware = createProxyMiddleware({
-  // Dynamic routing: resolve target URL per-request from Daytona API
-  router: async (req) => {
-    const parsed = parseSandboxFromHost(req.headers.host)
+    // Parse subdomain
+    const host = request.headers.get('Host')
+    if (!host) {
+      return new Response('Missing Host header', { status: 400 })
+    }
+
+    const parsed = parseSandboxFromHost(host)
     if (!parsed) {
-      throw new Error('Invalid subdomain format')
+      return new Response('Invalid subdomain. Expected: {port}-{sandboxId}-preview.vibestack.site', {
+        status: 400,
+      })
     }
 
     const { sandboxId, port } = parsed
-    const preview = await getPreviewToken(sandboxId, port)
 
-    // Stash token on request for header injection in proxyReq handler
-    ;(req as any)._daytonaToken = preview.token
-    return preview.url
+    // Get Daytona target URL + auth token
+    let preview: DaytonaPreviewResponse
+    try {
+      preview = await getPreviewToken(sandboxId, port, env)
+    } catch (err) {
+      return new Response(`Failed to resolve sandbox: ${(err as Error).message}`, { status: 502 })
+    }
+
+    // Build proxied request to Daytona's actual URL
+    const targetUrl = new URL(url.pathname + url.search, preview.url)
+
+    const headers = new Headers(request.headers)
+    headers.set('X-Daytona-Preview-Token', preview.token)
+    headers.set('X-Daytona-Skip-Preview-Warning', 'true')
+    headers.set('X-Daytona-Disable-CORS', 'true')
+    // Set Host to the Daytona origin so it routes correctly
+    headers.set('Host', new URL(preview.url).host)
+
+    const proxyRequest = new Request(targetUrl.toString(), {
+      method: request.method,
+      headers,
+      body: request.body,
+      redirect: 'manual',
+    })
+
+    // fetch() handles both HTTP and WebSocket transparently.
+    // For WebSocket upgrades, Cloudflare proxies the connection at infra level
+    // — the Worker exits immediately with zero duration charges.
+    const response = await fetch(proxyRequest)
+
+    // Return response with permissive CORS for iframe embedding
+    const proxyResponse = new Response(response.body, response)
+    proxyResponse.headers.set('Access-Control-Allow-Origin', '*')
+    proxyResponse.headers.delete('X-Frame-Options')
+    proxyResponse.headers.set('Cache-Control', 'no-store')
+
+    return proxyResponse
   },
-
-  changeOrigin: true,
-  autoRewrite: true,
-  ws: true,
-
-  on: {
-    // Inject auth headers on HTTP requests
-    proxyReq: (proxyReq, req) => {
-      const token = (req as any)._daytonaToken as string | undefined
-      if (token) {
-        proxyReq.setHeader('X-Daytona-Preview-Token', token)
-      }
-      proxyReq.setHeader('X-Daytona-Skip-Preview-Warning', 'true')
-      proxyReq.setHeader('X-Daytona-Disable-CORS', 'true')
-    },
-
-    // Inject auth headers on WebSocket upgrade requests
-    proxyReqWs: (proxyReq, req) => {
-      const token = (req as any)._daytonaToken as string | undefined
-      if (token) {
-        proxyReq.setHeader('X-Daytona-Preview-Token', token)
-      }
-      proxyReq.setHeader('X-Daytona-Skip-Preview-Warning', 'true')
-      proxyReq.setHeader('X-Daytona-Disable-CORS', 'true')
-    },
-
-    // Log errors for debugging
-    error: (err, _req, res) => {
-      console.error('[proxy error]', err.message)
-      if (res && 'writeHead' in res) {
-        ;(res as any).writeHead(502)
-        ;(res as any).end('Proxy error')
-      }
-    },
-  },
-})
-
-app.use(proxyMiddleware)
-
-// ---------------------------------------------------------------------------
-// Start server
-// ---------------------------------------------------------------------------
-
-const server = app.listen(PORT, () => {
-  console.log(`Preview proxy listening on :${PORT}`)
-  console.log(`Daytona API: ${DAYTONA_API_URL}`)
-  console.log(`Subdomain format: {port}-{sandboxId}.preview.vibestack.codes`)
-})
-
-// Handle WebSocket upgrades
-server.on('upgrade', proxyMiddleware.upgrade!)
+}
