@@ -11,7 +11,7 @@ export const Route = createFileRoute('/_authenticated/_dashboard')({
 
 function DashboardLayout() {
   return (
-    <SidebarProvider>
+    <SidebarProvider defaultOpen={false}>
       <AppSidebar />
       <SidebarInset>
         <Outlet />

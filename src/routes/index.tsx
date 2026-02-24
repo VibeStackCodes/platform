@@ -26,7 +26,7 @@ function LandingPage() {
 
 function AuthenticatedHome() {
   return (
-    <SidebarProvider>
+    <SidebarProvider defaultOpen={false}>
       <AppSidebar />
       <SidebarInset>
         <div className="relative flex flex-1 flex-col overflow-hidden bg-[#1a0a2e]">
