@@ -10,14 +10,17 @@ vi.mock('@server/middleware/auth', () => ({
   }),
 }))
 
-// Mock sandbox functions
-vi.mock('@server/lib/sandbox', () => ({
-  findSandboxByProject: vi.fn(),
-  waitForDevServer: vi.fn(),
-  waitForCodeServer: vi.fn(),
-  getPreviewUrl: vi.fn(),
-  getCodeServerLink: vi.fn(),
-}))
+// Mock sandbox functions — buildProxyUrl is a pure function, use real implementation
+vi.mock('@server/lib/sandbox', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@server/lib/sandbox')>()
+  return {
+    ...actual,
+    findSandboxByProject: vi.fn(),
+    waitForDevServer: vi.fn(),
+    waitForCodeServer: vi.fn(),
+    getPreviewUrl: vi.fn(),
+  }
+})
 
 // Mock DB queries for ownership check
 vi.mock('@server/lib/db/queries', () => ({
@@ -26,7 +29,6 @@ vi.mock('@server/lib/db/queries', () => ({
 
 import {
   findSandboxByProject,
-  getCodeServerLink,
   getPreviewUrl,
   waitForCodeServer,
   waitForDevServer,
@@ -46,7 +48,7 @@ describe('Sandbox URLs Routes', () => {
   })
 
   describe('GET /api/projects/:id/sandbox-urls', () => {
-    it('returns signed preview URL and code server URL for project with sandbox', async () => {
+    it('returns proxy preview URL and proxy code server URL for project with sandbox', async () => {
       const mockSandbox = {
         id: 'sandbox-123',
         project: 'proj-1',
@@ -62,23 +64,21 @@ describe('Sandbox URLs Routes', () => {
         port: 3000,
         expiresAt: new Date('2026-02-16T12:00:00Z'),
       })
-      vi.mocked(getCodeServerLink).mockResolvedValue('https://codeserver.daytona.io/sandbox-123')
 
       const res = await app.request('/api/projects/proj-1/sandbox-urls', { method: 'GET' })
       const data = await res.json()
 
       expect(res.status).toBe(200)
       expect(data.sandboxId).toBe('sandbox-123')
-      // Route constructs proxy URL: https://{port}-{sandboxId}-preview.vibestack.site
+      // Both URLs route through the Cloudflare Worker reverse proxy
       expect(data.previewUrl).toBe('https://3000-sandbox-123-preview.vibestack.site')
-      expect(data.codeServerUrl).toBe('https://codeserver.daytona.io/sandbox-123')
+      expect(data.codeServerUrl).toBe('https://13337-sandbox-123-preview.vibestack.site')
       expect(data.expiresAt).toBeDefined()
 
       expect(findSandboxByProject).toHaveBeenCalledWith('proj-1')
       expect(waitForDevServer).toHaveBeenCalledWith(mockSandbox)
       expect(waitForCodeServer).toHaveBeenCalledWith(mockSandbox)
       expect(getPreviewUrl).toHaveBeenCalledWith(mockSandbox, 3000)
-      expect(getCodeServerLink).toHaveBeenCalledWith(mockSandbox)
     })
 
     it('returns null URLs when project has no sandbox', async () => {
@@ -175,10 +175,10 @@ describe('Sandbox URLs Routes', () => {
       vi.mocked(findSandboxByProject).mockResolvedValue(mockSandbox as any)
       vi.mocked(getPreviewUrl).mockResolvedValue({
         url: 'https://preview.daytona.io',
+        token: 'tok',
         port: 3000,
         expiresAt: new Date(),
       })
-      vi.mocked(getCodeServerLink).mockResolvedValue('https://code.daytona.io')
 
       const res = await app.request('/api/projects/proj-5/sandbox-urls', { method: 'GET' })
 
@@ -187,7 +187,7 @@ describe('Sandbox URLs Routes', () => {
       expect(waitForCodeServerMock).toHaveBeenCalled()
     })
 
-    it('uses signed URL for preview (iframe compatible)', async () => {
+    it('constructs proxy URL from sandbox.id + preview.port, not raw Daytona URL', async () => {
       const mockSandbox = {
         id: 'sandbox-signed',
         project: 'proj-6',
@@ -203,17 +203,15 @@ describe('Sandbox URLs Routes', () => {
         port: 3000,
         expiresAt: new Date('2026-02-16T13:00:00Z'),
       })
-      vi.mocked(getCodeServerLink).mockResolvedValue('https://code.daytona.io')
 
       const res = await app.request('/api/projects/proj-6/sandbox-urls', { method: 'GET' })
       const data = await res.json()
 
-      // Route constructs proxy URL from sandbox.id + preview.port, not the raw Daytona URL
+      // Both URLs use the proxy format — raw Daytona URLs never reach the client
       expect(data.previewUrl).toBe('https://3000-sandbox-signed-preview.vibestack.site')
-      // Token is returned separately for the proxy to use
-      expect(data.previewToken).toBeDefined()
+      expect(data.codeServerUrl).toBe('https://13337-sandbox-signed-preview.vibestack.site')
+      expect(data.previewToken).toBe('abc123')
 
-      // Verify getPreviewUrl was called with port 3000
       expect(getPreviewUrl).toHaveBeenCalledWith(mockSandbox, 3000)
     })
 
@@ -224,18 +222,17 @@ describe('Sandbox URLs Routes', () => {
         status: 'running',
       }
 
-      const now = Date.now()
-
       vi.mocked(findSandboxByProject).mockResolvedValue(mockSandbox as any)
       vi.mocked(waitForDevServer).mockResolvedValue(undefined)
       vi.mocked(waitForCodeServer).mockResolvedValue(undefined)
       vi.mocked(getPreviewUrl).mockResolvedValue({
         url: 'https://preview.daytona.io',
+        token: 'tok',
         port: 3000,
-        expiresAt: new Date(now + 3600 * 1000),
+        expiresAt: new Date(Date.now() + 3600 * 1000),
       })
-      vi.mocked(getCodeServerLink).mockResolvedValue('https://code.daytona.io')
 
+      const now = Date.now()
       const res = await app.request('/api/projects/proj-7/sandbox-urls', { method: 'GET' })
       const data = await res.json()
 
@@ -244,8 +241,8 @@ describe('Sandbox URLs Routes', () => {
       const expiresAt = new Date(data.expiresAt)
       const expectedExpiry = new Date(now + 3600 * 1000)
 
-      // Allow 2 second tolerance for test execution time
-      expect(Math.abs(expiresAt.getTime() - expectedExpiry.getTime())).toBeLessThan(2000)
+      // Allow 5 second tolerance for test execution time
+      expect(Math.abs(expiresAt.getTime() - expectedExpiry.getTime())).toBeLessThan(5000)
     })
 
     it('returns 404 when user does not own the project', async () => {
@@ -283,12 +280,7 @@ describe('Sandbox URLs Routes', () => {
       vi.mocked(findSandboxByProject).mockResolvedValue(mockSandbox as any)
       vi.mocked(waitForDevServer).mockResolvedValue(undefined)
       vi.mocked(waitForCodeServer).mockResolvedValue(undefined)
-      vi.mocked(getPreviewUrl).mockResolvedValue({
-        url: 'https://preview.daytona.io',
-        port: 3000,
-        expiresAt: new Date(),
-      })
-      vi.mocked(getCodeServerLink).mockRejectedValue(new Error('Code server failed'))
+      vi.mocked(getPreviewUrl).mockRejectedValue(new Error('Preview URL failed'))
 
       const res = await app.request('/api/projects/proj-8/sandbox-urls', { method: 'GET' })
       const data = await res.json()

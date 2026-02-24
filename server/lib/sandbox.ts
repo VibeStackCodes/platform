@@ -35,6 +35,23 @@ export interface PreviewUrlResult {
 }
 
 // ============================================================================
+// Reverse Proxy URL Construction
+// ============================================================================
+
+/**
+ * Build a proxy URL that routes through our Cloudflare Worker.
+ * Format: https://{port}-{sandboxId}-preview.{PREVIEW_PROXY_BASE}
+ *
+ * The Worker resolves the Daytona target, injects auth headers
+ * (X-Daytona-Preview-Token, X-Daytona-Skip-Preview-Warning),
+ * and proxies HTTP + WebSocket transparently.
+ */
+export function buildProxyUrl(sandboxId: string, port: number): string {
+  const base = process.env.PREVIEW_PROXY_BASE ?? 'vibestack.site'
+  return `https://${port}-${sandboxId}-preview.${base}`
+}
+
+// ============================================================================
 // Singleton Daytona Client
 // ============================================================================
 

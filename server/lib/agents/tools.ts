@@ -3,6 +3,7 @@ import { z } from 'zod'
 import path from 'node:path'
 import { buildRepoName, createRepo, getInstallationToken } from '../github'
 import {
+  buildProxyUrl,
   createSandbox as createSandboxFn,
   downloadDirectory,
   getPreviewUrl as getPreviewUrlFn,
@@ -387,7 +388,7 @@ export const getPreviewUrlTool = createTool({
       const sandbox = await getSandbox(inputData.sandboxId)
       const port = inputData.port || 3000
       const preview = await getPreviewUrlFn(sandbox, port)
-      return { url: preview.url, port: preview.port, expiresAt: preview.expiresAt.toISOString() }
+      return { url: buildProxyUrl(inputData.sandboxId, preview.port), port: preview.port, expiresAt: preview.expiresAt.toISOString() }
     } catch (e) {
       return {
         url: '',

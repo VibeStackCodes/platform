@@ -49,6 +49,7 @@ export function BuilderPreview({
     const handler = (event: MessageEvent) => {
       const isAllowedOrigin =
         event.origin === window.location.origin ||
+        /^https:\/\/[a-z0-9-]+-preview\.vibestack\.site$/.test(event.origin) ||
         /^https:\/\/[a-z0-9-]+\.daytona\.io$/.test(event.origin)
       if (!isAllowedOrigin) return
 
