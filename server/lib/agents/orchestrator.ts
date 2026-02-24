@@ -15,12 +15,15 @@ import type { GeneratedPage } from '../page-generator'
 // Result types for each handler
 // ============================================================================
 
+export type AppComplexity = 'simple' | 'moderate' | 'ambitious'
+
 export type AnalysisResult =
   | {
       type: 'done'
       appName: string
       appDescription: string
       prd: string
+      complexity: AppComplexity
       tokensUsed: number
     }
   | {
@@ -93,6 +96,7 @@ export async function runAnalysis(input: {
           appName: part.input.appName,
           appDescription: part.input.appDescription,
           prd: part.input.prd,
+          complexity: part.input.complexity ?? 'moderate',
           tokensUsed,
         }
       }
@@ -488,14 +492,17 @@ export async function runDeployment(input: {
 export async function runArchitect(input: {
   appName: string
   prd: string
+  complexity?: AppComplexity
 }): Promise<ArchitectResult> {
   console.log('[architect] Starting creative director...')
   const { runCreativeDirector } = await import('../creative-director')
   const { DEFAULT_TEXT_SLOTS } = await import('../themed-code-engine')
 
+  console.log(`[architect] Complexity tier: ${input.complexity ?? 'moderate'}`)
   const result = await runCreativeDirector({
     appName: input.appName,
     prd: input.prd,
+    complexity: input.complexity,
   })
 
   const tokensUsed = (result.usage.inputTokens ?? 0) + (result.usage.outputTokens ?? 0)
@@ -557,6 +564,7 @@ export async function runCodeGeneration(input: {
   tokens: DesignSystem
   appName: string
   sandboxId: string
+  complexity?: AppComplexity
   onPageStart?: (fileName: string, route: string, componentName: string, index: number, total: number) => void
   onPageComplete?: (fileName: string, route: string, componentName: string, lineCount: number, code: string, index: number, total: number) => void
   onFileAssembled?: (path: string, category: string) => void
@@ -570,6 +578,7 @@ export async function runCodeGeneration(input: {
     generatePages({
       spec: input.spec,
       tokens: input.tokens,
+      complexity: input.complexity,
       onPageStart: input.onPageStart,
       onPageComplete: input.onPageComplete,
     }),
@@ -668,6 +677,7 @@ export async function runCodeGeneration(input: {
 export async function runPageGeneration(input: {
   spec: CreativeSpec
   tokens: DesignSystem
+  complexity?: AppComplexity
   onPageStart?: (fileName: string, route: string, componentName: string, index: number, total: number) => void
   onPageComplete?: (fileName: string, route: string, componentName: string, lineCount: number, code: string, index: number, total: number) => void
 }): Promise<{ pages: GeneratedPage[]; tokensUsed: number }> {
@@ -676,6 +686,7 @@ export async function runPageGeneration(input: {
   const result = await generatePages({
     spec: input.spec,
     tokens: input.tokens,
+    complexity: input.complexity,
     onPageStart: input.onPageStart,
     onPageComplete: input.onPageComplete,
   })

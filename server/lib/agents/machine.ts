@@ -28,6 +28,9 @@ export interface MachineContext {
   // Blueprint (Pipeline A — kept for validating/reviewing/deploying compatibility)
   blueprint: AppBlueprint | null
 
+  // Analyst complexity tier (guides Creative Director scope)
+  complexity: 'simple' | 'moderate' | 'ambitious' | null
+
   // Pipeline B fields
   tokens: DesignSystem | null
   creativeSpec: CreativeSpec | null
@@ -99,11 +102,11 @@ export const appGenerationMachine = setup({
       const { runAnalysis } = await import('./orchestrator')
       return runAnalysis(input)
     }),
-    runArchitectActor: fromPromise(async ({ input }: { input: { appName: string; prd: string } }) => {
+    runArchitectActor: fromPromise(async ({ input }: { input: { appName: string; prd: string; complexity?: 'simple' | 'moderate' | 'ambitious' } }) => {
       const { runArchitect } = await import('./orchestrator')
       return runArchitect(input)
     }),
-    runCodeGenerationActor: fromPromise(async ({ input }: { input: { spec: CreativeSpec; tokens: DesignSystem; appName: string; sandboxId: string } }) => {
+    runCodeGenerationActor: fromPromise(async ({ input }: { input: { spec: CreativeSpec; tokens: DesignSystem; appName: string; sandboxId: string; complexity?: 'simple' | 'moderate' | 'ambitious' } }) => {
       const { runCodeGeneration } = await import('./orchestrator')
       return runCodeGeneration(input)
     }),
@@ -161,6 +164,7 @@ export const appGenerationMachine = setup({
     appDescription: '',
     clarificationQuestions: null,
     blueprint: null,
+    complexity: null,
     tokens: null,
     creativeSpec: null,
     generatedPages: null,
@@ -228,6 +232,7 @@ export const appGenerationMachine = setup({
                       appName: ({ event }) => (event.output as Extract<AnalysisResult, { type: 'done' }>).appName,
                       appDescription: ({ event }) => (event.output as Extract<AnalysisResult, { type: 'done' }>).appDescription,
                       prd: ({ event }) => (event.output as Extract<AnalysisResult, { type: 'done' }>).prd,
+                      complexity: ({ event }) => (event.output as Extract<AnalysisResult, { type: 'done' }>).complexity ?? 'moderate',
                       totalTokens: ({ context, event }) => context.totalTokens + event.output.tokensUsed,
                     }),
                   },
@@ -329,6 +334,7 @@ export const appGenerationMachine = setup({
         input: ({ context }) => ({
           appName: context.appName ?? '',
           prd: context.prd ?? '',
+          complexity: context.complexity ?? undefined,
         }),
         onDone: {
           target: 'codeGeneration',
@@ -359,6 +365,7 @@ export const appGenerationMachine = setup({
           tokens: context.tokens!,
           appName: context.appName ?? '',
           sandboxId: context.sandboxId!,
+          complexity: context.complexity ?? undefined,
         }),
         onDone: {
           target: 'validating',
@@ -791,6 +798,7 @@ export const mockAppGenerationMachine = setup({
     appDescription: '',
     clarificationQuestions: null,
     blueprint: null,
+    complexity: null,
     tokens: null,
     creativeSpec: null,
     generatedPages: null,
@@ -900,6 +908,7 @@ export const mockAppGenerationMachine = setup({
         input: ({ context }) => ({
           appName: context.appName ?? '',
           prd: context.prd ?? '',
+          complexity: context.complexity ?? undefined,
         }),
         onDone: {
           target: 'codeGeneration',
@@ -923,6 +932,7 @@ export const mockAppGenerationMachine = setup({
           tokens: context.tokens!,
           appName: context.appName ?? '',
           sandboxId: context.sandboxId!,
+          complexity: context.complexity ?? undefined,
         }),
         onDone: {
           target: 'validating',

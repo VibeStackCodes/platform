@@ -132,7 +132,7 @@ export const PIPELINE_MODELS = {
   edit: 'gpt-5.2-codex',
   seed: 'gpt-5.2-codex',
   composer: 'gpt-5.2-codex',
-  creativeDirector: 'gpt-5.2-codex',
+  creativeDirector: 'gpt-5.2',
   pageGen: 'gpt-5.2-codex',
 } as const
 

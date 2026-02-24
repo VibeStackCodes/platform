@@ -56,9 +56,15 @@ sandboxUrlRoutes.get('/:id/sandbox-urls', async (c) => {
       getCodeServerLink(sandbox),
     ])
 
+    // Route preview through our edge proxy to skip Daytona's warning interstitial.
+    // The proxy adds X-Daytona-Skip-Preview-Warning header and injects <base href>
+    // so sub-resources (JS, CSS, HMR WebSocket) still load from Daytona directly.
+    const PREVIEW_PROXY_BASE = process.env.PREVIEW_PROXY_URL ?? 'https://preview.vibestack.codes'
+    const proxyPreviewUrl = `${PREVIEW_PROXY_BASE}/p/${encodeURIComponent(preview.url)}`
+
     return c.json({
       sandboxId: sandbox.id,
-      previewUrl: preview.url,
+      previewUrl: proxyPreviewUrl,
       codeServerUrl,
       expiresAt: new Date(Date.now() + expiresInSeconds * 1000).toISOString(),
     })

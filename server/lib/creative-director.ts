@@ -16,9 +16,12 @@ import { CreativeSpecSchema, type CreativeSpec } from './agents/schemas'
 // Public types
 // ---------------------------------------------------------------------------
 
+export type AppComplexity = 'simple' | 'moderate' | 'ambitious'
+
 export interface CreativeDirectorInput {
   appName: string
   prd: string
+  complexity?: AppComplexity
 }
 
 export interface CreativeDirectorResult {
@@ -80,23 +83,11 @@ You MUST commit to these before writing any architecture:
 
 ## STEP 2: Sitemap Design (1-8 pages)
 
-Build EXACTLY what the user asked for. Match scope to the request:
-- "Build a to-do app" → 1 page: functional React app with to-do UI
-- "Build a restaurant website" → 3-5 pages: homepage, menu, about, contact, reservations
-- "Build a portfolio" → 2-3 pages: homepage with projects, about, contact
-- "Build a SaaS landing page" → 4-6 pages: homepage, features, pricing, FAQ, blog, contact
+Build EXACTLY what the user asked for — nothing more. The COMPLEXITY tier in the user prompt tells you how much to build. Follow it strictly.
 
 NEVER generate auth/login/register routes.
 NEVER generate more than 8 pages.
 NEVER generate CRUD-style routes like /new, /$id/edit, /admin.
-
-Adapt your page structure to the app type:
-
-LANDING PAGE: Hero + social proof + features + pricing + FAQ + CTA + footer
-DASHBOARD/SPA: Sidebar nav + data area + charts + search/filter + modals
-E-COMMERCE: Product grid + detail modal + cart + filtering + pricing
-PORTFOLIO: Project showcase + about + contact + subtle animations
-SIMPLE APP (calculator, tool, game): Focused single-purpose interface + real-time feedback
 
 Route naming: use domain language. File naming: TanStack Router conventions:
   "/" → routes/index.tsx, "/menu" → routes/menu/index.tsx
@@ -104,7 +95,7 @@ Route naming: use domain language. File naming: TanStack Router conventions:
 ## STEP 3: Per-Page Briefs
 
 Each page MUST have:
-- sections: 3-8 descriptive strings (top to bottom)
+- sections: 1-8 descriptive strings (top to bottom). For simple apps, 1-2 sections is fine — don't pad with unnecessary sections.
 - copyDirection: tone and voice (be specific, not "professional and modern")
 - keyInteractions: primary user actions
 - lucideIcons: 3-6 Lucide icon names (use ONLY real lucide-react exports like ArrowRight, Star, Heart, MapPin, Phone, Mail, Clock, Shield, Check, ChevronRight, Menu, X, Search, Home, Plus, Trash2, Pencil, Eye, Bookmark, Users, Calendar, Package, Globe, Leaf, Sun, Moon, Code, Sparkles, Flame, BookOpen, FileText, Settings, Filter, Mountain, Coffee, Building2, Store, CreditCard — NOT made-up names like Lotus, Hamburger, Loading)
@@ -148,7 +139,7 @@ NEVER invent routes like "/privacy", "/terms", "/contact" unless they are in the
 5. Every image query is unique — never duplicate on same page
 6. For interactive apps, keyInteractions describe actual app functionality
 7. Nav and footer links MUST only reference sitemap routes or external URLs`,
-  defaultOptions: { modelSettings: { temperature: 0.4 } },
+  defaultOptions: { modelSettings: { temperature: 0.8 } },
 })
 
 // ---------------------------------------------------------------------------
@@ -162,6 +153,47 @@ NEVER invent routes like "/privacy", "/terms", "/contact" unless they are in the
  * Throws on invalid output — no fallbacks, no retry loops.
  */
 export async function runCreativeDirector(input: CreativeDirectorInput): Promise<CreativeDirectorResult> {
+  // Inject a random aesthetic seed to force palette diversity across generations.
+  // Without this, the model converges on the same "safe" palette every time.
+  const aestheticSeeds = [
+    { direction: 'editorial', palette: 'deep navy #1a2332, warm ivory #f5f0e8, burnt sienna #c0622e' },
+    { direction: 'brutalist', palette: 'pure black #000000, raw white #ffffff, electric yellow #e6ff00' },
+    { direction: 'soft-organic', palette: 'sage green #8fae7e, warm sand #e8dcc8, terracotta #c4724e' },
+    { direction: 'luxury', palette: 'charcoal #2d2d2d, champagne gold #c9a96e, deep burgundy #6b1d2a' },
+    { direction: 'retro-futuristic', palette: 'deep purple #2a1052, neon cyan #00f5d4, hot pink #f72585' },
+    { direction: 'playful-bold', palette: 'cobalt blue #0047ab, sunshine yellow #ffd60a, coral red #ff6b6b' },
+    { direction: 'minimal-swiss', palette: 'true black #111111, pure white #fafafa, signal red #e63946' },
+    { direction: 'dark-cinematic', palette: 'midnight #0d1117, amber glow #f0a500, steel #8b949e' },
+    { direction: 'glassmorphic', palette: 'violet mist #7c3aed, frosted white #f8fafc, soft blue #60a5fa' },
+    { direction: 'neo-corporate', palette: 'slate blue #334155, ice white #f1f5f9, emerald #059669' },
+    { direction: 'warm-neutral', palette: 'espresso #3c2415, warm cream #faf7f2, dusty rose #c9a2a2' },
+    { direction: 'art-deco', palette: 'midnight teal #003b46, gold leaf #c5a55a, ivory #f5f1e3' },
+    { direction: 'cyberpunk', palette: 'void black #0a0a0f, neon magenta #ff00ff, toxic green #39ff14' },
+    { direction: 'dashboard-dense', palette: 'dark surface #1e1e2e, electric blue #3b82f6, subtle gray #94a3b8' },
+  ]
+  const seed = aestheticSeeds[Math.floor(Math.random() * aestheticSeeds.length)]
+
+  const complexity = input.complexity ?? 'moderate'
+
+  const complexityGuide = {
+    simple: `COMPLEXITY: SIMPLE — This is a lightweight single-purpose tool.
+- Generate EXACTLY 1 page. No multi-page sitemap.
+- No hero sections, no testimonials, no dashboards, no sidebars, no analytics.
+- Minimal nav (just the app name, no links). Minimal footer (just copyright).
+- The page IS the app — a focused, interactive UI. Think: what would a developer build in an afternoon.
+- 1-2 sections max in the page brief. Don't pad with unnecessary sections.
+- Image manifest should be empty or minimal — simple apps rarely need stock photos.
+- Still apply the CREATIVE SEED colors and aesthetic fully — simple apps deserve distinctive palettes too.`,
+    moderate: `COMPLEXITY: MODERATE — This is a multi-page website or small app.
+- Generate 2-5 pages, scaled to what the user described.
+- Standard sections: hero, features, about, contact as appropriate.
+- Full nav and footer with relevant links.`,
+    ambitious: `COMPLEXITY: AMBITIOUS — This is a feature-rich application.
+- Generate 4-8 pages with rich section briefs.
+- Full design treatment: hero, features, pricing, testimonials, FAQ as appropriate.
+- Complex navigation, detailed footer with multiple columns.`,
+  }
+
   const prompt = `Design the complete creative spec for this web application.
 
 App Name: ${input.appName}
@@ -169,7 +201,12 @@ App Name: ${input.appName}
 Product Requirements:
 ${input.prd}
 
-Produce: all design decisions (aestheticDirection, colorPalette with 9 tokens, typography with display/body fonts, style tokens including cardStyle/navStyle/heroLayout/spacing/motion/imagery/borderRadius, layoutStrategy, signatureDetail), a complete sitemap (1-8 pages, scaled to match the scope the user described) with per-page image manifests, navigation contract, and footer contract.`
+${complexityGuide[complexity]}
+
+CREATIVE SEED (mandatory starting point):
+Your aesthetic direction MUST be ${seed.direction}. Start from these tones: ${seed.palette}. Derive your palette from this seed — shift hues to fit the app's domain, but the overall feel must match the seed direction. Do NOT default to generic dark-navy + white + green.
+
+Produce: all design decisions (aestheticDirection, colorPalette with 9 tokens, typography with display/body fonts, style tokens including cardStyle/navStyle/heroLayout/spacing/motion/imagery/borderRadius, layoutStrategy, signatureDetail), a complete sitemap with per-page image manifests, navigation contract, and footer contract.`
 
   const result = await creativeDirectorAgent.generate(prompt, {
     structuredOutput: { schema: CreativeSpecSchema },

@@ -22,6 +22,9 @@ export const AnalystOutputSchema = z.object({
   appName: z.string().describe('Short application name (e.g., "TaskFlow")'),
   appDescription: z.string().describe('One-line app description'),
   prd: z.string().describe('Short PRD: 2-line introduction followed by 5 bullet points of key requirements'),
+  complexity: z.enum(['simple', 'moderate', 'ambitious']).describe(
+    'How complex is this app to build? Judge by the number of distinct features, pages, and interactions the user is asking for — not by the domain.',
+  ),
 })
 
 // ---------------------------------------------------------------------------

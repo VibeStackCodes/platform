@@ -31,9 +31,12 @@ export interface GeneratedPage {
   route: string
 }
 
+export type AppComplexity = 'simple' | 'moderate' | 'ambitious'
+
 export interface PageGeneratorInput {
   spec: CreativeSpec
   tokens: DesignSystem
+  complexity?: AppComplexity
   /** Called when a page starts generating */
   onPageStart?: (fileName: string, route: string, componentName: string, index: number, total: number) => void
   /** Called when a page finishes generating */
@@ -60,13 +63,13 @@ export interface PageGeneratorResult {
 }
 
 export async function generatePages(input: PageGeneratorInput): Promise<PageGeneratorResult> {
-  const { spec, tokens, onPageStart, onPageComplete } = input
+  const { spec, tokens, complexity, onPageStart, onPageComplete } = input
   const total = spec.sitemap.length
 
   const results = await Promise.all(
     spec.sitemap.map(async (page, index) => {
       onPageStart?.(page.fileName, page.route, page.componentName, index, total)
-      const result = await generateSinglePage(page, spec, tokens)
+      const result = await generateSinglePage(page, spec, tokens, complexity)
       const lineCount = result.content.split('\n').length
       const codePreview = result.content.split('\n').slice(0, 50).join('\n')
       onPageComplete?.(result.fileName, page.route, page.componentName, lineCount, codePreview, index, total)
@@ -96,8 +99,9 @@ async function generateSinglePage(
   page: CreativeSpec['sitemap'][number],
   spec: CreativeSpec,
   tokens: DesignSystem,
+  complexity?: AppComplexity,
 ): Promise<GeneratedPage & { inputTokens: number; outputTokens: number }> {
-  const systemPrompt = buildPageGenSystemPrompt(spec, tokens)
+  const systemPrompt = buildPageGenSystemPrompt(spec, tokens, complexity)
   const userPrompt = buildPageGenUserPrompt(page, spec)
 
   const provider = createHeliconeProvider({ userId: 'pipeline', agentName: 'page-gen' })
@@ -131,9 +135,19 @@ async function generateSinglePage(
  * Exported so tests can validate the prompt's closed vocabulary, forbidden
  * section, and absence of Supabase / TanStack Query references.
  */
-export function buildPageGenSystemPrompt(spec: CreativeSpec, tokens: DesignSystem): string {
-  return `You are an expert React developer generating a complete TanStack Router page file (.tsx).
+export function buildPageGenSystemPrompt(spec: CreativeSpec, tokens: DesignSystem, complexity?: AppComplexity): string {
+  const isSimple = complexity === 'simple'
 
+  return `You are an expert React developer generating a complete TanStack Router page file (.tsx).
+${isSimple ? `
+## SIMPLE APP MODE
+This is a lightweight single-purpose tool. Build ONLY the core functionality the user asked for.
+- No hero sections, no testimonials, no feature grids, no pricing tables.
+- No stock photos or decorative images.
+- Minimal layout: the app IS the page. Center it, give it breathing room, done.
+- Focus 100% on working interactivity (useState, event handlers).
+- Keep the component under 200 lines. Simplicity is the goal.
+` : ''}
 ## Output Format
 Output ONLY the complete .tsx file content. No markdown, no explanation, no code fences.
 
@@ -207,12 +221,13 @@ ONLY import from the CLOSED VOCABULARY — anything else will cause a build fail
 
 For landing pages and informational pages: hardcode content in JSX with realistic placeholder text (not "Lorem ipsum").
 For interactive apps (to-do lists, calculators, form builders, etc.): use React state (useState, useEffect) for client-side interactivity. All state is local — no external APIs, no database.
+No data fetching, no API calls, no database queries.
+${isSimple ? '' : `
 For images, use the VibeStack image resolver: \`https://img.vibestack.codes/s/{query}/{width}/{height}\`
 where {query} is a 3-5 word URL-encoded photo description (short, specific, scenic).
 Example: \`https://img.vibestack.codes/s/coffee%20shop%20morning%20light/800/600\`
 Every <img> tag MUST include: alt text and loading="lazy" (or "eager" for hero).
 NEVER add onError handlers to <img> tags — the image resolver handles fallbacks server-side.
-No data fetching, no API calls, no database queries.
 
 IMAGE QUERY RULES (critical for visual quality):
 - Queries MUST be 3-5 words maximum. Longer queries fail to match Unsplash photos and show placeholders.
@@ -223,7 +238,7 @@ IMAGE QUERY RULES (critical for visual quality):
 - NEVER use single-word queries like "office", "team", "food", "house".
 - For hero images: use WIDE aspect ratios (1600/900 or 1920/1080) and include "wide angle" or "panoramic" in the query.
 - For card thumbnails: use SQUARE or 4:3 aspect ratios (600/400 or 400/400).
-- For portrait photos: use square crop (400/400) and include "headshot" and "studio lighting".
+- For portrait photos: use square crop (400/400) and include "headshot" and "studio lighting".`}
 
 ## Route File Structure
 \`\`\`tsx
@@ -272,9 +287,13 @@ CODE:
 - onClick={() => {}} (empty handlers) — always wire to state or navigation
 - Mixed inline styles + Tailwind on same element
 - Unused imports or state variables
+- Building custom toggle/switch UI with divs — use <Switch> from shadcn/ui
+- Putting w-full on TabsList — let it size naturally
 - console.log statements
 
-## INTERACTIVITY RULES (every page must feel alive)
+${isSimple ? `## INTERACTIVITY
+- Wire ALL buttons and inputs to useState. Every click should do something visible.
+- No decorative UI — if it's on screen, it should be functional.` : `## INTERACTIVITY RULES (every page must feel alive)
 
 - Nav links MUST use id-based anchor scrolling. Add id attributes to major sections and use onClick={() => document.getElementById('section-id')?.scrollIntoView({ behavior: 'smooth' })} on nav links.
 - Filter/category controls MUST use useState to filter displayed items. Never render a static <select> that does nothing.
@@ -284,7 +303,7 @@ CODE:
 - Pricing toggle (monthly/annual) MUST use useState to switch displayed prices.
 - Mobile hamburger menu MUST use useState to toggle a Sheet or mobile nav overlay.
 - Add hover:scale-[1.02] transition-transform to all clickable cards.
-- Add hover:underline to all text links.
+- Add hover:underline to all text links.`}
 
 ## Critical Rules
 1. Do NOT generate navigation or footer — these are in __root.tsx

@@ -1,0 +1,10 @@
+{
+  "name": "@vibestack/preview-proxy",
+  "private": true,
+  "dependencies": {},
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "@types/node": "^22.0.0",
+    "@vercel/node": "^5.1.0"
+  }
+}
