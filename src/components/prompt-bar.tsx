@@ -2,6 +2,7 @@
 
 import { ChevronDownIcon } from 'lucide-react'
 import { useMemo, useState } from 'react'
+import { cn } from '@/lib/utils'
 import {
   ModelSelector,
   ModelSelectorContent,
@@ -36,7 +37,7 @@ const models = [
 interface PromptBarProps {
   onSubmit: (
     message: PromptInputMessage,
-    options: { model: string },
+    options: { model: string; mode: 'edit' | 'chat' | 'plan' },
   ) => void | Promise<void>
   onStop?: () => void
   placeholder?: string
@@ -54,11 +55,12 @@ export function PromptBar({
   const [text, setText] = useState('')
   const [model, setModel] = useState(models[0].id)
   const [selectorOpen, setSelectorOpen] = useState(false)
+  const [mode, setMode] = useState<'edit' | 'chat' | 'plan'>('edit')
 
   const selectedModel = useMemo(() => models.find((m) => m.id === model) ?? models[0], [model])
 
   function handleSubmit(message: PromptInputMessage) {
-    const result = onSubmit(message, { model })
+    const result = onSubmit(message, { model, mode })
     setText('')
     return result
   }
@@ -73,6 +75,24 @@ export function PromptBar({
         />
       </PromptInputBody>
       <PromptInputFooter>
+        <div className="flex gap-1">
+          {(['edit', 'chat', 'plan'] as const).map((m) => (
+            <button
+              key={m}
+              type="button"
+              onClick={() => setMode(m)}
+              data-active={mode === m ? 'true' : undefined}
+              className={cn(
+                'rounded-full px-3 py-1 text-xs font-medium capitalize transition-colors',
+                mode === m
+                  ? 'bg-primary text-primary-foreground'
+                  : 'text-muted-foreground hover:text-foreground',
+              )}
+            >
+              {m === 'edit' ? 'Edit' : m === 'chat' ? 'Chat' : 'Plan'}
+            </button>
+          ))}
+        </div>
         <PromptInputTools>
           <ModelSelector open={selectorOpen} onOpenChange={setSelectorOpen}>
             <ModelSelectorTrigger asChild>

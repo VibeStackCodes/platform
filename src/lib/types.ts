@@ -390,6 +390,7 @@ export interface PhaseCompleteEvent {
 
 export interface PlanReadyEvent {
   type: 'plan_ready'
+  runId?: string
   plan: {
     appName?: string
     appDescription?: string
@@ -564,4 +565,13 @@ export interface ElementContext {
   textContent: string
   tailwindClasses: string[]
   rect: { x: number; y: number; width: number; height: number }
+  computedStyles?: {
+    color: string
+    backgroundColor: string
+    fontSize: string
+    fontWeight: string
+    padding: string
+    margin: string
+    textAlign: string
+  }
 }

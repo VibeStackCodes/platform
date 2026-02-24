@@ -148,6 +148,15 @@ describe('assembleApp — basic assembly', () => {
     expect(paths).not.toContain('src/lib/supabase.ts')
     expect(paths).not.toContain('src/routes/auth/login.tsx')
   })
+
+  it('vite.config.ts includes componentTagger from lovable-tagger', () => {
+    const files = assembleApp(makeInput())
+    const viteConfig = files.find((f) => f.path === 'vite.config.ts')!
+    expect(viteConfig).toBeDefined()
+    expect(viteConfig.content).toContain('lovable-tagger')
+    expect(viteConfig.content).toContain('componentTagger')
+    expect(viteConfig.content).toContain("componentTagger({ jsxSource: true })")
+  })
 })
 
 // ---------------------------------------------------------------------------

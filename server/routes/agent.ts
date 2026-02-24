@@ -76,6 +76,7 @@ const STATE_PHASES: Record<string, { name: string; phase: number; agentId?: stri
   analyzing:            { name: 'Analyzing requirements',      phase: 1, agentId: 'analyst',     agentName: 'Analyst' },
   awaitingClarification:{ name: 'Awaiting clarification',     phase: 1 },
   provisioning:         { name: 'Provisioning infrastructure', phase: 1, agentId: 'provisioner', agentName: 'DevOps Agent' },
+  planning:             { name: 'Awaiting plan approval',      phase: 2, agentId: 'architect', agentName: 'Architect Agent' },
   architecting:         { name: 'Designing & architecting',    phase: 2, agentId: 'architect',   agentName: 'Architect Agent' },
   codeGeneration:       { name: 'Generating code',             phase: 3, agentId: 'codegen',     agentName: 'Code Agent' },
   validating:           { name: 'Validating code',             phase: 4, agentId: 'qa',          agentName: 'Quality Assurance' },
@@ -102,6 +103,7 @@ const STATE_TO_DB_STATUS: Record<string, string> = {
   analyzing: 'planning',
   awaitingClarification: 'planning',
   provisioning: 'generating',
+  planning: 'planning',
   architecting: 'planning',
   codeGeneration: 'generating',
   validating: 'verifying',
@@ -476,15 +478,15 @@ function streamActorStates(
           }
         }
 
-        // Emit plan_ready when entering architecting (Analyst PRD is ready)
-        if (state === 'architecting') {
+        // Emit plan_ready when entering planning (Analyst PRD is ready, awaiting approval)
+        if (state === 'planning') {
           const plan = {
             appName: snapshot.context.appName,
             appDescription: snapshot.context.appDescription,
             prd: snapshot.context.prd ?? '',
           }
-          emit({ type: 'plan_ready', plan })
-          persistEvent('plan_ready', { plan })
+          emit({ type: 'plan_ready', plan, runId })
+          persistEvent('plan_ready', { plan, runId })
         }
 
         // Emit progress when entering repairing state
@@ -826,9 +828,10 @@ agentRoutes.post('/', async (c) => {
       const snapshot = actor.getSnapshot()
       const stateVal = snapshot.value
       const isAwaitingClarification =
-        typeof stateVal === 'object' &&
+        (typeof stateVal === 'object' &&
         stateVal !== null &&
-        (stateVal as Record<string, any>).preparing?.analysis === 'awaitingClarification'
+        (stateVal as Record<string, any>).preparing?.analysis === 'awaitingClarification') ||
+        stateVal === 'planning'
 
       if (!isAwaitingClarification) {
         try {
@@ -930,6 +933,103 @@ agentRoutes.post('/resume', async (c) => {
         // Already stopped
       }
       activeRuns.delete(runId)
+    }
+  })
+})
+
+/**
+ * POST /api/agent/approve-plan
+ * Approve a pending plan and resume the pipeline
+ */
+agentRoutes.post('/approve-plan', async (c) => {
+  let body: { runId?: string }
+  try {
+    body = await c.req.json()
+  } catch {
+    return c.json({ error: 'Invalid request body' }, 400)
+  }
+
+  const { runId } = body
+  if (!runId) {
+    return c.json({ error: 'Missing runId' }, 400)
+  }
+
+  const stored = activeRuns.get(runId)
+  if (!stored) {
+    return c.json({ error: 'Run not found or expired' }, 404)
+  }
+
+  const user = c.var.user
+  if (stored.userId !== user.id) {
+    return c.json({ error: 'Unauthorized' }, 403)
+  }
+
+  return createSSEStream(async (emit: (event: StreamEvent) => void, signal: AbortSignal) => {
+    try {
+      // Subscribe BEFORE sending event to avoid missing state transitions
+      const streamPromise = streamActorStates(stored.actor, emit, signal, runId, stored.projectId, stored.userId)
+
+      // Send PLAN_APPROVED event to actor
+      stored.actor.send({ type: 'PLAN_APPROVED' })
+
+      // Wait for actor to reach final state
+      await streamPromise
+
+      // Get final snapshot to read totalTokens from machine context
+      const finalSnapshot = stored.actor.getSnapshot()
+      const totalTokens = finalSnapshot.context.totalTokens
+      const creditsUsed = Math.ceil(totalTokens / 1000) // 1 credit = 1,000 tokens
+
+      // B2: Check settled flag to prevent double-settlement
+      if (!stored.settled) {
+        // Settle reserved credits with actual usage (from initial reservation)
+        const settlement = await settleCredits(user.id, stored.reservedCredits, creditsUsed)
+        stored.settled = true
+
+        // Emit real credit usage with settled remaining balance
+        emit({
+          type: 'credits_used',
+          creditsUsed,
+          creditsRemaining: settlement.creditsRemaining,
+          tokensTotal: totalTokens,
+        })
+      }
+    } catch (error) {
+      if (signal.aborted) {
+        log.info(`Approve-plan stream aborted by client runId=${runId}`, { module: 'agent', runId })
+        // Refund reserved credits on abort (check settled flag)
+        if (!stored.settled) {
+          await settleCredits(user.id, stored.reservedCredits, 0)
+          stored.settled = true
+        }
+        return
+      }
+      // Refund reserved credits on error (check settled flag)
+      if (!stored.settled) {
+        await settleCredits(user.id, stored.reservedCredits, 0)
+        stored.settled = true
+      }
+      Sentry.captureException(error, {
+        tags: { route: '/api/agent/approve-plan', operation: 'approve-plan' },
+        extra: { runId },
+      })
+      emit({
+        type: 'error',
+        message: 'Plan approval failed — please try again',
+        stage: 'error',
+      })
+    } finally {
+      // Don't clean up if actor is still in planning state (e.g., user re-submitted)
+      const snapshot = stored.actor.getSnapshot()
+      const stateVal = snapshot.value
+      if (stateVal !== 'planning') {
+        try {
+          stored.actor.stop()
+        } catch {
+          // Already stopped
+        }
+        activeRuns.delete(runId)
+      }
     }
   })
 })
