@@ -11,7 +11,7 @@ import {
   Rocket,
 } from 'lucide-react'
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '@/lib/utils'
 import { supabase } from '@/lib/supabase-browser'
 import { useAuth } from '@/lib/auth'
@@ -75,11 +75,15 @@ import { ArchitectureCard } from '@/components/ai-elements/architecture-card'
 import { PageProgressCard } from '@/components/ai-elements/page-progress-card'
 import { FileAssemblyCard } from '@/components/ai-elements/file-assembly-card'
 import type {
+  AgentStartEvent,
+  ArchitectureReadyEvent,
   BuildError,
   ClarificationQuestion,
+  DesignTokensEvent,
   ElementContext,
   FileAssemblyEntry,
   PageProgressEntry,
+  PlanReadyEvent,
   StreamEvent,
   TimelineEntry,
   ValidationCheckEntry,
@@ -299,35 +303,24 @@ export function BuilderChat({
   const abortControllerRef = useRef<AbortController | null>(null)
   const sendChatMessageRef = useRef<(text: string) => void>(() => {})
   const { user } = useAuth()
+  const queryClient = useQueryClient()
 
-  // Fetch project data to hydrate persisted timeline on mount/reload
-  const { data: projectData } = useQuery({
-    queryKey: ['project', projectId],
+  // Fetch ALL conversation events (messages + timeline + validation + progress)
+  const { data: conversationEvents } = useQuery({
+    queryKey: ['project-conversation', projectId],
     queryFn: async () => {
-      const res = await apiFetch(`/api/projects/${projectId}`)
-      if (!res.ok) return null
-      return res.json()
+      const res = await apiFetch(`/api/projects/${projectId}/messages`)
+      if (!res.ok) return []
+      return (await res.json()) as Array<{
+        id: string
+        role: string
+        type: string
+        parts: unknown
+        createdAt: string
+      }>
     },
     staleTime: Number.POSITIVE_INFINITY,
   })
-
-  // Hydrate timeline from persisted generation_state on mount
-  const hasHydrated = useRef(false)
-  useEffect(() => {
-    if (hasHydrated.current || !projectData) return
-    const gs = projectData.generationState
-    if (!gs) return
-    // Only hydrate if there's actual timeline data and we haven't started a new generation
-    if (generationStatus !== 'idle') return
-    hasHydrated.current = true
-    if (gs.timeline?.length) setTimelineEvents(gs.timeline)
-    if (gs.pageProgress?.length) setPageProgress(gs.pageProgress)
-    if (gs.fileAssembly?.length) setFileAssembly(gs.fileAssembly)
-    if (gs.validationChecks?.length) setValidationChecks(gs.validationChecks)
-    if (gs.buildErrors?.length) setBuildErrors(gs.buildErrors)
-    if (gs.generationStatus === 'complete') setGenerationStatus('complete')
-    else if (gs.generationStatus === 'error') setGenerationStatus('error')
-  }, [projectData, generationStatus])
 
   // Fetch credits on mount via Supabase browser client
   const { data: creditsData } = useQuery({
@@ -371,39 +364,172 @@ export function BuilderChat({
     setGenerationStatus('idle')
   }, [])
 
-  // Fetch persisted chat messages via TanStack Query
-  const { data: persistedMessages } = useQuery({
-    queryKey: ['project-messages', projectId],
-    queryFn: async () => {
-      const res = await apiFetch(`/api/projects/${projectId}/messages`)
-      if (!res.ok) return []
-      const rows = (await res.json()) as Array<{
-        id: string
-        role: string
-        parts: unknown
-        createdAt: string
-      }>
-      return rows.map((m) => ({
-        id: m.id,
-        role: (m.role === 'system' ? 'assistant' : m.role) as 'user' | 'assistant',
-        content:
-          (Array.isArray(m.parts) ? m.parts : [])
-            .map((p: Record<string, unknown>) => (p.text as string) || '')
-            .filter(Boolean)
-            .join('') || '',
-      }))
-    },
-    staleTime: Number.POSITIVE_INFINITY, // Only fetch once per mount
-  })
+  // Partition persisted events into messages vs timeline data
+  const { persistedMessages, persistedTimeline, persistedValidation, persistedPageProgress, persistedFileAssembly } = useMemo(() => {
+    if (!conversationEvents?.length) {
+      return {
+        persistedMessages: [] as ChatMessage[],
+        persistedTimeline: [] as TimelineEntry[],
+        persistedValidation: [] as Array<{ name: string; status: string; errors?: string[] }>,
+        persistedPageProgress: [] as Array<Record<string, unknown>>,
+        persistedFileAssembly: [] as Array<{ path: string; category: string }>,
+      }
+    }
+
+    const messages: ChatMessage[] = []
+    const timeline: TimelineEntry[] = []
+    const validation: Array<{ name: string; status: string; errors?: string[] }> = []
+    const pageProgress: Array<Record<string, unknown>> = []
+    const fileAssembly: Array<{ path: string; category: string }> = []
+
+    for (const evt of conversationEvents) {
+      const p = Array.isArray(evt.parts) ? evt.parts[0] : evt.parts
+      switch (evt.type) {
+        case 'message':
+          messages.push({
+            id: evt.id,
+            role: (evt.role === 'system' ? 'assistant' : evt.role) as 'user' | 'assistant',
+            content: (Array.isArray(evt.parts) ? evt.parts : [])
+              .map((part: Record<string, unknown>) => (part.text as string) || '')
+              .filter(Boolean)
+              .join(''),
+          })
+          break
+        case 'agent_start':
+          timeline.push({
+            type: 'agent',
+            ts: new Date(evt.createdAt).getTime(),
+            agent: p as AgentStartEvent,
+            status: 'running',
+          })
+          break
+        case 'agent_complete': {
+          const data = p as Record<string, unknown>
+          const idx = timeline.findLastIndex(
+            (e) => e.type === 'agent' && e.agent.agentId === data.agentId,
+          )
+          if (idx >= 0) {
+            const agentEntry = timeline[idx] as Extract<TimelineEntry, { type: 'agent' }>
+            timeline[idx] = { ...agentEntry, status: 'complete' as const, durationMs: data.durationMs as number }
+          }
+          break
+        }
+        case 'agent_progress': {
+          const data = p as Record<string, unknown>
+          const idx = timeline.findLastIndex(
+            (e) => e.type === 'agent' && e.agent.agentId === data.agentId,
+          )
+          if (idx >= 0) {
+            const entry = timeline[idx]
+            if (entry.type === 'agent') {
+              timeline[idx] = {
+                ...entry,
+                progressMessages: [...(entry.progressMessages ?? []), data.message as string],
+              }
+            }
+          }
+          break
+        }
+        case 'design_tokens': {
+          const data = p as Record<string, unknown>
+          const idx = timeline.findLastIndex((e) => e.type === 'agent' && e.agent.agentId === 'architect')
+          if (idx >= 0) {
+            const agentEntry = timeline[idx] as Extract<TimelineEntry, { type: 'agent' }>
+            timeline[idx] = { ...agentEntry, designTokens: data.tokens as DesignTokensEvent['tokens'] }
+          }
+          break
+        }
+        case 'architecture_ready': {
+          const data = p as Record<string, unknown>
+          const idx = timeline.findLastIndex((e) => e.type === 'agent' && e.agent.agentId === 'architect')
+          if (idx >= 0) {
+            const agentEntry = timeline[idx] as Extract<TimelineEntry, { type: 'agent' }>
+            timeline[idx] = { ...agentEntry, architecture: data.spec as ArchitectureReadyEvent['spec'] }
+          }
+          break
+        }
+        case 'plan_ready': {
+          const data = p as Record<string, unknown>
+          const idx = timeline.findLastIndex((e) => e.type === 'agent' && e.agent.agentId === 'analyst')
+          if (idx >= 0) {
+            const agentEntry = timeline[idx] as Extract<TimelineEntry, { type: 'agent' }>
+            timeline[idx] = { ...agentEntry, plan: data.plan as PlanReadyEvent['plan'] }
+          }
+          break
+        }
+        case 'validation_check': {
+          const data = p as Record<string, unknown>
+          const existing = validation.findIndex((v) => v.name === data.name)
+          if (existing >= 0) validation[existing] = data as { name: string; status: string; errors?: string[] }
+          else validation.push(data as { name: string; status: string; errors?: string[] })
+          break
+        }
+        case 'page_complete':
+          pageProgress.push(p as Record<string, unknown>)
+          break
+        case 'file_assembled': {
+          const data = p as Record<string, unknown>
+          fileAssembly.push({ path: data.path as string, category: data.category as string })
+          break
+        }
+        case 'completion':
+          timeline.push({
+            type: 'complete',
+            ts: new Date(evt.createdAt).getTime(),
+            deploymentUrl: (p as Record<string, unknown>)?.deployUrl as string | undefined,
+          })
+          break
+        case 'error':
+          timeline.push({
+            type: 'error',
+            ts: new Date(evt.createdAt).getTime(),
+            error: (p as Record<string, unknown>)?.message as string,
+          })
+          break
+      }
+    }
+
+    return {
+      persistedMessages: messages,
+      persistedTimeline: timeline,
+      persistedValidation: validation,
+      persistedPageProgress: pageProgress,
+      persistedFileAssembly: fileAssembly,
+    }
+  }, [conversationEvents])
+
+  // Hydrate timeline state from persisted events on mount
+  const hasHydratedFromEvents = useRef(false)
+  useEffect(() => {
+    if (hasHydratedFromEvents.current) return
+    if (persistedTimeline.length > 0 && timelineEvents.length === 0) {
+      hasHydratedFromEvents.current = true
+      setTimelineEvents(persistedTimeline)
+    }
+    if (persistedValidation.length > 0 && validationChecks.length === 0) {
+      setValidationChecks(persistedValidation as ValidationCheckEntry[])
+    }
+    if (persistedPageProgress.length > 0 && pageProgress.length === 0) {
+      setPageProgress(persistedPageProgress as PageProgressEntry[])
+    }
+    if (persistedFileAssembly.length > 0 && fileAssembly.length === 0) {
+      setFileAssembly(persistedFileAssembly as FileAssemblyEntry[])
+    }
+    // Detect completed/errored state
+    if (persistedTimeline.some((e) => e.type === 'complete')) {
+      setGenerationStatus('complete')
+    } else if (persistedTimeline.some((e) => e.type === 'error')) {
+      setGenerationStatus('error')
+    }
+  }, [persistedTimeline, persistedValidation, persistedPageProgress, persistedFileAssembly])
 
   // Session messages: new messages added during this SSE session
   const [sessionMessages, setSessionMessages] = useState<ChatMessage[]>([])
   // Merge: persisted history + current session (deduplicated by id)
   const messages = useMemo(() => {
-    const history = persistedMessages ?? []
-    if (sessionMessages.length === 0) return history
-    const historyIds = new Set(history.map((m) => m.id))
-    return [...history, ...sessionMessages.filter((m) => !historyIds.has(m.id))]
+    if (sessionMessages.length === 0) return persistedMessages
+    const historyIds = new Set(persistedMessages.map((m) => m.id))
+    return [...persistedMessages, ...sessionMessages.filter((m) => !historyIds.has(m.id))]
   }, [persistedMessages, sessionMessages])
 
   const [chatStatus, setChatStatus] = useState<'ready' | 'streaming'>('ready')
@@ -767,6 +893,8 @@ export function BuilderChat({
         if (selectedElement) {
           onEditComplete?.()
         }
+        // Invalidate conversation cache so next mount gets fresh persisted events
+        queryClient.invalidateQueries({ queryKey: ['project-conversation', projectId] })
       } catch (err) {
         if (err instanceof Error && err.name === 'AbortError') return
         console.error('[builder-chat] sendChatMessage error:', err)
@@ -776,7 +904,7 @@ export function BuilderChat({
         setChatStatus('ready')
       }
     },
-    [projectId, model, chatStatus, parseSSEBuffer, handleGenerationEvent, selectedElement, onEditComplete],
+    [projectId, model, chatStatus, parseSSEBuffer, handleGenerationEvent, selectedElement, onEditComplete, queryClient],
   )
 
   // Keep a ref to the latest sendChatMessage (avoids stale closure)

@@ -19,7 +19,7 @@ All routes mounted under `/api` basePath in server/index.ts.
 - Ownership: Project routes verify `userId` to prevent IDOR
 - SSE: Only agent.ts uses `streamSSE()` — all others return JSON
 - Credit gating: Returns 402 if credits insufficient; deduction post-execution (can go negative)
-- Timeline persistence: Agent route flushes generation state to DB every 2s (debounced)
+- Event persistence: `persistEvent()` in `streamActorStates` writes each agent event to `chatMessages` immediately (no debounce, no flush)
 
 ## Gotchas
 - `streamActorStates()` MUST be called BEFORE `actor.send({ type: 'START' })` — subscribe-before-send

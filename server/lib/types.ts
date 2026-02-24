@@ -109,8 +109,6 @@ export interface Plan {
 // File & Stage Status
 // ============================================================================
 
-export type FileStatus = 'pending' | 'generating' | 'complete' | 'error' | 'fixing'
-
 export type StageStatus =
   | 'idle'
   | 'planning'
@@ -120,15 +118,6 @@ export type StageStatus =
   | 'verifying_requirements'
   | 'complete'
   | 'error'
-
-export interface FileProgress {
-  path: string
-  status: FileStatus
-  content?: string
-  error?: string
-  retryCount: number
-  linesOfCode: number
-}
 
 // ============================================================================
 // Build Errors & Verification
@@ -158,25 +147,24 @@ export interface GenerationURLs {
   deploy?: string
 }
 
-export interface GenerationTimestamps {
-  startedAt: string
-  planCompletedAt?: string
-  provisioningCompletedAt?: string
-  generationCompletedAt?: string
-  buildVerifiedAt?: string
-  requirementsVerifiedAt?: string
-  completedAt?: string
-}
-
+/**
+ * Persisted generation state stored in projects.generation_state JSONB.
+ * Contains data needed for iterative editing and deployment — NOT timeline/progress
+ * events (those are persisted as chatMessages with typed event payloads).
+ */
 export interface GenerationState {
-  projectId: string
-  stage: StageStatus
-  plan?: Plan
-  files: FileProgress[]
-  urls: GenerationURLs
-  buildErrors: BuildError[]
-  requirementResults: RequirementResult[]
-  timestamps: GenerationTimestamps
+  blueprint?: unknown
+  sandboxId?: string
+  supabaseProjectId?: string | null
+  githubRepo?: string | null
+  fileManifest?: Record<string, string>
+  contract?: unknown
+  appName?: string
+  appDescription?: string
+  tokens?: unknown
+  creativeSpec?: unknown
+  generationStatus?: string
+  lastEditedAt?: string
 }
 
 // ============================================================================

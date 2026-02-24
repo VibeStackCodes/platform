@@ -43,6 +43,7 @@ export const chatMessages = pgTable('chat_messages', {
     .notNull()
     .references(() => projects.id, { onDelete: 'cascade' }),
   role: text('role').notNull(),
+  type: text('type').notNull().default('message'),
   parts: jsonb('parts').notNull().default([]),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 })

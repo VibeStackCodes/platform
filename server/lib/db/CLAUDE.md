@@ -11,7 +11,7 @@ Platform database layer. 5 tables, type-safe queries via Drizzle.
 ## Key Patterns
 - `db.query.*` for eager relations (`findFirst` with `with: { chatMessages }`)
 - `db.select().from().where()` for filtered queries (e.g., `getProject(id, userId)` for ownership)
-- Fire-and-forget `updateGenerationTimeline()` via JSONB merge (`COALESCE(...) ||`)
+- `insertChatMessage()` with `ON CONFLICT DO NOTHING` for idempotent event persistence; `type` column distinguishes message kinds
 - `warmSupabaseProjects` table: pre-provisioned instances (status: 'available'|'claimed'|'creating')
 
 ## Gotchas

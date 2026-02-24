@@ -1,6 +1,6 @@
 // server/lib/db/queries.ts
 
-import { and, asc, desc, eq, sql } from 'drizzle-orm'
+import { and, asc, desc, eq } from 'drizzle-orm'
 import { db } from './client'
 import { chatMessages, profiles, projects } from './schema'
 
@@ -147,31 +147,15 @@ export async function getStripeCustomerId(userId: string) {
     .then((rows) => rows[0]?.stripeCustomerId ?? null)
 }
 
-// ── Generation Timeline Persistence ──────────────────────────────
-
-/** Merge timeline snapshot into project's generation_state JSONB (fire-and-forget) */
-export async function updateGenerationTimeline(
-  projectId: string,
-  userId: string,
-  timeline: Record<string, unknown>,
-) {
-  return db
-    .update(projects)
-    .set({
-      generationState: sql`COALESCE(${projects.generationState}, '{}'::jsonb) || ${JSON.stringify(timeline)}::jsonb`,
-      updatedAt: new Date(),
-    })
-    .where(and(eq(projects.id, projectId), eq(projects.userId, userId)))
-}
-
 // ── Chat Message Queries ──────────────────────────────────────────
 
-/** Get all chat messages for a project, ordered by created_at asc */
+/** Get all conversation events for a project, ordered by created_at asc */
 export async function getProjectMessages(projectId: string) {
   return db
     .select({
       id: chatMessages.id,
       role: chatMessages.role,
+      type: chatMessages.type,
       parts: chatMessages.parts,
       createdAt: chatMessages.createdAt,
     })
@@ -180,18 +164,20 @@ export async function getProjectMessages(projectId: string) {
     .orderBy(asc(chatMessages.createdAt))
 }
 
-/** Insert a chat message for a project */
+/** Insert a chat message/event for a project. Uses ON CONFLICT DO NOTHING for dedup safety. */
 export async function insertChatMessage(
   id: string,
   projectId: string,
   role: string,
-  parts: unknown[],
+  parts: unknown,
+  type = 'message',
 ) {
   return db
     .insert(chatMessages)
-    .values({ id, projectId, role, parts })
+    .values({ id, projectId, role, type, parts: Array.isArray(parts) ? parts : [parts] })
+    .onConflictDoNothing({ target: chatMessages.id })
     .returning()
-    .then((rows) => rows[0])
+    .then((rows) => rows[0] ?? null)
 }
 
 // ── Relational Queries (using db.query) ──────────────────────────

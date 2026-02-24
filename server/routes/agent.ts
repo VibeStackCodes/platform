@@ -25,7 +25,7 @@ import type { MachineContext } from '../lib/agents/machine'
 import { editMachine } from '../lib/agents/edit-machine'
 import type { EditMachineContext } from '../lib/agents/edit-machine'
 import { RequestContext } from '../lib/agents/registry'
-import { getProject, getUserCredits, getProjectGenerationState, updateProject, insertChatMessage, updateGenerationTimeline } from '../lib/db/queries'
+import { getProject, getUserCredits, getProjectGenerationState, updateProject, insertChatMessage } from '../lib/db/queries'
 import { reserveCredits, settleCredits } from '../lib/credits'
 import { createSSEStream } from '../lib/sse'
 import type { StreamEvent } from '../lib/types'
@@ -134,46 +134,18 @@ function streamActorStates(
     let previousParallelSubStates = new Set<string>()
     let clarificationEmitted = false
 
-    // Server-side timeline mirrors — flushed to DB on key transitions
-    const serverTimeline: Array<Record<string, unknown>> = []
-    const serverPageProgress: Array<Record<string, unknown>> = []
-    const serverFileAssembly: Array<Record<string, unknown>> = []
-    const serverValidationChecks: Array<Record<string, unknown>> = []
-    const serverBuildErrors: Array<Record<string, unknown>> = []
-    let serverGenerationStatus = 'generating'
-    let flushTimer: ReturnType<typeof setTimeout> | null = null
+    /** Sequence counter for deterministic event ordering within a run */
+    let eventSeq = 0
 
-    /** Debounced flush of timeline state to DB (2s debounce, fire-and-forget) */
-    function scheduleFlush() {
+    /** Persist an SSE event to chatMessages (non-blocking, 1 retry with 500ms delay) */
+    function persistEvent(type: string, parts: unknown, role = 'system') {
       if (mockMode) return
-      if (flushTimer) clearTimeout(flushTimer)
-      flushTimer = setTimeout(() => {
-        updateGenerationTimeline(projectId, userId, {
-          timeline: serverTimeline,
-          pageProgress: serverPageProgress,
-          fileAssembly: serverFileAssembly,
-          validationChecks: serverValidationChecks,
-          buildErrors: serverBuildErrors,
-          generationStatus: serverGenerationStatus,
-        }).catch((err) => {
-          log.error(`Failed to flush timeline: ${String(err)}`, { module: 'agent', projectId })
+      const id = `${runId}-${type}-${eventSeq++}`
+      insertChatMessage(id, projectId, role, parts, type).catch(async () => {
+        await new Promise((r) => setTimeout(r, 500))
+        insertChatMessage(id, projectId, role, parts, type).catch((retryErr) => {
+          log.error(`Failed to persist event ${type}: ${String(retryErr)}`, { module: 'agent', projectId })
         })
-      }, 2000)
-    }
-
-    /** Immediate flush (used on final states: complete/error) */
-    function flushNow() {
-      if (mockMode) return
-      if (flushTimer) clearTimeout(flushTimer)
-      updateGenerationTimeline(projectId, userId, {
-        timeline: serverTimeline,
-        pageProgress: serverPageProgress,
-        fileAssembly: serverFileAssembly,
-        validationChecks: serverValidationChecks,
-        buildErrors: serverBuildErrors,
-        generationStatus: serverGenerationStatus,
-      }).catch((err) => {
-        log.error(`Failed to flush timeline: ${String(err)}`, { module: 'agent', projectId })
       })
     }
 
@@ -208,6 +180,7 @@ function streamActorStates(
               const entryTime = stateEntryTimes.get(prev)
               const durationMs = entryTime ? Date.now() - entryTime : 0
               emit({ type: 'agent_complete', agentId: prevPhase.agentId, tokensUsed: 0, durationMs })
+              persistEvent('agent_complete', { agentId: prevPhase.agentId, durationMs })
             }
           }
         }
@@ -219,39 +192,16 @@ function streamActorStates(
             const phase = STATE_PHASES[curr]
             if (phase) {
               emit({ type: 'phase_start', phase: phase.phase, phaseName: phase.name, agentCount: 1 })
+              persistEvent('phase_start', { phase: phase.phase, phaseName: phase.name, agentCount: 1 })
               if (phase.agentId && phase.agentName) {
                 emit({ type: 'agent_start', agentId: phase.agentId, agentName: phase.agentName, phase: phase.phase })
+                persistEvent('agent_start', { agentId: phase.agentId, agentName: phase.agentName, phase: phase.phase })
               }
               // Emit initial progress for provisioner
               if (phase.agentId === 'provisioner') {
                 emit({ type: 'agent_progress', agentId: 'provisioner', message: 'Booting sandbox...' })
+                persistEvent('agent_progress', { agentId: 'provisioner', message: 'Booting sandbox...' })
               }
-              // Track agent_start server-side
-              serverTimeline.push({
-                type: 'agent',
-                ts: Date.now(),
-                agent: { agentId: phase.agentId, agentName: phase.agentName, phase: phase.phase },
-                status: 'running',
-              })
-              scheduleFlush()
-            }
-          }
-        }
-
-        // Track agent_complete server-side for parallel sub-states
-        for (const prev of previousParallelSubStates) {
-          if (!currentSubStates.has(prev)) {
-            const prevPhase = STATE_PHASES[prev]
-            if (prevPhase?.agentId) {
-              const entryTime = stateEntryTimes.get(prev)
-              const durationMs = entryTime ? Date.now() - entryTime : 0
-              const idx = serverTimeline.findLastIndex(
-                (e) => e.type === 'agent' && (e.agent as Record<string, unknown>)?.agentId === prevPhase.agentId,
-              )
-              if (idx >= 0) {
-                serverTimeline[idx] = { ...serverTimeline[idx], status: 'complete', durationMs }
-              }
-              scheduleFlush()
             }
           }
         }
@@ -327,19 +277,14 @@ function streamActorStates(
             tokensUsed: 0,
             durationMs,
           })
-          // Track agent_complete server-side
-          const tlIdx = serverTimeline.findLastIndex(
-            (e) => e.type === 'agent' && (e.agent as Record<string, unknown>)?.agentId === prevPhase.agentId,
-          )
-          if (tlIdx >= 0) {
-            serverTimeline[tlIdx] = { ...serverTimeline[tlIdx], status: 'complete', durationMs }
-          }
+          persistEvent('agent_complete', { agentId: prevPhase.agentId, durationMs })
           // Mark the previous checkpoint complete
           emit({
             type: 'checkpoint',
             label: prevPhase.name,
             status: 'complete',
           })
+          persistEvent('checkpoint', { label: prevPhase.name, status: 'complete' })
         }
 
         // Emit design_tokens when transitioning FROM architecting
@@ -348,6 +293,7 @@ function streamActorStates(
           const tokens = snapshot.context.tokens
           if (tokens) {
             emit({ type: 'design_tokens', tokens: tokens as unknown as Record<string, unknown> })
+            persistEvent('design_tokens', { tokens })
           }
         }
 
@@ -369,6 +315,7 @@ function streamActorStates(
               auth: creativeSpec.auth as boolean,
             }
             emit({ type: 'architecture_ready', spec })
+            persistEvent('architecture_ready', { spec })
           }
         }
 
@@ -379,13 +326,24 @@ function streamActorStates(
           const totalPages = pages.length
           for (let i = 0; i < totalPages; i++) {
             const page = pages[i]
+            const lineCount = page.content.split('\n').length
+            const code = page.content.split('\n').slice(0, 50).join('\n')
             emit({
               type: 'page_complete',
               fileName: page.fileName,
               route: page.route,
               componentName: page.componentName,
-              lineCount: page.content.split('\n').length,
-              code: page.content.split('\n').slice(0, 50).join('\n'),
+              lineCount,
+              code,
+              pageIndex: i,
+              totalPages,
+            })
+            persistEvent('page_complete', {
+              fileName: page.fileName,
+              route: page.route,
+              componentName: page.componentName,
+              lineCount,
+              code,
               pageIndex: i,
               totalPages,
             })
@@ -398,20 +356,8 @@ function streamActorStates(
               : file.path.includes('vite.config') || file.path.includes('main.tsx') || file.path.includes('__root') ? 'config' as const
               : 'wiring' as const
             emit({ type: 'file_assembled', path: file.path, category })
-            serverFileAssembly.push({ path: file.path, category })
+            persistEvent('file_assembled', { path: file.path, category })
           }
-          // Track page progress server-side
-          for (const page of pages) {
-            serverPageProgress.push({
-              fileName: page.fileName,
-              route: page.route,
-              componentName: page.componentName,
-              status: 'complete',
-              lineCount: page.content.split('\n').length,
-              code: page.content.split('\n').slice(0, 50).join('\n'),
-            })
-          }
-          scheduleFlush()
         }
 
         // When leaving 'validating', emit validation_check events (populates QA card)
@@ -423,15 +369,15 @@ function streamActorStates(
             if (check) {
               const status = check.passed ? 'passed' : 'failed'
               emit({ type: 'validation_check', name: checkName, status })
-              serverValidationChecks.push({ name: checkName, status })
+              persistEvent('validation_check', { name: checkName, status })
             }
           }
-          scheduleFlush()
         }
 
         // When leaving 'repairing', emit progress for repair agent card
         if (previousState === 'repairing') {
           emit({ type: 'agent_progress', agentId: 'repair', message: 'Repair cycle complete — re-validating...' })
+          persistEvent('agent_progress', { agentId: 'repair', message: 'Repair cycle complete — re-validating...' })
         }
       }
 
@@ -443,10 +389,6 @@ function streamActorStates(
 
       // ── Emit phase events ──
       if (state === 'complete') {
-        // Track final state server-side
-        serverGenerationStatus = 'complete'
-        serverTimeline.push({ type: 'complete', ts: Date.now() })
-
         // Persist generation state to DB for later edits/deploys (fire-and-forget, skip in mock mode)
         if (!mockMode) {
           const ctx = snapshot.context
@@ -457,19 +399,12 @@ function streamActorStates(
               sandboxId: ctx.sandboxId,
               githubRepoUrl: ctx.githubHtmlUrl,
               generationState: {
-                contract: null,
                 blueprint: ctx.blueprint,
                 sandboxId: ctx.sandboxId,
                 tokens: ctx.tokens,
                 creativeSpec: ctx.creativeSpec,
                 appName: ctx.appName,
                 appDescription: ctx.appDescription,
-                // Timeline snapshot for reload hydration
-                timeline: serverTimeline,
-                pageProgress: serverPageProgress,
-                fileAssembly: serverFileAssembly,
-                validationChecks: serverValidationChecks,
-                buildErrors: serverBuildErrors,
                 generationStatus: 'complete',
               },
             },
@@ -479,6 +414,7 @@ function streamActorStates(
           })
         }
 
+        persistEvent('completion', { projectId, deployUrl: snapshot.context.deploymentUrl })
         emit({ type: 'stage_update', stage: 'complete' })
         emit({
           type: 'complete',
@@ -490,9 +426,7 @@ function streamActorStates(
         resolve()
       } else if (state === 'failed') {
         const errorMsg = snapshot.context.error ?? 'Pipeline failed'
-        serverGenerationStatus = 'error'
-        serverTimeline.push({ type: 'error', ts: Date.now(), error: errorMsg })
-        flushNow()
+        persistEvent('error', { message: errorMsg })
         if (!mockMode) {
           Sentry.captureMessage(errorMsg, {
             level: 'error',
@@ -522,26 +456,18 @@ function streamActorStates(
         })
       } else {
         // Regular state transition
-        emit({
-          type: 'stage_update',
-          stage: 'generating',
-        })
-        emit({
-          type: 'phase_start',
-          phase: phaseInfo.phase,
-          phaseName: phaseInfo.name,
-          agentCount: 1,
-        })
-        emit({
-          type: 'checkpoint',
-          label: phaseInfo.name,
-          status: 'active',
-        })
+        emit({ type: 'stage_update', stage: 'generating' })
+        emit({ type: 'phase_start', phase: phaseInfo.phase, phaseName: phaseInfo.name, agentCount: 1 })
+        persistEvent('phase_start', { phase: phaseInfo.phase, phaseName: phaseInfo.name, agentCount: 1 })
+        emit({ type: 'checkpoint', label: phaseInfo.name, status: 'active' })
+        persistEvent('checkpoint', { label: phaseInfo.name, status: 'active' })
 
         // Emit sandbox_ready when entering architecting (provisioning is complete)
         if (state === 'architecting' && snapshot.context.sandboxId) {
           emit({ type: 'agent_progress', agentId: 'provisioner', message: 'Sandbox ready' })
+          persistEvent('agent_progress', { agentId: 'provisioner', message: 'Sandbox ready' })
           emit({ type: 'sandbox_ready', sandboxId: snapshot.context.sandboxId })
+          persistEvent('sandbox_ready', { sandboxId: snapshot.context.sandboxId })
           // Persist sandboxId to DB for page reloads (fire-and-forget, skip in mock mode)
           if (!mockMode) {
             updateProject(projectId, { sandboxId: snapshot.context.sandboxId }, userId).catch((err) => {
@@ -552,14 +478,13 @@ function streamActorStates(
 
         // Emit plan_ready when entering architecting (Analyst PRD is ready)
         if (state === 'architecting') {
-          emit({
-            type: 'plan_ready',
-            plan: {
-              appName: snapshot.context.appName,
-              appDescription: snapshot.context.appDescription,
-              prd: snapshot.context.prd ?? '',
-            },
-          })
+          const plan = {
+            appName: snapshot.context.appName,
+            appDescription: snapshot.context.appDescription,
+            prd: snapshot.context.prd ?? '',
+          }
+          emit({ type: 'plan_ready', plan })
+          persistEvent('plan_ready', { plan })
         }
 
         // Emit progress when entering repairing state
@@ -567,11 +492,9 @@ function streamActorStates(
           const errorCount = snapshot.context.validation?.typecheck?.errors?.length
             ?? snapshot.context.validation?.build?.errors?.length
             ?? 0
-          emit({
-            type: 'agent_progress',
-            agentId: 'repair',
-            message: `Fixing ${errorCount} error${errorCount !== 1 ? 's' : ''}...`,
-          })
+          const repairMsg = `Fixing ${errorCount} error${errorCount !== 1 ? 's' : ''}...`
+          emit({ type: 'agent_progress', agentId: 'repair', message: repairMsg })
+          persistEvent('agent_progress', { agentId: 'repair', message: repairMsg })
         }
 
         // Emit agent_start for states that have an agent
@@ -582,14 +505,7 @@ function streamActorStates(
             agentName: phaseInfo.agentName,
             phase: phaseInfo.phase,
           })
-          // Track agent_start server-side
-          serverTimeline.push({
-            type: 'agent',
-            ts: Date.now(),
-            agent: { agentId: phaseInfo.agentId, agentName: phaseInfo.agentName, phase: phaseInfo.phase },
-            status: 'running',
-          })
-          scheduleFlush()
+          persistEvent('agent_start', { agentId: phaseInfo.agentId, agentName: phaseInfo.agentName, phase: phaseInfo.phase })
 
           // In mock mode, emit descriptive agent_progress so cards aren't empty
           if (mockMode) {
@@ -619,6 +535,7 @@ function streamActorStates(
           // Emit file_start for all files immediately
           for (const filePath of files) {
             emit({ type: 'file_start', path: filePath, layer: 0 })
+            persistEvent('file_start', { path: filePath, layer: 0 })
           }
 
           // In mock mode, schedule file_complete events with staggered delays
@@ -1136,8 +1053,27 @@ agentRoutes.post('/edit', async (c) => {
     failed: 'error',
   }
 
+  const editMockMode = isMockPipeline()
+
+  // Inline persistence helper — fire-and-forget, skip in mock mode
+  let editPersistSeq = 0
+  const persistEditEvent = (eventType: string, parts: unknown[]) => {
+    if (editMockMode) return
+    const id = `${runId}-edit-${eventType}-${editPersistSeq++}`
+    insertChatMessage(id, projectId, 'assistant', parts, 'event').catch((err) => {
+      log.error('Failed to persist edit event', { module: 'agent:edit', error: String(err) })
+    })
+  }
+
   return createSSEStream(async (emit: (event: StreamEvent) => void, signal: AbortSignal) => {
     try {
+      // Persist user message (fire-and-forget, skip in mock mode)
+      if (!editMockMode) {
+        insertChatMessage(`user-${runId}`, projectId, 'user', [{ text: message }]).catch((err) => {
+          log.error('Failed to save edit user message', { module: 'agent:edit', error: String(err) })
+        })
+      }
+
       emit({ type: 'stage_update', stage: 'generating' })
 
       // Subscribe BEFORE sending START to avoid missing initial state transitions
@@ -1166,11 +1102,13 @@ agentRoutes.post('/edit', async (c) => {
             if (state === 'complete') {
               emit({ type: 'stage_update', stage: 'complete' })
               emit({ type: 'checkpoint', label: 'Edit complete', status: 'complete' })
+              persistEditEvent('complete', [{ text: 'Edit complete' }])
               subscription.unsubscribe()
               resolve()
             } else if (state === 'failed') {
               const errorMsg = snapshot.context.error ?? 'Edit failed'
               emit({ type: 'error', message: errorMsg, stage: 'error' })
+              persistEditEvent('failed', [{ text: errorMsg }])
               subscription.unsubscribe()
               reject(new Error(errorMsg))
             } else {
@@ -1182,6 +1120,7 @@ agentRoutes.post('/edit', async (c) => {
                 agentCount: 1,
               })
               emit({ type: 'checkpoint', label: phaseInfo.name, status: 'active' })
+              persistEditEvent(`phase-${state}`, [{ text: phaseInfo.name }])
             }
           },
         )
@@ -1208,6 +1147,13 @@ agentRoutes.post('/edit', async (c) => {
       const finalSnapshot = actor.getSnapshot()
       const totalTokens = finalSnapshot.context.totalTokens
       const creditsUsed = Math.ceil(totalTokens / 1000)
+
+      // Persist assistant completion message (fire-and-forget, skip in mock mode)
+      if (!editMockMode) {
+        insertChatMessage(`assistant-${runId}`, projectId, 'assistant', [{ text: 'Edit applied successfully.' }]).catch((err) => {
+          log.error('Failed to save edit assistant message', { module: 'agent:edit', error: String(err) })
+        })
+      }
 
       const activeRun = activeRuns.get(runId)
       if (activeRun && !activeRun.settled) {
