@@ -24,7 +24,7 @@ import { useAuth } from '@/lib/auth'
 import { supabase } from '@/lib/supabase-browser'
 
 const NAV_ITEMS = [
-  { label: 'Home', icon: Home, to: '/dashboard' as const },
+  { label: 'Home', icon: Home, to: '/' as const },
   { label: 'All Projects', icon: FolderOpen, to: '/dashboard' as const },
 ] as const
 
