@@ -3,11 +3,11 @@
  * GET /api/projects/[id]/sandbox-urls
  *
  * Returns sandbox preview + code server URLs.
- * Preview URL is a signed Daytona URL loaded directly in the iframe —
- * supports both HTTP and WebSocket (Vite HMR).
+ * Preview URL routes through our reverse proxy (preview.vibestack.codes)
+ * which adds Daytona auth headers and supports WebSocket (Vite HMR).
  *
- * TODO: Phase 2 — replace with Cloudflare proxy on *.preview.vibestack.app
- * See docs/plans/2026-02-14-sandbox-preview-architecture-design.md
+ * Proxy uses subdomain routing: {port}-{sandboxId}.preview.vibestack.codes
+ * See packages/preview-proxy/ for the proxy implementation.
  */
 
 import { Hono } from 'hono'
@@ -47,8 +47,6 @@ sandboxUrlRoutes.get('/:id/sandbox-urls', async (c) => {
     const expiresInSeconds = 3600 // 1 hour
 
     // Wait for both servers to be ready before returning URLs
-    // Preview uses signed URL (works in iframes); code server uses preview link
-    // (signed URLs have a proxy bug that corrupts OpenVSCode HTML in browsers)
     const [, , preview, codeServerUrl] = await Promise.all([
       waitForDevServer(sandbox),
       waitForCodeServer(sandbox),
@@ -56,16 +54,17 @@ sandboxUrlRoutes.get('/:id/sandbox-urls', async (c) => {
       getCodeServerLink(sandbox),
     ])
 
-    // Route preview through our edge proxy to skip Daytona's warning interstitial.
-    // The proxy sends X-Daytona-Skip-Preview-Warning: true and injects <base href>
-    // so sub-resources load from Daytona directly (Daytona only warns on page navigations,
-    // not sub-resource requests per their docs).
-    const PREVIEW_PROXY_BASE = process.env.PREVIEW_PROXY_URL ?? 'https://preview.vibestack.codes'
-    const proxyPreviewUrl = `${PREVIEW_PROXY_BASE}/p/${encodeURIComponent(preview.url)}`
+    // Route preview through our reverse proxy using subdomain routing.
+    // Format: https://{port}-{sandboxId}.preview.vibestack.codes
+    // The proxy resolves the Daytona target URL, adds X-Daytona-Preview-Token
+    // and X-Daytona-Skip-Preview-Warning headers, and proxies HTTP + WebSocket.
+    const PREVIEW_PROXY_DOMAIN = process.env.PREVIEW_PROXY_DOMAIN ?? 'preview.vibestack.codes'
+    const proxyPreviewUrl = `https://${preview.port}-${sandbox.id}.${PREVIEW_PROXY_DOMAIN}`
 
     return c.json({
       sandboxId: sandbox.id,
       previewUrl: proxyPreviewUrl,
+      previewToken: preview.token,
       codeServerUrl,
       expiresAt: new Date(Date.now() + expiresInSeconds * 1000).toISOString(),
     })

@@ -29,6 +29,7 @@ export interface CommandResult {
 
 export interface PreviewUrlResult {
   url: string
+  token: string
   port: number
   expiresAt: Date
 }
@@ -253,6 +254,7 @@ export async function getPreviewUrl(
 
     return {
       url: preview.url,
+      token: preview.token,
       port,
       expiresAt: new Date(Date.now() + expiresInSeconds * 1000),
     }
