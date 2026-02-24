@@ -1,35 +1,7 @@
 import { contractToBlueprint } from '@server/lib/app-blueprint'
 import type { SchemaContract } from '@server/lib/schema-contract'
-import { describe, expect, it, vi } from 'vitest'
-import type { PageCompositionPlan, PageCompositionPlanV2, SectionVisualSpec } from '@server/lib/sections/types'
+import { describe, expect, it } from 'vitest'
 
-// Mock composeSectionsV2 — deterministic plan from fallbackCompositionPlan (V1→V2 conversion)
-vi.mock('@server/lib/page-composer', async (importOriginal) => {
-  const mod = await importOriginal<typeof import('@server/lib/page-composer')>()
-  return {
-    ...mod,
-    composeSectionsV2: vi.fn(async (entities: any[], tokens: any, _appDescription: string) => {
-      const v1Plan = mod.fallbackCompositionPlan(entities, tokens)
-      return v1ToV2(v1Plan)
-    }),
-  }
-})
-
-function v1ToV2(plan: PageCompositionPlan): PageCompositionPlanV2 {
-  return {
-    routes: Object.entries(plan.pages).map(([path, slots]) => ({
-      path,
-      sections: slots.map((slot): SectionVisualSpec => ({
-        sectionId: slot.sectionId as SectionVisualSpec['sectionId'],
-        entityBinding: slot.entityBinding,
-        background: 'default',
-        spacing: 'normal',
-        showBadges: true,
-        showMetadata: true,
-      })),
-    })),
-  }
-}
 
 describe('contractToBlueprint', () => {
   const contract: SchemaContract = {

@@ -1,10 +1,5 @@
 import { formatCss, oklch as toOklch, parse as parseColor } from 'culori'
-import type { SchemaContract, TableDef } from './schema-contract'
-import { inferPageConfig, derivePageFeatureSpec, type PageFeatureSpec } from './agents/feature-schema'
-import { pluralize, singularize, snakeToKebab, snakeToTitle } from './naming-utils'
-import { composeSectionsV2 } from './page-composer'
-import { assemblePagesV2 } from './page-assembler'
-import type { EntityMeta } from './sections/types'
+import type { SchemaContract } from './schema-contract'
 import type { DesignSystem, TextSlots } from './design-system'
 import { DEFAULT_TEXT_SLOTS } from './design-system'
 
@@ -18,52 +13,6 @@ export type {
   ImageEntry,
 } from './design-system'
 export { DEFAULT_TEXT_SLOTS, DesignSystemSchema } from './design-system'
-
-export type RouteMeta = {
-  table: TableDef
-  spec: PageFeatureSpec
-  isPrivate: boolean
-  routePrefix: string
-  folderPrefix: string
-  pluralKebab: string
-  singularTitle: string
-  pluralTitle: string
-}
-
-const AUTO_COLS = new Set(['id', 'created_at', 'updated_at', 'user_id'])
-const IMAGE_RE = /image|photo|avatar|thumbnail|cover/
-
-function routeMetaToEntityMeta(meta: RouteMeta): EntityMeta {
-  const headerField = meta.spec.detailPage.headerField
-  return {
-    tableName: meta.table.name,
-    pluralKebab: meta.pluralKebab,
-    singularTitle: meta.singularTitle,
-    pluralTitle: meta.pluralTitle,
-    displayColumn: headerField,
-    imageColumn: meta.table.columns.find((c) => IMAGE_RE.test(c.name))?.name ?? null,
-    metadataColumns: meta.table.columns
-      .map((c) => c.name)
-      .filter((n) => !AUTO_COLS.has(n) && n !== headerField)
-      .slice(0, 3),
-    isPrivate: meta.isPrivate,
-  }
-}
-
-function isPrivateByTable(table: TableDef, tokens: DesignSystem): boolean {
-  if (tokens.authPosture === 'private') return true
-  if (tokens.authPosture === 'public') return false
-
-  const hasUserColumn = table.columns.some((column) => column.name === 'user_id')
-  const hasAuthReference = table.columns.some((column) => column.references?.table === 'auth.users')
-  const hasRlsAuthUid = (table.rlsPolicies ?? []).some((policy) => {
-    const using = policy.using?.toLowerCase() ?? ''
-    const withCheck = policy.withCheck?.toLowerCase() ?? ''
-    return using.includes('auth.uid()') || withCheck.includes('auth.uid()')
-  })
-
-  return hasUserColumn || hasAuthReference || hasRlsAuthUid
-}
 
 function colorToOklch(color: string, fallback: string): string {
   const parsed = toOklch(parseColor(color) ?? parseColor(fallback)!)
@@ -194,30 +143,7 @@ h1,h2,h3,h4,h5,h6 {
 export async function generateThemedApp(contract: SchemaContract, tokens: DesignSystem, appName: string, appDescription?: string): Promise<Record<string, string>> {
   const files: Record<string, string> = {}
 
-  const metas: RouteMeta[] = contract.tables.map((table) => {
-    const spec = derivePageFeatureSpec(inferPageConfig(table, contract), contract)
-    const isPrivate = isPrivateByTable(table, tokens)
-    const pluralKebab = snakeToKebab(pluralize(table.name))
-
-    return {
-      table,
-      spec,
-      isPrivate,
-      routePrefix: isPrivate ? '/_authenticated' : '',
-      folderPrefix: isPrivate ? `src/routes/_authenticated/${pluralKebab}` : `src/routes/${pluralKebab}`,
-      pluralKebab,
-      singularTitle: snakeToTitle(singularize(table.name)),
-      pluralTitle: snakeToTitle(pluralize(table.name)),
-    }
-  })
-
   files['src/index.css'] = themeCss(tokens)
-
-  // All routes are LLM-composed via section composition (V2)
-  const entities = metas.map(routeMetaToEntityMeta)
-  const plan = await composeSectionsV2(entities, tokens, appDescription ?? appName)
-  const composedFiles = assemblePagesV2(plan, entities, tokens, appName)
-  Object.assign(files, composedFiles)
 
   return files
 }
