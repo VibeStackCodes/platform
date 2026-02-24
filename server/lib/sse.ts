@@ -14,15 +14,15 @@ import type { StreamEvent } from './types'
  * @param handler - Async function that receives emit and signal
  * @returns Response with SSE headers and ReadableStream body
  */
-export function createSSEStream(
-  handler: (emit: (event: StreamEvent) => void, signal: AbortSignal) => Promise<void>,
+export function createSSEStream<T = StreamEvent>(
+  handler: (emit: (event: T) => void, signal: AbortSignal) => Promise<void>,
 ): Response {
   const encoder = new TextEncoder()
   const abortController = new AbortController()
 
   const stream = new ReadableStream({
     async start(controller) {
-      const emit = (event: StreamEvent) => {
+      const emit = (event: T) => {
         if (!abortController.signal.aborted) {
           try {
             controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`))
