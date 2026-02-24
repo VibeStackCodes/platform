@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { applyEdit, type RelaceResult } from '@server/lib/relace'
+import { applyEdit } from '@server/lib/relace'
 
 // Mock global fetch
 const mockFetch = vi.fn()
