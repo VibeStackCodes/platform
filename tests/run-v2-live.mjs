@@ -1,6 +1,6 @@
 /**
  * Live V2 generation runner — streams tool calls to stdout
- * Usage: node tests/run-v2-live.mjs
+ * Usage: bun tests/run-v2-live.mjs ["your prompt here"]
  */
 import { config } from 'dotenv'
 import { resolve, dirname } from 'node:path'
@@ -13,17 +13,18 @@ config({ path: resolve(__dirname, '../.env.local'), override: true })
 const { RequestContext } = await import('@mastra/core/di')
 const { createV2Orchestrator } = await import('../server/lib/agents/v2-orchestrator.ts')
 
-const prompt = `Build a hospital bed management dashboard with 3 user roles: Administrator, Nurse, and Physician. Administrators can see all wards, manage staff assignments, and view hospital-wide analytics. Nurses can only see their assigned ward, update bed status (available, occupied, cleaning, maintenance), and chat with other nurses in real-time. Physicians can see their patients across wards, add clinical notes, and receive emergency alert banners when bed capacity drops below 20%. Include: user authentication with role selection at signup, a real-time presence indicator showing who's currently online, a live bed occupancy grid that updates instantly when any user changes a bed status, private real-time messaging between staff, and a notification bell for urgent alerts. Use a clean, professional healthcare aesthetic — think soft blues, clear data hierarchy, proper spacing. Make it responsive for tablets since nurses use iPads at bedside.`
+const prompt = process.argv[2] || `Build an image rich restaurant website with editorial vibes`
 
 console.log('\n━━━ V2 Live Generation ━━━━━━━━━━━━━━━━━━━━━━━━')
 console.log('Model: gpt-5.2-codex')
-console.log('Prompt: Hospital bed management dashboard')
+console.log(`Prompt: ${prompt.slice(0, 80)}${prompt.length > 80 ? '...' : ''}`)
 console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n')
 
 const requestContext = new RequestContext()
 requestContext.set('selectedModel', 'gpt-5.2-codex')
 
-const agent = createV2Orchestrator()
+const agent = createV2Orchestrator('openai')
+console.log(`Agent created with provider: openai`)
 const streamOutput = await agent.stream(prompt, { requestContext, maxSteps: 50 })
 const reader = streamOutput.fullStream.getReader()
 
@@ -42,6 +43,7 @@ while (true) {
   if (done) break
   if (!chunk || !chunk.type) continue
 
+  // Mastra wraps chunks in { type, runId, from, payload }
   const p = chunk.payload || chunk
 
   switch (chunk.type) {
@@ -55,6 +57,10 @@ while (true) {
       break
     }
     case 'tool-call': {
+      if (thinkBuf) {
+        console.log(`[${ts()}] 💭 ${thinkBuf.slice(0, 200)}`)
+        thinkBuf = ''
+      }
       const name = p.toolName || chunk.toolName || '?'
       const args = p.args || chunk.args || {}
       let label = name
@@ -76,7 +82,7 @@ while (true) {
         sandboxId = result.sandboxId
         detail = ` [sandbox: ${sandboxId}]`
       } else if (name === 'runBuild') {
-        detail = ok ? ' [BUILD PASSED ✅]' : ` [BUILD FAILED ❌: ${(result.output || '').slice(0, 100)}]`
+        detail = ok ? ' [BUILD PASSED]' : ` [BUILD FAILED: ${(result.output || '').slice(0, 100)}]`
       } else if (name === 'writeFile' || name === 'editFile') {
         detail = ` [${result.path || '?'} — ${result.bytesWritten || '?'} bytes]`
       } else if (name === 'writeFiles') {
@@ -93,10 +99,11 @@ while (true) {
     }
     case 'step-finish': {
       const usage = p.usage || chunk.usage
+      const finishReason = p.finishReason || chunk.finishReason || 'unknown'
       if (usage && usage.totalTokens) {
         totalTokens += usage.totalTokens
-        console.log(`[${ts()}] 📊 Step done — ${usage.totalTokens} tokens (running total: ${totalTokens})`)
       }
+      console.log(`[${ts()}] 📊 Step done — reason=${finishReason} tokens=${usage?.totalTokens ?? '?'} (total: ${totalTokens})`)
       break
     }
     case 'error': {
@@ -104,10 +111,11 @@ while (true) {
       console.error(`[${ts()}] ❌ ERROR: ${JSON.stringify(err).slice(0, 300)}`)
       break
     }
-    case 'finish':
+    case 'finish': {
       if (thinkBuf) console.log(`[${ts()}] 💭 ${thinkBuf.slice(0, 200)}`)
-      console.log(`[${ts()}] 🏁 Stream finished`)
+      console.log(`[${ts()}] 🏁 Stream finished — reason=${p.finishReason || 'unknown'}`)
       break
+    }
   }
 }
 
