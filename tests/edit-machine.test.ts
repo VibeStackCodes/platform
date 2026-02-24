@@ -2,7 +2,6 @@ import { createActor, fromPromise, waitFor } from 'xstate'
 import { describe, expect, it } from 'vitest'
 import { editMachine } from '@server/lib/agents/edit-machine'
 import type { ElementContext } from '@server/lib/agents/edit-machine'
-import type { SchemaContract } from '@server/lib/schema-contract'
 import type { AppBlueprint } from '@server/lib/app-blueprint'
 
 describe('editMachine', () => {
@@ -307,14 +306,14 @@ describe('editMachine', () => {
     })
 
     it('transitions loading → reconnecting on successful load', async () => {
-      const mockContract: SchemaContract = { tables: [], enums: [] }
-      const mockBlueprint: AppBlueprint = {
+      const mockContract: Record<string, unknown> = { tables: [], enums: [] }
+      const mockBlueprint = {
         name: 'TestApp',
         description: 'Test',
         features: [],
         pages: [],
         contract: mockContract,
-      }
+      } as unknown as AppBlueprint
 
       const testMachine = editMachine.provide({
         actors: {
@@ -347,7 +346,7 @@ describe('editMachine', () => {
     })
 
     it('transitions reconnecting → editing on successful reconnect', async () => {
-      const mockContract: SchemaContract = { tables: [], enums: [] }
+      const mockContract: Record<string, unknown> = { tables: [], enums: [] }
       const mockBlueprint: AppBlueprint = {
         name: 'TestApp',
         description: 'Test',
@@ -405,7 +404,7 @@ describe('editMachine', () => {
     })
 
     it('transitions editing → validating on successful edit', async () => {
-      const mockContract: SchemaContract = { tables: [], enums: [] }
+      const mockContract: Record<string, unknown> = { tables: [], enums: [] }
       const testMachine = editMachine.provide({
         actors: {
           loadProjectActor: fromPromise(async () => ({
@@ -467,7 +466,7 @@ describe('editMachine', () => {
     })
 
     it('transitions validating → persisting when validation passes', async () => {
-      const mockContract: SchemaContract = { tables: [], enums: [] }
+      const mockContract: Record<string, unknown> = { tables: [], enums: [] }
       const testMachine = editMachine.provide({
         actors: {
           loadProjectActor: fromPromise(async () => ({
@@ -528,7 +527,7 @@ describe('editMachine', () => {
     })
 
     it('transitions persisting → complete', async () => {
-      const mockContract: SchemaContract = { tables: [], enums: [] }
+      const mockContract: Record<string, unknown> = { tables: [], enums: [] }
       const testMachine = editMachine.provide({
         actors: {
           loadProjectActor: fromPromise(async () => ({
@@ -590,7 +589,7 @@ describe('editMachine', () => {
     })
 
     it('transitions validating → editing when validation fails and canRetry', async () => {
-      const mockContract: SchemaContract = { tables: [], enums: [] }
+      const mockContract: Record<string, unknown> = { tables: [], enums: [] }
       let validateCallCount = 0
 
       const testMachine = editMachine.provide({
@@ -699,7 +698,7 @@ describe('editMachine', () => {
     })
 
     it('transitions reconnecting → failed on actor error', async () => {
-      const mockContract: SchemaContract = { tables: [], enums: [] }
+      const mockContract: Record<string, unknown> = { tables: [], enums: [] }
 
       const testMachine = editMachine.provide({
         actors: {
@@ -740,7 +739,7 @@ describe('editMachine', () => {
     })
 
     it('transitions editing → failed on actor error', async () => {
-      const mockContract: SchemaContract = { tables: [], enums: [] }
+      const mockContract: Record<string, unknown> = { tables: [], enums: [] }
 
       const testMachine = editMachine.provide({
         actors: {

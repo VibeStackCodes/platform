@@ -644,11 +644,8 @@ export async function runCodeGeneration(input: {
   }
 
   // Construct AppBlueprint for downstream validation/repair
-  const { inferFeatures } = await import('../schema-contract')
   const blueprint: AppBlueprint = {
     meta: { appName: input.appName, appDescription: '' },
-    features: inferFeatures({ tables: [] }),
-    contract: { tables: [] },
     fileTree: allFiles,
   }
 
@@ -771,11 +768,8 @@ export async function runAssembly(input: {
 
   // Construct AppBlueprint from assembled files so downstream states
   // (validating, repairing, reviewing) have the fileTree they expect.
-  const { inferFeatures } = await import('../schema-contract')
   const blueprint: AppBlueprint = {
     meta: { appName: input.appName, appDescription: '' },
-    features: inferFeatures({ tables: [] }),
-    contract: { tables: [] },
     fileTree: assembledFiles,
   }
 

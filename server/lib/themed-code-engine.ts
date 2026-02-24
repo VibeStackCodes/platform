@@ -1,5 +1,4 @@
 import { formatCss, oklch as toOklch, parse as parseColor } from 'culori'
-import type { SchemaContract } from './schema-contract'
 import type { DesignSystem, TextSlots } from './design-system'
 import { DEFAULT_TEXT_SLOTS } from './design-system'
 
@@ -71,7 +70,7 @@ function buildThemePalette(tokens: DesignSystem) {
   }
 }
 
-function themeCss(tokens: DesignSystem): string {
+export function themeCss(tokens: DesignSystem): string {
   const pal = buildThemePalette(tokens)
 
   return `@import url('${tokens.fonts.googleFontsUrl}');
@@ -138,12 +137,4 @@ h1,h2,h3,h4,h5,h6 {
   font-family: var(--font-display);
 }
 `
-}
-
-export async function generateThemedApp(contract: SchemaContract, tokens: DesignSystem, appName: string, appDescription?: string): Promise<Record<string, string>> {
-  const files: Record<string, string> = {}
-
-  files['src/index.css'] = themeCss(tokens)
-
-  return files
 }

@@ -1,5 +1,4 @@
 import { assign, fromPromise, setup } from 'xstate'
-import type { SchemaContract } from '../schema-contract'
 import type { AppBlueprint } from '../app-blueprint'
 
 // ============================================================================
@@ -27,7 +26,7 @@ export interface EditMachineContext {
   userId: string
   userMessage: string
   // Loaded from generationState
-  contract: SchemaContract | null
+  contract: Record<string, unknown> | null
   blueprint: AppBlueprint | null
   fileManifest: Record<string, string> | null
   sandboxId: string | null
@@ -68,7 +67,7 @@ type EditMachineEvent =
 // ============================================================================
 
 export interface LoadResult {
-  contract: SchemaContract | null
+  contract: Record<string, unknown> | null
   blueprint: AppBlueprint | null
   fileManifest: Record<string, string> | null
   sandboxId: string | null
@@ -131,7 +130,7 @@ export const editMachine = setup({
         const messages = await getProjectMessages(input.projectId)
 
         return {
-          contract: (genState.contract as SchemaContract) ?? null,
+          contract: (genState.contract as Record<string, unknown>) ?? null,
           blueprint: (genState.blueprint as AppBlueprint) ?? null,
           fileManifest: (genState.fileManifest as Record<string, string>) ?? null,
           sandboxId: project.sandboxId ?? (genState.sandboxId as string) ?? null,
@@ -203,7 +202,7 @@ export const editMachine = setup({
           sandboxId: string
           userMessage: string
           targetElement: ElementContext | null
-          contract: SchemaContract | null
+          contract: Record<string, unknown> | null
           conversationHistory: ChatMessage[]
           fileManifest: Record<string, string> | null
         }

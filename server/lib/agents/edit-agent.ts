@@ -1,6 +1,5 @@
 import { getSandbox, downloadFile, uploadFile } from '../sandbox'
 import type { ElementContext } from './edit-machine'
-import type { SchemaContract } from '../schema-contract'
 
 interface ChatMessage {
   role: 'user' | 'assistant'
@@ -31,7 +30,7 @@ export async function runLLMEdit(input: {
   targetFile: string
   targetElement: ElementContext | null
   userMessage: string
-  contract: SchemaContract | null
+  contract: Record<string, unknown> | null
   conversationHistory: ChatMessage[]
 }): Promise<LLMEditResult> {
   // Read the target file from sandbox
@@ -68,14 +67,17 @@ export async function runLLMEdit(input: {
     }
   }
 
-  if (input.contract?.tables && input.contract.tables.length > 0) {
+  const contractTables = Array.isArray(input.contract?.['tables']) ? input.contract!['tables'] as Record<string, unknown>[] : []
+  if (contractTables.length > 0) {
     parts.push(`\n## Database Schema (for reference if adding data-driven features)`)
     parts.push('```json')
     parts.push(
       JSON.stringify(
-        input.contract.tables.map((t) => ({
-          name: t.name,
-          columns: t.columns?.map((c) => ({ name: c.name, type: c.type, nullable: c.nullable })),
+        contractTables.map((t) => ({
+          name: t['name'],
+          columns: Array.isArray(t['columns'])
+            ? (t['columns'] as Record<string, unknown>[]).map((c) => ({ name: c['name'], type: c['type'], nullable: c['nullable'] }))
+            : [],
         })),
         null,
         2,
