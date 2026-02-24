@@ -9,6 +9,16 @@ vi.mock('@sentry/node', () => ({
   captureException: vi.fn(),
 }))
 
+/** Subscribe to an actor and auto-send PLAN_APPROVED when it enters the `planning` state */
+function autoApprovePlan(actor: ReturnType<typeof createActor<typeof appGenerationMachine>>) {
+  actor.subscribe((snapshot) => {
+    if (snapshot.value === 'planning') {
+      // Use setTimeout to avoid sending event during transition
+      setTimeout(() => actor.send({ type: 'PLAN_APPROVED' }), 0)
+    }
+  })
+}
+
 describe('appGenerationMachine', () => {
   it('starts in idle state', () => {
     const actor = createActor(appGenerationMachine)
@@ -248,7 +258,7 @@ describe('state transitions', () => {
     actor.stop()
   })
 
-  it('transitions through full happy path: preparing → architecting → codeGeneration → validating → complete', async () => {
+  it('transitions through full happy path: preparing → architecting → planning → codeGeneration → validating → complete', async () => {
     const mockBlueprint: AppBlueprint = {
       name: 'TestApp',
       description: 'Test app',
@@ -305,6 +315,7 @@ describe('state transitions', () => {
     })
 
     const actor = createActor(testMachine)
+    autoApprovePlan(actor)
     actor.start()
     actor.send({
       type: 'START',
@@ -316,6 +327,7 @@ describe('state transitions', () => {
     // Preparing runs analysis + provisioning in parallel
     await waitFor(actor, (state) => state.matches('preparing'), { timeout: 1000 })
     await waitFor(actor, (state) => state.matches('architecting'), { timeout: 1000 })
+    await waitFor(actor, (state) => state.matches('planning'), { timeout: 1000 })
     await waitFor(actor, (state) => state.matches('codeGeneration'), { timeout: 1000 })
     await waitFor(actor, (state) => state.matches('validating'), { timeout: 1000 })
     await waitFor(actor, (state) => state.matches('complete'), { timeout: 1000 })
@@ -394,6 +406,7 @@ describe('validation and repair loop', () => {
     })
 
     const actor = createActor(testMachine)
+    autoApprovePlan(actor)
     actor.start()
     actor.send({
       type: 'START',
@@ -423,6 +436,7 @@ describe('validation and repair loop', () => {
     })
 
     const actor = createActor(testMachine)
+    autoApprovePlan(actor)
     actor.start()
     actor.send({
       type: 'START',
@@ -469,6 +483,7 @@ describe('validation and repair loop', () => {
     })
 
     const actor = createActor(testMachine)
+    autoApprovePlan(actor)
     actor.start()
     actor.send({
       type: 'START',
@@ -510,6 +525,7 @@ describe('validation and repair loop', () => {
     })
 
     const actor = createActor(testMachine)
+    autoApprovePlan(actor)
     actor.start()
     actor.send({
       type: 'START',
@@ -551,6 +567,7 @@ describe('validation and repair loop', () => {
     })
 
     const actor = createActor(testMachine)
+    autoApprovePlan(actor)
     actor.start()
     actor.send({
       type: 'START',
@@ -680,6 +697,7 @@ describe('error handling', () => {
     })
 
     const actor = createActor(testMachine)
+    autoApprovePlan(actor)
     actor.start()
     actor.send({
       type: 'START',
@@ -785,6 +803,7 @@ describe('context updates', () => {
     })
 
     const actor = createActor(testMachine)
+    autoApprovePlan(actor)
     actor.start()
     actor.send({
       type: 'START',
@@ -823,6 +842,7 @@ describe('context updates', () => {
     })
 
     const actor = createActor(testMachine)
+    autoApprovePlan(actor)
     actor.start()
     actor.send({
       type: 'START',
@@ -861,6 +881,7 @@ describe('context updates', () => {
     })
 
     const actor = createActor(testMachine)
+    autoApprovePlan(actor)
     actor.start()
     actor.send({
       type: 'START',
@@ -951,6 +972,7 @@ describe('userId and cleanup', () => {
     })
 
     const actor = createActor(testMachine)
+    autoApprovePlan(actor)
     actor.start()
     actor.send({
       type: 'START',
@@ -1060,6 +1082,7 @@ describe('cleanup ordering', () => {
     })
 
     const fullActor = createActor(fullMachine)
+    autoApprovePlan(fullActor)
     fullActor.start()
     fullActor.send({
       type: 'START',
@@ -1108,6 +1131,7 @@ describe('sentry error capture', () => {
     })
 
     const actor = createActor(testMachine)
+    autoApprovePlan(actor)
     actor.start()
     actor.send({
       type: 'START',

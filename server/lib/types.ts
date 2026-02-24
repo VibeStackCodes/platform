@@ -395,6 +395,7 @@ export interface PhaseCompleteEvent {
 
 export interface PlanReadyEvent {
   type: 'plan_ready'
+  runId?: string
   plan: Record<string, unknown>
 }
 

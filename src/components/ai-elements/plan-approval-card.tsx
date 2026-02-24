@@ -39,7 +39,7 @@ export function PlanApprovalCard({ plan, onApprove, status }: PlanApprovalCardPr
             )}
             {plan.prd && (
               <div className="rounded-md border bg-muted/50 p-3 text-sm">
-                <MessageResponse content={plan.prd} />
+                <MessageResponse>{plan.prd}</MessageResponse>
               </div>
             )}
             {status === 'pending' && (

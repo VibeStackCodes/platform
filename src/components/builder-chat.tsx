@@ -51,6 +51,7 @@ import {
   TestResultsSummary,
   Test,
 } from '@/components/ai-elements/test-results'
+import { PlanApprovalCard } from '@/components/ai-elements/plan-approval-card'
 import { ClarificationQuestions } from '@/components/clarification-questions'
 import { CreditDisplay } from '@/components/credit-display'
 import { PromptBar } from '@/components/prompt-bar'
@@ -276,6 +277,8 @@ export function BuilderChat({
     null,
   )
   const [resumeRunId, setResumeRunId] = useState<string | null>(null)
+  const [pendingPlan, setPendingPlan] = useState<PlanReadyEvent['plan'] | null>(null)
+  const [planRunId, setPlanRunId] = useState<string | null>(null)
   const [userCredits, setUserCredits] = useState<{
     credits_remaining: number
     credits_monthly: number
@@ -576,8 +579,10 @@ export function BuilderChat({
           break
 
         case 'plan_ready':
+          setPendingPlan(event.plan)
+          if (event.runId) setPlanRunId(event.runId)
           updateTimeline(
-            (e) => e.type === 'agent' && e.agent.agentId === 'analyst',
+            (e) => e.type === 'agent' && e.agent.agentId === 'architect',
             (e) => ({ ...e, plan: event.plan }),
           )
           break
@@ -952,6 +957,43 @@ export function BuilderChat({
     [resumeRunId, parseSSEBuffer, handleGenerationEvent, sendChatMessage],
   )
 
+  const handlePlanApprove = useCallback(async () => {
+    if (!planRunId) return
+    setPendingPlan(null)
+
+    const abortController = new AbortController()
+    abortControllerRef.current = abortController
+
+    try {
+      const response = await apiFetch('/api/agent/approve-plan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ runId: planRunId }),
+        signal: abortController.signal,
+      })
+
+      if (!response.ok) throw new Error(`Plan approval failed: ${response.status}`)
+      if (!response.body) throw new Error('No response body')
+
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      let sseBuffer = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        sseBuffer += decoder.decode(value, { stream: true })
+        sseBuffer = parseSSEBuffer(sseBuffer, null, handleGenerationEvent)
+      }
+    } catch (err) {
+      if ((err as Error).name !== 'AbortError') {
+        console.error('Plan approval error:', err)
+      }
+    } finally {
+      setPlanRunId(null)
+    }
+  }, [planRunId, parseSSEBuffer, handleGenerationEvent])
+
   const hasFiles = generationFiles.length > 0
   const showTimeline = generationStatus === 'generating' || timelineEvents.length > 0
 
@@ -1083,46 +1125,55 @@ export function BuilderChat({
                             ? (config?.completeLabel ?? 'Designed app architecture')
                             : (config?.runningLabel ?? 'Designing architecture...')
                           return (
-                            <ActionCard key={cardKey}>
-                              <ActionCardHeader
-                                icon={config?.icon ?? 'sparkles'}
-                                label={architectLabel}
-                                status={cardStatus}
-                                durationMs={entry.durationMs}
-                              />
-                              {(hasTokens || hasArch) && (
-                                <ActionCardTabs>
-                                  <ActionCardContent tab="details">
-                                    <div className="space-y-3">
-                                      {hasTokens && (
-                                        <ThemeTokensCard
-                                          tokens={entry.designTokens as unknown as ThemeTokensCardTokens}
-                                        />
-                                      )}
-                                      {hasArch && <ArchitectureCard spec={entry.architecture!} />}
-                                    </div>
-                                  </ActionCardContent>
-                                  {colors && (
-                                    <ActionCardContent tab="preview">
-                                      <div className="flex flex-wrap gap-2">
-                                        {Object.entries(colors).map(([name, value]) => (
-                                          <div key={name} className="flex items-center gap-1.5">
-                                            <div
-                                              className="size-4 rounded-full border border-border"
-                                              style={{ backgroundColor: value }}
-                                              title={value}
-                                            />
-                                            <span className="text-xs text-muted-foreground capitalize">
-                                              {name.replace(/([A-Z])/g, ' $1').toLowerCase()}
-                                            </span>
-                                          </div>
-                                        ))}
+                            <div key={cardKey} className="space-y-3">
+                              <ActionCard>
+                                <ActionCardHeader
+                                  icon={config?.icon ?? 'sparkles'}
+                                  label={architectLabel}
+                                  status={cardStatus}
+                                  durationMs={entry.durationMs}
+                                />
+                                {(hasTokens || hasArch) && (
+                                  <ActionCardTabs>
+                                    <ActionCardContent tab="details">
+                                      <div className="space-y-3">
+                                        {hasTokens && (
+                                          <ThemeTokensCard
+                                            tokens={entry.designTokens as unknown as ThemeTokensCardTokens}
+                                          />
+                                        )}
+                                        {hasArch && <ArchitectureCard spec={entry.architecture!} />}
                                       </div>
                                     </ActionCardContent>
-                                  )}
-                                </ActionCardTabs>
+                                    {colors && (
+                                      <ActionCardContent tab="preview">
+                                        <div className="flex flex-wrap gap-2">
+                                          {Object.entries(colors).map(([name, value]) => (
+                                            <div key={name} className="flex items-center gap-1.5">
+                                              <div
+                                                className="size-4 rounded-full border border-border"
+                                                style={{ backgroundColor: value }}
+                                                title={value}
+                                              />
+                                              <span className="text-xs text-muted-foreground capitalize">
+                                                {name.replace(/([A-Z])/g, ' $1').toLowerCase()}
+                                              </span>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </ActionCardContent>
+                                    )}
+                                  </ActionCardTabs>
+                                )}
+                              </ActionCard>
+                              {entry.plan && pendingPlan && (
+                                <PlanApprovalCard
+                                  plan={entry.plan}
+                                  onApprove={handlePlanApprove}
+                                  status={pendingPlan ? 'pending' : 'approved'}
+                                />
                               )}
-                            </ActionCard>
+                            </div>
                           )
                         }
 
