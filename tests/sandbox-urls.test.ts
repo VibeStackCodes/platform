@@ -58,6 +58,7 @@ describe('Sandbox URLs Routes', () => {
       vi.mocked(waitForCodeServer).mockResolvedValue(undefined)
       vi.mocked(getPreviewUrl).mockResolvedValue({
         url: 'https://signed-preview.daytona.io/sandbox-123',
+        token: 'test-token',
         port: 3000,
         expiresAt: new Date('2026-02-16T12:00:00Z'),
       })
@@ -68,7 +69,8 @@ describe('Sandbox URLs Routes', () => {
 
       expect(res.status).toBe(200)
       expect(data.sandboxId).toBe('sandbox-123')
-      expect(data.previewUrl).toBe('https://signed-preview.daytona.io/sandbox-123')
+      // Route constructs proxy URL: https://{port}-{sandboxId}-preview.vibestack.site
+      expect(data.previewUrl).toBe('https://3000-sandbox-123-preview.vibestack.site')
       expect(data.codeServerUrl).toBe('https://codeserver.daytona.io/sandbox-123')
       expect(data.expiresAt).toBeDefined()
 
@@ -197,6 +199,7 @@ describe('Sandbox URLs Routes', () => {
       vi.mocked(waitForCodeServer).mockResolvedValue(undefined)
       vi.mocked(getPreviewUrl).mockResolvedValue({
         url: 'https://signed-with-token.daytona.io/sandbox-signed?token=abc123',
+        token: 'abc123',
         port: 3000,
         expiresAt: new Date('2026-02-16T13:00:00Z'),
       })
@@ -205,8 +208,10 @@ describe('Sandbox URLs Routes', () => {
       const res = await app.request('/api/projects/proj-6/sandbox-urls', { method: 'GET' })
       const data = await res.json()
 
-      expect(data.previewUrl).toContain('signed-with-token')
-      expect(data.previewUrl).toContain('token=')
+      // Route constructs proxy URL from sandbox.id + preview.port, not the raw Daytona URL
+      expect(data.previewUrl).toBe('https://3000-sandbox-signed-preview.vibestack.site')
+      // Token is returned separately for the proxy to use
+      expect(data.previewToken).toBeDefined()
 
       // Verify getPreviewUrl was called with port 3000
       expect(getPreviewUrl).toHaveBeenCalledWith(mockSandbox, 3000)

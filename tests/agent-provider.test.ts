@@ -72,8 +72,8 @@ describe('Agent Provider', () => {
     expect(isAllowedModel('claude-sonnet')).toBe(false)
   })
 
-  it('ALLOWED_MODELS contains only gpt-5.2-codex', async () => {
+  it('ALLOWED_MODELS contains all configured model IDs', async () => {
     const { ALLOWED_MODELS } = await import('@server/lib/agents/provider')
-    expect(ALLOWED_MODELS).toEqual(['gpt-5.2-codex'])
+    expect(ALLOWED_MODELS).toEqual(['gpt-5.2-codex', 'claude-opus-4-6', 'claude-sonnet-4-6'])
   })
 })
