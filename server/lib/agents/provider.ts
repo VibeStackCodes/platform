@@ -1,9 +1,9 @@
 /**
- * Helicone-proxied OpenAI provider factory
+ * Helicone-proxied provider factory (OpenAI + Anthropic)
  *
- * ALL OpenAI calls (LLM + embeddings) route through Helicone for full
- * observability: per-user, per-project, per-session, per-agent cost tracking.
- * Falls back to direct OpenAI if HELICONE_API_KEY is not set.
+ * ALL LLM calls route through Helicone for full observability: per-user,
+ * per-project, per-session, per-agent cost tracking.
+ * Falls back to direct provider if HELICONE_API_KEY is not set.
  *
  * Helicone headers used:
  *   Helicone-Auth            — API key authentication
@@ -15,10 +15,38 @@
  *
  * @see https://docs.helicone.ai/helicone-headers/header-directory
  */
+import { createAnthropic } from '@ai-sdk/anthropic'
 import { createOpenAI } from '@ai-sdk/openai'
 import type { MastraModelConfig } from '@mastra/core/llm'
 
-const HELICONE_GATEWAY = 'https://oai.helicone.ai/v1'
+// ---------------------------------------------------------------------------
+// Provider Registry — add new providers here
+// ---------------------------------------------------------------------------
+
+type ProviderType = 'openai' | 'anthropic'
+
+interface ProviderEntry {
+  heliconeGateway: string
+  apiKeyEnv: string
+  create: (opts: {
+    baseURL?: string
+    apiKey?: string
+    headers?: Record<string, string>
+  }) => ReturnType<typeof createOpenAI>
+}
+
+const PROVIDER_REGISTRY: Record<ProviderType, ProviderEntry> = {
+  openai: {
+    heliconeGateway: 'https://oai.helicone.ai/v1',
+    apiKeyEnv: 'OPENAI_API_KEY',
+    create: (opts) => createOpenAI(opts) as ReturnType<typeof createOpenAI>,
+  },
+  anthropic: {
+    heliconeGateway: 'https://anthropic.helicone.ai/v1',
+    apiKeyEnv: 'ANTHROPIC_API_KEY',
+    create: (opts) => createAnthropic(opts) as unknown as ReturnType<typeof createOpenAI>,
+  },
+}
 
 // ---------------------------------------------------------------------------
 // Types
@@ -86,9 +114,9 @@ export function getHeliconeHeaders(ctx: HeliconeContext | string): Record<string
   return headers
 }
 
-/** Helicone gateway URL (or undefined to use direct OpenAI) */
+/** Helicone gateway URL for OpenAI (or undefined to use direct OpenAI) */
 export function getHeliconeBaseURL(): string | undefined {
-  return process.env.HELICONE_API_KEY ? HELICONE_GATEWAY : undefined
+  return process.env.HELICONE_API_KEY ? PROVIDER_REGISTRY.openai.heliconeGateway : undefined
 }
 
 // ---------------------------------------------------------------------------
@@ -96,23 +124,25 @@ export function getHeliconeBaseURL(): string | undefined {
 // ---------------------------------------------------------------------------
 
 /**
- * Creates an OpenAI provider instance routed through Helicone.
+ * Creates a provider instance routed through Helicone.
  * Accepts either a simple userId string or a full HeliconeContext.
+ * Defaults to OpenAI; pass providerType to use Anthropic.
  */
-export function createHeliconeProvider(ctx: HeliconeContext | string) {
-  const apiKey = process.env.HELICONE_API_KEY
+export function createHeliconeProvider(
+  ctx: HeliconeContext | string,
+  providerType: ProviderType = 'openai',
+) {
+  const reg = PROVIDER_REGISTRY[providerType]
+  const apiKey = process.env[reg.apiKeyEnv]
 
-  if (!apiKey) {
-    return createOpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
-    })
+  if (!process.env.HELICONE_API_KEY) {
+    return reg.create({ apiKey })
   }
 
   const context: HeliconeContext = typeof ctx === 'string' ? { userId: ctx } : ctx
-
-  return createOpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-    baseURL: HELICONE_GATEWAY,
+  return reg.create({
+    apiKey,
+    baseURL: reg.heliconeGateway,
     headers: getHeliconeHeaders(context),
   })
 }
@@ -138,9 +168,37 @@ export const PIPELINE_MODELS = {
 
 export type PipelineRole = keyof typeof PIPELINE_MODELS
 
+// ---------------------------------------------------------------------------
+// Model Configs — maps user-facing model IDs to provider + role overrides
+// ---------------------------------------------------------------------------
+
+export type { ProviderType }
+
+export interface ModelConfig {
+  provider: ProviderType
+  modelId: string
+  roleOverrides?: Partial<Record<PipelineRole, string>>
+}
+
+export const MODEL_CONFIGS: Record<string, ModelConfig> = {
+  'gpt-5.2-codex': {
+    provider: 'openai',
+    modelId: 'gpt-5.2-codex',
+    roleOverrides: { creativeDirector: 'gpt-5.2' },
+  },
+  'claude-opus-4-6': {
+    provider: 'anthropic',
+    modelId: 'claude-opus-4-6',
+  },
+  'claude-sonnet-4-6': {
+    provider: 'anthropic',
+    modelId: 'claude-sonnet-4-6',
+  },
+}
+
 /**
  * Creates a Mastra-compatible model resolver for a specific pipeline role.
- * Reads Helicone context from RequestContext for per-user observability.
+ * Reads Helicone context and selectedModel from RequestContext for per-user observability.
  * Falls back to global context (for scripts/tests) or 'studio' context.
  */
 
@@ -153,21 +211,27 @@ export function setGlobalHeliconeContext(ctx: HeliconeContext) {
 }
 
 export function createAgentModelResolver(role: PipelineRole) {
-  const modelId = PIPELINE_MODELS[role]
   return function resolveModel({
     requestContext,
   }: {
     requestContext: { has: (key: string) => boolean; get: (key: string) => unknown }
   }): MastraModelConfig {
+    // Determine model config from user selection or default
+    const selectedModel = requestContext?.has('selectedModel')
+      ? (requestContext.get('selectedModel') as string)
+      : 'gpt-5.2-codex'
+    const config = MODEL_CONFIGS[selectedModel] ?? MODEL_CONFIGS['gpt-5.2-codex']
+    const modelId = config.roleOverrides?.[role] ?? config.modelId
+
     if (requestContext?.has('heliconeContext')) {
       const ctx = requestContext.get('heliconeContext') as HeliconeContext
-      return createHeliconeProvider({ ...ctx, agentName: role })(modelId)
+      return createHeliconeProvider({ ...ctx, agentName: role }, config.provider)(modelId)
     }
     // Fallback: global context (E2E scripts) or 'studio' (Mastra Studio)
     const fallbackCtx = _globalHeliconeContext
       ? { ..._globalHeliconeContext, agentName: role }
-      : { userId: 'studio' } as HeliconeContext
-    return createHeliconeProvider(fallbackCtx)(modelId)
+      : ({ userId: 'studio' } as HeliconeContext)
+    return createHeliconeProvider(fallbackCtx, config.provider)(modelId)
   }
 }
 
@@ -175,11 +239,11 @@ export function createAgentModelResolver(role: PipelineRole) {
 // Model allowlist (client-facing — validates the "tier" the user selects)
 // ---------------------------------------------------------------------------
 
-/** Allowed models the client can request */
-export const ALLOWED_MODELS = ['gpt-5.2-codex'] as const
-export type AllowedModel = (typeof ALLOWED_MODELS)[number]
+/** Allowed models the client can request — derived from MODEL_CONFIGS */
+export const ALLOWED_MODELS = Object.keys(MODEL_CONFIGS)
+export type AllowedModel = string
 
 /** Validate that a model string is allowed */
 export function isAllowedModel(model: string): model is AllowedModel {
-  return (ALLOWED_MODELS as readonly string[]).includes(model)
+  return model in MODEL_CONFIGS
 }

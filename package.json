@@ -21,6 +21,7 @@
     "mastra:build": "mastra build"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "^3.0.46",
     "@ai-sdk/openai": "^3.0.27",
     "@daytonaio/sdk": "^0.141.0",
     "@hono/sentry": "1.2.2",

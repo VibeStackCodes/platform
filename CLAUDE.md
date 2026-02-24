@@ -95,7 +95,7 @@ server/                  # Hono API server
       registry.ts        # Agent definitions (Mastra)
       tools.ts           # ~25 Mastra tools (sandbox, GitHub, Supabase, Vercel)
       schemas.ts         # Zod schemas for agent inputs/outputs
-      provider.ts        # Model routing (PIPELINE_MODELS per role)
+      provider.ts        # Multi-provider routing (PROVIDER_REGISTRY + MODEL_CONFIGS per role)
       repair.ts          # Repair agent for build errors
       validation.ts      # Build validation gate
     sandbox.ts           # Daytona sandbox lifecycle
@@ -137,7 +137,7 @@ The generation pipeline is orchestrated by an XState state machine (`server/lib/
 
 ### Model Routing
 
-All pipeline stages use `gpt-5.2-codex` via `PIPELINE_MODELS` in `provider.ts`.
+User-selectable per generation: GPT-5.2 Codex (OpenAI), Claude Opus 4.6, Claude Sonnet 4.6. Provider routing via `PROVIDER_REGISTRY` + `MODEL_CONFIGS` in `provider.ts`. Adding a new model = one `MODEL_CONFIGS` entry. Adding a new provider = one `PROVIDER_REGISTRY` entry + `bun add @ai-sdk/<provider>`.
 
 ### Key Patterns
 
@@ -159,6 +159,7 @@ Required in `.env.local`:
 | `SUPABASE_ACCESS_TOKEN` | Management API token (for generating app DBs) |
 | `SUPABASE_ORG_ID` | Org for generated Supabase projects |
 | `OPENAI_API_KEY` | OpenAI API |
+| `ANTHROPIC_API_KEY` | Anthropic API (Claude models) |
 | `DAYTONA_API_KEY` | Daytona sandbox API |
 | `DAYTONA_SNAPSHOT_ID` | Pre-built sandbox snapshot ID |
 | `VERCEL_TOKEN` | Vercel deployment token |
