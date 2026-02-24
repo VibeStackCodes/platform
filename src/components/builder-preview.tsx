@@ -4,6 +4,7 @@ import { AppWindowIcon, CodeIcon, Pencil, Rocket, X } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { apiFetch } from '@/lib/utils'
 import { WebPreview, WebPreviewBody } from '@/components/ai-elements/web-preview'
+import { PropertyPanel } from '@/components/ai-elements/property-panel'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -24,12 +25,24 @@ export function BuilderPreview({
   onElementSelected,
 }: BuilderPreviewProps) {
   const [selectedElement, setSelectedElement] = useState<ElementContext | null>(null)
+  const [selectionMode, setSelectionMode] = useState(false)
+  const [isEditing, setIsEditing] = useState(false)
   const iframeRef = useRef<HTMLIFrameElement>(null)
 
   const dismissSelection = useCallback(() => {
     setSelectedElement(null)
     onElementSelected?.(null)
   }, [onElementSelected])
+
+  // Toggle selection mode in iframe via postMessage
+  useEffect(() => {
+    const iframe = iframeRef.current
+    if (!iframe?.contentWindow) return
+    iframe.contentWindow.postMessage(
+      { type: selectionMode ? 'VIBESTACK_ENTER_EDIT_MODE' : 'VIBESTACK_EXIT_EDIT_MODE' },
+      '*',
+    )
+  }, [selectionMode])
 
   // Listen for element selection messages from iframe (validate origin)
   useEffect(() => {
@@ -48,6 +61,43 @@ export function BuilderPreview({
     window.addEventListener('message', handler)
     return () => window.removeEventListener('message', handler)
   }, [onElementSelected])
+
+  const handleApplyEdit = useCallback(
+    async (editDescription: string) => {
+      if (!selectedElement) return
+      setIsEditing(true)
+      setSelectionMode(false)
+
+      try {
+        const response = await apiFetch('/api/agent/edit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            message: editDescription,
+            projectId,
+            targetElement: selectedElement,
+          }),
+        })
+
+        if (!response.ok) throw new Error(`Edit failed: ${response.status}`)
+
+        // Read SSE stream to completion (edit machine handles HMR)
+        if (response.body) {
+          const reader = response.body.getReader()
+          while (true) {
+            const { done } = await reader.read()
+            if (done) break
+          }
+        }
+      } catch (err) {
+        console.error('Visual edit error:', err)
+      } finally {
+        setIsEditing(false)
+        dismissSelection()
+      }
+    },
+    [selectedElement, projectId, dismissSelection],
+  )
 
   const handleDeploy = async () => {
     try {
@@ -70,7 +120,7 @@ export function BuilderPreview({
 
   return (
     <div className="flex h-full flex-col">
-      {/* Selected element badge */}
+      {/* Selected element badge + property panel */}
       {selectedElement && (
         <div className="border-b px-3 py-2">
           <Badge variant="secondary" className="inline-flex items-center gap-2">
@@ -90,6 +140,16 @@ export function BuilderPreview({
               <X className="size-3" />
             </button>
           </Badge>
+          <div className="mt-2">
+            <PropertyPanel
+              element={selectedElement}
+              onApply={handleApplyEdit}
+              onDismiss={dismissSelection}
+            />
+          </div>
+          {isEditing && (
+            <p className="mt-2 text-xs text-muted-foreground animate-pulse">Applying edit...</p>
+          )}
         </div>
       )}
 
@@ -105,7 +165,16 @@ export function BuilderPreview({
               Code
             </TabsTrigger>
           </TabsList>
-          <div className="ml-auto">
+          <div className="ml-auto flex items-center gap-2">
+            <Button
+              size="sm"
+              variant={selectionMode ? 'default' : 'outline'}
+              onClick={() => setSelectionMode(!selectionMode)}
+              disabled={!previewUrl}
+            >
+              <Pencil className="mr-1.5 size-3.5" />
+              {selectionMode ? 'Selecting...' : 'Select'}
+            </Button>
             <Button size="sm" onClick={handleDeploy}>
               <Rocket className="mr-1.5 size-3.5" />
               Deploy
