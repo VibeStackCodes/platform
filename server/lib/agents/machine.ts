@@ -86,6 +86,7 @@ type MachineEvent =
   | { type: 'VALIDATION_FAIL'; validation: ValidationGateResult }
   | { type: 'REPAIR_DONE' }
   | { type: 'DEPLOY_DONE'; deploymentUrl: string }
+  | { type: 'PLAN_APPROVED' }
   | { type: 'ERROR'; error: string }
 
 // ============================================================================
@@ -337,7 +338,7 @@ export const appGenerationMachine = setup({
           complexity: context.complexity ?? undefined,
         }),
         onDone: {
-          target: 'codeGeneration',
+          target: 'planning',
           actions: assign({
             creativeSpec: ({ event }) => event.output.spec,
             tokens: ({ event }) => event.output.tokens,
@@ -347,6 +348,20 @@ export const appGenerationMachine = setup({
         onError: {
           target: 'failed',
           actions: assign({ error: ({ event }) => String(event.error) }),
+        },
+      },
+    },
+
+    planning: {
+      after: {
+        1_800_000: {
+          target: 'failed',
+          actions: assign({ error: () => 'Plan approval timed out (30 minutes)' }),
+        },
+      },
+      on: {
+        PLAN_APPROVED: {
+          target: 'codeGeneration',
         },
       },
     },
@@ -911,7 +926,7 @@ export const mockAppGenerationMachine = setup({
           complexity: context.complexity ?? undefined,
         }),
         onDone: {
-          target: 'codeGeneration',
+          target: 'planning',
           actions: assign({
             creativeSpec: ({ event }) => event.output.spec,
             tokens: ({ event }) => event.output.tokens,
@@ -921,6 +936,19 @@ export const mockAppGenerationMachine = setup({
         onError: {
           target: 'failed',
           actions: assign({ error: ({ event }) => String(event.error) }),
+        },
+      },
+    },
+    planning: {
+      after: {
+        1_800_000: {
+          target: 'failed',
+          actions: assign({ error: () => 'Plan approval timed out (30 minutes)' }),
+        },
+      },
+      on: {
+        PLAN_APPROVED: {
+          target: 'codeGeneration',
         },
       },
     },
