@@ -695,6 +695,7 @@ agentRoutes.post('/', async (c) => {
       createHeliconeProvider({ ...heliconeContext, agentName: 'app-generation' })(model),
     )
     requestContext.set('userId', user.id)
+    requestContext.set('selectedModel', model)
   }
 
   // H1: Create XState actor with error handling to refund credits on failure
