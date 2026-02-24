@@ -15,7 +15,7 @@
  */
 
 import { generateText } from 'ai'
-import { createHeliconeProvider, PIPELINE_MODELS } from './agents/provider'
+import { createHeliconeProvider, PIPELINE_MODELS, type ModelConfig, type HeliconeContext } from './agents/provider'
 import type { CreativeSpec } from './agents/schemas'
 import { getStaticDesignRules } from './design-knowledge'
 import type { DesignSystem } from './themed-code-engine'
@@ -41,6 +41,10 @@ export interface PageGeneratorInput {
   onPageStart?: (fileName: string, route: string, componentName: string, index: number, total: number) => void
   /** Called when a page finishes generating */
   onPageComplete?: (fileName: string, route: string, componentName: string, lineCount: number, code: string, index: number, total: number) => void
+  /** Model config for provider routing (defaults to OpenAI) */
+  modelConfig?: ModelConfig
+  /** Helicone context for observability */
+  heliconeCtx?: HeliconeContext
 }
 
 // ---------------------------------------------------------------------------
@@ -63,13 +67,13 @@ export interface PageGeneratorResult {
 }
 
 export async function generatePages(input: PageGeneratorInput): Promise<PageGeneratorResult> {
-  const { spec, tokens, complexity, onPageStart, onPageComplete } = input
+  const { spec, tokens, complexity, onPageStart, onPageComplete, modelConfig, heliconeCtx } = input
   const total = spec.sitemap.length
 
   const results = await Promise.all(
     spec.sitemap.map(async (page, index) => {
       onPageStart?.(page.fileName, page.route, page.componentName, index, total)
-      const result = await generateSinglePage(page, spec, tokens, complexity)
+      const result = await generateSinglePage(page, spec, tokens, complexity, modelConfig, heliconeCtx)
       const lineCount = result.content.split('\n').length
       const codePreview = result.content.split('\n').slice(0, 50).join('\n')
       onPageComplete?.(result.fileName, page.route, page.componentName, lineCount, codePreview, index, total)
@@ -100,14 +104,19 @@ async function generateSinglePage(
   spec: CreativeSpec,
   tokens: DesignSystem,
   complexity?: AppComplexity,
+  modelConfig?: ModelConfig,
+  heliconeCtx?: HeliconeContext,
 ): Promise<GeneratedPage & { inputTokens: number; outputTokens: number }> {
   const systemPrompt = buildPageGenSystemPrompt(spec, tokens, complexity)
   const userPrompt = buildPageGenUserPrompt(page, spec)
 
-  const provider = createHeliconeProvider({ userId: 'pipeline', agentName: 'page-gen' })
+  const provider = createHeliconeProvider(
+    { userId: heliconeCtx?.userId ?? 'pipeline', agentName: 'page-gen' },
+    modelConfig?.provider ?? 'openai',
+  )
 
   const result = await generateText({
-    model: provider(PAGE_GEN_MODEL),
+    model: provider(modelConfig?.modelId ?? PAGE_GEN_MODEL),
     system: systemPrompt,
     prompt: userPrompt,
     maxOutputTokens: 8000,
