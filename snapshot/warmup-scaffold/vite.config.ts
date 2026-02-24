@@ -4,12 +4,12 @@ import { resolve } from 'node:path'
 import { defineConfig } from 'vite'
 import { componentTagger } from 'lovable-tagger'
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   plugins: [
-    componentTagger({ jsxSource: true, virtualOverrides: true, tailwindConfig: false }),
     react(),
     tailwindcss(),
-  ],
+    mode === 'development' && componentTagger({ jsxSource: true, virtualOverrides: true, tailwindConfig: false }),
+  ].filter(Boolean),
   resolve: {
     alias: {
       '@': resolve(__dirname, './src'),
@@ -20,5 +20,9 @@ export default defineConfig({
     port: 3000,
     allowedHosts: true,
     cors: true,
+    hmr: {
+      overlay: false,
+    },
   },
-})
+  cacheDir: '/tmp/.vite',
+}))

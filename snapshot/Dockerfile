@@ -13,19 +13,20 @@ RUN curl -fsSL "https://github.com/gitpod-io/openvscode-server/releases/download
 # Install OxLint globally — single Rust binary, much lighter than ESLint + plugins
 RUN bun install -g oxlint
 
-# Pre-cache common deps for static Vite + React + Tailwind apps
+# Pre-cache common deps for Vite + React + Tailwind apps
 WORKDIR /workspace
 COPY package-base.json /workspace/package.json
 RUN bun install
 
-# Pre-warm Vite + TypeScript caches with minimal scaffold
-# Creates .vite/ dep pre-bundle and tsconfig.tsbuildinfo
-# Saves ~5-10s on first dev server start and tsc --noEmit
+# Copy full scaffold: src/ (App, pages, components/ui, hooks, lib), configs, index.html
 COPY warmup-scaffold/ /workspace/
+
+# Pre-warm Vite + TypeScript caches with the scaffold
+# Creates .vite/ dep pre-bundle and tsconfig.tsbuildinfo
+# Saves ~5-10s on first dev server start
 RUN bun add -g typescript
-RUN bun run dev & DEV_PID=$! && sleep 8 && kill $DEV_PID 2>/dev/null; \
-    test -d node_modules/.vite || (echo "FATAL: Vite dep pre-bundle failed" && exit 1)
-RUN tsc --noEmit
+RUN bun run dev & DEV_PID=$! && sleep 10 && kill $DEV_PID 2>/dev/null; \
+    test -d /tmp/.vite || (echo "FATAL: Vite dep pre-bundle failed" && exit 1)
 
 # Entrypoint starts dev server (tmux) + OpenVSCode Server (foreground)
 COPY entrypoint.sh /entrypoint.sh

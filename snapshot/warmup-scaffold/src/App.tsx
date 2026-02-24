@@ -1,25 +1,27 @@
-import { createRouter, RouterProvider, createRootRoute, createRoute } from '@tanstack/react-router'
-// Warmup imports — trigger Vite dep pre-bundling for shadcn/ui dependencies
-// These are tree-shaken in production but force Vite to pre-bundle radix-ui, lucide-react, cva
-import '@/components/ui/button'
-import '@/components/ui/dialog'
-import '@/components/ui/select'
-import '@/components/ui/command'
+import { Toaster } from "@/components/ui/toaster";
+import { Toaster as Sonner } from "@/components/ui/sonner";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
+import Index from "./pages/Index";
+import NotFound from "./pages/NotFound";
 
-const rootRoute = createRootRoute()
-const indexRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/',
-  component: () => (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-neutral-950 text-white">
-      <p className="text-lg font-medium text-neutral-300">Your app will show up here once built</p>
-    </div>
-  ),
-})
+const queryClient = new QueryClient();
 
-const routeTree = rootRoute.addChildren([indexRoute])
-const router = createRouter({ routeTree })
+const App = () => (
+  <QueryClientProvider client={queryClient}>
+    <TooltipProvider>
+      <Toaster />
+      <Sonner />
+      <BrowserRouter>
+        <Routes>
+          <Route path="/" element={<Index />} />
+          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+          <Route path="*" element={<NotFound />} />
+        </Routes>
+      </BrowserRouter>
+    </TooltipProvider>
+  </QueryClientProvider>
+);
 
-export default function App() {
-  return <RouterProvider router={router} />
-}
+export default App;

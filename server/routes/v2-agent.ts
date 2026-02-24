@@ -14,7 +14,7 @@ import { Hono } from 'hono'
 import * as Sentry from '@sentry/node'
 import { RequestContext } from '../lib/agents/registry'
 import { createV2Orchestrator } from '../lib/agents/v2-orchestrator'
-import { isAllowedModel } from '../lib/agents/provider'
+import { isAllowedModel, MODEL_CONFIGS } from '../lib/agents/provider'
 import {
   getProject,
   getUserCredits,
@@ -65,9 +65,14 @@ async function bridgeStreamToSSE(
 
       if (!chunk || !chunk.type) continue
 
+      // Mastra fullStream wraps Vercel AI SDK chunks in an envelope:
+      //   { type, runId, from, payload: { toolName, args, result, ... } }
+      // biome-ignore lint/suspicious/noExplicitAny: envelope shape varies per chunk type
+      const payload = (chunk as any).payload ?? chunk
+
       switch (chunk.type) {
         case 'text-delta': {
-          const text = chunk.textDelta ?? ''
+          const text = payload.textDelta ?? chunk.textDelta ?? ''
           if (text) {
             lastTextChunk += text
             // Emit thinking in batches (every ~100 chars) to reduce event frequency
@@ -88,9 +93,10 @@ async function bridgeStreamToSSE(
         }
 
         case 'tool-call': {
-          const toolName = chunk.toolName ?? 'unknown'
-          const args = chunk.args ?? {}
-          toolStartTimes.set(toolName + '-' + (chunk.toolCallId ?? ''), Date.now())
+          const toolName = payload.toolName ?? chunk.toolName ?? 'unknown'
+          const args = payload.args ?? chunk.args ?? {}
+          const toolCallId = payload.toolCallId ?? chunk.toolCallId ?? ''
+          toolStartTimes.set(toolName + '-' + toolCallId, Date.now())
 
           // Generate human-readable label
           let label: string | undefined
@@ -102,7 +108,7 @@ async function bridgeStreamToSSE(
             label = 'Building app'
           } else if (toolName === 'installPackage') {
             label = `Installing ${args.packages ?? 'packages'}`
-          } else if (toolName === 'searchWeb') {
+          } else if (toolName === 'webSearch' || toolName === 'web_search_tool') {
             label = `Searching: ${args.query ?? ''}`
           }
 
@@ -111,9 +117,9 @@ async function bridgeStreamToSSE(
         }
 
         case 'tool-result': {
-          const toolName = chunk.toolName ?? 'unknown'
-          const result = chunk.result
-          const toolCallId = chunk.toolCallId ?? ''
+          const toolName = payload.toolName ?? chunk.toolName ?? 'unknown'
+          const result = payload.result ?? chunk.result
+          const toolCallId = payload.toolCallId ?? chunk.toolCallId ?? ''
           const startTime = toolStartTimes.get(toolName + '-' + toolCallId)
           const durationMs = startTime ? Date.now() - startTime : undefined
 
@@ -135,13 +141,18 @@ async function bridgeStreamToSSE(
             emit({ type: 'v2_package_installed', packages: result.output ?? '' })
           }
 
-          // Build result summary
+          // Build result summary (lean — file names only, no content)
           if (toolName === 'runBuild') {
             resultSummary = success
               ? 'Build passed'
               : `Build failed: ${result?.output?.slice(0, 200) ?? ''}`
           } else if (toolName === 'writeFile' || toolName === 'editFile') {
-            resultSummary = `${result?.path ?? 'file'} updated`
+            resultSummary = `${result?.path ?? 'file'} (${result?.bytesWritten ?? '?'} bytes)`
+          } else if (toolName === 'writeFiles') {
+            const paths = result?.paths as string[] | undefined
+            resultSummary = paths?.length
+              ? `Wrote ${paths.join(', ')}`
+              : `Wrote ${result?.filesWritten ?? '?'} files`
           }
 
           emit({
@@ -156,7 +167,7 @@ async function bridgeStreamToSSE(
 
         case 'step-finish': {
           // Accumulate token usage from each step
-          const usage = chunk.usage
+          const usage = payload.usage ?? chunk.usage
           if (usage) {
             totalTokens += usage.totalTokens ?? 0
           }
@@ -288,8 +299,9 @@ v2AgentRoutes.post('/', async (c) => {
         fullMessage = `[Existing sandbox: ${sandboxId}]\n\n${message}`
       }
 
-      // Create agent and stream
-      const agent = createV2Orchestrator()
+      // Create agent with provider-appropriate web search tool
+      const provider = MODEL_CONFIGS[model]?.provider ?? 'openai'
+      const agent = createV2Orchestrator(provider)
       const streamOutput = await agent.stream(fullMessage, {
         requestContext,
         maxSteps: 50,

@@ -103,6 +103,7 @@ export const writeFilesTool = createTool({
   }),
   outputSchema: z.object({
     success: z.boolean(),
+    paths: z.array(z.string()),
     filesWritten: z.number(),
     totalBytes: z.number(),
     errors: z.array(z.object({ path: z.string(), error: z.string() })),
@@ -114,6 +115,7 @@ export const writeFilesTool = createTool({
       if (file.content.length > MAX_FILE_SIZE) {
         return {
           success: false,
+          paths: [],
           filesWritten: 0,
           totalBytes: 0,
           errors: [],
@@ -125,6 +127,7 @@ export const writeFilesTool = createTool({
     const sandbox = await getSandbox(inputData.sandboxId)
     let filesWritten = 0
     let totalBytes = 0
+    const writtenPaths: string[] = []
     const errors: { path: string; error: string }[] = []
 
     for (const file of inputData.files) {
@@ -133,6 +136,7 @@ export const writeFilesTool = createTool({
         await sandbox.fs.uploadFile(Buffer.from(file.content), fullPath)
         filesWritten++
         totalBytes += file.content.length
+        writtenPaths.push(file.path)
       } catch (e) {
         errors.push({ path: file.path, error: e instanceof Error ? e.message : String(e) })
       }
@@ -140,6 +144,7 @@ export const writeFilesTool = createTool({
 
     return {
       success: errors.length === 0,
+      paths: writtenPaths,
       filesWritten,
       totalBytes,
       errors,
@@ -404,12 +409,16 @@ export const getPreviewUrlTool = createTool({
 export const createSandboxTool = createTool({
   id: 'create-sandbox',
   description:
-    'Create a new Daytona sandbox from snapshot. Labels must be a JSON object (e.g. {"project": "my-app", "env": "dev"}), NOT a plain string.',
+    'Create a new Daytona sandbox from snapshot. Optionally pass labels as a key-value object.',
   inputSchema: z.object({
-    labels: z
-      .record(z.string(), z.string())
-      .optional()
-      .describe('Optional labels as key-value object, e.g. {"project": "my-app"}'),
+    labels: z.preprocess(
+      (val) => {
+        if (typeof val === 'string') return { project: val }
+        if (typeof val === 'boolean' || typeof val === 'number') return {}
+        return val
+      },
+      z.record(z.string(), z.string()).optional(),
+    ).describe('Optional labels, e.g. {"project": "my-app"}. A plain string is also accepted.'),
   }),
   outputSchema: z.object({
     sandboxId: z.string(),
@@ -819,8 +828,8 @@ This is faster and cheaper than rewriting the entire file.`,
   }),
   outputSchema: z.object({
     success: z.boolean(),
-    mergedCode: z.string(),
-    relaceTokens: z.number(),
+    path: z.string(),
+    bytesWritten: z.number(),
     error: z.string().optional(),
   }),
   execute: async (inputData, _context) => {
@@ -844,40 +853,16 @@ This is faster and cheaper than rewriting the entire file.`,
 
       return {
         success: true,
-        mergedCode: result.mergedCode,
-        relaceTokens: result.usage.total_tokens,
+        path: inputData.path,
+        bytesWritten: result.mergedCode.length,
       }
     } catch (e) {
       return {
         success: false,
-        mergedCode: '',
-        relaceTokens: 0,
+        path: inputData.path,
+        bytesWritten: 0,
         error: e instanceof Error ? e.message : String(e),
       }
-    }
-  },
-})
-
-// ============================================================================
-// Web Search (V2 Orchestrator)
-// ============================================================================
-
-export const searchWebTool = createTool({
-  id: 'search-web',
-  description: `Search the web for design inspiration, library documentation, or reference UIs.
-Use this when building apps in unfamiliar domains to anchor your design to real products.
-Examples: "Procore dashboard UI" for construction apps, "Stripe dashboard design" for fintech.`,
-  inputSchema: z.object({
-    query: z.string().describe('Search query — be specific about what you need'),
-  }),
-  outputSchema: z.object({
-    results: z.string().describe('Search results summary'),
-    error: z.string().optional(),
-  }),
-  execute: async (inputData, _context) => {
-    // V2: Placeholder — will be replaced with actual search API (Brave/Serper/Tavily)
-    return {
-      results: `Web search for "${inputData.query}" — use your training knowledge to provide design context for this domain. In production, this will call a search API.`,
     }
   },
 })

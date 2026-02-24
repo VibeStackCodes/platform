@@ -8,8 +8,10 @@
  * Quality gate: `vite build` passes = ship it.
  */
 
+import { anthropic } from '@ai-sdk/anthropic'
+import { openai } from '@ai-sdk/openai'
 import { Agent } from '@mastra/core/agent'
-import { createAgentModelResolver } from './provider'
+import { createAgentModelResolver, type ProviderType } from './provider'
 import {
   createSandboxTool,
   writeFileTool,
@@ -20,7 +22,6 @@ import {
   runCommandTool,
   runBuildTool,
   installPackageTool,
-  searchWebTool,
   getPreviewUrlTool,
   createGitHubRepoTool,
   getGitHubTokenTool,
@@ -31,8 +32,15 @@ import {
 // Orchestrator uses the user-selected model via provider routing
 const orchestratorModel = createAgentModelResolver('orchestrator')
 
-/** Tool belt for the V2 orchestrator — all tools the agent can call */
-export const V2_ORCHESTRATOR_TOOLS = {
+/** Provider-native web search tools — both are server-side, zero extra deps */
+const WEB_SEARCH_TOOLS: Record<ProviderType, ReturnType<typeof openai.tools.webSearch>> = {
+  openai: openai.tools.webSearch(),
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Anthropic tool type is compatible at runtime
+  anthropic: anthropic.tools.webSearch_20250305({ maxUses: 5 }) as any,
+}
+
+/** Shared tool belt (everything except web search) */
+const BASE_TOOLS = {
   createSandbox: createSandboxTool,
   writeFile: writeFileTool,
   writeFiles: writeFilesTool,
@@ -42,12 +50,16 @@ export const V2_ORCHESTRATOR_TOOLS = {
   runCommand: runCommandTool,
   runBuild: runBuildTool,
   installPackage: installPackageTool,
-  searchWeb: searchWebTool,
   getPreviewUrl: getPreviewUrlTool,
   createGitHubRepo: createGitHubRepoTool,
   getGitHubToken: getGitHubTokenTool,
   pushToGitHub: pushToGitHubTool,
   deployToVercel: deployToVercelTool,
+}
+
+/** Build full tool belt with provider-appropriate web search */
+function buildTools(provider: ProviderType = 'openai') {
+  return { ...BASE_TOOLS, webSearch: WEB_SEARCH_TOOLS[provider] }
 }
 
 /** System prompt for the V2 orchestrator */
@@ -56,22 +68,25 @@ const ORCHESTRATOR_PROMPT = `You are a world-class app builder. You take a user'
 ## Your Environment
 
 You work in a sandbox with a pre-baked React project scaffold:
-- **Stack**: Vite 8, React 19, Tailwind v4.1, react-router-dom, shadcn/ui
-- **Pre-installed**: All 40+ shadcn/ui components, framer-motion, recharts, react-hook-form, zod, date-fns, lucide-react, @tanstack/react-query, sonner, vaul, cmdk
+- **Stack**: Vite 8, React 19, Tailwind v4.2 (CSS-first, no tailwind.config), react-router-dom v7, shadcn/ui
+- **Pre-installed**: 49 shadcn/ui components, framer-motion, recharts, react-hook-form, zod, date-fns, lucide-react, @tanstack/react-query, react-resizable-panels, sonner, vaul, cmdk, input-otp, embla-carousel-react, react-day-picker, next-themes
+- **Scaffold**: \`src/App.tsx\` (BrowserRouter + QueryClient + Toasters), \`src/pages/Index.tsx\`, \`src/pages/NotFound.tsx\`, \`src/components/ui/\` (49 components), \`src/hooks/\`, \`src/lib/utils.ts\`
 - **TypeScript**: Loose config (strict:false) — focus on working code, not type perfection
+- **CSS**: Tailwind v4 CSS-first — theme variables in \`src/index.css\` via \`@theme inline\` block, not a JS config file. Colors use \`hsl(var(--primary))\` pattern.
 - **Quality gate**: \`vite build\` passing is the only requirement
 
 ## How You Work
 
 ### First Prompt (New App)
-1. **Think about design first** — anchor to real products for inspiration. If the domain is unfamiliar, use searchWeb to research.
-2. Create a brief mental plan (2-3 sentences about your approach), then start building.
+1. **Research the domain first** — ALWAYS use \`webSearch\` to find 2-3 real products in this space. Study their UI patterns, color palettes, and information hierarchy. Example queries: "best construction project management dashboard UI", "top fitness tracking app design".
+2. Create a brief mental plan (2-3 sentences about your design approach, citing the products you researched), then start building.
 3. Call \`createSandbox\` to provision your workspace.
 4. Edit \`src/index.css\` to set the color theme (CSS variables).
-5. Create/edit files: pages in \`src/pages/\`, components in \`src/components/\`, hooks in \`src/hooks/\`.
-6. Update \`src/App.tsx\` with routes for your pages.
-7. Call \`runBuild\` to validate. If it fails, read the errors and fix them.
-8. End with a brief summary: "Your [app name] is live! Features: [list]."
+5. Edit \`index.html\`: set a descriptive \`<title>\`, \`<meta name="description">\`, and an app-themed SVG favicon (replace the default \`/favicon.svg\`).
+6. Create/edit files: pages in \`src/pages/\`, components in \`src/components/\`, hooks in \`src/hooks/\`.
+7. Update \`src/App.tsx\` with routes for your pages.
+8. Call \`runBuild\` to validate. If it fails, read the errors and fix them.
+9. End with a brief summary: "Your [app name] is live! Features: [list]."
 
 ### Edit Requests (Existing App)
 1. Read the relevant file(s) to understand current state.
@@ -89,6 +104,19 @@ You work in a sandbox with a pre-baked React project scaffold:
 - **shadcn/ui first**: Prefer shadcn components (Card, Button, Dialog, etc.) over raw HTML.
 - **No placeholder content**: Use realistic data, names, numbers. "John's Construction Co." not "Company Name".
 
+## Images
+
+Use the VibeStack image resolver for all photos: \`https://img.vibestack.site/s/{query}/{width}/{height}\`
+- **{query}**: URL-encoded, 3-5 word description. Short and specific.
+- **{width}/{height}**: Desired dimensions. Hero: 1600/900. Cards: 600/400. Thumbnails: 400/400. Avatars: 200/200.
+- The resolver searches Unsplash, picks the best aspect-ratio match, edge-caches for 24h, and falls back to a gradient SVG.
+- Every \`<img>\` MUST include \`alt\` text and \`loading="lazy"\` (or \`"eager"\` for hero).
+- NEVER add \`onError\` handlers — the resolver handles fallbacks server-side.
+- Good queries: "coffee shop warm interior", "pasta carbonara plated", "mountain lake sunrise"
+- Bad queries (too long): "marina promenade morning mist sailboats wooden docks"
+- Bad queries (too short): "food", "office", "team"
+- For people/portraits: include "headshot studio lighting" and use square crops (400/400).
+
 ## Tool Usage
 
 - \`createSandbox\`: Always first for new apps. Labels with project metadata.
@@ -100,7 +128,7 @@ You work in a sandbox with a pre-baked React project scaffold:
 - \`runCommand\`: Run any shell command (\`bun add\`, \`ls\`, etc.).
 - \`runBuild\`: Run \`vite build\`. The quality gate — must pass before you're done.
 - \`installPackage\`: \`bun add\` packages not in the snapshot. You are free to install anything.
-- \`searchWeb\`: Research design inspiration, library APIs, reference UIs.
+- \`webSearch\`: Search the web for design inspiration, real product UIs, library docs. Use BEFORE writing code.
 - \`getPreviewUrl\`: Get the live preview URL for the sandbox.
 
 ## Important Rules
@@ -114,14 +142,14 @@ You work in a sandbox with a pre-baked React project scaffold:
 7. **No TODO/FIXME/placeholder comments** — ship complete code.`
 
 /** Create a fresh V2 orchestrator agent instance */
-export function createV2Orchestrator(): Agent {
+export function createV2Orchestrator(provider: ProviderType = 'openai'): Agent {
   return new Agent({
     id: 'v2-orchestrator',
     name: 'V2 Orchestrator',
     model: orchestratorModel,
     description: 'Single orchestrator that builds apps from user descriptions',
     instructions: ORCHESTRATOR_PROMPT,
-    tools: V2_ORCHESTRATOR_TOOLS,
+    tools: buildTools(provider),
     defaultOptions: {
       maxSteps: 50,
       modelSettings: { temperature: 0.3 },
