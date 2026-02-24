@@ -10,6 +10,7 @@ import {
   getSandbox,
   pushToGitHub as pushToGitHubFn,
 } from '../sandbox'
+import { applyEdit } from '../relace'
 /**
  * Standalone Mastra tools for 9-agent architecture
  *
@@ -795,6 +796,129 @@ export const searchDocsTool = createTool({
       return {
         results: `Could not fetch docs for ${inputData.library}. Reference: ${url}. Use your training knowledge for: ${inputData.query}`,
         source: url,
+      }
+    }
+  },
+})
+
+// ============================================================================
+// Relace Edit (V2 Orchestrator)
+// ============================================================================
+
+export const editFileTool = createTool({
+  id: 'edit-file',
+  description: `Edit an existing file in the sandbox using Relace Instant Apply.
+Provide a lazy edit snippet — you can use "// ... keep existing code" markers
+to abbreviate unchanged sections. Relace merges your snippet into the full file.
+This is faster and cheaper than rewriting the entire file.`,
+  inputSchema: z.object({
+    sandboxId: z.string().describe('Daytona sandbox ID'),
+    path: z.string().describe('File path relative to /workspace'),
+    editSnippet: z.string().describe('Edit snippet with "// ... keep existing code" markers for unchanged parts'),
+    instruction: z.string().optional().describe('Optional natural language instruction for the merge'),
+  }),
+  outputSchema: z.object({
+    success: z.boolean(),
+    mergedCode: z.string(),
+    relaceTokens: z.number(),
+    error: z.string().optional(),
+  }),
+  execute: async (inputData, _context) => {
+    try {
+      const sandbox = await getSandbox(inputData.sandboxId)
+      const fullPath = sanitizeSandboxPath(inputData.path)
+
+      // Read current file content
+      const buffer = await sandbox.fs.downloadFile(fullPath)
+      const initialCode = buffer.toString('utf-8')
+
+      // Apply edit via Relace
+      const result = await applyEdit({
+        initialCode,
+        editSnippet: inputData.editSnippet,
+        instruction: inputData.instruction,
+      })
+
+      // Write merged result back
+      await sandbox.fs.uploadFile(Buffer.from(result.mergedCode), fullPath)
+
+      return {
+        success: true,
+        mergedCode: result.mergedCode,
+        relaceTokens: result.usage.total_tokens,
+      }
+    } catch (e) {
+      return {
+        success: false,
+        mergedCode: '',
+        relaceTokens: 0,
+        error: e instanceof Error ? e.message : String(e),
+      }
+    }
+  },
+})
+
+// ============================================================================
+// Web Search (V2 Orchestrator)
+// ============================================================================
+
+export const searchWebTool = createTool({
+  id: 'search-web',
+  description: `Search the web for design inspiration, library documentation, or reference UIs.
+Use this when building apps in unfamiliar domains to anchor your design to real products.
+Examples: "Procore dashboard UI" for construction apps, "Stripe dashboard design" for fintech.`,
+  inputSchema: z.object({
+    query: z.string().describe('Search query — be specific about what you need'),
+  }),
+  outputSchema: z.object({
+    results: z.string().describe('Search results summary'),
+    error: z.string().optional(),
+  }),
+  execute: async (inputData, _context) => {
+    // V2: Placeholder — will be replaced with actual search API (Brave/Serper/Tavily)
+    return {
+      results: `Web search for "${inputData.query}" — use your training knowledge to provide design context for this domain. In production, this will call a search API.`,
+    }
+  },
+})
+
+// ============================================================================
+// Install Package (V2 Orchestrator)
+// ============================================================================
+
+export const installPackageTool = createTool({
+  id: 'install-package',
+  description: `Install an npm package in the sandbox using bun add.
+Use this when you need a library not included in the pre-installed snapshot.
+The LLM is free to install any package it needs.`,
+  inputSchema: z.object({
+    sandboxId: z.string().describe('Daytona sandbox ID'),
+    packages: z.string().describe('Package names to install, space-separated (e.g. "dnd-kit @dnd-kit/core")'),
+  }),
+  outputSchema: z.object({
+    success: z.boolean(),
+    output: z.string(),
+    error: z.string().optional(),
+  }),
+  execute: async (inputData, _context) => {
+    try {
+      const sandbox = await getSandbox(inputData.sandboxId)
+      const result = await sandbox.process.executeCommand(
+        `bun add ${inputData.packages}`,
+        '/workspace',
+        undefined,
+        60,
+      )
+      return {
+        success: result.exitCode === 0,
+        output: result.result,
+        error: result.exitCode !== 0 ? result.result : undefined,
+      }
+    } catch (e) {
+      return {
+        success: false,
+        output: '',
+        error: e instanceof Error ? e.message : String(e),
       }
     }
   },
