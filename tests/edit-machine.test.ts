@@ -60,7 +60,6 @@ describe('editMachine', () => {
       expect(context.blueprint).toBeNull()
       expect(context.fileManifest).toBeNull()
       expect(context.sandboxId).toBeNull()
-      expect(context.supabaseProjectId).toBeNull()
       expect(context.githubRepo).toBeNull()
       expect(context.targetFile).toBeNull()
       expect(context.targetElement).toBeNull()
@@ -322,7 +321,6 @@ describe('editMachine', () => {
             blueprint: mockBlueprint,
             fileManifest: { 'src/App.tsx': 'content' },
             sandboxId: 'sandbox-123',
-            supabaseProjectId: 'supabase-123',
             githubRepo: 'https://github.com/test/repo.git',
             conversationHistory: [],
           })),
@@ -362,7 +360,6 @@ describe('editMachine', () => {
             blueprint: mockBlueprint,
             fileManifest: {},
             sandboxId: 'sandbox-123',
-            supabaseProjectId: null,
             githubRepo: null,
             conversationHistory: [],
           })),
@@ -412,7 +409,7 @@ describe('editMachine', () => {
             blueprint: null,
             fileManifest: {},
             sandboxId: 'sandbox-123',
-            supabaseProjectId: null,
+
             githubRepo: null,
             conversationHistory: [],
           })),
@@ -474,7 +471,7 @@ describe('editMachine', () => {
             blueprint: null,
             fileManifest: {},
             sandboxId: 'sandbox-123',
-            supabaseProjectId: null,
+
             githubRepo: null,
             conversationHistory: [],
           })),
@@ -535,7 +532,7 @@ describe('editMachine', () => {
             blueprint: null,
             fileManifest: {},
             sandboxId: 'sandbox-123',
-            supabaseProjectId: null,
+
             githubRepo: null,
             conversationHistory: [],
           })),
@@ -599,7 +596,7 @@ describe('editMachine', () => {
             blueprint: null,
             fileManifest: {},
             sandboxId: 'sandbox-123',
-            supabaseProjectId: null,
+
             githubRepo: null,
             conversationHistory: [],
           })),
@@ -707,7 +704,7 @@ describe('editMachine', () => {
             blueprint: null,
             fileManifest: {},
             sandboxId: 'sandbox-123',
-            supabaseProjectId: null,
+
             githubRepo: null,
             conversationHistory: [],
           })),
@@ -748,7 +745,7 @@ describe('editMachine', () => {
             blueprint: null,
             fileManifest: {},
             sandboxId: 'sandbox-123',
-            supabaseProjectId: null,
+
             githubRepo: null,
             conversationHistory: [],
           })),

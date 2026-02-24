@@ -51,8 +51,6 @@ global.fetch = vi.fn()
 const mockProject = {
   id: 'proj-123',
   name: 'Test App',
-  supabaseUrl: 'https://test.supabase.co',
-  supabaseAnonKey: 'anon-key-123',
 }
 
 const mockSandbox = {
@@ -132,10 +130,6 @@ describe('orchestrator - runDeployment', () => {
 
     // Verify sandbox operations
     expect(getSandbox).toHaveBeenCalledWith('sandbox-123')
-    expect(mockSandbox.fs.uploadFile).toHaveBeenCalledWith(
-      expect.any(Buffer),
-      '/workspace/.env.production',
-    )
 
     // Verify build
     expect(runCommand).toHaveBeenCalledWith(mockSandbox, 'bun run build', 'deploy-build', {
@@ -421,34 +415,6 @@ describe('orchestrator - runDeployment', () => {
     )
   })
 
-  it('should upload env vars to sandbox before build', async () => {
-    ;(global.fetch as ReturnType<typeof vi.fn>)
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ id: 'dpl-123', url: 'test-app.vercel.app' }),
-      } as Response)
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ readyState: 'READY' }),
-      } as Response)
-
-    await runDeployment({
-      sandboxId: 'sandbox-123',
-      projectId: 'proj-123',
-    })
-
-    // Verify env file content
-    expect(mockSandbox.fs.uploadFile).toHaveBeenCalledWith(
-      expect.any(Buffer),
-      '/workspace/.env.production',
-    )
-
-    const uploadedBuffer = (mockSandbox.fs.uploadFile as ReturnType<typeof vi.fn>).mock.calls[0][0]
-    const content = uploadedBuffer.toString()
-    expect(content).toContain('VITE_SUPABASE_URL=https://test.supabase.co')
-    expect(content).toContain('VITE_SUPABASE_ANON_KEY=anon-key-123')
-  })
-
   it('should send files as base64 to Vercel', async () => {
     ;(global.fetch as ReturnType<typeof vi.fn>)
       .mockResolvedValueOnce({
@@ -478,31 +444,6 @@ describe('orchestrator - runDeployment', () => {
         data: Buffer.from('console.log("app")').toString('base64'),
       },
     ])
-  })
-
-  it('should include Supabase env vars in Vercel deployment', async () => {
-    ;(global.fetch as ReturnType<typeof vi.fn>)
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ id: 'dpl-123', url: 'test-app.vercel.app' }),
-      } as Response)
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ readyState: 'READY' }),
-      } as Response)
-
-    await runDeployment({
-      sandboxId: 'sandbox-123',
-      projectId: 'proj-123',
-    })
-
-    const fetchCall = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0]
-    const body = JSON.parse(fetchCall[1].body)
-
-    expect(body.env).toEqual({
-      VITE_SUPABASE_URL: 'https://test.supabase.co',
-      VITE_SUPABASE_ANON_KEY: 'anon-key-123',
-    })
   })
 
   it('should capture exceptions to Sentry', async () => {

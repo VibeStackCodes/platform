@@ -9,7 +9,7 @@ import { checkDeploymentStatus } from '@vercel/client'
 import { Hono } from 'hono'
 import { getProject, updateProject } from '../lib/db/queries'
 import { fetchWithTimeout } from '../lib/fetch'
-import { downloadDirectory, getDaytonaClient, runCommand } from '../lib/sandbox'
+import { downloadDirectory, getDaytonaClient } from '../lib/sandbox'
 import { buildAppSlug } from '../lib/slug'
 import type { DeployRequest } from '../lib/types'
 import { authMiddleware } from '../middleware/auth'
@@ -18,34 +18,6 @@ export const projectDeployRoutes = new Hono()
 
 // Apply auth middleware to all routes
 projectDeployRoutes.use('*', authMiddleware)
-
-/**
- * Build the project in sandbox with production env vars
- */
-async function buildInSandbox(
-  sandbox: Awaited<ReturnType<typeof import('../lib/sandbox').getSandbox>>,
-  supabaseUrl: string,
-  supabaseAnonKey: string,
-): Promise<Array<{ path: string; content: Buffer }>> {
-  // Write production env vars
-  await sandbox.fs.uploadFile(
-    Buffer.from(`VITE_SUPABASE_URL=${supabaseUrl}\nVITE_SUPABASE_ANON_KEY=${supabaseAnonKey}\n`),
-    '/workspace/.env.production',
-  )
-
-  // Run production build
-  const result = await runCommand(sandbox, 'bun run build', 'prod-build', {
-    cwd: '/workspace',
-    timeout: 120,
-  })
-
-  if (result.exitCode !== 0) {
-    throw new Error(`Production build failed: ${result.stdout}\n${result.stderr || ''}`)
-  }
-
-  // Download dist/
-  return await downloadDirectory(sandbox, '/workspace/dist')
-}
 
 /**
  * POST /api/projects/deploy
@@ -86,53 +58,15 @@ projectDeployRoutes.post('/', async (c) => {
 
     console.log(`[deploy] Downloading files from sandbox ${sandbox.id}...`)
 
-    // Apply migration to cloud Supabase if not already done
-    if (project.supabaseProjectId) {
-      try {
-        const migrationFile = await sandbox.fs.downloadFile(
-          '/workspace/supabase/migrations/001_init.sql',
-        )
-        if (migrationFile) {
-          const { runMigration } = await import('../lib/supabase-mgmt')
-          const result = await runMigration(project.supabaseProjectId, migrationFile.toString())
-          if (!result.success) {
-            console.error(`[deploy] Cloud migration warning: ${result.error}`)
-            // Don't throw — migration might already be applied
-          } else {
-            console.log('[deploy] Cloud Supabase migration applied')
-          }
-        }
-      } catch (err) {
-        console.warn('[deploy] Could not apply cloud migration:', err)
-        // Continue — migration may already be applied from generation
-      }
-    }
-
     let deployUrl: string
-
-    // Build Supabase env vars from stored credentials
-    const supabaseEnvVars: Record<string, string> = {}
-    if (project.supabaseUrl) {
-      supabaseEnvVars.VITE_SUPABASE_URL = project.supabaseUrl
-    }
-    if (project.supabaseAnonKey) {
-      supabaseEnvVars.VITE_SUPABASE_ANON_KEY = project.supabaseAnonKey
-    }
 
     console.log(
       `[deploy] Project: ${project.name}, GitHub: ${project.githubRepoUrl || 'none'}, Sandbox: ${project.sandboxId}`,
     )
-    console.log(`[deploy] Supabase env vars: ${Object.keys(supabaseEnvVars).join(', ') || 'none'}`)
 
     let vercelProjectSlug: string
 
-    if (project.sandboxId && project.supabaseUrl && project.supabaseAnonKey) {
-      console.log(`[deploy] Pre-built deploy: building in sandbox...`)
-      const builtFiles = await buildInSandbox(sandbox, project.supabaseUrl, project.supabaseAnonKey)
-      console.log(`[deploy] Built ${builtFiles.length} files, deploying to Vercel...`)
-      deployUrl = await deployToVercel(project.name, builtFiles, vercelTeamId, supabaseEnvVars)
-      vercelProjectSlug = project.name.toLowerCase().replace(/[^a-z0-9-]/g, '-')
-    } else if (project.githubRepoUrl) {
+    if (project.githubRepoUrl) {
       // Deploy from GitHub repo (required path)
       const repoFullName = project.githubRepoUrl.replace('https://github.com/', '')
       console.log(`[deploy] Deploying from GitHub: ${repoFullName}`)
@@ -140,7 +74,6 @@ projectDeployRoutes.post('/', async (c) => {
         repoFullName,
         project.name,
         vercelTeamId,
-        supabaseEnvVars,
       )
       deployUrl = result.deployUrl
       vercelProjectSlug = result.vercelProjectSlug
@@ -149,7 +82,7 @@ projectDeployRoutes.post('/', async (c) => {
       console.log(`[deploy] No GitHub repo, falling back to file upload...`)
       const files = await downloadDirectory(sandbox, '/workspace')
       console.log(`[deploy] Downloaded ${files.length} files, deploying to Vercel...`)
-      deployUrl = await deployToVercel(project.name, files, vercelTeamId, supabaseEnvVars)
+      deployUrl = await deployToVercel(project.name, files, vercelTeamId)
       vercelProjectSlug = project.name.toLowerCase().replace(/[^a-z0-9-]/g, '-')
     }
 
@@ -210,7 +143,6 @@ async function deployToVercel(
   projectName: string,
   files: Array<{ path: string; content: Buffer }>,
   teamId?: string,
-  envVars?: Record<string, string>,
 ): Promise<string> {
   const vercelToken = process.env.VERCEL_TOKEN
   if (!vercelToken) {
@@ -247,7 +179,6 @@ async function deployToVercel(
           outputDirectory: 'dist',
         },
         target: 'production',
-        ...(envVars && Object.keys(envVars).length > 0 ? { env: envVars } : {}),
       }),
     },
   )
@@ -283,7 +214,6 @@ async function deployFromGitHub(
   repoFullName: string,
   projectName: string,
   teamId?: string,
-  envVars?: Record<string, string>,
 ): Promise<{ deployUrl: string; vercelProjectSlug: string }> {
   const vercelToken = process.env.VERCEL_TOKEN
   if (!vercelToken) {
@@ -342,11 +272,6 @@ async function deployFromGitHub(
     throw new Error(`Vercel project creation failed: ${errorBody}`)
   }
 
-  // Step 2.5: Set environment variables on the Vercel project
-  if (envVars && Object.keys(envVars).length > 0) {
-    await setVercelEnvVars(slug, envVars, finalTeamId, vercelToken)
-  }
-
   // Step 3: Create explicit deployment with gitSource (doesn't rely on Vercel GitHub App)
   const deployResponse = await fetchWithTimeout(
     `https://api.vercel.com/v13/deployments${finalTeamId ? `?teamId=${finalTeamId}` : ''}`,
@@ -387,42 +312,6 @@ async function deployFromGitHub(
   await waitForDeploymentReady(vercelDeployment, finalTeamId, vercelToken)
 
   return { deployUrl, vercelProjectSlug: slug }
-}
-
-/**
- * Set environment variables on a Vercel project
- */
-async function setVercelEnvVars(
-  projectSlug: string,
-  envVars: Record<string, string>,
-  teamId: string | undefined,
-  token: string,
-): Promise<void> {
-  const body = Object.entries(envVars).map(([key, value]) => ({
-    key,
-    value,
-    target: ['production', 'preview', 'development'],
-    type: 'encrypted',
-  }))
-
-  const response = await fetchWithTimeout(
-    `https://api.vercel.com/v10/projects/${projectSlug}/env${teamId ? `?teamId=${teamId}` : ''}`,
-    {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(body),
-    },
-  )
-
-  if (!response.ok) {
-    const error = await response.text()
-    throw new Error(`Failed to set Vercel env vars: ${error}`)
-  }
-
-  console.log(`[deploy] Set ${body.length} env vars on project ${projectSlug}`)
 }
 
 /**

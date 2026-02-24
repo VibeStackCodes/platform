@@ -71,9 +71,7 @@ projectRoutes.get('/:id', async (c) => {
     return c.json({ error: 'Project not found' }, 404)
   }
 
-  // Strip sensitive fields before sending to client
-  const { supabaseServiceRoleKey: _, ...safeProject } = project
-  return c.json(safeProject)
+  return c.json(project)
 })
 
 /**

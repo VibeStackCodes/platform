@@ -31,18 +31,6 @@ export interface FileSpec {
 }
 
 // ============================================================================
-// Supabase Schema
-// ============================================================================
-
-export interface SupabaseSchema {
-  migrationSQL: string
-  seedSQL: string | null
-  rls: string
-  storageBuckets: string[]
-  realtimeTables: string[]
-}
-
-// ============================================================================
 // Design & Dependencies
 // ============================================================================
 
@@ -100,7 +88,6 @@ export interface Plan {
   appDescription: string
   requirements: Requirement[]
   files: FileSpec[]
-  supabase: SupabaseSchema
   designTokens: DesignTokens
   packageDeps: PackageDependencies
 }
@@ -155,32 +142,14 @@ export interface GenerationURLs {
 export interface GenerationState {
   blueprint?: unknown
   sandboxId?: string
-  supabaseProjectId?: string | null
   githubRepo?: string | null
   fileManifest?: Record<string, string>
-  contract?: unknown
   appName?: string
   appDescription?: string
   tokens?: unknown
   creativeSpec?: unknown
   generationStatus?: string
   lastEditedAt?: string
-}
-
-// ============================================================================
-// Supabase Project (from Management API)
-// ============================================================================
-
-export interface SupabaseProject {
-  id: string
-  name: string
-  orgId: string
-  region: string
-  dbHost: string
-  dbPassword: string
-  anonKey: string
-  serviceRoleKey: string
-  url: string
 }
 
 // ============================================================================
@@ -207,11 +176,9 @@ export interface Project {
   plan: Plan | null
   generation_state: GenerationState | null
   sandbox_id: string | null
-  supabase_project_id: string | null
   preview_url: string | null
   code_server_url: string | null
   deploy_url: string | null
-  supabase_url: string | null
   model: string | null
   created_at: string
   updated_at: string

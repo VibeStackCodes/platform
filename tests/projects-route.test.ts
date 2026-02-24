@@ -44,7 +44,7 @@ describe('Project Routes', () => {
           createdAt: new Date('2026-02-16T10:00:00Z'),
           updatedAt: new Date('2026-02-16T10:00:00Z'),
           sandboxId: 'sandbox-1',
-          supabaseProjectId: 'supabase-1',
+
           githubRepoUrl: 'https://github.com/test/repo',
           vercelUrl: 'https://vercel.app',
           generationState: null,
@@ -60,7 +60,7 @@ describe('Project Routes', () => {
           createdAt: new Date('2026-02-15T10:00:00Z'),
           updatedAt: new Date('2026-02-15T10:00:00Z'),
           sandboxId: null,
-          supabaseProjectId: null,
+
           githubRepoUrl: null,
           vercelUrl: null,
           generationState: null,

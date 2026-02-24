@@ -30,7 +30,6 @@ export interface EditMachineContext {
   blueprint: AppBlueprint | null
   fileManifest: Record<string, string> | null
   sandboxId: string | null
-  supabaseProjectId: string | null
   githubRepo: string | null
   // Edit-specific
   targetFile: string | null
@@ -71,7 +70,6 @@ export interface LoadResult {
   blueprint: AppBlueprint | null
   fileManifest: Record<string, string> | null
   sandboxId: string | null
-  supabaseProjectId: string | null
   githubRepo: string | null
   conversationHistory: ChatMessage[]
 }
@@ -134,7 +132,6 @@ export const editMachine = setup({
           blueprint: (genState.blueprint as AppBlueprint) ?? null,
           fileManifest: (genState.fileManifest as Record<string, string>) ?? null,
           sandboxId: project.sandboxId ?? (genState.sandboxId as string) ?? null,
-          supabaseProjectId: project.supabaseProjectId ?? null,
           githubRepo: project.githubRepoUrl ?? (genState.githubRepo as string) ?? null,
           conversationHistory: messages.map((m) => ({
             role: (m.role === 'system' ? 'assistant' : m.role) as 'user' | 'assistant',
@@ -317,7 +314,6 @@ export const editMachine = setup({
             contract: input.context.contract,
             blueprint: input.context.blueprint,
             sandboxId: input.context.sandboxId,
-            supabaseProjectId: input.context.supabaseProjectId,
             githubRepo: input.context.githubRepo,
             fileManifest: newFileManifest,
             lastEditedAt: new Date().toISOString(),
@@ -341,7 +337,6 @@ export const editMachine = setup({
     blueprint: null,
     fileManifest: null,
     sandboxId: null,
-    supabaseProjectId: null,
     githubRepo: null,
     targetFile: null,
     targetElement: null,
@@ -387,7 +382,6 @@ export const editMachine = setup({
             blueprint: ({ event }) => event.output.blueprint,
             fileManifest: ({ event }) => event.output.fileManifest,
             sandboxId: ({ event }) => event.output.sandboxId,
-            supabaseProjectId: ({ event }) => event.output.supabaseProjectId,
             githubRepo: ({ event }) => event.output.githubRepo,
             conversationHistory: ({ event }) => event.output.conversationHistory,
           }),

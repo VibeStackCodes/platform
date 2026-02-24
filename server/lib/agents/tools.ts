@@ -9,8 +9,6 @@ import {
   getSandbox,
   pushToGitHub as pushToGitHubFn,
 } from '../sandbox'
-import { createSupabaseProject as createSupabaseProjectFn, runMigration } from '../supabase-mgmt'
-
 /**
  * Standalone Mastra tools for 9-agent architecture
  *
@@ -368,130 +366,6 @@ export const runTypeCheckTool = createTool({
 })
 
 // ============================================================================
-// SQL Validation
-// ============================================================================
-
-/**
- * Cached PGlite instance with auth stubs pre-loaded.
- * Reused across validate-sql calls to avoid ~200ms startup per invocation.
- * Each validation runs in a transaction that gets rolled back to keep state clean.
- */
-let _pgliteInstance: Awaited<ReturnType<typeof initPGlite>> | null = null
-let _pgliteReady: Promise<void> | null = null
-
-async function initPGlite() {
-  const { PGlite } = await import('@electric-sql/pglite')
-  const pg = new PGlite()
-  const supabaseStubs = `
-    -- Supabase roles
-    DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN CREATE ROLE authenticated; END IF; END $$;
-    DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN CREATE ROLE anon; END IF; END $$;
-    DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'service_role') THEN CREATE ROLE service_role; END IF; END $$;
-    GRANT ALL ON SCHEMA public TO authenticated, anon, service_role;
-
-    -- auth schema
-    CREATE SCHEMA IF NOT EXISTS auth;
-    CREATE TABLE IF NOT EXISTS auth.users (
-      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-      email text,
-      role text DEFAULT 'authenticated'
-    );
-    CREATE OR REPLACE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$ SELECT '00000000-0000-0000-0000-000000000000'::uuid $$;
-    CREATE OR REPLACE FUNCTION auth.role() RETURNS text LANGUAGE sql STABLE AS $$ SELECT 'authenticated'::text $$;
-    CREATE OR REPLACE FUNCTION auth.jwt() RETURNS jsonb LANGUAGE sql STABLE AS $$ SELECT '{}'::jsonb $$;
-
-    -- storage schema (Supabase Storage stubs)
-    CREATE SCHEMA IF NOT EXISTS storage;
-    CREATE TABLE IF NOT EXISTS storage.buckets (
-      id text PRIMARY KEY,
-      name text NOT NULL UNIQUE,
-      owner uuid REFERENCES auth.users(id),
-      public boolean DEFAULT false,
-      file_size_limit bigint,
-      allowed_mime_types text[],
-      created_at timestamptz DEFAULT now(),
-      updated_at timestamptz DEFAULT now()
-    );
-    CREATE TABLE IF NOT EXISTS storage.objects (
-      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-      bucket_id text REFERENCES storage.buckets(id),
-      name text,
-      owner uuid REFERENCES auth.users(id),
-      metadata jsonb,
-      path_tokens text[] GENERATED ALWAYS AS (string_to_array(name, '/')) STORED,
-      created_at timestamptz DEFAULT now(),
-      updated_at timestamptz DEFAULT now(),
-      last_accessed_at timestamptz DEFAULT now()
-    );
-    GRANT ALL ON SCHEMA storage TO authenticated, anon, service_role;
-
-    -- realtime schema (stub for ALTER PUBLICATION references)
-    CREATE SCHEMA IF NOT EXISTS realtime;
-  `
-  await pg.exec(supabaseStubs)
-  return pg
-}
-
-async function getPGlite() {
-  if (_pgliteInstance) return _pgliteInstance
-  if (!_pgliteReady) {
-    _pgliteReady = initPGlite().then(
-      (pg) => {
-        _pgliteInstance = pg
-      },
-      (err) => {
-        _pgliteReady = null // Reset on failure so next call retries
-        throw err
-      },
-    )
-  }
-  await _pgliteReady
-  return _pgliteInstance!
-}
-
-export const validateSQLTool = createTool({
-  id: 'validate-sql',
-  description: 'Validate SQL migration against PGlite (runs locally, no sandbox needed)',
-  inputSchema: z.object({
-    sql: z.string().describe('SQL migration to validate'),
-  }),
-  outputSchema: z.object({
-    valid: z.boolean(),
-    error: z.string().optional(),
-  }),
-  execute: async (inputData, _context) => {
-    const pg = await getPGlite()
-    // Strip statements PGlite can't handle:
-    // - CREATE EXTENSION: PGlite has gen_random_uuid() built-in, extensions not needed
-    // - ALTER/CREATE PUBLICATION: Supabase realtime uses publications, PGlite doesn't support them
-    // - NOTIFY/pg_notify: Supabase realtime triggers, no-op in PGlite
-    const sql = inputData.sql
-      .replace(/CREATE\s+EXTENSION\s+IF\s+NOT\s+EXISTS\s+[^;]+;/gi, '')
-      .replace(/ALTER\s+PUBLICATION\s+[^;]+;/gi, '')
-      .replace(/CREATE\s+PUBLICATION\s+[^;]+;/gi, '')
-      .replace(/DROP\s+PUBLICATION\s+[^;]+;/gi, '')
-      .replace(/SELECT\s+pg_notify\s*\([^)]*\)\s*;/gi, '')
-      // Strip indexes using pg_trgm operator classes (gin_trgm_ops, gist_trgm_ops)
-      // PGlite doesn't bundle pg_trgm, but Supabase Postgres does
-      .replace(/CREATE\s+INDEX\s+[^;]*_trgm_ops\b[^;]*;/gi, '')
-    try {
-      // Wrap in a transaction and always rollback to keep PGlite clean
-      await pg.exec('BEGIN')
-      await pg.exec(sql)
-      await pg.exec('ROLLBACK')
-      return { valid: true }
-    } catch (e) {
-      try {
-        await pg.exec('ROLLBACK')
-      } catch {
-        /* already rolled back */
-      }
-      return { valid: false, error: e instanceof Error ? e.message : String(e) }
-    }
-  },
-})
-
-// ============================================================================
 // Preview & Sandbox Management
 // ============================================================================
 
@@ -679,67 +553,6 @@ export const deployToVercelTool = createTool({
         error: e instanceof Error ? e.message : String(e),
       }
     }
-  },
-})
-
-// ============================================================================
-// Infrastructure Tools
-// ============================================================================
-
-export const createSupabaseProjectTool = createTool({
-  id: 'create-supabase-project',
-  description:
-    'Create a new Supabase project via Management API. Waits for ACTIVE_HEALTHY status. Returns project ID, URL, and API keys. A random suffix is appended to the name to avoid duplicates.',
-  inputSchema: z.object({
-    name: z.string().describe('Project name base (a random suffix will be appended automatically)'),
-    region: z.string().default('us-east-1').describe('AWS region'),
-  }),
-  outputSchema: z.object({
-    projectId: z.string(),
-    url: z.string(),
-    anonKey: z.string(),
-    serviceRoleKey: z.string(),
-    dbHost: z.string(),
-    error: z.string().optional(),
-  }),
-  execute: async (inputData) => {
-    try {
-      const uniqueName = `${inputData.name}-${Date.now().toString(36).slice(-5)}`
-      const project = await createSupabaseProjectFn(uniqueName, inputData.region)
-      return {
-        projectId: project.id,
-        url: project.url,
-        anonKey: project.anonKey,
-        serviceRoleKey: project.serviceRoleKey,
-        dbHost: project.dbHost,
-      }
-    } catch (e) {
-      return {
-        projectId: '',
-        url: '',
-        anonKey: '',
-        serviceRoleKey: '',
-        dbHost: '',
-        error: e instanceof Error ? e.message : String(e),
-      }
-    }
-  },
-})
-
-export const runMigrationTool = createTool({
-  id: 'run-migration',
-  description: 'Execute a SQL migration against a Supabase project via the Management API',
-  inputSchema: z.object({
-    supabaseProjectId: z.string().describe('Supabase project ID'),
-    sql: z.string().describe('SQL migration to execute'),
-  }),
-  outputSchema: z.object({
-    success: z.boolean(),
-    error: z.string().optional(),
-    executedAt: z.string(),
-  }),
-  execute: async (inputData) => {
-    return await runMigration(inputData.supabaseProjectId, inputData.sql)
   },
 })
 

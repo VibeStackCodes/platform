@@ -31,7 +31,6 @@ export async function getProjectGenerationState(projectId: string, userId: strin
       id: projects.id,
       generationState: projects.generationState,
       sandboxId: projects.sandboxId,
-      supabaseProjectId: projects.supabaseProjectId,
       githubRepoUrl: projects.githubRepoUrl,
       name: projects.name,
       status: projects.status,

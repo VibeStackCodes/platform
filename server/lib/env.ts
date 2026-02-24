@@ -7,8 +7,6 @@ const envSchema = z.object({
   DATABASE_URL: z.string().min(1),
   VITE_SUPABASE_URL: z.string().url(),
   VITE_SUPABASE_ANON_KEY: z.string().min(1),
-  SUPABASE_ACCESS_TOKEN: z.string().min(1),
-  SUPABASE_ORG_ID: z.string().min(1),
   OPENAI_API_KEY: z.string().min(1),
   DAYTONA_API_KEY: z.string().min(1),
   DAYTONA_SNAPSHOT_ID: z.string().min(1),
@@ -26,8 +24,9 @@ const envSchema = z.object({
   HELICONE_API_KEY: z.string().optional(),
   SENTRY_DSN: z.string().optional(),
   VITE_SENTRY_DSN: z.string().optional(),
+  SUPABASE_ACCESS_TOKEN: z.string().optional(),
+  SUPABASE_ORG_ID: z.string().optional(),
   ADMIN_USER_IDS: z.string().optional(),
-  WARM_POOL_SIZE: z.coerce.number().int().positive().optional(),
   NODE_ENV: z.enum(['development', 'production', 'test']).optional(),
 })
 

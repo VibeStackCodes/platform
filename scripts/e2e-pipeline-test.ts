@@ -260,7 +260,6 @@ async function phase3_provisioning(appName: string) {
   })
 
   log(`Sandbox ID: ${result.sandboxId}`)
-  log(`Supabase Project: ${result.supabaseProjectId}`)
   log(`GitHub: ${result.githubHtmlUrl}`)
 
   return result
@@ -270,7 +269,7 @@ async function phase3_provisioning(appName: string) {
 // Phase 4: Code Generation
 // ============================================================================
 
-async function phase4_codegen(blueprint: any, contract: any, sandboxId: string, supabaseProjectId: string, supabaseUrl: string, supabaseAnonKey: string) {
+async function phase4_codegen(blueprint: any, contract: any, sandboxId: string) {
   const { runCodeGeneration } = await import('../server/lib/agents/orchestrator')
 
   log('Running code generation (scaffold + deterministic assembly)...')
@@ -279,9 +278,6 @@ async function phase4_codegen(blueprint: any, contract: any, sandboxId: string, 
     blueprint,
     contract,
     sandboxId,
-    supabaseProjectId,
-    supabaseUrl,
-    supabaseAnonKey,
   })
 
   log(`Assembled files: ${result.assembledFiles.length}`)
@@ -686,8 +682,6 @@ async function main() {
 
   const notes: string[] = []
   let sandboxId: string | null = null
-  let supabaseProjectId: string | null = null
-
   const results: any = {
     analysis: null,
     blueprint: null,
@@ -738,8 +732,7 @@ async function main() {
     const provisioningResult = await phase3_provisioning(analysisResult.appName)
     const d3 = Date.now() - t3
     sandboxId = provisioningResult.sandboxId
-    supabaseProjectId = provisioningResult.supabaseProjectId
-    trackPhase('3. Provisioning', d3, 0, 'PASS', `sandbox + supabase + github`)
+    trackPhase('3. Provisioning', d3, 0, 'PASS', `sandbox + github`)
     results.provisioning = provisioningResult
     notes.push(`[PERF] Provisioning: ${(d3/1000).toFixed(1)}s`)
 
@@ -747,8 +740,6 @@ async function main() {
     const t4 = Date.now()
     const codegenResult = await phase4_codegen(
       blueprint, analysisResult.contract, sandboxId,
-      provisioningResult.supabaseProjectId,
-      provisioningResult.supabaseUrl, provisioningResult.supabaseAnonKey,
     )
     const d4 = Date.now() - t4
     trackPhase('4. Code Generation', d4, codegenResult.tokensUsed,
@@ -830,19 +821,6 @@ async function main() {
         log(`\n🚀 APP ${TEST_CONFIG.id} LIVE: ${vercelUrl}`)
         log(`   App: ${analysisResult.appName}`)
 
-        // --- Phase 9.5: Update Supabase Auth SITE_URL ---
-        // Must run after Vercel deploy so we know the live URL.
-        // Fixes confirmation/magic-link emails redirecting to localhost:3000.
-        if (blueprint.features?.auth && provisioningResult?.supabaseProjectId) {
-          try {
-            const { updateAuthConfig } = await import('../server/lib/supabase-mgmt')
-            await updateAuthConfig(provisioningResult.supabaseProjectId, vercelUrl)
-            log(`   Auth SITE_URL updated: ${vercelUrl}`)
-          } catch (authErr) {
-            logError('Auth config update failed (non-blocking)', authErr)
-            notes.push(`[BUG] Supabase SITE_URL update failed: ${authErr instanceof Error ? authErr.message : String(authErr)}`)
-          }
-        }
       } catch (error) {
         logError('Vercel deploy failed', error)
         notes.push(`[BUG] Vercel deploy failed: ${error instanceof Error ? error.message : String(error)}`)
@@ -875,7 +853,6 @@ async function main() {
     await cleanup(sandboxId)
 
     log('\n--- Resources Retained ---')
-    if (supabaseProjectId) log(`  Supabase: ${supabaseProjectId} (retained for inspection)`)
   }
 }
 

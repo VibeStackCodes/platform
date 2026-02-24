@@ -260,7 +260,6 @@ export async function runDeployment(input: {
   sandboxId: string
   projectId: string
   blueprint?: AppBlueprint | null
-  supabaseProjectId?: string | null
   githubCloneUrl?: string | null
 }): Promise<DeploymentResult> {
   // Lazy imports to avoid circular dependencies
@@ -287,10 +286,8 @@ export async function runDeployment(input: {
     // 3. Persist generation state early (enables iterative editing even if deployment fails)
     await updateProject(input.projectId, {
       generationState: {
-        contract: null,
         blueprint: input.blueprint ?? null,
         sandboxId: input.sandboxId,
-        supabaseProjectId: input.supabaseProjectId ?? null,
         githubRepo: input.githubCloneUrl ?? null,
         fileManifest,
         lastEditedAt: new Date().toISOString(),
@@ -308,19 +305,7 @@ export async function runDeployment(input: {
       throw new Error(`Project ${input.projectId} not found`)
     }
 
-    // 5. Write production env vars
-    const envContent = [
-      project.supabaseUrl ? `VITE_SUPABASE_URL=${project.supabaseUrl}` : '',
-      project.supabaseAnonKey ? `VITE_SUPABASE_ANON_KEY=${project.supabaseAnonKey}` : '',
-    ]
-      .filter(Boolean)
-      .join('\n')
-
-    if (envContent) {
-      await sandbox.fs.uploadFile(Buffer.from(envContent + '\n'), '/workspace/.env.production')
-    }
-
-    // 6. Production build
+    // 5. Production build
     const buildResult = await runCommand(sandbox, 'bun run build', 'deploy-build', {
       cwd: '/workspace',
       timeout: 120,
@@ -351,10 +336,6 @@ export async function runDeployment(input: {
       data: f.content.toString('base64'),
     }))
 
-    const envVars: Record<string, string> = {}
-    if (project.supabaseUrl) envVars.VITE_SUPABASE_URL = project.supabaseUrl
-    if (project.supabaseAnonKey) envVars.VITE_SUPABASE_ANON_KEY = project.supabaseAnonKey
-
     // Deploy with retry (max 2 attempts)
     let deployResponse: Response | null = null
     for (let attempt = 0; attempt < 2; attempt++) {
@@ -377,7 +358,6 @@ export async function runDeployment(input: {
               outputDirectory: 'dist',
             },
             target: 'production',
-            ...(Object.keys(envVars).length > 0 ? { env: envVars } : {}),
           }),
           timeout: 60_000,
         },

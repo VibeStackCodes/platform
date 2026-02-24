@@ -19,7 +19,6 @@ import { projectDeployRoutes } from './routes/projects-deploy'
 import { sandboxUrlRoutes } from './routes/sandbox-urls'
 import { stripeCheckoutRoutes } from './routes/stripe-checkout'
 import { stripeWebhookRoutes } from './routes/stripe-webhook'
-import { supabaseProxyRoutes } from './routes/supabase-proxy'
 import { adminRoutes } from './routes/admin'
 
 declare const Bun: {
@@ -112,7 +111,6 @@ app.route('/projects', sandboxUrlRoutes)
 app.route('/projects/deploy', projectDeployRoutes)
 app.route('/stripe/checkout', stripeCheckoutRoutes)
 app.route('/stripe/webhook', stripeWebhookRoutes)
-app.route('/supabase-proxy', supabaseProxyRoutes)
 app.route('/auth/callback', authCallbackRoutes)
 app.route('/admin', adminRoutes)
 
