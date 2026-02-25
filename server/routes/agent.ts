@@ -291,6 +291,8 @@ agentRoutes.post('/', async (c) => {
           resource: user.id,
         },
         maxSteps: 50,
+        savePerStep: true,
+        abortSignal: signal,
         structuredOutput: {
           schema: z.object({
             summary: z.string().describe('One-line summary of what was built or changed'),

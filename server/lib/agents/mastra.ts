@@ -31,6 +31,7 @@ export const memory = new Memory({
     semanticRecall: false,
     workingMemory: {
       enabled: true,
+      scope: 'thread',
       schema: workingMemorySchema,
     },
   },

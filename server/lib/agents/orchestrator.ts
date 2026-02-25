@@ -11,7 +11,7 @@
 import { anthropic } from '@ai-sdk/anthropic'
 import { openai } from '@ai-sdk/openai'
 import { Agent } from '@mastra/core/agent'
-import { memory } from './mastra'
+import { mastra, memory } from './mastra'
 import { createAgentModelResolver, type ProviderType } from './provider'
 import {
   commitAndPushTool,
@@ -151,9 +151,9 @@ Use the VibeStack image resolver for all photos: \`https://img.vibestack.site/s/
 6. **File size limit**: Keep individual files under 500 lines. Split into components.
 7. **No TODO/FIXME/placeholder comments** — ship complete code.`
 
-/** Create a fresh orchestrator agent instance */
+/** Create a fresh orchestrator agent instance, registered with Mastra for auto-injection */
 export function createOrchestrator(provider: ProviderType = 'openai'): Agent {
-  return new Agent({
+  const agent = new Agent({
     id: 'orchestrator',
     name: 'Orchestrator',
     model: orchestratorModel,
@@ -166,4 +166,9 @@ export function createOrchestrator(provider: ProviderType = 'openai'): Agent {
       modelSettings: { temperature: 0.3 },
     },
   })
+
+  // Register with Mastra for storage/logger/observability auto-injection
+  agent.__registerMastra(mastra)
+
+  return agent
 }

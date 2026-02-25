@@ -3,6 +3,7 @@ import { describe, it, expect, vi } from 'vitest'
 // Mock mastra module to avoid PostgresStore initialization without DATABASE_URL
 vi.mock('@server/lib/agents/mastra', () => ({
   memory: {},
+  mastra: { __registerMastra: vi.fn() },
 }))
 
 import { createOrchestrator } from '@server/lib/agents/orchestrator'
