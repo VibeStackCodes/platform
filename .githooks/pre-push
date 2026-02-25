@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# .githooks/pre-push
+#
+# Pre-push hook: auto-updates CLAUDE.md files based on code changes.
+# Analyzes the diff between local and remote, invokes Claude Code to
+# update documentation, commits the changes, and asks for a re-push.
+#
+# Skip: SKIP_CLAUDE_MD=1 git push
+# Skip: git push --no-verify
+
+set -euo pipefail
+
+REPO_ROOT=$(git rev-parse --show-toplevel)
+
+# Read push info from stdin (may have multiple lines for multi-ref push)
+# Format: <local ref> <local sha> <remote ref> <remote sha>
+REMOTE_SHA=""
+while read -r local_ref local_sha remote_ref remote_sha; do
+  # Skip delete pushes
+  if [ "$local_sha" = "0000000000000000000000000000000000000000" ]; then
+    continue
+  fi
+
+  # For new branches (remote sha is all zeros), compare against default branch
+  if [ "$remote_sha" = "0000000000000000000000000000000000000000" ]; then
+    REMOTE_SHA=$(git merge-base HEAD origin/main 2>/dev/null || echo "")
+  else
+    REMOTE_SHA="$remote_sha"
+  fi
+done
+
+# If we couldn't determine a base, skip
+if [ -z "$REMOTE_SHA" ]; then
+  exit 0
+fi
+
+# Delegate to the update script
+exec "$REPO_ROOT/scripts/update-claude-md.sh" "$REMOTE_SHA"
