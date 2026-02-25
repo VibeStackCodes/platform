@@ -13,7 +13,6 @@ vi.mock('@server/lib/db/queries', () => ({
   getProject: vi.fn(() => ({ id: 'proj-1', userId: 'user-1' })),
   getUserCredits: vi.fn(() => ({ creditsRemaining: 100 })),
   updateProject: vi.fn(),
-  insertChatMessage: vi.fn(),
 }))
 vi.mock('@server/lib/credits', () => ({
   reserveCredits: vi.fn(() => true),

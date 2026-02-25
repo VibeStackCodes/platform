@@ -4,11 +4,12 @@
  *
  * Bridges Mastra agent.stream() fullStream → SSE events.
  *
- * Request: { message: string, projectId: string, model?: string, sandboxId?: string }
+ * Request: { message: string, projectId: string, model?: string }
  * Response: SSE stream with AgentStreamEvent SSE events
  */
 
 import crypto from 'node:crypto'
+import { z } from 'zod'
 import { Hono } from 'hono'
 import * as Sentry from '@sentry/node'
 import { RequestContext } from '@mastra/core/di'
@@ -18,7 +19,6 @@ import {
   getProject,
   getUserCredits,
   updateProject,
-  insertChatMessage,
 } from '../lib/db/queries'
 import { reserveCredits, settleCredits } from '../lib/credits'
 import { createSSEStream } from '../lib/sse'
@@ -77,14 +77,6 @@ async function bridgeStreamToSSE(
             // Emit thinking in batches (every ~100 chars) to reduce event frequency
             if (lastTextChunk.length > 100) {
               emit({ type: 'thinking', content: lastTextChunk })
-              // Fire-and-forget persistence
-              insertChatMessage(
-                `thinking-${meta.runId}-${Date.now()}`,
-                meta.projectId,
-                'assistant',
-                [{ text: lastTextChunk }],
-                'thinking',
-              ).catch(() => {})
               lastTextChunk = ''
             }
           }
@@ -197,17 +189,24 @@ async function bridgeStreamToSSE(
     // Usage may not be available if stream was aborted
   }
 
-  // Get final text as summary
+  // Get structured output summary; fall back to last sentence of text on failure
   let summary = 'App built successfully.'
   try {
-    const text = await streamOutput.text
-    if (text) {
-      // Extract last sentence as summary
-      const sentences = text.split(/[.!]\s/)
-      summary = sentences[sentences.length - 1]?.trim() || summary
+    const output = await streamOutput.object
+    if (output?.summary) {
+      summary = output.summary
     }
   } catch {
-    // Text may not be available
+    // Structured output may fail if stream was aborted — fall back to text
+    try {
+      const text = await streamOutput.text
+      if (text) {
+        const sentences = text.split(/[.!]\s/)
+        summary = sentences[sentences.length - 1]?.trim() || summary
+      }
+    } catch {
+      // Text may not be available
+    }
   }
 
   emit({
@@ -231,7 +230,6 @@ agentRoutes.post('/', async (c) => {
     message?: string
     projectId?: string
     model?: string
-    sandboxId?: string
   }
   try {
     body = await c.req.json()
@@ -239,7 +237,7 @@ agentRoutes.post('/', async (c) => {
     return c.json({ error: 'Invalid request body' }, 400)
   }
 
-  const { message, projectId, model = 'gpt-5.2-codex', sandboxId } = body
+  const { message, projectId, model = 'gpt-5.2-codex' } = body
   agentLog.info(`Generation: project=${projectId} model=${model}`, { projectId, model })
 
   if (!message || !projectId) {
@@ -283,21 +281,21 @@ agentRoutes.post('/', async (c) => {
     let settled = false
 
     try {
-      // Persist user message
-      insertChatMessage(`user-${runId}`, projectId, 'user', [{ text: message }]).catch(() => {})
-
-      // Build the user message with context
-      let fullMessage = message
-      if (sandboxId) {
-        fullMessage = `[Existing sandbox: ${sandboxId}]\n\n${message}`
-      }
-
       // Create agent with provider-appropriate web search tool
       const provider = MODEL_CONFIGS[model]?.provider ?? 'openai'
       const agent = createOrchestrator(provider)
-      const streamOutput = await agent.stream(fullMessage, {
+      const streamOutput = await agent.stream(message, {
         requestContext,
+        memory: {
+          thread: projectId,
+          resource: user.id,
+        },
         maxSteps: 50,
+        structuredOutput: {
+          schema: z.object({
+            summary: z.string().describe('One-line summary of what was built or changed'),
+          }),
+        },
       })
 
       // Bridge Mastra stream to SSE
@@ -315,14 +313,6 @@ agentRoutes.post('/', async (c) => {
           sandboxId: result.sandboxId,
         },
         user.id,
-      ).catch(() => {})
-
-      // Persist assistant message
-      insertChatMessage(
-        `assistant-${runId}`,
-        projectId,
-        'assistant',
-        [{ text: `Generation complete. Tokens: ${result.totalTokens}` }],
       ).catch(() => {})
 
       // Settle credits
