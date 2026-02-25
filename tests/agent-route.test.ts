@@ -1,8 +1,21 @@
 import { describe, it, expect, vi } from 'vitest'
 
 // Mock all external dependencies
+vi.mock('@server/lib/agents/memory', () => ({
+  memory: {},
+  storage: {},
+  workingMemorySchema: {},
+}))
+vi.mock('@server/lib/agents/mastra', () => ({
+  mastra: { __registerMastra: vi.fn() },
+  memory: {},
+  storage: {},
+}))
 vi.mock('@server/lib/agents/orchestrator', () => ({
-  createOrchestrator: vi.fn(),
+  createOrchestrator: vi.fn(() => ({
+    __registerMastra: vi.fn(),
+    stream: vi.fn(),
+  })),
 }))
 vi.mock('@server/lib/agents/provider', () => ({
   createDirectProvider: vi.fn(() => vi.fn(() => ({}))),

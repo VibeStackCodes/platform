@@ -8,17 +8,18 @@
  */
 import { describe, it, expect, vi } from 'vitest'
 
-// Mock mastra module to avoid PostgresStore requiring DATABASE_URL
-vi.mock('@server/lib/agents/mastra', () => {
-  class Memory {}
-  class PostgresStore {}
-  return {
-    memory: new Memory(),
-    storage: new PostgresStore(),
-    mastra: {},
-    workingMemorySchema: { safeParse: () => ({ success: true }) },
-  }
-})
+// Mock memory + mastra modules to avoid PostgresStore requiring DATABASE_URL
+vi.mock('@server/lib/agents/memory', () => ({
+  memory: {},
+  storage: {},
+  workingMemorySchema: { safeParse: () => ({ success: true }) },
+}))
+vi.mock('@server/lib/agents/mastra', () => ({
+  memory: {},
+  storage: {},
+  mastra: {},
+  workingMemorySchema: { safeParse: () => ({ success: true }) },
+}))
 
 // ---------------------------------------------------------------------------
 // 1. Tool-belt wiring: agent.listTools() contains expected tools

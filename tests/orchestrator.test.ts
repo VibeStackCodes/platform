@@ -1,8 +1,14 @@
 import { describe, it, expect, vi } from 'vitest'
 
-// Mock mastra module to avoid PostgresStore initialization without DATABASE_URL
+// Mock memory + mastra modules to avoid PostgresStore initialization without DATABASE_URL
+vi.mock('@server/lib/agents/memory', () => ({
+  memory: {},
+  storage: {},
+  workingMemorySchema: {},
+}))
 vi.mock('@server/lib/agents/mastra', () => ({
   memory: {},
+  storage: {},
   mastra: { __registerMastra: vi.fn() },
 }))
 

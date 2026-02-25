@@ -14,6 +14,7 @@ import { Hono } from 'hono'
 import * as Sentry from '@sentry/node'
 import { RequestContext } from '@mastra/core/di'
 import { createOrchestrator } from '../lib/agents/orchestrator'
+import { mastra } from '../lib/agents/mastra'
 import { isAllowedModel, MODEL_CONFIGS } from '../lib/agents/provider'
 import {
   getProject,
@@ -284,6 +285,7 @@ agentRoutes.post('/', async (c) => {
       // Create agent with provider-appropriate web search tool
       const provider = MODEL_CONFIGS[model]?.provider ?? 'openai'
       const agent = createOrchestrator(provider)
+      agent.__registerMastra(mastra)
       const streamOutput = await agent.stream(message, {
         requestContext,
         memory: {

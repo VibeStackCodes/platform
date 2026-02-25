@@ -11,11 +11,18 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 // Mock setup - use vi.mock at module level like existing tests
 // ============================================================================
 
-// Mock mastra module to avoid PostgresStore requiring DATABASE_URL
-vi.mock('@server/lib/agents/mastra', () => {
-  class Memory {}
-  return { memory: new Memory(), storage: {}, mastra: {}, workingMemorySchema: {} }
-})
+// Mock memory + mastra modules to avoid PostgresStore requiring DATABASE_URL
+vi.mock('@server/lib/agents/memory', () => ({
+  memory: {},
+  storage: {},
+  workingMemorySchema: {},
+}))
+vi.mock('@server/lib/agents/mastra', () => ({
+  memory: {},
+  storage: {},
+  mastra: {},
+  workingMemorySchema: {},
+}))
 
 // Default auth mock - grants access to user-123
 const mockUser = { id: 'user-123', email: 'test@test.com' }

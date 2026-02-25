@@ -1,41 +1,22 @@
+/**
+ * Mastra Registry
+ *
+ * Central Mastra instance with orchestrator agent, memory, storage,
+ * observability, and logging. Re-exported by `src/mastra/index.ts`
+ * for `mastra dev` / `mastra build` / Mastra Cloud.
+ *
+ * Memory + storage are defined in `./memory.ts` (shared with orchestrator.ts).
+ */
+
 import { Mastra } from '@mastra/core/mastra'
-import { Memory } from '@mastra/memory'
-import { PostgresStore } from '@mastra/pg'
 import { PinoLogger } from '@mastra/loggers'
 import { Observability, SamplingStrategyType } from '@mastra/observability'
 import { LangfuseExporter } from '@mastra/langfuse'
-import { z } from 'zod'
+import { createOrchestrator } from './orchestrator'
+import { memory, storage } from './memory'
 
-// Working Memory Schema — structured notepad persisted across turns
-export const workingMemorySchema = z.object({
-  sandboxId: z.string().optional(),
-  projectName: z.string().optional(),
-  repoUrl: z.string().optional(),
-  filesCreated: z.array(z.string()).optional(),
-  designDecisions: z.array(z.string()).optional(),
-  buildStatus: z.enum(['pending', 'passing', 'failing']).optional(),
-})
-
-// Storage — reuse existing Supabase Postgres
-export const storage = new PostgresStore({
-  id: 'vibestack-storage',
-  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- DATABASE_URL required at runtime
-  connectionString: process.env.DATABASE_URL as string,
-})
-
-// Memory — thread-based conversation history + working memory
-export const memory = new Memory({
-  storage,
-  options: {
-    lastMessages: 40,
-    semanticRecall: false,
-    workingMemory: {
-      enabled: true,
-      scope: 'thread',
-      schema: workingMemorySchema,
-    },
-  },
-})
+// Re-export for consumers that imported from this module
+export { memory, storage, workingMemorySchema } from './memory'
 
 // Observability — Langfuse exporter (gated on env vars)
 function createObservability(): Observability | undefined {
@@ -63,8 +44,12 @@ function createObservability(): Observability | undefined {
 // Logger
 const logger = new PinoLogger({ level: 'info' })
 
-// Mastra Registry
+// Mastra Registry — orchestrator registered here for mastra dev / Mastra Cloud.
+// Production route (agent.ts) creates per-request agents for provider switching.
 export const mastra = new Mastra({
+  agents: {
+    orchestrator: createOrchestrator(),
+  },
   memory: {
     default: memory,
   },
