@@ -8,15 +8,10 @@
 # Usage:
 #   ./scripts/update-claude-md.sh              # Compare against upstream
 #   ./scripts/update-claude-md.sh origin/main  # Compare against specific ref
-#   SKIP_CLAUDE_MD=1 git push                  # Skip via env var
 
 set -euo pipefail
 
 # ── Guards ──────────────────────────────────────────────────────────
-if [ "${SKIP_CLAUDE_MD:-0}" = "1" ]; then
-  echo "[claude-md] Skipped (SKIP_CLAUDE_MD=1)"
-  exit 0
-fi
 
 if ! command -v claude &>/dev/null; then
   echo "[claude-md] 'claude' CLI not found — skipping CLAUDE.md update"
@@ -61,7 +56,9 @@ if [ -z "$CLAUDE_MDS" ]; then
 fi
 
 # ── Map changed files to their nearest CLAUDE.md scope ──────────────
-declare -A SCOPE_FILES  # scope_dir -> newline-separated changed files
+# Use a temp directory instead of associative arrays (bash 3 compat)
+SCOPE_DIR=$(mktemp -d)
+trap 'rm -rf "$SCOPE_DIR"' EXIT
 
 for file in $CHANGED_FILES; do
   abs_file="$REPO_ROOT/$file"
@@ -83,11 +80,14 @@ for file in $CHANGED_FILES; do
   fi
 
   if [ -n "$found" ]; then
-    SCOPE_FILES["$found"]+="$file"$'\n'
+    # Use md5/shasum of path as filename to avoid slash issues
+    scope_key=$(echo "$found" | shasum | cut -d' ' -f1)
+    echo "$found" > "$SCOPE_DIR/${scope_key}.path"
+    echo "$file" >> "$SCOPE_DIR/${scope_key}.files"
   fi
 done
 
-SCOPE_COUNT=${#SCOPE_FILES[@]}
+SCOPE_COUNT=$(find "$SCOPE_DIR" -name '*.path' | wc -l | tr -d ' ')
 if [ "$SCOPE_COUNT" -eq 0 ]; then
   echo "[claude-md] No CLAUDE.md scopes affected."
   exit 0
@@ -96,8 +96,6 @@ fi
 echo "[claude-md] $FILE_COUNT changed files across $SCOPE_COUNT CLAUDE.md scopes"
 
 # ── Build prompt for Claude ─────────────────────────────────────────
-# We build one comprehensive prompt and let Claude handle all updates in a single pass.
-
 PROMPT="You are a documentation maintainer for a codebase. Your job is to update CLAUDE.md files to reflect recent code changes.
 
 RULES:
@@ -116,8 +114,12 @@ $(git log --oneline "$BASE_REF"...HEAD 2>/dev/null | head -30)
 
 "
 
-for scope in "${!SCOPE_FILES[@]}"; do
-  files="${SCOPE_FILES[$scope]}"
+for path_file in "$SCOPE_DIR"/*.path; do
+  [ -f "$path_file" ] || continue
+  scope=$(cat "$path_file")
+  scope_key=$(basename "$path_file" .path)
+  files=$(cat "$SCOPE_DIR/${scope_key}.files")
+
   # Make scope path relative to repo root for readability
   rel_scope="${scope#"$REPO_ROOT"/}"
   if [ "$scope" = "$REPO_ROOT" ]; then
