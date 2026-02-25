@@ -493,24 +493,24 @@ export type TimelineEntry =
   | { type: 'complete'; ts: number; deploymentUrl?: string }
 
 // ============================================================================
-// V2 Stream Events (Single Orchestrator)
+// Agent Stream Events (Single Orchestrator)
 // ============================================================================
 
-export interface V2ThinkingEvent {
-  type: 'v2_thinking'
+export interface ThinkingEvent {
+  type: 'thinking'
   content: string
 }
 
-export interface V2ToolStartEvent {
-  type: 'v2_tool_start'
+export interface ToolStartEvent {
+  type: 'tool_start'
   tool: string
   /** Human-readable label like "Setting up retro LCD theme" */
   label?: string
   args?: Record<string, unknown>
 }
 
-export interface V2ToolCompleteEvent {
-  type: 'v2_tool_complete'
+export interface ToolCompleteEvent {
+  type: 'tool_complete'
   tool: string
   success: boolean
   /** Summary of what the tool did */
@@ -518,34 +518,34 @@ export interface V2ToolCompleteEvent {
   durationMs?: number
 }
 
-export interface V2DoneEvent {
-  type: 'v2_done'
+export interface DoneEvent {
+  type: 'done'
   summary: string
   sandboxId?: string
   tokensUsed?: number
 }
 
-export interface V2ErrorEvent {
-  type: 'v2_error'
+export interface AgentErrorEvent {
+  type: 'agent_error'
   message: string
 }
 
-export interface V2SandboxReadyEvent {
-  type: 'v2_sandbox_ready'
+export interface SandboxCreatedEvent {
+  type: 'sandbox_ready'
   sandboxId: string
 }
 
-export interface V2PackageInstalledEvent {
-  type: 'v2_package_installed'
+export interface PackageInstalledEvent {
+  type: 'package_installed'
   packages: string
 }
 
-export type V2StreamEvent =
-  | V2ThinkingEvent
-  | V2ToolStartEvent
-  | V2ToolCompleteEvent
-  | V2DoneEvent
-  | V2ErrorEvent
-  | V2SandboxReadyEvent
-  | V2PackageInstalledEvent
+export type AgentStreamEvent =
+  | ThinkingEvent
+  | ToolStartEvent
+  | ToolCompleteEvent
+  | DoneEvent
+  | AgentErrorEvent
+  | SandboxCreatedEvent
+  | PackageInstalledEvent
   | CreditsUsedEvent

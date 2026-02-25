@@ -95,11 +95,6 @@ function generateFallbackSVG(w: number, h: number, query: string): string {
 // ---------------------------------------------------------------------------
 
 const CACHE_TTL = 86400 // 24 hours
-const CACHE_HEADERS = {
-  'Cache-Control': 'public, max-age=86400, stale-while-revalidate=604800',
-  'Access-Control-Allow-Origin': '*',
-}
-
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url)

@@ -1,6 +1,6 @@
 # VibeStack Platform
 
-AI-powered app builder — users describe an app, the platform generates a full Vite + Supabase project with live preview.
+AI-powered app builder — users describe an app, the platform generates a full Vite + React project with live preview.
 
 ## Commands
 
@@ -21,14 +21,14 @@ bun run db:studio     # Drizzle Kit studio (DB browser)
 
 ## Stack
 
-- **Client**: Vite 8 SPA, React 19, TanStack Router (file-based routing)
+- **Client**: Vite 7 SPA, React 19, TanStack Router (file-based routing)
 - **Server**: Hono API framework
 - **Language**: TypeScript 5, strict mode, single tsconfig
 - **UI**: Tailwind CSS v4, shadcn/ui (Radix), Motion (framer-motion successor)
 - **Auth**: Supabase Auth via `@supabase/supabase-js` (SPA localStorage tokens)
-- **Database**: Drizzle ORM + Supabase (platform DB) + Supabase Management API (generated app DBs)
+- **Database**: Drizzle ORM + Supabase (platform DB)
 - **Sandbox**: Daytona SDK — sandboxed environments from snapshots
-- **AI**: Mastra agent framework, OpenAI providers, XState pipeline orchestration
+- **AI**: Mastra agent framework, multi-provider LLM routing (OpenAI + Anthropic via Helicone)
 - **Payments**: Stripe (checkout, webhooks)
 - **Deployment**: Vercel (Hono via `@hono/vercel`, client via `dist/client/`)
 - **Monitoring**: Sentry (client + server + AI agent instrumentation)
@@ -73,14 +73,13 @@ server/                  # Hono API server
   middleware/
     auth.ts              # Hono auth middleware (cookie-based Supabase)
   routes/
-    agent.ts             # XState pipeline SSE endpoint (credit-gated)
+    agent.ts             # Single orchestrator SSE endpoint (credit-gated)
     admin.ts             # Admin health check + env check
     projects.ts          # Project CRUD
     projects-deploy.ts   # Vercel deployment
     sandbox-urls.ts      # Sandbox preview URLs
     stripe-checkout.ts   # Stripe checkout sessions
     stripe-webhook.ts    # Stripe webhook handler
-    supabase-proxy.ts    # Proxies queries to generated app's Supabase
     auth-callback.ts     # OAuth code exchange
   lib/
     db/
@@ -89,28 +88,22 @@ server/                  # Hono API server
       client.ts          # Drizzle client (pg Pool)
       queries.ts         # Type-safe query functions
     agents/
-      machine.ts         # XState state machine (main pipeline)
-      edit-machine.ts    # XState machine for iterative edits
-      orchestrator.ts    # Actor implementations (analysis, design, codegen, etc.)
-      registry.ts        # Agent definitions (Mastra)
-      tools.ts           # ~25 Mastra tools (sandbox, GitHub, Supabase, Vercel)
-      schemas.ts         # Zod schemas for agent inputs/outputs
+      orchestrator.ts    # Single Mastra agent with 14 tools + system prompt
       provider.ts        # Multi-provider routing (PROVIDER_REGISTRY + MODEL_CONFIGS per role)
-      repair.ts          # Repair agent for build errors
-      validation.ts      # Build validation gate
+      tools.ts           # 14 Mastra tools (sandbox, file I/O, build, deploy, web search)
     sandbox.ts           # Daytona sandbox lifecycle
-    creative-director.ts # Creative Director — visual design spec
-    page-generator.ts    # LLM bespoke page generation (per CreativeSpec sitemap)
-    deterministic-assembly.ts # routeTree, main.tsx, __root.tsx, index.css from CreativeSpec
-    app-blueprint.ts     # AppBlueprint type + loadUIKit()
-    page-validator.ts    # Post-assembly validation
-    themed-code-engine.ts # themeCss() — CSS generation from DesignSystem tokens
     github.ts            # GitHub App integration
-    supabase-mgmt.ts     # Supabase Management API
-    credits.ts           # Credit checking/deduction
+    relace.ts            # Relace Instant Apply API client
+    credits.ts           # reserveCredits + settleCredits (pessimistic reservation)
     sse.ts               # SSE stream helper (Hono streamSSE)
+    rate-limit.ts        # DB-backed rate limiter (PostgreSQL sliding window, 5/min agent, 60/min global)
+    logger.ts            # Structured logger
+    env.ts               # Env var validation
+    fetch.ts             # Fetch utilities
+    slug.ts              # Slug generation
+    types.ts             # StreamEvent types (AgentStreamEvent union)
 supabase/migrations/     # Platform DB migrations
-snapshot/                # Daytona sandbox Docker image (Vite + React base)
+snapshot/                # Daytona sandbox Docker image (scaffold + tooling)
 ```
 
 ### Path Aliases
@@ -122,26 +115,28 @@ Single `tsconfig.json` covers both `src/` and `server/`:
 - **Never cross-import** between client and server boundaries
 - Server code uses relative imports internally
 
-### XState Pipeline Orchestration
+### Single Orchestrator Agent
 
-The generation pipeline is orchestrated by an XState state machine (`server/lib/agents/machine.ts`):
+The generation pipeline is a single Mastra `Agent` (`server/lib/agents/orchestrator.ts`). The LLM decides what to do — no state machine.
 
-- **State flow**: `idle` → `preparing` (parallel: analysis + provisioning) → `designing` → `architecting` → `codeGeneration` → `validating` → `deploying` → `complete`
-- **Error path**: Any state can transition to `cleanup` → `failed` (cleanup releases sandbox + Supabase project)
-- **Repair loop**: `validating` ↔ `repairing` (max 2 retries, halts if errors unchanged)
-- **Parallel state**: `preparing` runs `runAnalysisActor` and `runProvisioningActor` concurrently; both must complete before `designing`
-- **Clarification**: `preparing.analysis.running` → `awaitingClarification` (30min timeout) → `USER_ANSWERED` event resumes
-- **Mock pipeline**: `MOCK_PIPELINE=true` swaps all actors with fake delays (2-3s each), no external services
-- **SSE mapping**: `STATE_PHASES` maps state names → `{ phase, agentId, agentName }` for client rendering; `streamActorStates()` emits `agent_start`/`agent_complete`/`checkpoint`/`phase_start` events
-- **Context**: `MachineContext` carries all data through the pipeline (tokens, blueprint, sandbox/Supabase IDs, validation results, generated pages)
+- **Entry point**: `POST /api/agent` — credit-gated, streams `AgentStreamEvent` via Hono `streamSSE()`
+- **Agent**: `createOrchestrator(provider)` builds a Mastra `Agent` with 14 tools + a detailed system prompt
+- **Tool belt**: `createSandbox`, `writeFile`, `writeFiles`, `readFile`, `editFile`, `listFiles`, `runCommand`, `runBuild`, `installPackage`, `getPreviewUrl`, `createGitHubRepo`, `getGitHubToken`, `pushToGitHub`, `deployToVercel`, `webSearch`
+- **Web search**: Provider-native — `openai.tools.webSearch()` for OpenAI, `anthropic.tools.webSearch_20250305()` for Anthropic
+- **Relace**: `editFile` tool calls the Relace Instant Apply API (`relace.ts`) to merge code snippets into existing files
+- **Build loop**: Agent writes code → calls `runBuild` → reads errors → fixes → rebuilds. Max 3 repair attempts.
+- **Quality gate**: `vite build` passing is the only requirement — no type-check gate in generated apps
+- **SSE events**: `AgentStreamEvent` union — `thinking`, `tool_start`, `tool_complete`, `done`, `agent_error`, `sandbox_ready`, `package_installed`, `credits_used`
+- **Credits**: `reserveCredits()` before generation starts, `settleCredits()` after to adjust to actual token usage
 
 ### Model Routing
 
-User-selectable per generation: GPT-5.2 Codex (OpenAI), Claude Opus 4.6, Claude Sonnet 4.6. Provider routing via `PROVIDER_REGISTRY` + `MODEL_CONFIGS` in `provider.ts`. Adding a new model = one `MODEL_CONFIGS` entry. Adding a new provider = one `PROVIDER_REGISTRY` entry + `bun add @ai-sdk/<provider>`.
+User-selectable per generation: GPT-5.2 Codex (OpenAI), Claude Opus 4.6, Claude Sonnet 4.6. Provider routing via `PROVIDER_REGISTRY` + `MODEL_CONFIGS` in `provider.ts`. Route handler sets `selectedModel` on `RequestContext` before creating the agent. Adding a new model = one `MODEL_CONFIGS` entry. Adding a new provider = one `PROVIDER_REGISTRY` entry + `bun add @ai-sdk/<provider>`.
 
 ### Key Patterns
 
-- **Bespoke LLM code generation**: Creative Director → CreativeSpec → `page-generator.ts` writes complete .tsx per sitemap entry → `deterministic-assembly.ts` generates infrastructure (routeTree, main.tsx, __root.tsx, index.css). No prefab renderers — every page is bespoke.
+- **Single-agent generation**: User prompt → `createOrchestrator(provider)` → agent calls tools in sequence. No fixed pipeline — the LLM decides order and which tools to call.
+- **Scaffold-first editing**: Sandbox contains a full Lovable-style scaffold (React 19, RRD 7, Tailwind v4, 49 shadcn/ui components pre-installed). Agent edits files in-place via `editFile` / `writeFile`.
 - **Credit-Based Billing**: 1 credit = 1,000 tokens. `/api/agent` enforces credits (402 on exhaustion). Stripe meters track usage.
 - **Single-flow frontend**: All AI calls go through `/api/agent` (SSE).
 - **SSE streaming**: Agent route streams progress events to client via Hono `streamSSE()`.
@@ -156,8 +151,8 @@ Required in `.env.local`:
 | `VITE_SUPABASE_URL` | Platform Supabase instance |
 | `VITE_SUPABASE_ANON_KEY` | Platform Supabase anon key |
 | `DATABASE_URL` | PostgreSQL connection string (Supabase pooler URL) |
-| `SUPABASE_ACCESS_TOKEN` | Management API token (for generating app DBs) |
-| `SUPABASE_ORG_ID` | Org for generated Supabase projects |
+| `SUPABASE_ACCESS_TOKEN` | Supabase Management API token (keep — may still be referenced) |
+| `SUPABASE_ORG_ID` | Supabase org (keep — may still be referenced) |
 | `OPENAI_API_KEY` | OpenAI API |
 | `ANTHROPIC_API_KEY` | Anthropic API (Claude models) |
 | `DAYTONA_API_KEY` | Daytona sandbox API |
@@ -172,7 +167,7 @@ Required in `.env.local`:
 | `STRIPE_WEBHOOK_SECRET` | Stripe webhook validation |
 | `VITE_STRIPE_PUBLISHABLE_KEY` | Stripe client key |
 | `HELICONE_API_KEY` | Helicone LLM proxy (observability + per-user tracking) |
-| `UNSPLASH_ACCESS_KEY` | Unsplash API for hero images in generated apps |
+| `RELACE_API_KEY` | Relace Instant Apply API key (used by editFile tool) |
 | `VITE_SENTRY_DSN` | Sentry client DSN (optional) |
 | `SENTRY_DSN` | Sentry server DSN (optional) |
 
@@ -221,27 +216,26 @@ git commit
 
 - **Path aliases**: `@/` → `src/` (client), `@server/` → `server/` (tests). Server code uses relative imports. Never cross-import between client and server.
 - **Env vars**: Client uses `import.meta.env.VITE_*`, server uses `process.env.*`. Only `VITE_` prefixed vars are exposed to the client.
-- **PGlite validation** requires AUTH_STUBS with `authenticated`, `anon`, and `service_role` roles — omitting these causes migration validation to fail silently.
 - **Daytona sandbox polling** uses a 20s window (10x2s) — shorter windows cause duplicate sandbox creation from race conditions.
 - **Preview URL** comes from Supabase realtime subscription on `projects` table, NOT from SSE events.
 - **`d.list()` vs `d.get(id)`**: Daytona's `list()` returns lightweight objects without `process.executeCommand()`. Always use `get(id)` for full sandbox operations.
 - **Signed preview URLs** from Daytona expire in 1 hour.
-- **Credit deduction** happens post-execution (not pre-execution). In-flight generations always complete even if credits go negative.
-- **Helicone fallback**: When `HELICONE_API_KEY` is unset, LLM calls go directly to OpenAI (no observability).
+- **Credit deduction**: `reserveCredits()` is pessimistic — reserves upfront, then `settleCredits()` adjusts after. In-flight generations always complete even if credits go negative.
+- **Helicone fallback**: When `HELICONE_API_KEY` is unset, LLM calls go directly to OpenAI/Anthropic (no observability).
 - **Sentry** is gated behind `VITE_SENTRY_DSN` / `SENTRY_DSN` — no-op when unset.
 - **Bun.serve idle timeout**: Set to 255s (max) to prevent SSE connection drops during long LLM calls. Keepalive pings every 15s.
-- **SSE subscribe before send**: XState `actor.subscribe()` only fires on future snapshots. Must call `streamActorStates()` BEFORE `actor.send({ type: 'START' })`.
+- **Rate limiter**: DB-backed (PostgreSQL sliding window) — survives Vercel cold starts. Fails open for non-critical paths, fails closed for `/api/agent` and `/api/stripe`.
 
 ## Snapshot (Daytona Sandbox Image)
 
 The `snapshot/` directory defines the Docker image used as the Daytona sandbox base (`vibestack-workspace`):
 
 - **Base**: `oven/bun:1-debian` (Bun runtime, not Node)
-- **Pre-cached deps**: `package-base.json` — React 19, Supabase JS, PGlite, Vite 7, Tailwind v4, Radix UI, etc.
-- **Warmup**: Dockerfile runs `bun run dev` + `tsc --noEmit` at build time to pre-bundle Vite deps (`.vite/`) and TypeScript caches (`tsconfig.tsbuildinfo`), saving ~5-10s on first use
+- **Template repo**: Cloned from `VibeStackCodes/vibestack-template` (not `git init`) — React 19, react-router-dom v7, Tailwind v4, 46 shadcn/ui components pre-installed. Agent edits files in-place.
+- **Tooling**: OpenVSCode Server + tmux + OxLint included in the image
 - **Generated apps use Vite** (not Next.js) — `bun run build` = `tsc -b && vite build`
-- **PGlite** (`@electric-sql/pglite`) is included for in-sandbox SQL migration validation
-- **`warmup-scaffold/`**: Minimal React+Vite app used only for cache warming, cleaned up after build (caches kept)
+- **TypeScript**: Loose config (`strict: false`) in scaffold — agent focuses on working code, not type perfection
+- **Pre-warmed**: Dockerfile pre-bundles Vite deps (`.vite/`) and TypeScript caches at build time, saving ~5-10s on first use
 
 ## Code Style
 

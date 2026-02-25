@@ -4,7 +4,6 @@ FROM oven/bun:1-debian
 RUN apt-get update && apt-get install -y git curl tmux && rm -rf /var/lib/apt/lists/*
 
 # Install OpenVSCode Server (VS Code in the browser)
-# Provides in-browser IDE on port 13337 for the Code tab
 ARG OPENVSCODE_RELEASE=v1.106.3
 RUN curl -fsSL "https://github.com/gitpod-io/openvscode-server/releases/download/openvscode-server-${OPENVSCODE_RELEASE}/openvscode-server-${OPENVSCODE_RELEASE}-linux-x64.tar.gz" \
     | tar xz -C /opt \
@@ -13,22 +12,36 @@ RUN curl -fsSL "https://github.com/gitpod-io/openvscode-server/releases/download
 # Install OxLint globally — single Rust binary, much lighter than ESLint + plugins
 RUN bun install -g oxlint
 
-# Pre-cache common deps for Vite + React + Tailwind apps
+# Git identity for agent commits
+RUN git config --global user.email "agent@vibestack.app" \
+    && git config --global user.name "VibeStack Agent"
+
 WORKDIR /workspace
-COPY package-base.json /workspace/package.json
-RUN bun install
 
-# Copy full scaffold: src/ (App, pages, components/ui, hooks, lib), configs, index.html
-COPY warmup-scaffold/ /workspace/
+# Clone template repo — proper git history, not git init
+# All scaffold code (46 shadcn/ui components, React 19, Vite 7, Tailwind v4) lives here
+ARG TEMPLATE_REPO=https://github.com/VibeStackCodes/vibestack-template.git
+RUN git clone --depth 1 ${TEMPLATE_REPO} . \
+    && rm -rf .git \
+    && git init -b main \
+    && git add -A \
+    && git commit -m "Initial commit"
 
-# Pre-warm Vite + TypeScript caches with the scaffold
-# Creates .vite/ dep pre-bundle and tsconfig.tsbuildinfo
-# Saves ~5-10s on first dev server start
-RUN bun add -g typescript
-RUN bun run dev & DEV_PID=$! && sleep 10 && kill $DEV_PID 2>/dev/null; \
-    test -d /tmp/.vite || (echo "FATAL: Vite dep pre-bundle failed" && exit 1)
+# Install dependencies from committed lockfile (deterministic, no resolution needed)
+RUN bun install --frozen-lockfile
 
-# Entrypoint starts dev server (tmux) + OpenVSCode Server (foreground)
+# Warm Vite cache by running a dev build
+# Creates .vite/ dep pre-bundle — saves ~5-10s on first dev server start
+RUN timeout 30 bun run dev &>/dev/null & sleep 10 && kill %1 2>/dev/null || true
+
+# Warm TypeScript cache
+RUN bunx tsc --noEmit 2>/dev/null || true
+
+# Set up entrypoint and bashrc extras
 COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+COPY bashrc-extra.sh /root/.bashrc-extra
+RUN chmod +x /entrypoint.sh && echo '. /root/.bashrc-extra' >> /root/.bashrc
+
+EXPOSE 3000 13337
+
 ENTRYPOINT ["/entrypoint.sh"]

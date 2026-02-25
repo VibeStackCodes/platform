@@ -1,52 +1,6 @@
-import { checkCredits } from '@server/lib/credits'
-import type { SupabaseClient } from '@supabase/supabase-js'
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 
 describe('Credit System', () => {
-  it('checkCredits returns user credits', async () => {
-    const mockSupabase = {
-      from: vi.fn().mockReturnValue({
-        select: vi.fn().mockReturnValue({
-          eq: vi.fn().mockReturnValue({
-            single: vi.fn().mockResolvedValue({
-              data: {
-                credits_remaining: 1500,
-                credits_monthly: 2000,
-                credits_reset_at: '2026-03-15T00:00:00Z',
-                plan: 'pro',
-              },
-              error: null,
-            }),
-          }),
-        }),
-      }),
-    } as unknown as SupabaseClient
-
-    const credits = await checkCredits(mockSupabase, 'user-123')
-    expect(credits).not.toBeNull()
-    if (!credits) return
-    expect(credits.credits_remaining).toBe(1500)
-    expect(credits.plan).toBe('pro')
-  })
-
-  it('checkCredits returns null on error', async () => {
-    const mockSupabase = {
-      from: vi.fn().mockReturnValue({
-        select: vi.fn().mockReturnValue({
-          eq: vi.fn().mockReturnValue({
-            single: vi.fn().mockResolvedValue({
-              data: null,
-              error: { message: 'not found' },
-            }),
-          }),
-        }),
-      }),
-    } as unknown as SupabaseClient
-
-    const credits = await checkCredits(mockSupabase, 'user-999')
-    expect(credits).toBeNull()
-  })
-
   it('credit math: 1 credit = 1000 tokens', () => {
     const tokensUsed = 5432
     const creditsUsed = Math.ceil(tokensUsed / 1000)

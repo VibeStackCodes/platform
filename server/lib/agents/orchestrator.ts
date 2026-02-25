@@ -1,772 +1,158 @@
-// server/lib/agents/orchestrator.ts
-//
-// XState invoke handlers — each function maps to one machine state.
-// The machine calls these via fromPromise actors.
-
-import type { AppBlueprint } from '../app-blueprint'
-import type { ValidationGateResult } from './validation'
-import { runValidationGate } from './validation'
-import { buildRepairPrompt } from './repair'
-import type { DesignSystem } from '../themed-code-engine'
-import type { CreativeSpec } from './schemas'
-import type { GeneratedPage } from '../page-generator'
-
-// ============================================================================
-// Result types for each handler
-// ============================================================================
-
-export type AppComplexity = 'simple' | 'moderate' | 'ambitious'
-
-export type AnalysisResult =
-  | {
-      type: 'done'
-      appName: string
-      appDescription: string
-      prd: string
-      complexity: AppComplexity
-      tokensUsed: number
-    }
-  | {
-      type: 'clarification'
-      questions: unknown[]
-      tokensUsed: number
-    }
-
-export interface ValidationResult {
-  validation: ValidationGateResult
-  allPassed: boolean
-  tokensUsed: number
-}
-
-export interface RepairResult {
-  tokensUsed: number
-}
-
-export interface ProvisioningResult {
-  sandboxId: string
-  githubCloneUrl: string
-  githubHtmlUrl: string
-  repoName: string
-  tokensUsed: number
-}
-
-export interface DeploymentResult {
-  deploymentUrl: string
-  tokensUsed: number
-}
-
-export interface ArchitectResult {
-  spec: CreativeSpec
-  tokens: DesignSystem
-  tokensUsed: number
-}
-
-export interface CodeGenerationResult {
-  pages: GeneratedPage[]
-  assembledFiles: Array<{ path: string; content: string; layer: number; isLLMSlot: boolean }>
-  blueprint: AppBlueprint
-  tokensUsed: number
-}
-
-// ============================================================================
-// Analysis handler
-// ============================================================================
-
-export async function runAnalysis(input: {
-  userMessage: string
-  projectId: string
-}): Promise<AnalysisResult> {
-  // Dynamic import to avoid circular deps
-  const { analystAgent } = await import('./registry')
-
-  const result = await analystAgent.generate(input.userMessage, {
-    maxSteps: 5,
-  })
-
-  const tokensUsed = result.totalUsage?.totalTokens ?? 0
-
-  // Extract tool calls from AI SDK v5 content parts
-  for (const step of result.steps ?? []) {
-    for (const part of step.content ?? []) {
-      if (part.type !== 'tool-call') continue
-
-      if (part.toolName === 'submitRequirements') {
-        return {
-          type: 'done',
-          appName: part.input.appName,
-          appDescription: part.input.appDescription,
-          prd: part.input.prd,
-          complexity: part.input.complexity ?? 'moderate',
-          tokensUsed,
-        }
-      }
-
-      if (part.toolName === 'askClarifyingQuestions') {
-        return {
-          type: 'clarification',
-          questions: part.input.questions,
-          tokensUsed,
-        }
-      }
-    }
-  }
-
-  throw new Error('Analyst agent did not call any tool')
-}
-
-// ============================================================================
-// Validation handler (Task 9)
-// ============================================================================
-
-export async function runValidation(input: {
-  blueprint: AppBlueprint
-  sandboxId: string
-}): Promise<ValidationResult> {
-  // Get sandbox via Daytona
-  const { Daytona } = await import('@daytonaio/sdk')
-  const daytona = new Daytona()
-  const sandbox = await daytona.get(input.sandboxId)
-
-  const validation = await runValidationGate(input.blueprint, sandbox)
-
-  return {
-    validation,
-    allPassed: validation.allPassed,
-    tokensUsed: 0, // No LLM calls in validation
-  }
-}
-
-// ============================================================================
-// Repair handler (Task 9 + E8 JSON Patch)
-// ============================================================================
-
-export async function runRepair(input: {
-  blueprint: AppBlueprint
-  validation: ValidationGateResult
-  sandboxId: string
-}): Promise<RepairResult> {
-  const { Agent } = await import('@mastra/core/agent')
-  const { createBoundSandboxTools } = await import('./tools')
-  const { createAgentModelResolver } = await import('./provider')
-
-  // Build repair prompt from validation errors
-  const skeletons = input.blueprint.fileTree
-    .filter((f) => f.isLLMSlot)
-    .map((f) => ({ path: f.path, content: f.content }))
-
-  const repairPrompt = buildRepairPrompt(input.validation, skeletons)
-  if (!repairPrompt) {
-    return { tokensUsed: 0 }
-  }
-
-  // Create sandbox-bound tools -- sandboxId is deterministic, never in prompt
-  const boundTools = createBoundSandboxTools(input.sandboxId)
-
-  // Create a per-call repair agent with sandbox-bound tools
-  const boundRepairAgent = new Agent({
-    id: 'repair',
-    name: 'Repair Agent',
-    model: createAgentModelResolver('repair'),
-    description: 'Fixes validation errors in generated code with targeted, minimal changes',
-    instructions: `You are the repair agent for VibeStack-generated applications.
-
-You receive specific validation errors (TypeScript, lint, build) and fix them with minimal changes.
-
-Rules:
-1. Only modify files that have errors -- do not touch other files
-2. Preserve the skeleton structure (imports, hooks, state declarations)
-3. Only fix the specific error -- do not refactor or add features
-4. Use ESM imports (never require())
-5. No TODO/FIXME/placeholder comments
-6. If a type error is in generated code, fix the type -- do not add \`as any\``,
-    tools: boundTools,
-    defaultOptions: { maxSteps: 15 },
-  })
-
-  const result = await boundRepairAgent.generate(repairPrompt, {
-    maxSteps: 5,
-  })
-
-  const tokensUsed = result.totalUsage?.totalTokens ?? 0
-  return { tokensUsed }
-}
-
-// ============================================================================
-// Provisioning handler (bonus -- for the provisioning state)
-// ============================================================================
-
-export async function runProvisioning(input: {
-  appName: string
-  projectId: string
-}): Promise<ProvisioningResult> {
-  const [sandboxResult, githubResult] = await Promise.allSettled([
-    // 1. Create sandbox (~10-20s)
-    (async () => {
-      const { createSandbox } = await import('../sandbox')
-      return createSandbox({
-        language: 'typescript',
-        autoStopInterval: 60,
-        labels: { project: input.projectId },
-      })
-    })(),
-    // 2. Create GitHub repo (~2-5s)
-    (async () => {
-      const { createRepo, buildRepoName } = await import('../github')
-      return createRepo(buildRepoName(input.appName, input.projectId))
-    })(),
-  ])
-
-  if (sandboxResult.status === 'rejected') {
-    throw new Error(`Sandbox creation failed: ${sandboxResult.reason}`)
-  }
-  if (githubResult.status === 'rejected') {
-    throw new Error(`GitHub repo creation failed: ${githubResult.reason}`)
-  }
-
-  const sandbox = sandboxResult.value
-  const github = githubResult.value
-
-  return {
-    sandboxId: sandbox.id,
-    githubCloneUrl: github.cloneUrl,
-    githubHtmlUrl: github.htmlUrl,
-    repoName: github.repoName,
-    tokensUsed: 0,
-  }
-}
-
-// ============================================================================
-// Deployment handler (bonus -- for the deploying state)
-// ============================================================================
-
 /**
- * Fetch with timeout protection
- */
-async function fetchWithTimeout(
-  url: string,
-  options: RequestInit & { timeout?: number } = {},
-): Promise<Response> {
-  const { timeout = 30_000, ...fetchOptions } = options
-  const controller = new AbortController()
-  const id = setTimeout(() => controller.abort(), timeout)
-  try {
-    return await fetch(url, { ...fetchOptions, signal: controller.signal })
-  } finally {
-    clearTimeout(id)
-  }
-}
-
-export async function runDeployment(input: {
-  sandboxId: string
-  projectId: string
-  blueprint?: AppBlueprint | null
-  githubCloneUrl?: string | null
-}): Promise<DeploymentResult> {
-  // Lazy imports to avoid circular dependencies
-  const { getSandbox, runCommand, downloadDirectory } = await import('../sandbox')
-  const { updateProject } = await import('../db/queries')
-  const { buildAppSlug } = await import('../slug')
-  const { db } = await import('../db/client')
-  const { eq } = await import('drizzle-orm')
-  const { projects } = await import('../db/schema')
-  const Sentry = await import('@sentry/node')
-
-  try {
-    // 1. Get sandbox
-    const sandbox = await getSandbox(input.sandboxId)
-
-    // 2. Build file manifest from source files for generation state persistence
-    const sourceFiles = await downloadDirectory(sandbox, '/workspace')
-    const fileManifest: Record<string, string> = {}
-    for (const file of sourceFiles) {
-      const hash = `${file.content.length}:${Buffer.from(file.content).toString('base64').slice(0, 16)}`
-      fileManifest[file.path] = hash
-    }
-
-    // 3. Persist generation state early (enables iterative editing even if deployment fails)
-    await updateProject(input.projectId, {
-      generationState: {
-        blueprint: input.blueprint ?? null,
-        sandboxId: input.sandboxId,
-        githubRepo: input.githubCloneUrl ?? null,
-        fileManifest,
-        lastEditedAt: new Date().toISOString(),
-      },
-    })
-
-    // 4. Get project details from DB for deployment
-    const [project] = await db
-      .select()
-      .from(projects)
-      .where(eq(projects.id, input.projectId))
-      .limit(1)
-
-    if (!project) {
-      throw new Error(`Project ${input.projectId} not found`)
-    }
-
-    // 5. Production build
-    const buildResult = await runCommand(sandbox, 'bun run build', 'deploy-build', {
-      cwd: '/workspace',
-      timeout: 120,
-    })
-
-    if (buildResult.exitCode !== 0) {
-      const output = buildResult.stdout?.slice(-2000) || ''
-      const stderr = buildResult.stderr?.slice(-1000) || ''
-      throw new Error(
-        `Production build failed (exit code ${buildResult.exitCode}):\n${output}\n${stderr}`,
-      )
-    }
-
-    // 7. Download dist/ for Vercel deployment
-    const builtFiles = await downloadDirectory(sandbox, '/workspace/dist')
-
-    // 8. Deploy to Vercel
-    const vercelToken = process.env.VERCEL_TOKEN
-    if (!vercelToken) {
-      throw new Error('VERCEL_TOKEN environment variable is required for deployment')
-    }
-
-    const teamId = process.env.VERCEL_TEAM_ID
-    const slug = (project.name || 'app').toLowerCase().replace(/[^a-z0-9-]/g, '-')
-
-    const vercelFiles = builtFiles.map((f) => ({
-      file: f.path,
-      data: f.content.toString('base64'),
-    }))
-
-    // Deploy with retry (max 2 attempts)
-    let deployResponse: Response | null = null
-    for (let attempt = 0; attempt < 2; attempt++) {
-      deployResponse = await fetchWithTimeout(
-        `https://api.vercel.com/v13/deployments${teamId ? `?teamId=${teamId}` : ''}`,
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${vercelToken}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            name: slug,
-            files: vercelFiles,
-            projectSettings: {
-              framework: 'vite',
-              buildCommand: 'bun run build',
-              devCommand: 'bun run dev',
-              installCommand: 'bun install',
-              outputDirectory: 'dist',
-            },
-            target: 'production',
-          }),
-          timeout: 60_000,
-        },
-      )
-      if (deployResponse.ok || deployResponse.status < 500) break
-      if (attempt < 1) {
-        console.warn(`[deployment] Vercel returned ${deployResponse.status}, retrying...`)
-        await new Promise((r) => setTimeout(r, 2000))
-      }
-    }
-
-    if (!deployResponse!.ok) {
-      const error = await deployResponse!.text()
-      throw new Error(`Vercel deployment failed: ${error}`)
-    }
-
-    const deployment = (await deployResponse!.json()) as { id: string; url: string }
-    let deploymentUrl = `https://${deployment.url}`
-
-    // Poll with explicit timeout
-    const POLL_TIMEOUT_MS = 5 * 60 * 1000 // 5 minutes
-    const POLL_INTERVAL_MS = 5_000
-    const pollStart = Date.now()
-    let lastState = 'UNKNOWN'
-
-    while (Date.now() - pollStart < POLL_TIMEOUT_MS) {
-      const statusRes = await fetchWithTimeout(
-        `https://api.vercel.com/v13/deployments/${deployment.id}${teamId ? `?teamId=${teamId}` : ''}`,
-        {
-          headers: { Authorization: `Bearer ${vercelToken}` },
-          timeout: 10_000,
-        },
-      )
-
-      if (statusRes.ok) {
-        const status = (await statusRes.json()) as { readyState: string }
-        lastState = status.readyState
-        if (status.readyState === 'READY') {
-          console.log(`[deployment] Deployment ready: ${deploymentUrl}`)
-          break
-        }
-        if (status.readyState === 'ERROR' || status.readyState === 'CANCELED') {
-          throw new Error(`Deployment ${status.readyState}`)
-        }
-      }
-
-      await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS))
-    }
-
-    if (lastState !== 'READY') {
-      throw new Error(
-        `Deployment timed out after ${Math.ceil(POLL_TIMEOUT_MS / 1000)}s -- last state: ${lastState}`,
-      )
-    }
-
-    // 9. Optional: assign custom domain
-    const wildcardDomain = process.env.VERCEL_WILDCARD_DOMAIN
-    if (wildcardDomain) {
-      const appSlug = buildAppSlug(project.name, input.projectId)
-      const customDomain = `${appSlug}.${wildcardDomain}`
-
-      const domainResponse = await fetchWithTimeout(
-        `https://api.vercel.com/v10/projects/${slug}/domains${teamId ? `?teamId=${teamId}` : ''}`,
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${vercelToken}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ name: customDomain }),
-          timeout: 10_000,
-        },
-      )
-
-      if (domainResponse.ok) {
-        deploymentUrl = `https://${customDomain}`
-        console.log(`[deployment] Custom domain assigned: ${deploymentUrl}`)
-      } else {
-        console.warn(`[deployment] Custom domain assignment failed: ${await domainResponse.text()}`)
-      }
-    }
-
-    // 10. Update project record with deployment URL
-    await updateProject(input.projectId, {
-      deployUrl: deploymentUrl,
-      status: 'deployed',
-    })
-
-    return {
-      deploymentUrl,
-      tokensUsed: 0,
-    }
-  } catch (error) {
-    Sentry.captureException(error, {
-      tags: { operation: 'deployment' },
-      extra: { sandboxId: input.sandboxId, projectId: input.projectId },
-    })
-    throw error
-  }
-}
-
-// ============================================================================
-// Pipeline B: Architect handler (Creative Director — single design authority)
-// ============================================================================
-
-/**
- * Run the Creative Director to produce a CreativeSpec (visual identity + sitemap)
- * AND a fully-populated DesignSystem token set.
+ * Single Orchestrator Agent
  *
- * The Creative Director is the single design authority — no separate Design Agent.
+ * A single Mastra agent with a tool belt that builds apps from user descriptions.
+ * The LLM decides what tools to call based on the user's prompt.
+ *
+ * Design: Trust the LLM completely. No closed vocabularies, no forbidden lists.
+ * Quality gate: `vite build` passes = ship it.
  */
-export async function runArchitect(input: {
-  appName: string
-  prd: string
-  complexity?: AppComplexity
-}): Promise<ArchitectResult> {
-  console.log('[architect] Starting creative director...')
-  const { runCreativeDirector } = await import('../creative-director')
-  const { DEFAULT_TEXT_SLOTS } = await import('../themed-code-engine')
 
-  console.log(`[architect] Complexity tier: ${input.complexity ?? 'moderate'}`)
-  const result = await runCreativeDirector({
-    appName: input.appName,
-    prd: input.prd,
-    complexity: input.complexity,
-  })
+import { anthropic } from '@ai-sdk/anthropic'
+import { openai } from '@ai-sdk/openai'
+import { Agent } from '@mastra/core/agent'
+import { createAgentModelResolver, type ProviderType } from './provider'
+import {
+  createSandboxTool,
+  writeFileTool,
+  writeFilesTool,
+  readFileTool,
+  editFileTool,
+  listFilesTool,
+  runCommandTool,
+  runBuildTool,
+  installPackageTool,
+  getPreviewUrlTool,
+  createGitHubRepoTool,
+  getGitHubTokenTool,
+  pushToGitHubTool,
+  deployToVercelTool,
+} from './tools'
 
-  const tokensUsed = (result.usage.inputTokens ?? 0) + (result.usage.outputTokens ?? 0)
-  const { designSystem } = result.spec
+// Orchestrator uses the user-selected model via provider routing
+const orchestratorModel = createAgentModelResolver('orchestrator')
 
-  // Build googleFontsUrl from typography if not already provided by the LLM
-  const displayEncoded = encodeURIComponent(designSystem.typography.display).replace(/%20/g, '+')
-  const bodyEncoded = encodeURIComponent(designSystem.typography.body).replace(/%20/g, '+')
-  const googleFontsUrl =
-    designSystem.typography.googleFontsUrl ??
-    `https://fonts.googleapis.com/css2?family=${displayEncoded}:wght@400;500;600;700&family=${bodyEncoded}:wght@300;400;500;600&display=swap`
+/** Provider-native web search tools — both are server-side, zero extra deps */
+const WEB_SEARCH_TOOLS: Record<ProviderType, ReturnType<typeof openai.tools.webSearch>> = {
+  openai: openai.tools.webSearch(),
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Anthropic tool type is compatible at runtime
+  anthropic: anthropic.tools.webSearch_20250305({ maxUses: 5 }) as any,
+}
 
-  const tokens: DesignSystem = {
-    name: '',
-    fonts: {
-      display: designSystem.typography.display,
-      body: designSystem.typography.body,
-      googleFontsUrl,
+/** Shared tool belt (everything except web search) */
+const BASE_TOOLS = {
+  createSandbox: createSandboxTool,
+  writeFile: writeFileTool,
+  writeFiles: writeFilesTool,
+  readFile: readFileTool,
+  editFile: editFileTool,
+  listFiles: listFilesTool,
+  runCommand: runCommandTool,
+  runBuild: runBuildTool,
+  installPackage: installPackageTool,
+  getPreviewUrl: getPreviewUrlTool,
+  createGitHubRepo: createGitHubRepoTool,
+  getGitHubToken: getGitHubTokenTool,
+  pushToGitHub: pushToGitHubTool,
+  deployToVercel: deployToVercelTool,
+}
+
+/** Build full tool belt with provider-appropriate web search */
+function buildTools(provider: ProviderType = 'openai') {
+  return { ...BASE_TOOLS, webSearch: WEB_SEARCH_TOOLS[provider] }
+}
+
+/** System prompt for the orchestrator */
+const ORCHESTRATOR_PROMPT = `You are a world-class app builder. You take a user's description and build a complete, polished web application.
+
+## Your Environment
+
+You work in a sandbox with a pre-baked React project scaffold:
+- **Stack**: Vite 8, React 19, Tailwind v4.2 (CSS-first, no tailwind.config), react-router-dom v7, shadcn/ui
+- **Pre-installed**: 49 shadcn/ui components, framer-motion, recharts, react-hook-form, zod, date-fns, lucide-react, @tanstack/react-query, react-resizable-panels, sonner, vaul, cmdk, input-otp, embla-carousel-react, react-day-picker, next-themes
+- **Scaffold**: \`src/App.tsx\` (BrowserRouter + QueryClient + Toasters), \`src/pages/Index.tsx\`, \`src/pages/NotFound.tsx\`, \`src/components/ui/\` (49 components), \`src/hooks/\`, \`src/lib/utils.ts\`
+- **TypeScript**: Loose config (strict:false) — focus on working code, not type perfection
+- **CSS**: Tailwind v4 CSS-first — theme variables in \`src/index.css\` via \`@theme inline\` block, not a JS config file. Colors use \`hsl(var(--primary))\` pattern.
+- **Quality gate**: \`vite build\` passing is the only requirement
+
+## How You Work
+
+### First Prompt (New App)
+1. **Research the domain first** — ALWAYS use \`webSearch\` to find 2-3 real products in this space. Study their UI patterns, color palettes, and information hierarchy. Example queries: "best construction project management dashboard UI", "top fitness tracking app design".
+2. Create a brief mental plan (2-3 sentences about your design approach, citing the products you researched), then start building.
+3. Call \`createSandbox\` to provision your workspace.
+4. Edit \`src/index.css\` to set the color theme (CSS variables).
+5. Edit \`index.html\`: set a descriptive \`<title>\`, \`<meta name="description">\`, and an app-themed SVG favicon (replace the default \`/favicon.svg\`).
+6. Create/edit files: pages in \`src/pages/\`, components in \`src/components/\`, hooks in \`src/hooks/\`.
+7. Update \`src/App.tsx\` with routes for your pages.
+8. Call \`runBuild\` to validate. If it fails, read the errors and fix them.
+9. End with a brief summary: "Your [app name] is live! Features: [list]."
+
+### Edit Requests (Existing App)
+1. Read the relevant file(s) to understand current state.
+2. Use \`editFile\` for modifications (faster + cheaper via Relace Instant Apply).
+3. Use \`writeFile\` only for brand-new files.
+4. Call \`runBuild\` to validate.
+5. End with a one-line summary: "Updated [what changed]."
+
+## Design Principles
+
+- **Anchor to real products**: "Build a construction dashboard" → think Procore (safety orange, slate grays, data-dense cards). "Build a snake game" → think Nokia retro (green LCD, pixel aesthetic).
+- **Colors are paramount**: Every app gets a custom color palette via CSS variables in index.css. Never use default gray themes.
+- **Mobile-first**: Use responsive Tailwind classes. Test mental model at 375px width.
+- **Whitespace and hierarchy**: Use generous spacing. Clear visual hierarchy with size and weight.
+- **shadcn/ui first**: Prefer shadcn components (Card, Button, Dialog, etc.) over raw HTML.
+- **No placeholder content**: Use realistic data, names, numbers. "John's Construction Co." not "Company Name".
+
+## Images
+
+Use the VibeStack image resolver for all photos: \`https://img.vibestack.site/s/{query}/{width}/{height}\`
+- **{query}**: URL-encoded, 3-5 word description. Short and specific.
+- **{width}/{height}**: Desired dimensions. Hero: 1600/900. Cards: 600/400. Thumbnails: 400/400. Avatars: 200/200.
+- The resolver searches Unsplash, picks the best aspect-ratio match, edge-caches for 24h, and falls back to a gradient SVG.
+- Every \`<img>\` MUST include \`alt\` text and \`loading="lazy"\` (or \`"eager"\` for hero).
+- NEVER add \`onError\` handlers — the resolver handles fallbacks server-side.
+- Good queries: "coffee shop warm interior", "pasta carbonara plated", "mountain lake sunrise"
+- Bad queries (too long): "marina promenade morning mist sailboats wooden docks"
+- Bad queries (too short): "food", "office", "team"
+- For people/portraits: include "headshot studio lighting" and use square crops (400/400).
+
+## Tool Usage
+
+- \`createSandbox\`: Always first for new apps. Labels with project metadata.
+- \`writeFile\`: Write a complete file. Use for NEW files only.
+- \`writeFiles\`: Batch write multiple files at once (more efficient for scaffolding).
+- \`editFile\`: Edit existing files via Relace. Use "// ... keep existing code" markers. PREFERRED over writeFile for modifications.
+- \`readFile\`: Read before editing. Always check current state.
+- \`listFiles\`: Explore what exists in the sandbox.
+- \`runCommand\`: Run any shell command (\`bun add\`, \`ls\`, etc.).
+- \`runBuild\`: Run \`vite build\`. The quality gate — must pass before you're done.
+- \`installPackage\`: \`bun add\` packages not in the snapshot. You are free to install anything.
+- \`webSearch\`: Search the web for design inspiration, real product UIs, library docs. Use BEFORE writing code.
+- \`getPreviewUrl\`: Get the live preview URL for the sandbox.
+
+## Important Rules
+
+1. **You decide everything** — library choices, architecture, data model, design. Make opinionated decisions.
+2. **Never ask clarifying questions for simple requests** — "Build a todo app" needs no clarification. Just build it with good taste.
+3. **Only ask for clarification when truly ambiguous** — e.g., "Build an app" (what kind?).
+4. **Show packages you install** — when calling installPackage, mention what you're adding and why.
+5. **Build loop**: write code → runBuild → if errors, read them, fix, rebuild. Max 3 repair attempts.
+6. **File size limit**: Keep individual files under 500 lines. Split into components.
+7. **No TODO/FIXME/placeholder comments** — ship complete code.`
+
+/** Create a fresh orchestrator agent instance */
+export function createOrchestrator(provider: ProviderType = 'openai'): Agent {
+  return new Agent({
+    id: 'orchestrator',
+    name: 'Orchestrator',
+    model: orchestratorModel,
+    description: 'Single orchestrator that builds apps from user descriptions',
+    instructions: ORCHESTRATOR_PROMPT,
+    tools: buildTools(provider),
+    defaultOptions: {
+      maxSteps: 50,
+      modelSettings: { temperature: 0.3 },
     },
-    colors: {
-      primary: designSystem.colorPalette.primary,
-      secondary: designSystem.colorPalette.secondary,
-      accent: designSystem.colorPalette.accent,
-      background: designSystem.colorPalette.background,
-      text: designSystem.colorPalette.text,
-      primaryForeground: designSystem.colorPalette.primaryForeground,
-      foreground: designSystem.colorPalette.foreground ?? designSystem.colorPalette.text,
-      muted: designSystem.colorPalette.muted,
-      border: designSystem.colorPalette.border,
-    },
-    style: designSystem.style,
-    aestheticDirection: designSystem.aestheticDirection,
-    layoutStrategy: designSystem.layoutStrategy,
-    signatureDetail: designSystem.signatureDetail,
-    imageManifest: designSystem.imageManifest,
-    authPosture: 'public',
-    heroImages: [],
-    heroQuery: '',
-    textSlots: { ...DEFAULT_TEXT_SLOTS },
-  }
-
-  return {
-    spec: result.spec,
-    tokens,
-    tokensUsed,
-  }
-}
-
-// ============================================================================
-// Code Generation handler (merged page gen + assembly + sandbox upload)
-// ============================================================================
-
-/**
- * Generate all page files (LLM) and deterministic assembly files in parallel,
- * then upload everything to the sandbox and run bun install.
- */
-export async function runCodeGeneration(input: {
-  spec: CreativeSpec
-  tokens: DesignSystem
-  appName: string
-  sandboxId: string
-  complexity?: AppComplexity
-  onPageStart?: (fileName: string, route: string, componentName: string, index: number, total: number) => void
-  onPageComplete?: (fileName: string, route: string, componentName: string, lineCount: number, code: string, index: number, total: number) => void
-  onFileAssembled?: (path: string, category: string) => void
-}): Promise<CodeGenerationResult> {
-  const { generatePages } = await import('../page-generator')
-  const { assembleApp } = await import('../deterministic-assembly')
-  const { getSandbox, uploadFiles } = await import('../sandbox')
-
-  // Run LLM page generation + deterministic assembly in parallel
-  const [pageResult, assembledFiles] = await Promise.all([
-    generatePages({
-      spec: input.spec,
-      tokens: input.tokens,
-      complexity: input.complexity,
-      onPageStart: input.onPageStart,
-      onPageComplete: input.onPageComplete,
-    }),
-    (async () => {
-      const files = assembleApp({
-        spec: input.spec,
-        generatedPages: [], // Deterministic files don't need LLM pages
-        appName: input.appName,
-        tokens: input.tokens,
-        includeUiKit: true,
-      })
-      console.log(`[codeGen] Assembled ${files.length} deterministic files`)
-      if (input.onFileAssembled) {
-        for (const file of files) {
-          input.onFileAssembled(file.path, file.isLLMSlot ? 'llm-page' : 'deterministic')
-        }
-      }
-      return files
-    })(),
-  ])
-
-  const tokensUsed = (pageResult.usage.inputTokens ?? 0) + (pageResult.usage.outputTokens ?? 0)
-
-  // Merge: deterministic files + LLM-generated pages
-  // LLM pages overwrite any deterministic placeholder at the same path
-  const fileMap = new Map<string, typeof assembledFiles[0]>()
-  for (const f of assembledFiles) fileMap.set(f.path, f)
-  for (const page of pageResult.pages) {
-    fileMap.set(`src/${page.fileName}`, {
-      path: `src/${page.fileName}`,
-      content: page.content,
-      layer: 1,
-      isLLMSlot: true,
-    })
-  }
-  const allFiles = [...fileMap.values()]
-
-  // Upload to sandbox
-  const sandbox = await getSandbox(input.sandboxId)
-  console.log(`[codeGen] Writing ${allFiles.length} files to sandbox...`)
-
-  const dirs = new Set<string>()
-  for (const file of allFiles) {
-    const dir = `/workspace/${file.path}`.split('/').slice(0, -1).join('/')
-    dirs.add(dir)
-  }
-  for (const dir of dirs) {
-    try {
-      await sandbox.process.executeCommand(`mkdir -p ${dir}`, '/workspace', undefined, 5)
-    } catch {
-      // ignore if exists
-    }
-  }
-
-  const uploads = allFiles.map((file) => ({
-    content: file.content,
-    path: `/workspace/${file.path}`,
-  }))
-  await uploadFiles(sandbox, uploads)
-  console.log(`[codeGen] Upload complete: ${uploads.length} files written`)
-
-  // Install dependencies
-  console.log('[codeGen] Installing dependencies...')
-  const installResult = await sandbox.process.executeCommand(
-    'bun install --frozen-lockfile 2>&1 || bun install 2>&1',
-    '/workspace',
-    undefined,
-    120,
-  )
-  if (installResult.exitCode !== 0) {
-    console.warn(`[codeGen] bun install exit code: ${installResult.exitCode}`)
-  }
-
-  // Construct AppBlueprint for downstream validation/repair
-  const blueprint: AppBlueprint = {
-    meta: { appName: input.appName, appDescription: '' },
-    fileTree: allFiles,
-  }
-
-  return {
-    pages: pageResult.pages,
-    assembledFiles: allFiles,
-    blueprint,
-    tokensUsed,
-  }
-}
-
-// ============================================================================
-// Pipeline B: Page Generation handler
-// ============================================================================
-
-/**
- * Generate all page route files in parallel from a CreativeSpec.
- * Pipeline B step 3: spec + tokens → GeneratedPage[].
- */
-export async function runPageGeneration(input: {
-  spec: CreativeSpec
-  tokens: DesignSystem
-  complexity?: AppComplexity
-  onPageStart?: (fileName: string, route: string, componentName: string, index: number, total: number) => void
-  onPageComplete?: (fileName: string, route: string, componentName: string, lineCount: number, code: string, index: number, total: number) => void
-}): Promise<{ pages: GeneratedPage[]; tokensUsed: number }> {
-  const { generatePages } = await import('../page-generator')
-
-  const result = await generatePages({
-    spec: input.spec,
-    tokens: input.tokens,
-    complexity: input.complexity,
-    onPageStart: input.onPageStart,
-    onPageComplete: input.onPageComplete,
   })
-
-  const tokensUsed = (result.usage.inputTokens ?? 0) + (result.usage.outputTokens ?? 0)
-
-  return {
-    pages: result.pages,
-    tokensUsed,
-  }
-}
-
-// ============================================================================
-// Pipeline B: Assembly handler
-// ============================================================================
-
-/**
- * Assemble all app files deterministically and upload them to the Daytona sandbox.
- * Runs bun install, applies the SQL migration, and seeds the Supabase database.
- * Pipeline B step 4: spec + generatedPages → files in sandbox + DB populated.
- */
-export async function runAssembly(input: {
-  spec: CreativeSpec
-  generatedPages: GeneratedPage[]
-  appName: string
-  tokens: DesignSystem
-  sandboxId: string
-  onFileAssembled?: (path: string, category: string) => void
-}): Promise<{ assembledFiles: Array<{ path: string; content: string; layer: number; isLLMSlot: boolean }>; blueprint: AppBlueprint; tokensUsed: number }> {
-  // Dynamic imports to avoid circular deps
-  const { assembleApp } = await import('../deterministic-assembly')
-  const { getSandbox, uploadFiles } = await import('../sandbox')
-
-  // Step 1: Deterministic assembly — zero LLM calls
-  const assembledFiles = assembleApp({
-    spec: input.spec,
-    generatedPages: input.generatedPages,
-    appName: input.appName,
-    tokens: input.tokens,
-    includeUiKit: true,
-  })
-
-  console.log(`[assembly] Assembled ${assembledFiles.length} files deterministically`)
-
-  // Notify caller about each file assembled
-  if (input.onFileAssembled) {
-    for (const file of assembledFiles) {
-      const category = file.isLLMSlot ? 'llm-page' : 'deterministic'
-      input.onFileAssembled(file.path, category)
-    }
-  }
-
-  // Step 2: Upload all files to Daytona sandbox
-  const sandbox = await getSandbox(input.sandboxId)
-  console.log(`[assembly] Writing ${assembledFiles.length} files to sandbox...`)
-
-  // Create all needed directories first
-  const dirs = new Set<string>()
-  for (const file of assembledFiles) {
-    const dir = `/workspace/${file.path}`.split('/').slice(0, -1).join('/')
-    dirs.add(dir)
-  }
-  for (const dir of dirs) {
-    try {
-      await sandbox.process.executeCommand(`mkdir -p ${dir}`, '/workspace', undefined, 5)
-    } catch {
-      // ignore if exists
-    }
-  }
-
-  // Upload files as-is
-  const uploads = assembledFiles.map((file) => ({
-    content: file.content,
-    path: `/workspace/${file.path}`,
-  }))
-  await uploadFiles(sandbox, uploads)
-  console.log(`[assembly] Upload complete: ${uploads.length} files written`)
-
-  // Step 3: Install dependencies
-  console.log('[assembly] Installing dependencies...')
-  const installResult = await sandbox.process.executeCommand(
-    'bun install --frozen-lockfile 2>&1 || bun install 2>&1',
-    '/workspace',
-    undefined,
-    120,
-  )
-  if (installResult.exitCode !== 0) {
-    console.warn(`[assembly] bun install exit code: ${installResult.exitCode}`)
-  }
-
-  // Construct AppBlueprint from assembled files so downstream states
-  // (validating, repairing, reviewing) have the fileTree they expect.
-  const blueprint: AppBlueprint = {
-    meta: { appName: input.appName, appDescription: '' },
-    fileTree: assembledFiles,
-  }
-
-  return {
-    assembledFiles,
-    blueprint,
-    tokensUsed: 0,
-  }
 }

@@ -350,6 +350,9 @@ export async function waitForCodeServer(sandbox: Sandbox, maxAttempts: number = 
 /**
  * Push the sandbox's git repo to a GitHub remote.
  * Uses Daytona's native sandbox.git.push() with PAT auth.
+ *
+ * The sandbox is cloned from the template repo, so `origin` already exists.
+ * We update origin to point at the user's new repo, then push.
  */
 export async function pushToGitHub(
   sandbox: Sandbox,
@@ -357,16 +360,10 @@ export async function pushToGitHub(
   token: string,
   workDir: string = '/workspace',
 ): Promise<void> {
-  // Add remote (shell command — no SDK method for remote add)
-  await runCommand(sandbox, `git remote add origin ${cloneUrl}`, 'git-remote-add', {
+  // Add origin remote pointing at the user's repo (sandbox starts with a fresh git init — no remotes)
+  await runCommand(sandbox, `git remote add origin ${cloneUrl}`, 'git-set-origin', {
     cwd: workDir,
     timeout: 15,
-  })
-
-  // Rename default branch to main (sandbox git init creates 'master')
-  await runCommand(sandbox, 'git branch -M main', 'git-rename-branch', {
-    cwd: workDir,
-    timeout: 10,
   })
 
   // Push using Daytona's native git module with token auth

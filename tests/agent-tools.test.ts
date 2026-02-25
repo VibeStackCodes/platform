@@ -1,42 +1,41 @@
 import {
-  createDirectoryTool,
   createGitHubRepoTool,
   createSandboxTool,
   deployToVercelTool,
+  editFileTool,
   getGitHubTokenTool,
   getPreviewUrlTool,
+  installPackageTool,
   listFilesTool,
   pushToGitHubTool,
   readFileTool,
   runBuildTool,
   runCommandTool,
-  runLintTool,
-  runTypeCheckTool,
-  searchDocsTool,
   writeFileTool,
+  writeFilesTool,
 } from '@server/lib/agents/tools'
 import { describe, expect, it } from 'vitest'
 
 describe('Sandbox Tools', () => {
-  it('exports all 15 tools', () => {
-    const tools = [
-      writeFileTool,
-      readFileTool,
-      listFilesTool,
-      createDirectoryTool,
-      runCommandTool,
-      runBuildTool,
-      runLintTool,
-      runTypeCheckTool,
-      getPreviewUrlTool,
-      createSandboxTool,
-      pushToGitHubTool,
-      deployToVercelTool,
-      searchDocsTool,
-      createGitHubRepoTool,
-      getGitHubTokenTool,
-    ]
-    for (const tool of tools) {
+  const ALL_TOOLS = [
+    writeFileTool,
+    writeFilesTool,
+    readFileTool,
+    listFilesTool,
+    runCommandTool,
+    runBuildTool,
+    getPreviewUrlTool,
+    createSandboxTool,
+    pushToGitHubTool,
+    deployToVercelTool,
+    createGitHubRepoTool,
+    getGitHubTokenTool,
+    editFileTool,
+    installPackageTool,
+  ]
+
+  it('exports all 14 tools', () => {
+    for (const tool of ALL_TOOLS) {
       expect(tool).toBeDefined()
       expect(tool.id).toBeDefined()
       expect(tool.description).toBeDefined()
@@ -72,14 +71,6 @@ describe('Sandbox Tools', () => {
     expect(valid.success).toBe(true)
   })
 
-  it('createDirectoryTool has correct input schema', () => {
-    const schema = createDirectoryTool.inputSchema
-    expect(schema).toBeDefined()
-    if (!schema) return
-    const valid = schema.safeParse({ sandboxId: 'abc', path: 'src/components' })
-    expect(valid.success).toBe(true)
-  })
-
   it('runCommandTool has correct input schema', () => {
     const schema = runCommandTool.inputSchema
     expect(schema).toBeDefined()
@@ -90,7 +81,6 @@ describe('Sandbox Tools', () => {
     })
     expect(valid.success).toBe(true)
 
-    // With optional cwd
     const withCwd = schema.safeParse({
       sandboxId: 'abc',
       command: 'ls',
@@ -101,22 +91,6 @@ describe('Sandbox Tools', () => {
 
   it('runBuildTool has correct input schema', () => {
     const schema = runBuildTool.inputSchema
-    expect(schema).toBeDefined()
-    if (!schema) return
-    const valid = schema.safeParse({ sandboxId: 'abc' })
-    expect(valid.success).toBe(true)
-  })
-
-  it('runLintTool has correct input schema', () => {
-    const schema = runLintTool.inputSchema
-    expect(schema).toBeDefined()
-    if (!schema) return
-    const valid = schema.safeParse({ sandboxId: 'abc' })
-    expect(valid.success).toBe(true)
-  })
-
-  it('runTypeCheckTool has correct input schema', () => {
-    const schema = runTypeCheckTool.inputSchema
     expect(schema).toBeDefined()
     if (!schema) return
     const valid = schema.safeParse({ sandboxId: 'abc' })
@@ -141,7 +115,6 @@ describe('Sandbox Tools', () => {
     const valid = schema.safeParse({})
     expect(valid.success).toBe(true)
 
-    // With optional labels
     const withLabels = schema.safeParse({
       labels: { project: 'test', type: 'vibestack-generated' },
     })
@@ -170,24 +143,12 @@ describe('Sandbox Tools', () => {
     })
     expect(valid.success).toBe(true)
 
-    // With optional teamId
     const withTeamId = schema.safeParse({
       sandboxId: 'abc',
       projectName: 'test-project',
       teamId: 'team_123',
     })
     expect(withTeamId.success).toBe(true)
-  })
-
-  it('searchDocsTool input accepts library and query', () => {
-    const schema = searchDocsTool.inputSchema
-    expect(schema).toBeDefined()
-    if (!schema) return
-    const valid = schema.safeParse({
-      library: 'react',
-      query: 'useEffect cleanup',
-    })
-    expect(valid.success).toBe(true)
   })
 
   it('createGitHubRepoTool has correct input schema', () => {
@@ -205,7 +166,6 @@ describe('Sandbox Tools', () => {
     const schema = getGitHubTokenTool.inputSchema
     expect(schema).toBeDefined()
     if (!schema) return
-    // Empty object should be valid (no required fields)
     const valid = schema.safeParse({})
     expect(valid.success).toBe(true)
   })
@@ -219,25 +179,7 @@ describe('Sandbox Tools', () => {
   })
 
   it('all sandbox tools have execute functions', () => {
-    const tools = [
-      writeFileTool,
-      readFileTool,
-      listFilesTool,
-      createDirectoryTool,
-      runCommandTool,
-      runBuildTool,
-      runLintTool,
-      runTypeCheckTool,
-      getPreviewUrlTool,
-      createSandboxTool,
-      pushToGitHubTool,
-      deployToVercelTool,
-      searchDocsTool,
-      createGitHubRepoTool,
-      getGitHubTokenTool,
-    ]
-
-    for (const tool of tools) {
+    for (const tool of ALL_TOOLS) {
       expect(tool.execute).toBeDefined()
       expect(typeof tool.execute).toBe('function')
     }

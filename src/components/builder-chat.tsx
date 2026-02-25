@@ -500,7 +500,7 @@ export function BuilderChat({
     } else if (persistedTimeline.some((e) => e.type === 'error')) {
       setGenerationStatus('error')
     }
-  }, [persistedTimeline, persistedValidation, persistedPageProgress, persistedFileAssembly])
+  }, [persistedTimeline, persistedValidation, persistedPageProgress, persistedFileAssembly, timelineEvents.length, validationChecks.length, pageProgress.length, fileAssembly.length])
 
   const [sessionMessages, setSessionMessages] = useState<ChatMessage[]>([])
   const messages = useMemo(() => {
