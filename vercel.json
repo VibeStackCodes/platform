@@ -2,7 +2,7 @@
   "buildCommand": "bun run build",
   "outputDirectory": "dist/client",
   "functions": {
-    "server/index.ts": {
+    "api/index.ts": {
       "maxDuration": 300,
       "memory": 1024
     }
@@ -19,7 +19,7 @@
     }
   ],
   "rewrites": [
-    { "source": "/api/:path*", "destination": "/server/index.ts" },
+    { "source": "/api/:path*", "destination": "/api/index.ts" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
