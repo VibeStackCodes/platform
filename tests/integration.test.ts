@@ -6,7 +6,19 @@
  * 2. AgentStreamEvent discriminant types are valid and distinct
  * 3. relace client exports the expected applyEdit function
  */
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
+
+// Mock mastra module to avoid PostgresStore requiring DATABASE_URL
+vi.mock('@server/lib/agents/mastra', () => {
+  class Memory {}
+  class PostgresStore {}
+  return {
+    memory: new Memory(),
+    storage: new PostgresStore(),
+    mastra: {},
+    workingMemorySchema: { safeParse: () => ({ success: true }) },
+  }
+})
 
 // ---------------------------------------------------------------------------
 // 1. Tool-belt wiring: agent.listTools() contains expected tools
