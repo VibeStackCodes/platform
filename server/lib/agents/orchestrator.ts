@@ -11,6 +11,7 @@
 import { anthropic } from '@ai-sdk/anthropic'
 import { openai } from '@ai-sdk/openai'
 import { Agent } from '@mastra/core/agent'
+import { memory } from './mastra'
 import { createAgentModelResolver, type ProviderType } from './provider'
 import {
   commitAndPushTool,
@@ -69,6 +70,18 @@ You work in a sandbox with a pre-baked React project scaffold:
 - **CSS**: Tailwind v4 CSS-first — theme variables in \`src/index.css\` via \`@theme inline\` block, not a JS config file. Colors use \`hsl(var(--primary))\` pattern.
 - **Quality gate**: \`vite build\` passing is the only requirement
 
+## Working Memory
+
+You have persistent working memory across conversation turns. It automatically tracks:
+- **sandboxId**: Your current sandbox ID (no need to track manually)
+- **repoUrl**: The GitHub repo URL (created automatically on first commitAndPush)
+- **projectName**: The project name
+- **filesCreated**: Files you've created
+- **designDecisions**: Key design decisions you've made
+- **buildStatus**: Current build status (pending/passing/failing)
+
+You don't need to reference a sandbox ID from the user's message — it's in your working memory from previous turns.
+
 ## How You Work
 
 ### First Prompt (New App)
@@ -80,14 +93,16 @@ You work in a sandbox with a pre-baked React project scaffold:
 6. Create/edit files: pages in \`src/pages/\`, components in \`src/components/\`, hooks in \`src/hooks/\`.
 7. Update \`src/App.tsx\` with routes for your pages.
 8. Call \`runBuild\` to validate. If it fails, read the errors and fix them.
-9. End with a brief summary: "Your [app name] is live! Features: [list]."
+9. Call \`commitAndPush\` to save your work to GitHub.
+10. End with a brief summary: "Your [app name] is live! Features: [list]."
 
 ### Edit Requests (Existing App)
 1. Read the relevant file(s) to understand current state.
 2. Use \`editFile\` for modifications (faster + cheaper via Relace Instant Apply).
 3. Use \`writeFile\` only for brand-new files.
 4. Call \`runBuild\` to validate.
-5. End with a one-line summary: "Updated [what changed]."
+5. Call \`commitAndPush\` to save your changes.
+6. End with a one-line summary: "Updated [what changed]."
 
 ## Design Principles
 
@@ -124,6 +139,7 @@ Use the VibeStack image resolver for all photos: \`https://img.vibestack.site/s/
 - \`installPackage\`: \`bun add\` packages not in the snapshot. You are free to install anything.
 - \`webSearch\`: Search the web for design inspiration, real product UIs, library docs. Use BEFORE writing code.
 - \`getPreviewUrl\`: Get the live preview URL for the sandbox.
+- \`commitAndPush\`: Commit all changes and push to GitHub. Call after each meaningful change (new feature, bug fix, build passing).
 
 ## Important Rules
 
@@ -141,6 +157,7 @@ export function createOrchestrator(provider: ProviderType = 'openai'): Agent {
     id: 'orchestrator',
     name: 'Orchestrator',
     model: orchestratorModel,
+    memory,
     description: 'Single orchestrator that builds apps from user descriptions',
     instructions: ORCHESTRATOR_PROMPT,
     tools: buildTools(provider),
