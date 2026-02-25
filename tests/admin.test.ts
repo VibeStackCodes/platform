@@ -185,7 +185,8 @@ describe('Admin Routes', () => {
       process.env.STRIPE_SECRET_KEY = 'sk_test_stripe'
       process.env.STRIPE_WEBHOOK_SECRET = 'whsec_test'
       process.env.WARM_POOL_SIZE = '10'
-      process.env.HELICONE_API_KEY = 'helicone-key'
+      process.env.LANGFUSE_PUBLIC_KEY = 'langfuse-pk'
+      process.env.LANGFUSE_SECRET_KEY = 'langfuse-sk'
 
       const res = await app.request('/api/admin/env-check')
       const data = await res.json()

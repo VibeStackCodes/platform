@@ -669,16 +669,8 @@ async function main() {
   log(`Prompt: "${TEST_PROMPT.slice(0, 80)}..."`)
   log('')
 
-  // Set up Helicone session context
   const sessionId = `e2e-app${TEST_CONFIG.id}-${Date.now()}`
-  const { setGlobalHeliconeContext } = await import('../server/lib/agents/provider')
-  setGlobalHeliconeContext({
-    userId: '00000000-0000-4000-8000-000000000e2e',
-    projectId: sessionId,
-    sessionId,
-    environment: 'e2e-10apps',
-  })
-  log(`Helicone session: ${sessionId}`)
+  log(`Session: ${sessionId}`)
 
   const notes: string[] = []
   let sandboxId: string | null = null

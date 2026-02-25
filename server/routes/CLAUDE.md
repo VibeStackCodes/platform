@@ -6,7 +6,7 @@ All routes mounted under `/api` basePath in server/index.ts.
 - `POST /api/agent` — Single orchestrator SSE stream (credit-gated, 5 req/min)
 - `GET /api/admin/health` — System diagnostics (DB, Daytona, env vars)
 - `GET/POST /api/projects` — Project CRUD (ownership-verified)
-- `GET /api/projects/:id/messages` — Chat message history
+- `GET /api/projects/:id/messages` — Chat message history (via Mastra memory threads)
 - `POST /api/projects/deploy` — Vercel deployment + GitHub repo creation
 - `GET /api/projects/:id/sandbox-urls` — Signed preview + code server URLs (1h expiry)
 - `POST /api/stripe/checkout` — Stripe checkout session ($20/mo, 2000 credits)

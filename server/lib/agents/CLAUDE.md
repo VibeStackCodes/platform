@@ -3,9 +3,10 @@
 Single Mastra agent handles all generation. No state machine, no multi-agent pipeline.
 
 ## Files
-- `orchestrator.ts` — Single Mastra Agent: system prompt + 14 tools. Factory: `createOrchestrator()`. The LLM decides what to do — creates sandbox, writes files, runs build, deploys.
+- `mastra.ts` — Central Mastra registry: `PostgresStore` (storage + memory backend), `Memory` (thread-based with working memory schema), `Observability` (Langfuse via `@mastra/langfuse`), `PinoLogger`. Exports `memory`, `storage`, `mastra`, `workingMemorySchema`.
+- `orchestrator.ts` — Single Mastra Agent: system prompt + 11 tools + memory. Factory: `createOrchestrator()`. The LLM decides what to do — creates sandbox, writes files, runs build, commits.
 - `provider.ts` — Multi-provider routing: `PROVIDER_REGISTRY` (OpenAI + Anthropic, direct connections), `MODEL_CONFIGS` maps user-facing model IDs→provider+modelId+roleOverrides, `createAgentModelResolver(role)` reads `selectedModel` from RequestContext
-- `tools.ts` — 14 Mastra tools: sandbox lifecycle, file I/O (write/read/edit/list), build/command execution, package install, web search, preview URL, deployment (Vercel + GitHub)
+- `tools.ts` — 11 Mastra tools: sandbox lifecycle, file I/O (write/read/edit/list), build/command execution, package install, web search, preview URL, `commitAndPush` (git + GitHub)
 
 ## Key Patterns
 - All models resolved via `createAgentModelResolver(role)` — reads `selectedModel` from RequestContext

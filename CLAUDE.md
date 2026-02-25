@@ -28,7 +28,7 @@ bun run db:studio     # Drizzle Kit studio (DB browser)
 - **Auth**: Supabase Auth via `@supabase/supabase-js` (SPA localStorage tokens)
 - **Database**: Drizzle ORM + Supabase (platform DB)
 - **Sandbox**: Daytona SDK — sandboxed environments from snapshots
-- **AI**: Mastra agent framework, multi-provider LLM routing (OpenAI + Anthropic via Helicone)
+- **AI**: Mastra agent framework, multi-provider LLM routing (OpenAI + Anthropic), Langfuse observability (via @mastra/langfuse)
 - **Payments**: Stripe (checkout, webhooks)
 - **Deployment**: Vercel (Hono via `@hono/vercel`, client via `dist/client/`)
 - **Monitoring**: Sentry (client + server + AI agent instrumentation)
@@ -88,9 +88,10 @@ server/                  # Hono API server
       client.ts          # Drizzle client (pg Pool)
       queries.ts         # Type-safe query functions
     agents/
-      orchestrator.ts    # Single Mastra agent with 14 tools + system prompt
+      mastra.ts          # Mastra registry: PostgresStore, Memory (working memory), Langfuse observability
+      orchestrator.ts    # Single Mastra agent with 11 tools + system prompt + memory
       provider.ts        # Multi-provider routing (PROVIDER_REGISTRY + MODEL_CONFIGS per role)
-      tools.ts           # 14 Mastra tools (sandbox, file I/O, build, deploy, web search)
+      tools.ts           # 11 Mastra tools (sandbox, file I/O, build, commitAndPush, web search)
     sandbox.ts           # Daytona sandbox lifecycle
     github.ts            # GitHub App integration
     relace.ts            # Relace Instant Apply API client
@@ -120,18 +121,20 @@ Single `tsconfig.json` covers both `src/` and `server/`:
 The generation pipeline is a single Mastra `Agent` (`server/lib/agents/orchestrator.ts`). The LLM decides what to do — no state machine.
 
 - **Entry point**: `POST /api/agent` — credit-gated, streams `AgentStreamEvent` via Hono `streamSSE()`
-- **Agent**: `createOrchestrator(provider)` builds a Mastra `Agent` with 14 tools + a detailed system prompt
-- **Tool belt**: `createSandbox`, `writeFile`, `writeFiles`, `readFile`, `editFile`, `listFiles`, `runCommand`, `runBuild`, `installPackage`, `getPreviewUrl`, `createGitHubRepo`, `getGitHubToken`, `pushToGitHub`, `deployToVercel`, `webSearch`
+- **Agent**: `createOrchestrator(provider)` builds a Mastra `Agent` with 11 tools + system prompt + thread-based memory
+- **Tool belt**: `createSandbox`, `writeFile`, `writeFiles`, `readFile`, `editFile`, `listFiles`, `runCommand`, `runBuild`, `installPackage`, `getPreviewUrl`, `commitAndPush`, `webSearch`
+- **Memory**: Mastra `Memory` with PostgresStore — thread-based (projectId = thread, userId = resource). Working memory schema tracks sandboxId, repoUrl, buildStatus, etc.
 - **Web search**: Provider-native — `openai.tools.webSearch()` for OpenAI, `anthropic.tools.webSearch_20250305()` for Anthropic
 - **Relace**: `editFile` tool calls the Relace Instant Apply API (`relace.ts`) to merge code snippets into existing files
 - **Build loop**: Agent writes code → calls `runBuild` → reads errors → fixes → rebuilds. Max 3 repair attempts.
 - **Quality gate**: `vite build` passing is the only requirement — no type-check gate in generated apps
 - **SSE events**: `AgentStreamEvent` union — `thinking`, `tool_start`, `tool_complete`, `done`, `agent_error`, `sandbox_ready`, `package_installed`, `credits_used`
 - **Credits**: `reserveCredits()` before generation starts, `settleCredits()` after to adjust to actual token usage
+- **Observability**: Langfuse via `@mastra/langfuse` (configured in `mastra.ts`). Traces all LLM calls + tool executions. Gated on `LANGFUSE_PUBLIC_KEY` + `LANGFUSE_SECRET_KEY`.
 
 ### Model Routing
 
-User-selectable per generation: GPT-5.2 Codex (OpenAI), Claude Opus 4.6, Claude Sonnet 4.6. Provider routing via `PROVIDER_REGISTRY` + `MODEL_CONFIGS` in `provider.ts`. Route handler sets `selectedModel` on `RequestContext` before creating the agent. Adding a new model = one `MODEL_CONFIGS` entry. Adding a new provider = one `PROVIDER_REGISTRY` entry + `bun add @ai-sdk/<provider>`.
+User-selectable per generation: GPT-5.2 Codex (OpenAI), Claude Opus 4.6, Claude Sonnet 4.6. Provider routing via `PROVIDER_REGISTRY` + `MODEL_CONFIGS` in `provider.ts`. Route handler sets `selectedModel` on `RequestContext` before creating the agent. Direct provider connections (no proxy). Adding a new model = one `MODEL_CONFIGS` entry. Adding a new provider = one `PROVIDER_REGISTRY` entry + `bun add @ai-sdk/<provider>`.
 
 ### Key Patterns
 
@@ -166,7 +169,9 @@ Required in `.env.local`:
 | `STRIPE_SECRET_KEY` | Stripe server key |
 | `STRIPE_WEBHOOK_SECRET` | Stripe webhook validation |
 | `VITE_STRIPE_PUBLISHABLE_KEY` | Stripe client key |
-| `HELICONE_API_KEY` | Helicone LLM proxy (observability + per-user tracking) |
+| `LANGFUSE_PUBLIC_KEY` | Langfuse observability public key (optional) |
+| `LANGFUSE_SECRET_KEY` | Langfuse observability secret key (optional) |
+| `LANGFUSE_BASEURL` | Langfuse base URL (default: `https://cloud.langfuse.com`) |
 | `RELACE_API_KEY` | Relace Instant Apply API key (used by editFile tool) |
 | `VITE_SENTRY_DSN` | Sentry client DSN (optional) |
 | `SENTRY_DSN` | Sentry server DSN (optional) |
@@ -221,7 +226,7 @@ git commit
 - **`d.list()` vs `d.get(id)`**: Daytona's `list()` returns lightweight objects without `process.executeCommand()`. Always use `get(id)` for full sandbox operations.
 - **Signed preview URLs** from Daytona expire in 1 hour.
 - **Credit deduction**: `reserveCredits()` is pessimistic — reserves upfront, then `settleCredits()` adjusts after. In-flight generations always complete even if credits go negative.
-- **Helicone fallback**: When `HELICONE_API_KEY` is unset, LLM calls go directly to OpenAI/Anthropic (no observability).
+- **Langfuse observability**: Gated on `LANGFUSE_PUBLIC_KEY` + `LANGFUSE_SECRET_KEY` — when unset, no traces are exported. Configured in `server/lib/agents/mastra.ts`.
 - **Sentry** is gated behind `VITE_SENTRY_DSN` / `SENTRY_DSN` — no-op when unset.
 - **Bun.serve idle timeout**: Set to 255s (max) to prevent SSE connection drops during long LLM calls. Keepalive pings every 15s.
 - **Rate limiter**: DB-backed (PostgreSQL sliding window) — survives Vercel cold starts. Fails open for non-critical paths, fails closed for `/api/agent` and `/api/stripe`.

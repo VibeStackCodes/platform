@@ -12,7 +12,7 @@
  *   bun scripts/local-e2e-renderer-test.ts --keep           # keep /tmp dirs
  *
  * Requires: OPENAI_API_KEY in .env.local (reads automatically via bun)
- * Optional: HELICONE_API_KEY for observability
+ * Optional: LANGFUSE_PUBLIC_KEY + LANGFUSE_SECRET_KEY for observability
  */
 
 import { writeFileSync, mkdirSync, rmSync, existsSync } from 'node:fs'
@@ -342,15 +342,6 @@ async function main() {
   log(`Prompts: ${selectedPrompts.map((p) => `#${p.id}`).join(', ')}`)
   log(`Keep /tmp dirs: ${keepDirs}`)
   log('')
-
-  // Initialize Helicone context for script-mode LLM calls
-  const { setGlobalHeliconeContext } = await import('../server/lib/agents/provider')
-  setGlobalHeliconeContext({
-    userId: '00000000-0000-4000-8000-000000000e2e',
-    projectId: 'local-e2e-renderer-test',
-    sessionId: `local-e2e-${Date.now()}`,
-    environment: 'local-e2e',
-  })
 
   const results: PromptResult[] = []
 

@@ -21,7 +21,9 @@ const envSchema = z.object({
 
   // Optional
   ANTHROPIC_API_KEY: z.string().optional(),
-  HELICONE_API_KEY: z.string().optional(),
+  LANGFUSE_PUBLIC_KEY: z.string().optional(),
+  LANGFUSE_SECRET_KEY: z.string().optional(),
+  LANGFUSE_BASEURL: z.string().optional(),
   SENTRY_DSN: z.string().optional(),
   VITE_SENTRY_DSN: z.string().optional(),
   SUPABASE_ACCESS_TOKEN: z.string().optional(),

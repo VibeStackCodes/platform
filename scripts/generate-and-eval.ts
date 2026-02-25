@@ -309,15 +309,6 @@ ${EVAL_RUBRIC}`,
 // ---------------------------------------------------------------------------
 
 async function runGenerationPipeline(): Promise<{ tmpDir: string; validation: { errors: { type: string; file: string; line?: number; message: string }[]; warnings: { type: string; file: string; message: string }[]; valid: boolean }; tscErrors: string[]; generatedPages: { route: string; fileName: string; content: string }[]; spec: any }> {
-  // Initialize Helicone context
-  const { setGlobalHeliconeContext } = await import('../server/lib/agents/provider')
-  setGlobalHeliconeContext({
-    userId: '00000000-0000-4000-8000-00000000exp1',
-    projectId: 'llm-fullpage-experiment',
-    sessionId: `fullpage-${Date.now()}`,
-    environment: 'experiment',
-  })
-
   // --- Phase 1: Analyst ---
   log('Phase 1: Running analyst agent...')
   const { runAnalysis } = await import('../server/lib/agents/orchestrator')
