@@ -1,13 +1,10 @@
 import {
-  createGitHubRepoTool,
+  commitAndPushTool,
   createSandboxTool,
-  deployToVercelTool,
   editFileTool,
-  getGitHubTokenTool,
   getPreviewUrlTool,
   installPackageTool,
   listFilesTool,
-  pushToGitHubTool,
   readFileTool,
   runBuildTool,
   runCommandTool,
@@ -26,15 +23,12 @@ describe('Sandbox Tools', () => {
     runBuildTool,
     getPreviewUrlTool,
     createSandboxTool,
-    pushToGitHubTool,
-    deployToVercelTool,
-    createGitHubRepoTool,
-    getGitHubTokenTool,
+    commitAndPushTool,
     editFileTool,
     installPackageTool,
   ]
 
-  it('exports all 14 tools', () => {
+  it('exports all 11 tools', () => {
     for (const tool of ALL_TOOLS) {
       expect(tool).toBeDefined()
       expect(tool.id).toBeDefined()
@@ -121,53 +115,45 @@ describe('Sandbox Tools', () => {
     expect(withLabels.success).toBe(true)
   })
 
-  it('pushToGitHubTool has correct input schema', () => {
-    const schema = pushToGitHubTool.inputSchema
+  it('commitAndPushTool has correct input schema', () => {
+    const schema = commitAndPushTool.inputSchema
     expect(schema).toBeDefined()
     if (!schema) return
     const valid = schema.safeParse({
       sandboxId: 'abc',
-      cloneUrl: 'https://github.com/user/repo.git',
-      token: 'ghp_token',
+      message: 'feat: initial scaffold',
     })
     expect(valid.success).toBe(true)
+
+    // sandboxId is required
+    const missingSandboxId = schema.safeParse({ message: 'feat: initial scaffold' })
+    expect(missingSandboxId.success).toBe(false)
+
+    // message is required
+    const missingMessage = schema.safeParse({ sandboxId: 'abc' })
+    expect(missingMessage.success).toBe(false)
   })
 
-  it('deployToVercelTool has correct input schema', () => {
-    const schema = deployToVercelTool.inputSchema
+  it('commitAndPushTool has correct output schema', () => {
+    const schema = commitAndPushTool.outputSchema
     expect(schema).toBeDefined()
     if (!schema) return
-    const valid = schema.safeParse({
-      sandboxId: 'abc',
-      projectName: 'test-project',
-    })
-    expect(valid.success).toBe(true)
 
-    const withTeamId = schema.safeParse({
-      sandboxId: 'abc',
-      projectName: 'test-project',
-      teamId: 'team_123',
-    })
-    expect(withTeamId.success).toBe(true)
-  })
+    // Minimal success (no push)
+    const successNoRepo = schema.safeParse({ success: true, commitHash: 'a1b2c3d' })
+    expect(successNoRepo.success).toBe(true)
 
-  it('createGitHubRepoTool has correct input schema', () => {
-    const schema = createGitHubRepoTool.inputSchema
-    expect(schema).toBeDefined()
-    if (!schema) return
-    const valid = schema.safeParse({
-      appName: 'my-generated-app',
-      projectId: 'proj_123',
+    // Full success with repoUrl
+    const successWithRepo = schema.safeParse({
+      success: true,
+      commitHash: 'a1b2c3d',
+      repoUrl: 'https://github.com/org/vibestack-sandboxid.git',
     })
-    expect(valid.success).toBe(true)
-  })
+    expect(successWithRepo.success).toBe(true)
 
-  it('getGitHubTokenTool has correct input schema', () => {
-    const schema = getGitHubTokenTool.inputSchema
-    expect(schema).toBeDefined()
-    if (!schema) return
-    const valid = schema.safeParse({})
-    expect(valid.success).toBe(true)
+    // Failure case
+    const failure = schema.safeParse({ success: false, error: 'Commit failed' })
+    expect(failure.success).toBe(true)
   })
 
   it('tools that require sandboxId reject missing sandboxId', () => {

@@ -5,10 +5,8 @@ import { buildRepoName, createRepo, getInstallationToken } from '../github'
 import {
   buildProxyUrl,
   createSandbox as createSandboxFn,
-  downloadDirectory,
   getPreviewUrl as getPreviewUrlFn,
   getSandbox,
-  pushToGitHub as pushToGitHubFn,
 } from '../sandbox'
 import { applyEdit } from '../relace'
 /**
@@ -359,181 +357,106 @@ export const createSandboxTool = createTool({
 // GitHub & Deployment
 // ============================================================================
 
-export const pushToGitHubTool = createTool({
-  id: 'push-to-github',
-  description: 'Push sandbox git repository to GitHub',
+export const commitAndPushTool = createTool({
+  id: 'commit-and-push',
+  description: 'Commit all changes and push to GitHub. Creates a repo if none exists. Call after each meaningful change.',
   inputSchema: z.object({
     sandboxId: z.string().describe('Daytona sandbox ID'),
-    cloneUrl: z.string().describe('GitHub clone URL (https://github.com/user/repo.git)'),
-    token: z.string().describe('GitHub personal access token'),
+    message: z.string().describe('Git commit message'),
   }),
   outputSchema: z.object({
     success: z.boolean(),
-    message: z.string(),
+    commitHash: z.string().optional(),
+    repoUrl: z.string().optional(),
     error: z.string().optional(),
   }),
   execute: async (inputData, _context) => {
-    try {
-      const sandbox = await getSandbox(inputData.sandboxId)
-      await pushToGitHubFn(sandbox, inputData.cloneUrl, inputData.token)
-      return { success: true, message: `Pushed to ${inputData.cloneUrl}` }
-    } catch (e) {
-      return { success: false, message: '', error: e instanceof Error ? e.message : String(e) }
+    const { sandboxId, message } = inputData
+    const sandbox = await getSandbox(sandboxId)
+
+    // 1. git add -A && git commit
+    const commitResult = await sandbox.process.executeCommand(
+      `cd /workspace && git add -A && git commit -m ${escapeShellArg(message)} --allow-empty`,
+      '/workspace',
+      undefined,
+      30,
+    )
+    if (commitResult.exitCode !== 0) {
+      return { success: false, error: commitResult.result || 'Commit failed' }
     }
-  },
-})
 
-export const deployToVercelTool = createTool({
-  id: 'deploy-to-vercel',
-  description:
-    'Deploy sandbox files to Vercel using the Vercel REST API. Downloads files from sandbox and creates a deployment.',
-  inputSchema: z.object({
-    sandboxId: z.string().describe('Daytona sandbox ID'),
-    projectName: z.string().describe('Project name for Vercel deployment'),
-    teamId: z.string().optional().describe('Vercel team ID (defaults to VERCEL_TEAM_ID env var)'),
-  }),
-  outputSchema: z.object({
-    deploymentUrl: z.string(),
-    deploymentId: z.string(),
-    status: z.string(),
-    error: z.string().optional(),
-  }),
-  execute: async (inputData, _context) => {
+    // Extract commit hash
+    const hashMatch = commitResult.result?.match(/\[[\w-]+ ([a-f0-9]+)\]/)
+    const commitHash = hashMatch?.[1]
+
+    // 2. Check if GitHub env vars are available for push
+    if (!process.env.GITHUB_APP_ID || !process.env.GITHUB_ORG) {
+      return { success: true, commitHash }
+    }
+
     try {
-      const vercelToken = process.env.VERCEL_TOKEN
-      if (!vercelToken) {
-        return {
-          deploymentUrl: '',
-          deploymentId: '',
-          status: 'failed',
-          error: 'VERCEL_TOKEN environment variable is required',
-        }
-      }
-
-      const finalTeamId = inputData.teamId || process.env.VERCEL_TEAM_ID
-
-      // Download files from sandbox
-      const sandbox = await getSandbox(inputData.sandboxId)
-      const files = await downloadDirectory(sandbox, '/workspace')
-
-      console.log(`[deploy-to-vercel] Downloaded ${files.length} files from sandbox`)
-
-      // Prepare files in Vercel format (base64-encoded)
-      const vercelFiles = files.map((f) => ({
-        file: f.path,
-        data: f.content.toString('base64'),
-      }))
-
-      // Create deployment
-      const deploymentResponse = await fetch(
-        `https://api.vercel.com/v13/deployments${finalTeamId ? `?teamId=${finalTeamId}` : ''}`,
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${vercelToken}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            name: inputData.projectName.toLowerCase().replace(/[^a-z0-9-]/g, '-'),
-            files: vercelFiles,
-            projectSettings: {
-              framework: 'vite',
-              buildCommand: 'bun run build',
-              devCommand: 'bun run dev',
-              installCommand: 'bun install',
-              outputDirectory: 'dist',
-            },
-            target: 'production',
-          }),
-        },
+      // Check if origin remote exists
+      const remoteResult = await sandbox.process.executeCommand(
+        'cd /workspace && git remote get-url origin 2>/dev/null',
+        '/workspace',
+        undefined,
+        10,
       )
 
-      if (!deploymentResponse.ok) {
-        const errText = await deploymentResponse.text()
+      let repoUrl: string
+
+      if (remoteResult.exitCode !== 0 || !remoteResult.result?.trim()) {
+        // No remote — create repo and set origin
+        // Use sandboxId as project identifier for repo naming
+        const repoName = buildRepoName('app', sandboxId)
+        const repo = await createRepo(repoName)
+        repoUrl = repo.cloneUrl
+        const token = await getInstallationToken()
+        const authedUrl = repoUrl.replace('https://', `https://x-access-token:${token}@`)
+        await sandbox.process.executeCommand(
+          `cd /workspace && git remote add origin ${authedUrl}`,
+          '/workspace',
+          undefined,
+          15,
+        )
+      } else {
+        repoUrl = remoteResult.result.trim()
+        // Refresh token for push
+        const token = await getInstallationToken()
+        const cleanUrl = repoUrl.replace(/x-access-token:[^@]+@/, '')
+        const authedUrl = cleanUrl.replace('https://', `https://x-access-token:${token}@`)
+        await sandbox.process.executeCommand(
+          `cd /workspace && git remote set-url origin ${authedUrl}`,
+          '/workspace',
+          undefined,
+          15,
+        )
+      }
+
+      // 3. Push
+      const pushResult = await sandbox.process.executeCommand(
+        'cd /workspace && git push -u origin main',
+        '/workspace',
+        undefined,
+        60,
+      )
+
+      if (pushResult.exitCode !== 0) {
         return {
-          deploymentUrl: '',
-          deploymentId: '',
-          status: 'failed',
-          error: `Vercel deployment failed: ${errText}`,
+          success: true,
+          commitHash,
+          error: `Push failed: ${pushResult.result}`,
         }
       }
 
-      const deployment = (await deploymentResponse.json()) as {
-        id: string
-        url: string
-        readyState: string
-      }
-      const deployUrl = `https://${deployment.url}`
-
-      console.log(`[deploy-to-vercel] Deployment created: ${deployUrl} (${deployment.id})`)
-
+      return { success: true, commitHash, repoUrl }
+    } catch (error) {
+      // Push failed but commit succeeded — still report success
       return {
-        deploymentUrl: deployUrl,
-        deploymentId: deployment.id,
-        status: deployment.readyState,
+        success: true,
+        commitHash,
+        error: `Push failed: ${error instanceof Error ? error.message : 'unknown'}`,
       }
-    } catch (e) {
-      return {
-        deploymentUrl: '',
-        deploymentId: '',
-        status: 'failed',
-        error: e instanceof Error ? e.message : String(e),
-      }
-    }
-  },
-})
-
-export const createGitHubRepoTool = createTool({
-  id: 'create-github-repo',
-  description: 'Create a GitHub repository in the VibeStack org via GitHub App',
-  inputSchema: z.object({
-    appName: z.string().describe('Application name'),
-    projectId: z.string().describe('VibeStack project ID'),
-  }),
-  outputSchema: z.object({
-    cloneUrl: z.string(),
-    htmlUrl: z.string(),
-    repoName: z.string(),
-    error: z.string().optional(),
-  }),
-  execute: async (inputData) => {
-    try {
-      const desiredName = buildRepoName(inputData.appName, inputData.projectId)
-      const repo = await createRepo(desiredName)
-      return { cloneUrl: repo.cloneUrl, htmlUrl: repo.htmlUrl, repoName: repo.repoName }
-    } catch (e) {
-      return {
-        cloneUrl: '',
-        htmlUrl: '',
-        repoName: '',
-        error: e instanceof Error ? e.message : String(e),
-      }
-    }
-  },
-})
-
-export const getGitHubTokenTool = createTool({
-  id: 'get-github-token',
-  description:
-    'Get a GitHub App installation token for git push authentication. Token expires in 1 hour.',
-  inputSchema: z.object({}),
-  outputSchema: z.object({
-    token: z.string(),
-    expiresIn: z.string().optional(),
-    error: z.string().optional(),
-  }),
-  execute: async () => {
-    try {
-      const token = await getInstallationToken()
-      // Token is returned for git operations, but we redact it from error messages
-      return { token, expiresIn: '1 hour' }
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e)
-      // Redact any token-like strings from error messages
-      const sanitizedMsg = msg
-        .replace(/ghp_[a-zA-Z0-9]+/g, 'ghp_[REDACTED]')
-        .replace(/ghs_[a-zA-Z0-9]+/g, 'ghs_[REDACTED]')
-      return { token: '', error: sanitizedMsg }
     }
   },
 })

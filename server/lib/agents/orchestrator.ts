@@ -13,20 +13,17 @@ import { openai } from '@ai-sdk/openai'
 import { Agent } from '@mastra/core/agent'
 import { createAgentModelResolver, type ProviderType } from './provider'
 import {
+  commitAndPushTool,
   createSandboxTool,
+  editFileTool,
+  getPreviewUrlTool,
+  installPackageTool,
+  listFilesTool,
+  readFileTool,
+  runBuildTool,
+  runCommandTool,
   writeFileTool,
   writeFilesTool,
-  readFileTool,
-  editFileTool,
-  listFilesTool,
-  runCommandTool,
-  runBuildTool,
-  installPackageTool,
-  getPreviewUrlTool,
-  createGitHubRepoTool,
-  getGitHubTokenTool,
-  pushToGitHubTool,
-  deployToVercelTool,
 } from './tools'
 
 // Orchestrator uses the user-selected model via provider routing
@@ -51,10 +48,7 @@ const BASE_TOOLS = {
   runBuild: runBuildTool,
   installPackage: installPackageTool,
   getPreviewUrl: getPreviewUrlTool,
-  createGitHubRepo: createGitHubRepoTool,
-  getGitHubToken: getGitHubTokenTool,
-  pushToGitHub: pushToGitHubTool,
-  deployToVercel: deployToVercelTool,
+  commitAndPush: commitAndPushTool,
 }
 
 /** Build full tool belt with provider-appropriate web search */
