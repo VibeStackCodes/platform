@@ -275,15 +275,9 @@ agentRoutes.post('/', async (c) => {
 
   const runId = crypto.randomUUID()
 
-  // Set up Mastra request context for model routing + Helicone
+  // Set up Mastra request context for model routing
   const requestContext = new RequestContext()
   requestContext.set('selectedModel', model)
-  requestContext.set('heliconeContext', {
-    userId: user.id,
-    projectId,
-    sessionId: `${projectId}:${Date.now()}`,
-    agentName: 'orchestrator',
-  })
 
   return createSSEStream<AgentStreamEvent | CreditsUsedEvent>(async (emit, signal) => {
     let settled = false

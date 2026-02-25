@@ -5,7 +5,7 @@ vi.mock('@server/lib/agents/orchestrator', () => ({
   createOrchestrator: vi.fn(),
 }))
 vi.mock('@server/lib/agents/provider', () => ({
-  createHeliconeProvider: vi.fn(() => vi.fn(() => ({}))),
+  createDirectProvider: vi.fn(() => vi.fn(() => ({}))),
   createAgentModelResolver: vi.fn(() => vi.fn(() => ({}))),
   isAllowedModel: vi.fn(() => true),
 }))

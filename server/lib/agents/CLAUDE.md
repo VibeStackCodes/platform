@@ -4,7 +4,7 @@ Single Mastra agent handles all generation. No state machine, no multi-agent pip
 
 ## Files
 - `orchestrator.ts` — Single Mastra Agent: system prompt + 14 tools. Factory: `createOrchestrator()`. The LLM decides what to do — creates sandbox, writes files, runs build, deploys.
-- `provider.ts` — Multi-provider routing: `PROVIDER_REGISTRY` (OpenAI + Anthropic via Helicone), `MODEL_CONFIGS` maps user-facing model IDs→provider+modelId+roleOverrides, `createAgentModelResolver(role)` reads `selectedModel` from RequestContext
+- `provider.ts` — Multi-provider routing: `PROVIDER_REGISTRY` (OpenAI + Anthropic, direct connections), `MODEL_CONFIGS` maps user-facing model IDs→provider+modelId+roleOverrides, `createAgentModelResolver(role)` reads `selectedModel` from RequestContext
 - `tools.ts` — 14 Mastra tools: sandbox lifecycle, file I/O (write/read/edit/list), build/command execution, package install, web search, preview URL, deployment (Vercel + GitHub)
 
 ## Key Patterns
@@ -15,6 +15,5 @@ Single Mastra agent handles all generation. No state machine, no multi-agent pip
 
 ## Gotchas
 - `d.get(id)` for full sandbox operations — `d.list()` returns lightweight objects without methods
-- Helicone disabled if `HELICONE_API_KEY` unset (fallback direct provider)
 - Route handler must set `requestContext.set('selectedModel', model)` for multi-provider routing
-- Route handler must set `requestContext.set('heliconeContext', {...})` for per-user tracking
+- Observability via Langfuse instrumentation in mastra.ts (not per-request headers)

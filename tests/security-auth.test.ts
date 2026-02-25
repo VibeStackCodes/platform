@@ -29,7 +29,7 @@ vi.mock('@server/lib/db/queries', () => ({
 
 vi.mock('@server/lib/agents/provider', () => ({
   isAllowedModel: vi.fn(),
-  createHeliconeProvider: vi.fn(() => vi.fn()),
+  createDirectProvider: vi.fn(() => vi.fn()),
   createAgentModelResolver: vi.fn(() => () => 'mock-model'),
   PIPELINE_MODELS: {
     orchestrator: 'gpt-5.2', codegen: 'gpt-5.2-codex', review: 'gpt-5.1',

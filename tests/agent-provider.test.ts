@@ -22,43 +22,37 @@ describe('Agent Provider', () => {
     process.env = originalEnv
   })
 
-  it('routes through Helicone when HELICONE_API_KEY is set', async () => {
-    process.env.HELICONE_API_KEY = 'sk-helicone-test'
+  it('createDirectProvider uses API key from env', async () => {
     process.env.OPENAI_API_KEY = 'sk-openai-test'
 
-    const { createHeliconeProvider } = await import('@server/lib/agents/provider')
+    const { createDirectProvider } = await import('@server/lib/agents/provider')
     const { createOpenAI } = await import('@ai-sdk/openai')
 
-    createHeliconeProvider('user-123')
-
-    expect(createOpenAI).toHaveBeenCalledWith(
-      expect.objectContaining({
-        baseURL: 'https://oai.helicone.ai/v1',
-        headers: expect.objectContaining({
-          'Helicone-Auth': 'Bearer sk-helicone-test',
-          'Helicone-User-Id': 'user-123',
-        }),
-      }),
-    )
-  })
-
-  it('falls back to direct OpenAI when HELICONE_API_KEY is not set', async () => {
-    delete process.env.HELICONE_API_KEY
-    process.env.OPENAI_API_KEY = 'sk-openai-test'
-
-    const { createHeliconeProvider } = await import('@server/lib/agents/provider')
-    const { createOpenAI } = await import('@ai-sdk/openai')
-
-    createHeliconeProvider('user-123')
+    createDirectProvider('openai')
 
     expect(createOpenAI).toHaveBeenCalledWith(
       expect.objectContaining({
         apiKey: 'sk-openai-test',
       }),
     )
+  })
+
+  it('createDirectProvider does not set baseURL or headers', async () => {
+    process.env.OPENAI_API_KEY = 'sk-openai-test'
+
+    const { createDirectProvider } = await import('@server/lib/agents/provider')
+    const { createOpenAI } = await import('@ai-sdk/openai')
+
+    createDirectProvider('openai')
+
     expect(createOpenAI).not.toHaveBeenCalledWith(
       expect.objectContaining({
-        baseURL: expect.stringContaining('helicone'),
+        baseURL: expect.anything(),
+      }),
+    )
+    expect(createOpenAI).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        headers: expect.anything(),
       }),
     )
   })
