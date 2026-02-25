@@ -146,7 +146,8 @@ Now read each affected CLAUDE.md and make targeted updates. Use the Edit tool fo
 echo "[claude-md] Invoking Claude to analyze changes and update docs..."
 
 # Use claude in print mode with restricted tools and a model appropriate for docs
-echo "$PROMPT" | claude -p \
+# Unset CLAUDECODE to allow nested invocation when run from within Claude Code
+echo "$PROMPT" | env -u CLAUDECODE claude -p \
   --allowedTools "Read,Edit,Glob,Grep" \
   --model sonnet \
   --max-turns 30 \
