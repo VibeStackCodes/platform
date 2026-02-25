@@ -38,13 +38,12 @@ describe('Orchestrator tool-belt wiring', () => {
     expect(toolNames).toContain('getPreviewUrl')
   })
 
-  it('agent has deployment tools', async () => {
+  it('agent has commitAndPush tool', async () => {
     const { createOrchestrator } = await import('@server/lib/agents/orchestrator')
     const agent = createOrchestrator()
     const toolNames = Object.keys(agent.listTools())
 
-    expect(toolNames).toContain('deployToVercel')
-    expect(toolNames).toContain('pushToGitHub')
+    expect(toolNames).toContain('commitAndPush')
   })
 })
 

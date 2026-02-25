@@ -24,8 +24,6 @@ vi.mock('@server/lib/sandbox', () => ({
   createSandbox: vi.fn(),
   getPreviewUrl: vi.fn(),
   buildProxyUrl: vi.fn(),
-  downloadDirectory: vi.fn(),
-  pushToGitHub: vi.fn(),
 }))
 vi.mock('@server/lib/github', () => ({
   buildRepoName: vi.fn(),
