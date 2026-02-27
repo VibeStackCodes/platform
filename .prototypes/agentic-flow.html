@@ -1,0 +1,1933 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VibeStack — Agentic Flow Interactive Prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300..700;1,9..40,300..700&family=DM+Serif+Display&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ═══════════════════════════════════════════
+   CLAUDE.AI EXACT DESIGN TOKENS
+   ═══════════════════════════════════════════ */
+:root {
+  --claude-dark:       #141413;
+  --claude-light:      #faf9f5;
+  --claude-mid-gray:   #b0aea5;
+  --claude-light-gray: #e8e6dc;
+  --claude-orange:     #d97757;
+  --claude-orange-hover: #c8654a;
+  --claude-blue:       #6a9bcc;
+  --claude-green:      #788c5d;
+
+  --bg:                #faf9f5;
+  --bg-sidebar:        #f0ede6;
+  --bg-hover:          #e8e6dc;
+  --bg-active:         #dedad0;
+  --bg-card:           #f5f3ed;
+  --bg-input:          #ffffff;
+  --bg-user-bubble:    #f0ede6;
+
+  --fg:                #141413;
+  --fg-muted:          #6b6960;
+  --fg-faint:          #b0aea5;
+
+  --border:            #e8e6dc;
+  --border-subtle:     #efece5;
+
+  --accent:            #d97757;
+  --accent-hover:      #c8654a;
+  --accent-soft:       rgba(217, 119, 87, 0.10);
+  --accent-fg:         #ffffff;
+
+  --radius-sm:         6px;
+  --radius-md:         10px;
+  --radius-lg:         16px;
+  --radius-xl:         20px;
+  --radius-2xl:        24px;
+  --radius-pill:       9999px;
+
+  --shadow-sm:         0 1px 2px rgba(20, 20, 19, 0.04);
+  --shadow-md:         0 2px 8px rgba(20, 20, 19, 0.06);
+  --shadow-input:      0 1px 4px rgba(20, 20, 19, 0.05);
+
+  --sidebar-width:     267px;
+  --chat-max-width:    768px;
+
+  --font-body:         'DM Sans', -apple-system, system-ui, sans-serif;
+  --font-display:      'DM Serif Display', Georgia, serif;
+  --font-mono:         'JetBrains Mono', ui-monospace, monospace;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-family: var(--font-body); font-size: 15px; line-height: 1.6; color: var(--fg); background: var(--bg); -webkit-font-smoothing: antialiased; }
+body { min-height: 100vh; overflow: hidden; }
+
+/* LAYOUT */
+.app { display: flex; width: 100vw; height: 100vh; }
+.sidebar { width: var(--sidebar-width); min-width: var(--sidebar-width); height: 100vh; background: var(--bg-sidebar); border-right: 1px solid var(--border); display: flex; flex-direction: column; padding: 12px; overflow-y: auto; overflow-x: hidden; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+.sidebar-top { display: flex; align-items: center; justify-content: space-between; padding: 4px 6px; margin-bottom: 8px; }
+.sidebar-logo { display: flex; align-items: center; gap: 8px; overflow: hidden; }
+.sidebar-logo-text { font-family: var(--font-display); font-size: 17px; color: var(--fg); white-space: nowrap; }
+.sidebar-toggle-btn { width: 28px; height: 28px; border: none; border-radius: var(--radius-sm); background: transparent; color: var(--fg-muted); cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.sidebar-toggle-btn:hover { background: var(--bg-hover); color: var(--fg); }
+.sidebar-toggle-btn svg { width: 18px; height: 18px; }
+
+/* Nav items (New chat, Search, Customize) */
+.sidebar-nav { display: flex; flex-direction: column; gap: 2px; margin-bottom: 4px; }
+.sidebar-nav-item { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: var(--radius-sm); cursor: pointer; color: var(--fg-muted); font-size: 13.5px; border: none; background: none; width: 100%; text-align: left; font-family: var(--font-body); line-height: 1.3; transition: all 0.1s; }
+.sidebar-nav-item:hover { background: var(--bg-hover); color: var(--fg); }
+.sidebar-nav-item svg { width: 18px; height: 18px; flex-shrink: 0; }
+.sidebar-nav-item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sidebar-divider { height: 1px; background: var(--border); margin: 8px 6px; }
+
+/* Category items (Chats, Projects, Artifacts, Code) */
+.sidebar-cat { display: flex; flex-direction: column; gap: 2px; margin-bottom: 4px; }
+.sidebar-cat-item { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: var(--radius-sm); cursor: pointer; color: var(--fg-muted); font-size: 13.5px; border: none; background: none; width: 100%; text-align: left; font-family: var(--font-body); line-height: 1.3; transition: all 0.1s; }
+.sidebar-cat-item:hover { background: var(--bg-hover); color: var(--fg); }
+.sidebar-cat-item svg { width: 18px; height: 18px; flex-shrink: 0; }
+.sidebar-cat-item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Recents section */
+.sidebar-section-label { padding: 6px 8px 4px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--fg-faint); white-space: nowrap; overflow: hidden; }
+.sidebar-item { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: var(--radius-sm); cursor: pointer; color: var(--fg-muted); font-size: 13.5px; border: none; background: none; width: 100%; text-align: left; font-family: var(--font-body); line-height: 1.3; transition: all 0.1s; }
+.sidebar-item:hover { background: var(--bg-hover); color: var(--fg); }
+.sidebar-item.active { background: var(--bg-active); color: var(--fg); font-weight: 500; }
+.sidebar-item-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.sidebar-item-meta { font-size: 11px; color: var(--fg-faint); flex-shrink: 0; }
+.sidebar-spacer { flex: 1; }
+.sidebar-footer { padding-top: 8px; border-top: 1px solid var(--border); margin-top: 8px; position: relative; }
+.sidebar-footer-row { display: flex; align-items: center; gap: 6px; }
+.sidebar-user { display: flex; align-items: center; gap: 10px; padding: 7px 8px; border-radius: var(--radius-sm); cursor: pointer; flex: 1; min-width: 0; }
+.sidebar-user:hover { background: var(--bg-hover); }
+.sidebar-avatar { width: 28px; height: 28px; border-radius: var(--radius-pill); background: var(--bg-hover); display: flex; align-items: center; justify-content: center; color: var(--fg); font-size: 12px; font-weight: 600; flex-shrink: 0; }
+.sidebar-user-name { font-size: 13px; font-weight: 500; color: var(--fg); white-space: nowrap; overflow: hidden; }
+.sidebar-user-plan { font-size: 11px; color: var(--fg-faint); white-space: nowrap; overflow: hidden; }
+.sidebar-footer-btn { width: 28px; height: 28px; border: none; border-radius: var(--radius-sm); background: transparent; color: var(--fg-faint); cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; position: relative; }
+.sidebar-footer-btn:hover { background: var(--bg-hover); color: var(--fg); }
+.sidebar-footer-btn svg { width: 16px; height: 16px; }
+.sidebar-footer-btn .badge-dot { position: absolute; top: 4px; right: 4px; width: 6px; height: 6px; border-radius: 50%; background: #4a90d9; }
+
+/* User menu popup */
+.user-menu { position: fixed; bottom: 60px; left: 12px; width: 260px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: 0 8px 32px rgba(0,0,0,0.12); padding: 6px 0; display: none; z-index: 1000; }
+.user-menu.open { display: block; }
+.user-menu-email { padding: 8px 14px; font-size: 12.5px; color: var(--fg-faint); }
+.user-menu-item { display: flex; align-items: center; gap: 10px; padding: 8px 14px; cursor: pointer; color: var(--fg-muted); font-size: 13.5px; font-family: var(--font-body); border: none; background: none; width: 100%; text-align: left; }
+.user-menu-item:hover { background: var(--bg-hover); color: var(--fg); }
+.user-menu-item svg { width: 16px; height: 16px; flex-shrink: 0; }
+.user-menu-item .menu-arrow { margin-left: auto; }
+.user-menu-item .menu-shortcut { margin-left: auto; font-size: 11px; color: var(--fg-faint); }
+.user-menu-divider { height: 1px; background: var(--border); margin: 4px 10px; }
+
+/* Collapsed sidebar — icon strip */
+.sidebar.collapsed { width: 52px; min-width: 52px; padding: 12px 6px; align-items: center; }
+.sidebar.collapsed .sidebar-top { justify-content: center; padding: 4px 0; }
+.sidebar.collapsed .sidebar-logo-text { display: none; }
+.sidebar.collapsed .sidebar-nav-item span,
+.sidebar.collapsed .sidebar-cat-item span { display: none; }
+.sidebar.collapsed .sidebar-nav-item,
+.sidebar.collapsed .sidebar-cat-item { justify-content: center; padding: 8px; }
+.sidebar.collapsed .sidebar-section-label { display: none; }
+.sidebar.collapsed .sidebar-item { display: none; }
+.sidebar.collapsed .sidebar-divider { margin: 8px 2px; }
+.sidebar.collapsed .sidebar-user { justify-content: center; gap: 0; }
+.sidebar.collapsed .sidebar-user > div:last-child { display: none; }
+.sidebar.collapsed .sidebar-footer { border-top: none; }
+.sidebar.collapsed .sidebar-footer-btn { display: none; }
+.sidebar.collapsed .sidebar-footer-row { justify-content: center; }
+.sidebar.collapsed .sidebar-item-meta { display: none; }
+
+.main-area { flex: 1; display: flex; flex-direction: row; overflow: hidden; position: relative; }
+
+/* Panel toggle button (top-right of chat column) */
+.panel-toggle-bar { position: absolute; top: 10px; right: 10px; z-index: 10; }
+.toggle-btn { width: 28px; height: 28px; border: none; border-radius: var(--radius-sm); background: transparent; color: var(--fg-muted); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.15s; }
+.toggle-btn:hover { background: var(--bg-hover); color: var(--fg); }
+.toggle-btn svg { width: 18px; height: 18px; }
+.toggle-btn.hidden { opacity: 0; pointer-events: none; }
+
+/* Artifacts icon button (Claude-style — light with subtle border) */
+.artifacts-toggle { width: 28px; height: 28px; border: none; border-radius: var(--radius-sm); background: transparent; color: var(--fg-faint); cursor: pointer; display: none; align-items: center; justify-content: center; transition: color 0.15s; padding: 0; }
+.artifacts-toggle:hover { color: var(--fg-muted); background: var(--bg-hover); }
+.artifacts-toggle svg { width: 18px; height: 18px; }
+.artifacts-toggle.visible { display: flex; }
+.chat-col { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 340px; transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
+.chat-messages { flex: 1; overflow-y: auto; padding: 28px 24px; }
+.chat-messages-inner { max-width: var(--chat-max-width); width: 100%; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+.has-panel .chat-messages-inner { max-width: 100%; }
+
+/* Messages */
+.msg { display: flex; flex-direction: column; gap: 4px; animation: fadeInUp 0.35s ease-out both; }
+@keyframes fadeInUp { from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)} }
+.msg-user { align-items: flex-end; }
+.msg-user .msg-bubble { background: var(--bg-user-bubble); padding: 12px 16px; border-radius: var(--radius-xl); border-bottom-right-radius: 6px; max-width: 70%; font-size: 14.5px; line-height: 1.55; color: var(--fg); }
+.msg-assistant { align-items: flex-start; }
+.msg-assistant .msg-text { max-width: 100%; font-size: 15px; line-height: 1.7; color: var(--fg); }
+.msg-assistant .msg-text p { margin-bottom: 12px; }
+.msg-assistant .msg-text p:last-child { margin-bottom: 0; }
+.msg-label { font-size: 11.5px; font-weight: 600; color: var(--fg-faint); padding: 0 4px; text-transform: uppercase; letter-spacing: 0.03em; }
+
+/* User message meta (timestamp + icons) */
+.msg-user-meta { display: flex; align-items: center; gap: 6px; padding: 4px 4px 0; }
+.msg-user-meta .msg-time { font-size: 12px; color: var(--fg-faint); font-family: var(--font-body); }
+.msg-meta-btn { width: 24px; height: 24px; border: none; border-radius: var(--radius-sm); background: transparent; color: var(--fg-faint); cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; }
+.msg-meta-btn:hover { color: var(--fg-muted); }
+.msg-meta-btn svg { width: 14px; height: 14px; }
+
+/* Assistant message actions (copy, thumbs up/down, retry) */
+.msg-actions { display: flex; align-items: center; gap: 4px; padding: 4px 0 0; }
+.msg-action-btn { width: 28px; height: 28px; border: none; border-radius: var(--radius-sm); background: transparent; color: var(--fg-faint); cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; }
+.msg-action-btn:hover { color: var(--fg-muted); background: var(--bg-hover); }
+.msg-action-btn svg { width: 16px; height: 16px; }
+
+/* Large artifact card with Download button (Claude-style) */
+.artifact-card-lg { display: flex; align-items: center; gap: 14px; padding: 14px 18px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-xl); max-width: 520px; }
+.artifact-card-lg .artifact-thumb { width: 48px; height: 48px; border-radius: var(--radius-md); background: var(--bg-hover); display: flex; align-items: center; justify-content: center; flex-shrink: 0; color: var(--fg-faint); }
+.artifact-card-lg .artifact-thumb svg { width: 22px; height: 22px; }
+.artifact-card-lg .artifact-info { flex: 1; min-width: 0; }
+.artifact-card-lg .artifact-title { font-size: 14px; font-weight: 500; color: var(--fg); }
+.artifact-card-lg .artifact-meta { font-size: 12.5px; color: var(--fg-faint); margin-top: 1px; }
+.artifact-card-lg .artifact-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.artifact-dl-btn { padding: 6px 16px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 13px; font-weight: 500; cursor: pointer; }
+.artifact-dl-btn:hover { background: var(--bg-hover); }
+
+/* Agent status */
+.agent-status { display: flex; align-items: center; gap: 10px; padding: 12px 16px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); }
+.agent-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.agent-dot.active { background: var(--accent); box-shadow: 0 0 0 3px oklch(0.55 0.20 280 / 0.15); animation: throb 1.5s ease-in-out infinite; }
+.agent-dot.done { background: var(--claude-green); box-shadow: 0 0 0 3px oklch(0.60 0.15 145 / 0.12); }
+@keyframes throb { 0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.85)} }
+.agent-name { font-size: 13.5px; font-weight: 600; color: var(--fg); }
+.agent-role { font-size: 11px; color: var(--fg-muted); font-weight: 500; letter-spacing: 0.02em; }
+.agent-role::before { content: '\00b7'; margin-right: 2px; color: var(--fg-faint); }
+.agent-timer { margin-left: auto; font-size: 11.5px; color: var(--fg-faint); font-family: var(--font-mono); letter-spacing: -0.02em; }
+.agent-stack { display: flex; flex-direction: column; gap: 6px; }
+
+/* Claude-style tool activity */
+.tool-activity { margin: 4px 0; }
+.tool-activity-header { display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 13.5px; color: var(--fg-muted); padding: 4px 0; user-select: none; }
+.tool-activity-header svg { width: 14px; height: 14px; transition: transform 0.2s; }
+.tool-activity-header.collapsed svg { transform: rotate(-90deg); }
+.tool-activity-steps { padding: 6px 0 2px 8px; }
+.tool-step { display: flex; align-items: flex-start; gap: 10px; padding: 4px 0; position: relative; min-height: 32px; }
+.tool-step::before { content: ''; position: absolute; left: 11px; top: 28px; width: 1.5px; height: calc(100% - 4px); background: var(--border); }
+.tool-step:last-child::before { display: none; }
+.tool-step-icon { width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; color: var(--fg-faint); }
+.tool-step-icon svg { width: 16px; height: 16px; }
+.tool-step-icon.done svg { color: var(--claude-green); }
+.tool-step-body { flex: 1; padding-top: 2px; min-width: 0; }
+.tool-step-text { font-size: 13.5px; color: var(--fg-muted); line-height: 1.4; }
+.tool-step-detail { display: flex; align-items: center; gap: 8px; margin-top: 4px; padding-left: 2px; }
+.tool-step-file { font-size: 12px; font-family: var(--font-mono); color: var(--fg-muted); padding: 2px 8px; background: var(--bg-hover); border-radius: var(--radius-sm); cursor: pointer; transition: all 0.1s; }
+.tool-step-file:hover { background: var(--bg-active); color: var(--fg); }
+.tool-step-diff { font-size: 12px; font-family: var(--font-mono); font-weight: 500; }
+.tool-step-diff .add { color: var(--claude-green); }
+.tool-step-diff .del { color: var(--accent); }
+.tool-step-badge { font-size: 12px; color: var(--fg-muted); padding: 2px 8px; background: var(--bg-hover); border-radius: var(--radius-sm); }
+
+/* Script block (Claude-style — outer shell with two inner cards) */
+.tool-script-wrap { margin-top: 8px; border: 1px solid var(--border-subtle); border-radius: var(--radius-xl); padding: 10px; display: flex; flex-direction: column; gap: 6px; background: var(--bg); }
+.tool-script-cmd { background: var(--bg-card); border-radius: var(--radius-lg); padding: 14px 18px; font-family: var(--font-mono); font-size: 13.5px; color: var(--fg); line-height: 1.7; }
+.tool-script-cmd .script-label { color: var(--fg-muted); display: block; margin-bottom: 6px; font-size: 13.5px; }
+.tool-script-cmd .kw { color: var(--claude-blue); }
+.tool-script-output { background: var(--bg-card); border-radius: var(--radius-lg); padding: 14px 18px; font-family: var(--font-body); font-size: 13.5px; color: var(--fg); line-height: 1.7; }
+.tool-script-output .output-label { color: var(--fg-muted); display: block; margin-bottom: 4px; }
+
+/* Working indicator (terracotta starburst) */
+.working-indicator { display: flex; align-items: center; gap: 10px; padding: 12px 16px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); }
+.working-indicator .starburst { width: 20px; height: 20px; color: var(--accent); animation: spin 3s linear infinite; }
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+.working-indicator .working-text { font-size: 13.5px; font-weight: 600; color: var(--fg); }
+.working-indicator .agent-role { margin-left: auto; }
+
+/* HITL */
+.hitl { display: flex; gap: 8px; margin-top: 6px; }
+.hitl-btn { padding: 8px 20px; border-radius: var(--radius-pill); font-family: var(--font-body); font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.15s; }
+.hitl-approve { background: var(--accent); color: white; border: none; }
+.hitl-approve:hover { background: var(--accent-hover); transform: translateY(-1px); }
+.hitl-changes { background: transparent; color: var(--fg-muted); border: 1px solid var(--border); }
+.hitl-changes:hover { border-color: var(--fg-muted); color: var(--fg); }
+.hitl.done-state .hitl-approve { background: var(--claude-green); color: white; pointer-events: none; }
+.hitl.done-state .hitl-changes { display: none; }
+.approved-badge { display: inline-flex; align-items: center; gap: 5px; padding: 4px 12px; border-radius: var(--radius-pill); background: rgba(120, 140, 93, 0.12); color: var(--claude-green); font-size: 12px; font-weight: 500; }
+.approved-badge svg { width: 13px; height: 13px; }
+
+/* Artifact card */
+.artifact-card { display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); cursor: pointer; transition: all 0.15s; max-width: 400px; }
+.artifact-card:hover { border-color: var(--accent); box-shadow: var(--shadow-md); }
+.artifact-icon { width: 36px; height: 36px; border-radius: var(--radius-md); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.artifact-icon svg { width: 18px; height: 18px; }
+.artifact-icon.doc { background: rgba(106, 155, 204, 0.12); color: var(--claude-blue); }
+.artifact-icon.design { background: rgba(217, 119, 87, 0.12); color: var(--accent); }
+.artifact-info { flex: 1; min-width: 0; }
+.artifact-title { font-size: 13.5px; font-weight: 600; color: var(--fg); }
+.artifact-meta { font-size: 11.5px; color: var(--fg-faint); margin-top: 1px; }
+.artifact-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.artifact-dl { width: 28px; height: 28px; border: none; border-radius: var(--radius-sm); background: transparent; color: var(--fg-faint); cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.artifact-dl:hover { background: var(--bg-hover); color: var(--fg); }
+.artifact-dl svg { width: 14px; height: 14px; }
+.artifact-arrow { color: var(--fg-faint); flex-shrink: 0; }
+.artifact-arrow svg { width: 14px; height: 14px; }
+
+/* Plan block */
+.plan-block { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 16px 20px; max-width: 600px; }
+.plan-block h4 { font-size: 14px; font-weight: 600; color: var(--fg); margin-bottom: 10px; }
+.plan-block ol { padding-left: 20px; margin: 0; }
+.plan-block li { font-size: 14px; line-height: 1.65; color: var(--fg-muted); margin-bottom: 6px; }
+.plan-block li strong { color: var(--fg); font-weight: 600; }
+
+/* RIGHT PANEL */
+.right-panel { width: 0; min-width: 0; border-left: 0px solid var(--border); background: var(--bg); display: flex; flex-direction: column; overflow: hidden; transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); opacity: 0; position: relative; }
+.right-panel.open { width: 50%; min-width: 340px; border-left-width: 1px; opacity: 1; }
+.right-panel.dragging { transition: none; }
+.panel-drag-handle { position: absolute; top: 0; left: -3px; width: 6px; height: 100%; cursor: col-resize; z-index: 20; }
+.panel-drag-handle::after { content: ''; position: absolute; top: 0; left: 2px; width: 2px; height: 100%; background: transparent; transition: background 0.15s; }
+.panel-drag-handle:hover::after, .panel-drag-handle.active::after { background: var(--accent); }
+
+/* Artifact panel header — light bar (Claude-style) */
+.panel-header { display: flex; align-items: center; padding: 10px 14px; gap: 8px; flex-shrink: 0; }
+.panel-header.artifact { background: var(--bg); border-bottom: 1px solid var(--border); }
+.panel-header.artifact .panel-title { color: var(--fg-muted); font-size: 13px; font-weight: 400; }
+.panel-header.artifact .panel-badge { background: transparent; color: var(--fg-faint); padding: 0; font-size: 12px; }
+.panel-header.artifact .panel-action-btn { width: 30px; height: 30px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg); color: var(--fg-muted); cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.panel-header.artifact .panel-action-btn:hover { background: var(--bg-hover); color: var(--fg); }
+.panel-header.artifact .panel-action-btn svg { width: 15px; height: 15px; }
+.panel-header.artifact .panel-close { color: var(--fg-muted); }
+.panel-header.artifact .panel-close:hover { background: var(--bg-hover); color: var(--fg); }
+
+/* Code panel header (Claude-style — light with Copy button) */
+.artifact-view-toggle { display: flex; gap: 2px; background: var(--bg-hover); border-radius: 6px; padding: 2px; }
+.artifact-view-btn { width: 28px; height: 28px; border: none; border-radius: 5px; background: transparent; color: var(--fg-faint); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: color 0.15s, background 0.15s; }
+.artifact-view-btn:hover { color: var(--fg-muted); }
+.artifact-view-btn.active { background: var(--bg); color: var(--fg); box-shadow: 0 1px 2px rgba(0,0,0,0.06); }
+.panel-header.code { background: var(--bg); border-bottom: 1px solid var(--border); }
+.panel-header.code .panel-title { color: var(--fg-muted); font-size: 13px; font-weight: 400; }
+.panel-header.code .panel-badge { background: transparent; color: var(--fg-faint); padding: 0; font-size: 12px; }
+.panel-header.code .panel-close { color: var(--fg-muted); }
+.panel-header.code .panel-close:hover { background: var(--bg-hover); color: var(--fg); }
+.panel-copy-btn { display: flex; align-items: center; gap: 4px; padding: 5px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg); color: var(--fg-muted); font-family: var(--font-body); font-size: 12.5px; font-weight: 500; cursor: pointer; }
+.panel-copy-btn:hover { background: var(--bg-hover); color: var(--fg); }
+.panel-copy-btn svg { width: 12px; height: 12px; }
+.panel-deploy-btn { display: flex; align-items: center; gap: 5px; padding: 5px 14px; border: 1px solid var(--accent); border-radius: var(--radius-sm); background: var(--accent); color: var(--accent-fg); font-family: var(--font-body); font-size: 12.5px; font-weight: 600; cursor: pointer; transition: opacity 0.15s; }
+.panel-deploy-btn:hover { opacity: 0.85; }
+/* Auto-save indicator */
+.panel-save-btn { width: 30px; height: 30px; border: none; border-radius: var(--radius-sm); background: transparent; color: var(--fg-faint); cursor: default; display: flex; align-items: center; justify-content: center; transition: color 0.2s; }
+.panel-save-btn svg { width: 16px; height: 16px; }
+.panel-save-btn .save-check { display: none; }
+.panel-save-btn .save-spin { display: none; }
+.panel-save-btn.saved { color: var(--claude-green); }
+.panel-save-btn.saved .save-check { display: block; }
+.panel-save-btn.saving .save-spin { display: block; animation: spin 1s linear infinite; }
+
+/* Code viewer body */
+.panel-body.code-view { background: var(--bg); padding: 0; font-family: var(--font-mono); font-size: 13px; line-height: 1.65; overflow-x: auto; }
+.code-lines { display: table; width: 100%; border-collapse: collapse; }
+.code-line { display: table-row; }
+.code-line:hover { background: var(--bg-hover); }
+.code-line-num { display: table-cell; padding: 1px 12px 1px 16px; text-align: right; color: var(--fg-faint); user-select: none; width: 1%; white-space: nowrap; font-size: 12px; }
+.code-line-content { display: table-cell; padding: 1px 16px 1px 12px; white-space: pre; color: var(--fg-muted); }
+.code-line-content .kw { color: #8b5cf6; }
+.code-line-content .fn { color: var(--claude-blue); }
+.code-line-content .str { color: var(--claude-green); }
+.code-line-content .cm { color: var(--fg-faint); font-style: italic; }
+.code-line-content .num { color: var(--accent); }
+.code-line-content .type { color: #e879a8; }
+
+/* Light header (for Project Panel) */
+.panel-header.light { border-bottom: 1px solid var(--border); }
+
+.panel-icon { width: 28px; height: 28px; border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; }
+.panel-icon svg { width: 15px; height: 15px; }
+.panel-icon.doc { background: rgba(106, 155, 204, 0.12); color: var(--claude-blue); }
+.panel-icon.design { background: rgba(217, 119, 87, 0.12); color: var(--accent); }
+.panel-icon.project { background: var(--accent-soft); color: var(--accent); }
+.panel-title { font-size: 13.5px; font-weight: 600; color: var(--fg); }
+.panel-badge { font-size: 11px; color: var(--fg-faint); padding: 2px 8px; background: var(--bg-hover); border-radius: var(--radius-pill); }
+.panel-spacer { flex: 1; }
+.panel-close { width: 26px; height: 26px; border: none; border-radius: var(--radius-sm); background: transparent; color: var(--fg-faint); cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.panel-close:hover { background: var(--bg-hover); color: var(--fg); }
+.panel-close svg { width: 15px; height: 15px; }
+.panel-body { flex: 1; overflow-y: auto; padding: 28px 32px; }
+.panel-body.compact { padding: 16px; }
+
+/* Document body — paper on gray bg (Claude-style) */
+.panel-body.doc-view { background: #eceae4; padding: 24px; }
+.doc-paper { background: #ffffff; border-radius: 4px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); padding: 0; min-height: 100%; overflow: hidden; }
+.doc-paper-accent { height: 4px; background: linear-gradient(90deg, #7ba1c7, #a8c4dd); }
+.doc-paper-inner { padding: 48px 56px; }
+
+/* Doc styling */
+.doc h2 { font-family: var(--font-display); font-size: 26px; color: #1a1a1a; margin-bottom: 8px; text-align: center; }
+.doc .doc-subtitle { font-style: italic; color: #6b6960; font-size: 14px; text-align: center; margin-bottom: 28px; }
+.doc h3 { font-size: 18px; font-weight: 700; color: #1a1a1a; margin: 28px 0 10px; }
+.doc h4 { font-size: 15px; font-weight: 600; color: #4a7ab5; margin: 20px 0 6px; }
+.doc p { font-size: 14.5px; line-height: 1.75; color: #3a3a3a; margin-bottom: 12px; }
+.doc ul { padding-left: 24px; margin-bottom: 14px; }
+.doc li { font-size: 14.5px; line-height: 1.7; color: #3a3a3a; margin-bottom: 5px; }
+.doc hr { border: none; border-top: 1px solid #e0ddd6; margin: 24px 0; }
+.swatch-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 12px 0 16px; }
+.swatch { border-radius: var(--radius-md); height: 52px; display: flex; align-items: flex-end; padding: 6px 8px; font-size: 10.5px; font-family: var(--font-mono); font-weight: 500; }
+.font-sample { padding: 12px 16px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-md); margin-bottom: 8px; }
+.font-sample-name { font-size: 11px; font-weight: 600; color: var(--fg-faint); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
+.font-sample-text { font-size: 20px; color: var(--fg); }
+
+/* Progress card */
+.progress-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; margin-bottom: 16px; }
+.progress-card-header { display: flex; align-items: center; gap: 8px; padding: 12px 16px; font-size: 13px; font-weight: 600; color: var(--fg); border-bottom: 1px solid var(--border); }
+.progress-card-header svg { width: 15px; height: 15px; color: var(--accent); }
+.progress-list { padding: 8px 0; }
+.progress-item { display: flex; align-items: center; gap: 12px; padding: 8px 16px; position: relative; cursor: default; }
+.progress-item:hover .pi-action { opacity: 1; }
+.progress-item::before { content: ''; position: absolute; left: 27px; top: 32px; width: 2px; height: calc(100% - 8px); background: var(--border); }
+.progress-item:last-child::before { display: none; }
+.progress-item.done::before { background: var(--claude-blue); }
+.pi-circle { width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 11px; font-weight: 600; transition: all 0.3s; }
+.pi-circle.done { background: var(--claude-blue); color: white; }
+.pi-circle.done svg { width: 13px; height: 13px; }
+.pi-circle.active { border: 2px solid var(--claude-blue); color: var(--claude-blue); background: transparent; }
+.pi-circle.pending { border: 2px solid var(--border); color: var(--fg-faint); background: transparent; }
+.pi-text { flex: 1; font-size: 13.5px; color: var(--fg); line-height: 1.4; transition: all 0.3s; }
+.progress-item.done .pi-text { text-decoration: line-through; color: var(--fg-faint); }
+.pi-action { opacity: 0; width: 22px; height: 22px; border: 1px solid var(--border); border-radius: 50%; background: var(--bg); color: var(--fg-faint); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.15s; flex-shrink: 0; position: relative; }
+.pi-action:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.pi-action svg { width: 12px; height: 12px; }
+.pi-action .tooltip { position: absolute; right: 30px; top: 50%; transform: translateY(-50%); white-space: nowrap; padding: 4px 10px; background: var(--fg); color: var(--bg); font-size: 11px; border-radius: var(--radius-sm); opacity: 0; pointer-events: none; transition: opacity 0.15s; }
+.pi-action:hover .tooltip { opacity: 1; }
+
+/* Artifacts list */
+.artifacts-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; }
+.artifacts-card-header { display: flex; align-items: center; gap: 8px; padding: 12px 16px; font-size: 13px; font-weight: 600; color: var(--fg); border-bottom: 1px solid var(--border); }
+.artifacts-card-header svg { width: 15px; height: 15px; color: var(--fg-muted); }
+.al-item { display: flex; align-items: center; gap: 10px; padding: 10px 16px; cursor: pointer; transition: background 0.1s; border-bottom: 1px solid var(--border-subtle); }
+.al-item:last-child { border-bottom: none; }
+.al-item:hover { background: var(--bg-hover); }
+.al-icon { width: 28px; height: 28px; border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.al-icon svg { width: 14px; height: 14px; }
+.al-icon.doc { background: rgba(106, 155, 204, 0.12); color: var(--claude-blue); }
+.al-icon.design { background: rgba(217, 119, 87, 0.12); color: var(--accent); }
+.preview-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; margin-bottom: 12px; }
+.preview-card-header { display: flex; align-items: center; gap: 8px; padding: 12px 16px; font-size: 13px; font-weight: 600; color: var(--fg); border-bottom: 1px solid var(--border); }
+.preview-card-header svg { width: 15px; height: 15px; color: var(--claude-green); }
+.preview-card-body { padding: 0; background: #ffffff; aspect-ratio: 16/10; display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden; }
+.preview-placeholder { display: flex; flex-direction: column; align-items: center; gap: 12px; color: var(--fg-faint); font-size: 13px; }
+.preview-placeholder svg { width: 32px; height: 32px; }
+.preview-card-footer { display: flex; align-items: center; gap: 8px; padding: 10px 16px; border-top: 1px solid var(--border); }
+.preview-url { font-size: 12px; font-family: var(--font-mono); color: var(--claude-blue); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.preview-open-btn { padding: 4px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 12px; font-weight: 500; cursor: pointer; }
+.preview-open-btn:hover { background: var(--bg-hover); }
+
+/* TaskFlow App Preview */
+.tf-app { width: 100%; height: 100%; display: flex; flex-direction: column; background: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 13px; color: #1e293b; overflow: hidden; }
+.tf-header { display: flex; align-items: center; gap: 16px; padding: 0 16px; height: 48px; background: #ffffff; border-bottom: 1px solid #e2e8f0; flex-shrink: 0; }
+.tf-logo { display: flex; align-items: center; gap: 6px; font-weight: 700; font-size: 15px; color: #0f172a; }
+.tf-logo svg { color: #6366f1; }
+.tf-nav { display: flex; gap: 2px; margin-left: 8px; }
+.tf-nav-item { padding: 4px 10px; border-radius: 6px; font-size: 12.5px; font-weight: 500; color: #64748b; cursor: pointer; }
+.tf-nav-item:hover { background: #f1f5f9; color: #334155; }
+.tf-nav-item.active { background: #eef2ff; color: #4338ca; }
+.tf-avatar { width: 28px; height: 28px; border-radius: 50%; background: #6366f1; color: #fff; font-size: 10px; font-weight: 600; display: flex; align-items: center; justify-content: center; }
+.tf-board { display: flex; gap: 12px; padding: 16px; flex: 1; overflow-x: auto; overflow-y: hidden; }
+.tf-col { min-width: 220px; max-width: 220px; display: flex; flex-direction: column; gap: 8px; background: #f1f5f9; border-radius: 10px; padding: 10px; max-height: 100%; overflow-y: auto; }
+.tf-col-header { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: #475569; padding: 2px 4px 8px; }
+.tf-col-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.tf-col-count { margin-left: auto; background: #e2e8f0; color: #64748b; font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 10px; }
+.tf-card { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; cursor: pointer; transition: box-shadow 0.15s; }
+.tf-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+.tf-card-active { border-color: #818cf8; box-shadow: 0 0 0 1px #818cf8; }
+.tf-card-done { opacity: 0.55; }
+.tf-card-done .tf-card-title { text-decoration: line-through; }
+.tf-card-tag { display: inline-block; font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 4px; margin-bottom: 6px; }
+.tf-card-title { font-size: 12.5px; font-weight: 500; color: #1e293b; line-height: 1.35; margin-bottom: 8px; }
+.tf-card-progress { height: 4px; background: #e2e8f0; border-radius: 2px; margin-bottom: 8px; overflow: hidden; }
+.tf-card-progress-fill { height: 100%; background: #6366f1; border-radius: 2px; }
+.tf-card-footer { display: flex; align-items: center; gap: 6px; }
+.tf-card-avatar { width: 20px; height: 20px; border-radius: 50%; font-size: 8px; font-weight: 700; color: #334155; display: flex; align-items: center; justify-content: center; }
+.tf-card-date { margin-left: auto; font-size: 10.5px; color: #94a3b8; }
+.tf-add-card { background: none; border: 1px dashed #cbd5e1; border-radius: 6px; padding: 6px; font-size: 11.5px; color: #94a3b8; cursor: pointer; text-align: center; }
+.tf-add-card:hover { border-color: #94a3b8; color: #64748b; background: #ffffff; }
+
+/* IDE Code Editor — Light Theme */
+.ide { display: flex; width: 100%; height: 100%; background: #ffffff; color: #1e293b; font-family: 'Menlo', 'Monaco', 'Consolas', monospace; font-size: 12.5px; overflow: hidden; }
+.ide-tree { width: 180px; min-width: 180px; background: #f8fafc; border-right: 1px solid #e2e8f0; display: flex; flex-direction: column; overflow-y: auto; }
+.ide-tree-header { padding: 10px 12px 6px; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: #94a3b8; }
+.ide-tree-item { display: flex; align-items: center; gap: 6px; padding: 3px 12px; font-size: 12px; color: #64748b; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ide-tree-item:hover { background: #e2e8f0; color: #1e293b; }
+.ide-tree-item.active { background: #e0e7ff; color: #1e293b; }
+.ide-tree-item.folder { color: #3b82f6; font-weight: 500; }
+.ide-tree-item .ide-icon { width: 14px; height: 14px; flex-shrink: 0; opacity: 0.7; }
+.ide-tree-item.active .ide-icon { opacity: 1; }
+.ide-tree-indent { width: 16px; flex-shrink: 0; }
+.ide-main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.ide-tabs { display: flex; background: #f8fafc; border-bottom: 1px solid #e2e8f0; overflow-x: auto; flex-shrink: 0; }
+.ide-tab { display: flex; align-items: center; gap: 6px; padding: 8px 14px; font-size: 12px; color: #94a3b8; cursor: pointer; border-right: 1px solid #e2e8f0; white-space: nowrap; min-width: 0; }
+.ide-tab:hover { background: #ffffff; color: #475569; }
+.ide-tab.active { background: #ffffff; color: #1e293b; border-bottom: 2px solid #6366f1; margin-bottom: -1px; }
+.ide-tab .ide-icon { width: 13px; height: 13px; flex-shrink: 0; }
+.ide-tab-close { width: 14px; height: 14px; border-radius: 3px; display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.1s; }
+.ide-tab:hover .ide-tab-close, .ide-tab.active .ide-tab-close { opacity: 0.5; }
+.ide-tab-close:hover { opacity: 1 !important; background: #e2e8f0; }
+.ide-tab-close svg { width: 10px; height: 10px; }
+.ide-editor { flex: 1; display: flex; overflow: auto; }
+.ide-gutter { padding: 12px 0; text-align: right; min-width: 44px; color: #cbd5e1; font-size: 12px; line-height: 1.65; user-select: none; background: #ffffff; padding-right: 12px; flex-shrink: 0; }
+.ide-gutter .active { color: #475569; }
+.ide-code { flex: 1; padding: 12px 0 12px 16px; line-height: 1.65; white-space: pre; outline: none; overflow: auto; caret-color: #6366f1; tab-size: 2; min-width: 0; }
+.ide-code:focus { background: rgba(99,102,241,0.02); }
+.ide-statusbar { display: flex; align-items: center; gap: 16px; padding: 2px 12px; background: #f8fafc; border-top: 1px solid #e2e8f0; font-size: 11px; color: #94a3b8; flex-shrink: 0; }
+.ide-statusbar span { white-space: nowrap; }
+/* Syntax colors — Light (One Light inspired) */
+.s-kw { color: #a626a4; }  /* keywords: purple */
+.s-str { color: #50a14f; } /* strings: green */
+.s-cmt { color: #a0a1a7; font-style: italic; } /* comments: gray */
+.s-fn { color: #4078f2; }  /* function names: blue */
+.s-tag { color: #4078f2; } /* JSX tags: blue */
+.s-attr { color: #986801; } /* JSX attrs: orange-brown */
+.s-num { color: #986801; } /* numbers: orange-brown */
+.s-type { color: #c18401; } /* types: amber */
+.s-op { color: #0184bc; }  /* operators: cyan */
+.s-punc { color: #a0a1a7; } /* punctuation: gray */
+.al-name { font-size: 13px; font-weight: 500; color: var(--fg); flex: 1; }
+.al-agent { font-size: 11px; color: var(--fg-faint); }
+
+/* Input bar */
+.input-wrap { padding: 0 24px 24px; display: flex; justify-content: center; }
+.input-bar { max-width: var(--chat-max-width); width: 100%; background: var(--bg-input); border: 1px solid var(--border); border-radius: var(--radius-2xl); padding: 14px 16px; box-shadow: var(--shadow-input); display: flex; flex-direction: column; gap: 10px; transition: border-color 0.15s; }
+.has-panel .input-bar { max-width: 100%; }
+.input-bar:focus-within { border-color: var(--accent); }
+.input-textarea { width: 100%; border: none; outline: none; resize: none; font-family: var(--font-body); font-size: 15px; line-height: 1.5; color: var(--fg); background: transparent; min-height: 24px; }
+.input-textarea::placeholder { color: var(--fg-faint); }
+.input-bottom { display: flex; align-items: center; justify-content: space-between; }
+.input-actions { display: flex; align-items: center; gap: 2px; }
+.input-icon-btn { width: 32px; height: 32px; border: none; border-radius: var(--radius-sm); background: transparent; color: var(--fg-faint); cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.input-icon-btn:hover { background: var(--bg-hover); color: var(--fg-muted); }
+.input-icon-btn svg { width: 18px; height: 18px; }
+.model-chip { display: flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: var(--radius-pill); border: 1px solid var(--border); background: transparent; color: var(--fg-muted); font-family: var(--font-body); font-size: 12px; font-weight: 500; cursor: pointer; }
+.model-chip:hover { border-color: var(--accent); color: var(--accent); }
+.model-chip svg { width: 12px; height: 12px; }
+.send-btn { width: 32px; height: 32px; border: none; border-radius: var(--radius-pill); background: var(--accent); color: white; cursor: pointer; display: flex; align-items: center; justify-content: center; margin-left: 4px; }
+.send-btn:hover { background: var(--accent-hover); }
+.send-btn svg { width: 15px; height: 15px; }
+.queue-btn { display: none; align-items: center; gap: 5px; padding: 5px 14px; border-radius: var(--radius-pill); background: var(--accent); color: white; font-family: var(--font-body); font-size: 12px; font-weight: 500; cursor: pointer; border: none; }
+.queue-btn.visible { display: flex; }
+.queue-btn:hover { background: var(--accent-hover); }
+.queue-btn svg { width: 13px; height: 13px; }
+.input-context { display: none; align-items: center; gap: 6px; padding: 4px 10px 4px 8px; background: var(--bg-hover); border-radius: var(--radius-sm); font-size: 12px; color: var(--fg-muted); margin-bottom: 2px; }
+.input-context.visible { display: flex; }
+.input-context-close { width: 16px; height: 16px; border: none; background: transparent; color: var(--fg-faint); cursor: pointer; display: flex; align-items: center; justify-content: center; border-radius: 50%; }
+.input-context-close:hover { background: var(--bg-active); color: var(--fg); }
+.input-context-close svg { width: 10px; height: 10px; }
+
+/* Step indicator */
+.step-indicator { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); z-index: 100; display: flex; align-items: center; gap: 10px; padding: 8px 16px; background: var(--fg); color: var(--bg); border-radius: var(--radius-pill); font-size: 12px; font-weight: 500; }
+.step-dots { display: flex; gap: 4px; }
+.step-dot { width: 8px; height: 8px; border-radius: 50%; background: rgba(250,249,245,0.25); transition: all 0.3s; cursor: pointer; }
+.step-dot.active { background: var(--accent); width: 20px; border-radius: 4px; }
+.step-dot.completed { background: rgba(250,249,245,0.6); }
+.step-label { margin-left: 4px; }
+.step-nav { display: flex; gap: 4px; margin-left: 8px; }
+.step-nav button { width: 24px; height: 24px; border: 1px solid rgba(250,249,245,0.25); border-radius: 50%; background: transparent; color: var(--bg); cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 14px; }
+.step-nav button:hover { background: rgba(250,249,245,0.15); }
+.step-nav button:disabled { opacity: 0.3; cursor: default; }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-top">
+      <div class="sidebar-logo">
+        <span class="sidebar-logo-text">VibeStack</span>
+      </div>
+      <button class="sidebar-toggle-btn" onclick="toggleSidebar()" title="Toggle sidebar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/></svg></button>
+    </div>
+    <div class="sidebar-nav">
+      <button class="sidebar-nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg><span>New project</span></button>
+      <button class="sidebar-nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.34-4.34"/></svg><span>Search</span></button>
+    </div>
+    <div class="sidebar-divider"></div>
+    <div class="sidebar-cat">
+      <button class="sidebar-cat-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 21.286V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z"/></svg><span>Chats</span></button>
+      <button class="sidebar-cat-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 20V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/><rect width="20" height="14" x="2" y="6" rx="2"/></svg><span>Projects</span></button>
+    </div>
+    <div class="sidebar-section-label">Recents</div>
+    <button class="sidebar-item active"><span class="sidebar-item-text">Project Management App</span><span class="sidebar-item-meta">now</span></button>
+    <button class="sidebar-item"><span class="sidebar-item-text">SaaS Landing Page</span><span class="sidebar-item-meta">2h</span></button>
+    <button class="sidebar-item"><span class="sidebar-item-text">E-commerce Dashboard</span><span class="sidebar-item-meta">1d</span></button>
+    <div class="sidebar-spacer"></div>
+    <div class="sidebar-footer">
+      <div class="user-menu" id="userMenu">
+        <div class="user-menu-email">alex.m@example.com</div>
+        <button class="user-menu-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"/><circle cx="12" cy="12" r="3"/></svg>Settings<span class="menu-shortcut">&#x21E7;&#x2318;,</span></button>
+        <button class="user-menu-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>Language<svg class="menu-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;margin-left:auto"><path d="m9 18 6-6-6-6"/></svg></button>
+        <button class="user-menu-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>Get help</button>
+        <div class="user-menu-divider"></div>
+        <button class="user-menu-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h.01"/><path d="M3 12h.01"/><path d="M3 19h.01"/><path d="M8 5h13"/><path d="M8 12h13"/><path d="M8 19h13"/></svg>View all plans</button>
+        <button class="user-menu-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 3v18"/><path d="M3 12h18"/></svg>Gift VibeStack</button>
+        <button class="user-menu-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>Learn more<svg class="menu-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;margin-left:auto"><path d="m9 18 6-6-6-6"/></svg></button>
+        <div class="user-menu-divider"></div>
+        <button class="user-menu-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/></svg>Log out</button>
+      </div>
+      <div class="sidebar-footer-row">
+        <div class="sidebar-user" onclick="document.getElementById('userMenu').classList.toggle('open')"><div class="sidebar-avatar">A</div><div><div class="sidebar-user-name">Alex M.</div><div class="sidebar-user-plan">Pro Plan</div></div></div>
+        <button class="sidebar-footer-btn" onclick="document.getElementById('userMenu').classList.toggle('open')" title="More"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></button>
+      </div>
+    </div>
+  </aside>
+
+  <div class="main-area" id="mainArea">
+    <div class="chat-col" id="chatCol" style="position:relative">
+      <div class="panel-toggle-bar" style="display:flex;gap:6px">
+        <button class="artifacts-toggle" id="artifactsToggle" onclick="toggleArtifactsPanel()" title="View artifacts"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg></button>
+        <button class="toggle-btn hidden" id="panelToggle" onclick="togglePanel()" title="Toggle panel"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M15 3v18"/></svg></button>
+      </div>
+      <div class="chat-messages" id="chatScroll">
+        <div class="chat-messages-inner" id="chatThread"></div>
+      </div>
+      <div class="input-wrap">
+        <div class="input-bar" id="inputBar">
+          <div class="input-context" id="inputContext">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:12px;height:12px;flex-shrink:0"><path d="M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 21.286V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z"/></svg>
+            <span id="inputContextText"></span>
+            <button class="input-context-close" onclick="hideContext()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+          </div>
+          <textarea class="input-textarea" id="inputText" placeholder="Describe what you want to build..." rows="1"></textarea>
+          <div class="input-bottom">
+            <div class="input-actions"><button class="input-icon-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m16 6-8.414 8.586a2 2 0 0 0 2.829 2.829l8.414-8.586a4 4 0 1 0-5.657-5.657l-8.379 8.551a6 6 0 1 0 8.485 8.485l8.379-8.551"/></svg></button></div>
+            <div class="input-actions">
+              <button class="queue-btn" id="queueBtn" onclick="alert('Change queued!')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>Queue</button>
+              <button class="model-chip">Claude Opus 4.6<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></button>
+              <button class="send-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"/><path d="m21.854 2.147-10.94 10.939"/></svg></button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="right-panel" id="rightPanel">
+      <div class="panel-drag-handle" id="panelDragHandle"></div>
+      <div class="panel-header" id="panelHeader"></div>
+      <div class="panel-body" id="panelBody"></div>
+    </div>
+  </div>
+</div>
+
+<div class="step-indicator">
+  <div class="step-dots" id="stepDots"></div>
+  <span class="step-label" id="stepLabel"></span>
+  <div class="step-nav">
+    <button id="prevBtn" onclick="prevStep()" disabled>&#8592;</button>
+    <button id="nextBtn" onclick="nextStep()">&#8594;</button>
+  </div>
+</div>
+
+<script src="https://mcp.figma.com/mcp/html-to-design/capture.js" async></script>
+<script>
+// NOTE: This is a static HTML prototype with hardcoded trusted content only.
+// No user input is rendered as HTML. All DOM manipulation uses known static strings.
+
+var STEP_NAMES = [
+  'analyst-plan', 'analyst-approved', 'pm-strategy', 'pm-prd',
+  'design-system', 'architect-plan', 'dev-progress', 'app-complete'
+];
+var STEP_LABELS = [
+  '1. Analyst Plan', '2. Plan Approved', '3. Strategy Playbook', '4. PRD',
+  '5. Design System', '6. Implementation', '7. Building...', '8. App Ready'
+];
+var currentStep = 0;
+
+// All content is static trusted HTML - this is a design prototype, not a user-facing app
+var STEP_CHAT = {};
+STEP_CHAT[0] = document.createElement('div');
+STEP_CHAT[0].innerHTML = [
+  '<div class="msg msg-user"><div class="msg-bubble">Build me a project management app with kanban boards, team collaboration, task assignments, and real-time notifications. Support dark mode and mobile responsive.</div></div>',
+  '<div class="msg msg-assistant"><div class="agent-status"><div class="agent-dot done"></div><span class="agent-name">Analysis complete</span><span class="agent-role">Analyst Agent</span><span class="agent-timer">8.3s</span></div></div>',
+  '<div class="msg msg-assistant"><div class="msg-label">Analyst Agent</div><div class="msg-text"><p>I\'ve analyzed your requirements and prepared a project plan:</p></div></div>',
+  '<div class="msg msg-assistant"><div class="plan-block"><h4>Project Plan \u2014 TaskFlow</h4><ol><li><strong>Authentication &amp; User Management</strong> \u2014 Email/password + OAuth, user profiles, team invites</li><li><strong>Kanban Board Engine</strong> \u2014 Drag-and-drop columns, custom statuses, WIP limits</li><li><strong>Task System</strong> \u2014 Assignments, due dates, priorities, labels, subtasks</li><li><strong>Real-time Collaboration</strong> \u2014 WebSocket live updates, presence indicators</li><li><strong>Notifications</strong> \u2014 In-app + email, @mentions, digest settings</li><li><strong>Responsive UI</strong> \u2014 Mobile-first, dark mode, keyboard shortcuts</li></ol></div><div class="hitl" id="hitl-0"><button class="hitl-btn hitl-approve" onclick="approveAndNext()">Approve</button><button class="hitl-btn hitl-changes">Request Changes</button></div></div>'
+].join('');
+
+function buildStepHTML(step) {
+  // Lucide icon SVGs (https://lucide.dev/icons/)
+  var I = {
+    pencil: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></svg>',
+    terminal: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 11 2-2-2-2"/><path d="M11 13h4"/><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/></svg>',
+    fileText: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>',
+    circleCheck: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>',
+    chevronDown: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>',
+    copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>',
+    thumbsUp: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88Z"/><path d="M7 10v12"/></svg>',
+    thumbsDown: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22a3.13 3.13 0 0 1-3-3.88Z"/><path d="M17 14V2"/></svg>',
+    rotateCcw: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>',
+    sparkles: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z"/><path d="M20 2v4"/><path d="M22 4h-4"/><circle cx="4" cy="20" r="2"/></svg>',
+    palette: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22a1 1 0 0 1 0-20 10 9 0 0 1 10 9 5 5 0 0 1-5 5h-2.25a1.75 1.75 0 0 0-1.4 2.8l.3.4a1.75 1.75 0 0 1-1.4 2.8z"/><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/></svg>',
+    download: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/></svg>'
+  };
+
+  // Reusable HTML fragments
+  var collapse = 'onclick="this.classList.toggle(\'collapsed\');this.nextElementSibling.style.display=this.classList.contains(\'collapsed\')?\'none\':\'block\'"';
+  var msgActions = '<div class="msg-actions"><button class="msg-action-btn">'+I.copy+'</button><button class="msg-action-btn">'+I.thumbsUp+'</button><button class="msg-action-btn">'+I.thumbsDown+'</button><button class="msg-action-btn">'+I.rotateCcw+'</button></div>';
+
+  function toolStep(icon, text, detail) {
+    return '<div class="tool-step"><div class="tool-step-icon">'+icon+'</div><div class="tool-step-body"><div class="tool-step-text">'+text+'</div>'+(detail?'<div class="tool-step-detail">'+detail+'</div>':'')+'</div></div>';
+  }
+  function toolStepDone() {
+    return '<div class="tool-step"><div class="tool-step-icon done">'+I.circleCheck+'</div><div class="tool-step-body"><div class="tool-step-text">Done</div></div></div>';
+  }
+  function toolActivity(header, steps) {
+    return '<div class="tool-activity"><div class="tool-activity-header" '+collapse+'>'+header+I.chevronDown+'</div><div class="tool-activity-steps">'+steps+'</div></div>';
+  }
+  function artifactCard(panel, icon, title, meta) {
+    return '<div class="artifact-card-lg" onclick="showPanel(\''+panel+'\')" style="cursor:pointer"><div class="artifact-thumb">'+icon+'</div><div class="artifact-info"><div class="artifact-title">'+title+'</div><div class="artifact-meta">'+meta+'</div></div><div class="artifact-right"><button class="artifact-dl-btn" onclick="event.stopPropagation()">Download</button></div></div>';
+  }
+  function fileStep(text, filename, adds, dels) {
+    var diff = '<span class="add">+'+adds+'</span>';
+    if (dels) diff += ' <span class="del">-'+dels+'</span>';
+    return toolStep(I.pencil, text, '<span class="tool-step-file" onclick="showPanel(\'code:'+filename+'\')">'+filename+'</span><span class="tool-step-diff">'+diff+'</span>');
+  }
+
+  // Returns an array of HTML strings for cumulative chat
+  var base = [
+    '<div class="msg msg-user"><div class="msg-bubble">Build me a project management app with kanban boards, team collaboration, task assignments, and real-time notifications.</div></div>',
+    '<div class="msg msg-assistant"><div class="agent-status"><div class="agent-dot done"></div><span class="agent-name">Plan approved</span><span class="agent-role">Analyst</span></div></div>'
+  ];
+
+  if (step === 1) return base.concat([
+    '<div class="msg msg-user"><div class="msg-bubble" style="padding:8px 14px"><button class="hitl-btn hitl-approve" style="background:var(--claude-green);color:white;pointer-events:none;margin:0">Approved</button></div></div>'
+  ]);
+
+  // Steps 2+: add approved badge then PM strategy
+  var msgs = base.slice();
+  if (step >= 2) {
+    var approvedBtn = '<button class="hitl-btn hitl-approve">Approved</button>';
+    // Tool activity
+    msgs.push('<div class="msg msg-assistant">'+toolActivity('Wrote strategy playbook, created document',
+      toolStep(I.pencil, 'Analyze market positioning and user personas', '') +
+      toolStep(I.terminal, 'Generate strategy document', '<span class="tool-step-badge">Script</span>') +
+      toolStep(I.fileText, 'Presented file', '') +
+      toolStepDone()
+    )+'</div>');
+    // Text + large artifact card
+    msgs.push('<div class="msg msg-assistant"><div class="msg-text"><p>Here\'s the comprehensive Product Strategy Playbook for TaskFlow.</p></div>'+artifactCard('strategy', I.fileText, 'Product Strategy Playbook', 'Document \u00b7 DOCX')+msgActions+'</div>');
+    // HITL
+    var hitlClass = step === 2 ? 'hitl' : 'hitl done-state';
+    var hitlContent = step === 2 ? '<button class="hitl-btn hitl-approve" onclick="approveAndNext()">Approve</button><button class="hitl-btn hitl-changes">Request Changes</button>' : approvedBtn;
+    msgs.push('<div class="msg msg-assistant"><div class="'+hitlClass+'">'+hitlContent+'</div></div>');
+  }
+  if (step >= 3) {
+    // Tool activity
+    msgs.push('<div class="msg msg-assistant">'+toolActivity('Wrote PRD document, defined user stories',
+      toolStep(I.pencil, 'Analyze strategy playbook for requirements extraction', '') +
+      toolStep(I.pencil, 'Define user stories with acceptance criteria', '') +
+      toolStep(I.terminal, 'Generate PRD document', '<span class="tool-step-badge">Script</span>') +
+      toolStep(I.fileText, 'Presented file', '') +
+      toolStepDone()
+    )+'</div>');
+    // Text + large artifact card
+    msgs.push('<div class="msg msg-assistant"><div class="msg-text"><p>Here\'s the Product Requirements Document with detailed user stories and acceptance criteria for TaskFlow.</p></div>'+artifactCard('prd', I.fileText, 'Product Requirements Document', 'Document \u00b7 DOCX')+msgActions+'</div>');
+    // HITL
+    var hitlClass3 = step === 3 ? 'hitl' : 'hitl done-state';
+    var hitlContent3 = step === 3 ? '<button class="hitl-btn hitl-approve" onclick="approveAndNext()">Approve</button><button class="hitl-btn hitl-changes">Request Changes</button>' : approvedBtn;
+    msgs.push('<div class="msg msg-assistant"><div class="'+hitlClass3+'">'+hitlContent3+'</div></div>');
+  }
+  if (step >= 4) {
+    // Tool activity
+    msgs.push('<div class="msg msg-assistant">'+toolActivity('Created design system, generated color swatches',
+      toolStep(I.pencil, 'Analyze PRD for visual requirements', '') +
+      toolStep(I.pencil, 'Generate color palette and typography scale', '') +
+      toolStep(I.terminal, 'Compile design tokens', '<span class="tool-step-badge">Script</span>') +
+      toolStep(I.fileText, 'Presented file', '') +
+      toolStepDone()
+    )+'</div>');
+    // Text + large artifact card
+    msgs.push('<div class="msg msg-assistant"><div class="msg-text"><p>Here\'s the complete Design System for TaskFlow with color palette, typography, and component tokens.</p></div>'+artifactCard('design', I.palette, 'TaskFlow Design System', 'Document \u00b7 Design Tokens')+msgActions+'</div>');
+    // HITL
+    var hitlClass4 = step === 4 ? 'hitl' : 'hitl done-state';
+    var hitlContent4 = step === 4 ? '<button class="hitl-btn hitl-approve" onclick="approveAndNext()">Approve</button><button class="hitl-btn hitl-changes">Request Changes</button>' : approvedBtn;
+    msgs.push('<div class="msg msg-assistant"><div class="'+hitlClass4+'">'+hitlContent4+'</div></div>');
+  }
+  if (step >= 5) {
+    // Tool activity
+    msgs.push('<div class="msg msg-assistant">'+toolActivity('Created task breakdown, assembled agent team',
+      toolStep(I.pencil, 'Decompose PRD into implementation tasks', '') +
+      toolStep(I.pencil, 'Map task dependencies and assign agents', '') +
+      toolStep(I.terminal, 'Assemble development team', '<span class="tool-step-badge">Script</span>') +
+      toolStepDone()
+    )+'</div>');
+    // Text message
+    msgs.push('<div class="msg msg-assistant"><div class="msg-text"><p>I\'ve assembled the implementation plan and assigned tasks to the development team. Track progress in the Project Panel.</p></div>'+msgActions+'</div>');
+    if (step === 5) {
+      msgs.push('<div class="msg msg-assistant"><div class="hitl"><button class="hitl-btn hitl-approve" onclick="approveAndNext()">Approve</button><button class="hitl-btn hitl-changes">Request Changes</button></div></div>');
+    }
+  }
+  if (step >= 6) {
+    // Infra Agent — completed tool activity
+    msgs.push('<div class="msg msg-assistant"><div class="agent-status"><div class="agent-dot done"></div><span class="agent-name">Sandbox ready</span><span class="agent-role">Infra Agent</span><span class="agent-timer">4.1s</span></div>'+toolActivity('Created sandbox, installed packages',
+      toolStep(I.terminal, 'Create sandbox environment', '<span class="tool-step-badge">Script</span>') +
+      toolStep(I.terminal, 'Install dependencies', '<span class="tool-step-file">bun install</span>') +
+      toolStepDone()
+    )+'</div>');
+    // Backend Agent — completed tool activity (schema)
+    msgs.push('<div class="msg msg-assistant"><div class="agent-status"><div class="agent-dot done"></div><span class="agent-name">Database schema created</span><span class="agent-role">Backend Agent</span><span class="agent-timer">6.3s</span></div>'+toolActivity('Edited 2 files, ran a command',
+      fileStep('Create database schema with tables', 'schema.ts', '48') +
+      fileStep('Create database migration file', '001_init.sql', '32') +
+      toolStep(I.terminal, 'Run database migration', '<span class="tool-step-badge">Script</span>') +
+      toolStepDone()
+    )+'</div>');
+
+    if (step === 6) {
+      // Backend Agent — still working
+      msgs.push('<div class="msg msg-assistant"><div class="working-indicator">'+I.sparkles.replace('<svg ', '<svg class="starburst" ')+'<span class="working-text">Working</span><span class="agent-role">Backend Agent</span></div><div class="tool-activity"><div class="tool-activity-steps">'+
+        fileStep('Create auth middleware and routes', 'auth.ts', '67') +
+        fileStep('Build task CRUD API endpoints', 'tasks.ts', '94', '2') +
+        toolStep(I.terminal, 'Run build to verify compilation', '') +
+        '<div class="tool-script-wrap"><div class="tool-script-cmd"><span class="script-label">bash</span><span class="kw">bun</span> run build</div><div class="tool-script-output"><span class="output-label">Output</span>Done</div></div>'+
+      '</div></div></div>');
+      // Frontend Agent — still working
+      msgs.push('<div class="msg msg-assistant"><div class="working-indicator">'+I.sparkles.replace('<svg ', '<svg class="starburst" ')+'<span class="working-text">Working</span><span class="agent-role">Frontend Agent</span></div><div class="tool-activity"><div class="tool-activity-steps">'+
+        fileStep('Create KanbanBoard component', 'KanbanBoard.tsx', '142') +
+        fileStep('Build TaskCard with drag-and-drop', 'TaskCard.tsx', '86') +
+        fileStep('Create navigation layout and sidebar', 'Layout.tsx', '58') +
+      '</div></div></div>');
+    }
+  }
+  if (step >= 7) {
+    // Backend Agent — completed
+    msgs.push('<div class="msg msg-assistant"><div class="agent-status"><div class="agent-dot done"></div><span class="agent-name">API routes complete</span><span class="agent-role">Backend Agent</span><span class="agent-timer">14.7s</span></div>'+toolActivity('Edited 4 files, ran 2 commands',
+      fileStep('Create auth middleware and routes', 'auth.ts', '67') +
+      fileStep('Build task CRUD API endpoints', 'tasks.ts', '94', '2') +
+      toolStep(I.terminal, 'Run build to verify compilation', '<span class="tool-step-badge">Script</span>') +
+      toolStepDone()
+    )+'</div>');
+    // Frontend Agent — completed
+    msgs.push('<div class="msg msg-assistant"><div class="agent-status"><div class="agent-dot done"></div><span class="agent-name">UI components complete</span><span class="agent-role">Frontend Agent</span><span class="agent-timer">18.3s</span></div>'+toolActivity('Edited 5 files, ran a command',
+      fileStep('Create KanbanBoard component', 'KanbanBoard.tsx', '142') +
+      fileStep('Build TaskCard with drag-and-drop', 'TaskCard.tsx', '86') +
+      fileStep('Create navigation layout and sidebar', 'Layout.tsx', '58') +
+      toolStep(I.terminal, 'Run build \u2014 all checks passed', '<span class="tool-step-badge">Script</span>') +
+      toolStepDone()
+    )+'</div>');
+    // Build verification
+    msgs.push('<div class="msg msg-assistant">'+toolActivity('Ran final build, deployed preview',
+      toolStep(I.terminal, 'Run full build verification', '<span class="tool-step-badge">Script</span>') +
+      toolStep(I.terminal, 'Deploy to preview URL', '<span class="tool-step-badge">Script</span>') +
+      toolStepDone()
+    )+'</div>');
+    // Final message + app artifact card
+    msgs.push('<div class="msg msg-assistant"><div class="msg-text"><p>TaskFlow is ready! The app includes kanban boards with drag-and-drop, user authentication, task CRUD with assignments, and real-time updates. You can preview it live or continue iterating.</p></div>'+
+      '<div class="artifact-card-lg" onclick="showPanel(\'app-preview\')" style="cursor:pointer"><div class="artifact-thumb" style="background:var(--accent-soft);color:var(--accent)">'+I.sparkles+'</div><div class="artifact-info"><div class="artifact-title">TaskFlow \u2014 Project Management App</div><div class="artifact-meta">React + Hono \u00b7 12 files \u00b7 Live preview</div></div><div class="artifact-right"><button class="artifact-dl-btn" onclick="event.stopPropagation()" style="background:var(--accent);color:var(--accent-fg);border-color:var(--accent)">Open Preview</button></div></div>'+
+      msgActions+'</div>');
+  }
+  return msgs;
+}
+
+// Panel content (all static trusted content)
+var panelData = {
+  strategy: {
+    title: 'Product Strategy Playbook', badge: 'Product Manager', iconClass: 'doc',
+    content: '<div class="doc"><h2>TaskFlow \u2014 Product Strategy</h2><p class="doc-subtitle">A comprehensive strategy for building a best-in-class project management application.</p><h3>1. Market Positioning</h3><p>TaskFlow sits between lightweight tools (Trello) and enterprise suites (Jira). Differentiator: <strong>real-time collaboration with zero setup friction</strong>.</p><ul><li>Target: 5\u201350 person dev teams</li><li>Price: Free tier + $12/user/month Pro</li><li>Key differentiator: AI-powered task suggestions</li></ul><h3>2. User Personas</h3><h4>Tech Lead \u2014 Sarah</h4><p>Manages 8 devs. Needs sprint planning, workload visibility, GitHub integrations.</p><h4>Developer \u2014 Marcus</h4><p>IC. Wants clean, fast board. Dark mode, notification control, mobile access.</p><h3>3. Feature Roadmap</h3><h4>Phase 1 \u2014 MVP (4 weeks)</h4><ul><li>Kanban board with drag-and-drop</li><li>User auth + team invites</li><li>Task CRUD with assignments</li><li>Basic notifications</li></ul><h4>Phase 2 \u2014 Growth (4 weeks)</h4><ul><li>Real-time WebSocket updates</li><li>Activity feed + @mentions</li><li>Dark mode + responsive</li><li>GitHub integration</li></ul></div>'
+  },
+  prd: {
+    title: 'Product Requirements Document', badge: 'Product Manager', iconClass: 'doc',
+    content: '<div class="doc"><h2>TaskFlow \u2014 PRD</h2><p class="doc-subtitle">Detailed product requirements with user stories and acceptance criteria.</p><h3>1. Authentication</h3><h4>US-001: Email Sign Up</h4><p>As a new user, I want to create an account with email and password.</p><ul><li>Email validation with confirmation</li><li>Password min 8 chars, 1 uppercase, 1 number</li><li>Rate limit: 5 attempts/min</li></ul><h4>US-002: OAuth Login</h4><p>As a user, I want to sign in with Google/GitHub.</p><h3>2. Kanban Board</h3><h4>US-003: Create Board</h4><p>As a team lead, I want to create a new board with custom columns.</p><ul><li>Default columns: To Do, In Progress, Review, Done</li><li>Max 10 columns per board</li><li>Drag-and-drop reordering</li></ul><h4>US-004: Move Tasks</h4><p>As a developer, I want to drag tasks between columns.</p><ul><li>Optimistic UI updates</li><li>Real-time sync to other viewers</li><li>Animation: 200ms ease-out</li></ul></div>'
+  },
+  design: {
+    title: 'TaskFlow Design System', badge: 'Design Agent', iconClass: 'design',
+    content: '<div class="doc"><h2>TaskFlow Design System</h2><p class="doc-subtitle">A cohesive visual language for the TaskFlow application.</p><h3>Color Palette</h3><h4>Primary</h4><div class="swatch-grid"><div class="swatch" style="background:#4F46E5;color:#fff">#4F46E5</div><div class="swatch" style="background:#6366F1;color:#fff">#6366F1</div><div class="swatch" style="background:#818CF8;color:#fff">#818CF8</div><div class="swatch" style="background:#C7D2FE;color:#333">#C7D2FE</div></div><h4>Neutral</h4><div class="swatch-grid"><div class="swatch" style="background:#111827;color:#fff">#111827</div><div class="swatch" style="background:#374151;color:#fff">#374151</div><div class="swatch" style="background:#9CA3AF;color:#fff">#9CA3AF</div><div class="swatch" style="background:#F3F4F6;color:#333">#F3F4F6</div></div><h4>Semantic</h4><div class="swatch-grid"><div class="swatch" style="background:#10B981;color:#fff">Success</div><div class="swatch" style="background:#F59E0B;color:#fff">Warning</div><div class="swatch" style="background:#EF4444;color:#fff">Error</div><div class="swatch" style="background:#3B82F6;color:#fff">Info</div></div><h3>Typography</h3><div class="font-sample"><div class="font-sample-name">Display</div><div class="font-sample-text" style="font-family:DM Serif Display,Georgia,serif">The quick brown fox jumps</div></div><div class="font-sample"><div class="font-sample-name">Body</div><div class="font-sample-text" style="font-family:DM Sans,sans-serif">The quick brown fox jumps over the lazy dog</div></div><div class="font-sample"><div class="font-sample-name">Mono</div><div class="font-sample-text" style="font-family:JetBrains Mono,monospace;font-size:16px">const task = await db.find()</div></div><h3>Spacing</h3><p>Base: 4px. Scale: 4, 8, 12, 16, 20, 24, 32, 40, 48, 64</p><h3>Radius</h3><p>SM: 6px \u00b7 MD: 10px \u00b7 LG: 16px \u00b7 XL: 20px \u00b7 Pill: 9999px</p></div>'
+  }
+};
+
+// Code file data for code panel viewer
+var codeFiles = {
+  'schema.ts': {name:'schema',ext:'TS',lines:[
+    {n:1,c:'<span class="kw">import</span> { pgTable, text, timestamp, uuid } <span class="kw">from</span> <span class="str">\'drizzle-orm/pg-core\'</span>'},
+    {n:2,c:''},
+    {n:3,c:'<span class="kw">export const</span> <span class="fn">users</span> = <span class="fn">pgTable</span>(<span class="str">\'users\'</span>, {'},
+    {n:4,c:'  id: <span class="fn">uuid</span>(<span class="str">\'id\'</span>).<span class="fn">primaryKey</span>().<span class="fn">defaultRandom</span>(),'},
+    {n:5,c:'  email: <span class="fn">text</span>(<span class="str">\'email\'</span>).<span class="fn">notNull</span>().<span class="fn">unique</span>(),'},
+    {n:6,c:'  name: <span class="fn">text</span>(<span class="str">\'name\'</span>).<span class="fn">notNull</span>(),'},
+    {n:7,c:'  avatarUrl: <span class="fn">text</span>(<span class="str">\'avatar_url\'</span>),'},
+    {n:8,c:'  createdAt: <span class="fn">timestamp</span>(<span class="str">\'created_at\'</span>).<span class="fn">defaultNow</span>(),'},
+    {n:9,c:'})'},
+    {n:10,c:''},
+    {n:11,c:'<span class="kw">export const</span> <span class="fn">boards</span> = <span class="fn">pgTable</span>(<span class="str">\'boards\'</span>, {'},
+    {n:12,c:'  id: <span class="fn">uuid</span>(<span class="str">\'id\'</span>).<span class="fn">primaryKey</span>().<span class="fn">defaultRandom</span>(),'},
+    {n:13,c:'  name: <span class="fn">text</span>(<span class="str">\'name\'</span>).<span class="fn">notNull</span>(),'},
+    {n:14,c:'  ownerId: <span class="fn">uuid</span>(<span class="str">\'owner_id\'</span>).<span class="fn">references</span>(() => users.id),'},
+    {n:15,c:'  createdAt: <span class="fn">timestamp</span>(<span class="str">\'created_at\'</span>).<span class="fn">defaultNow</span>(),'},
+    {n:16,c:'})'},
+    {n:17,c:''},
+    {n:18,c:'<span class="kw">export const</span> <span class="fn">columns</span> = <span class="fn">pgTable</span>(<span class="str">\'columns\'</span>, {'},
+    {n:19,c:'  id: <span class="fn">uuid</span>(<span class="str">\'id\'</span>).<span class="fn">primaryKey</span>().<span class="fn">defaultRandom</span>(),'},
+    {n:20,c:'  boardId: <span class="fn">uuid</span>(<span class="str">\'board_id\'</span>).<span class="fn">references</span>(() => boards.id),'},
+    {n:21,c:'  name: <span class="fn">text</span>(<span class="str">\'name\'</span>).<span class="fn">notNull</span>(),'},
+    {n:22,c:'  position: <span class="fn">integer</span>(<span class="str">\'position\'</span>).<span class="fn">notNull</span>(),'},
+    {n:23,c:'})'},
+    {n:24,c:''},
+    {n:25,c:'<span class="kw">export const</span> <span class="fn">tasks</span> = <span class="fn">pgTable</span>(<span class="str">\'tasks\'</span>, {'},
+    {n:26,c:'  id: <span class="fn">uuid</span>(<span class="str">\'id\'</span>).<span class="fn">primaryKey</span>().<span class="fn">defaultRandom</span>(),'},
+    {n:27,c:'  columnId: <span class="fn">uuid</span>(<span class="str">\'column_id\'</span>).<span class="fn">references</span>(() => columns.id),'},
+    {n:28,c:'  title: <span class="fn">text</span>(<span class="str">\'title\'</span>).<span class="fn">notNull</span>(),'},
+    {n:29,c:'  description: <span class="fn">text</span>(<span class="str">\'description\'</span>),'},
+    {n:30,c:'  assigneeId: <span class="fn">uuid</span>(<span class="str">\'assignee_id\'</span>).<span class="fn">references</span>(() => users.id),'},
+    {n:31,c:'  priority: <span class="fn">text</span>(<span class="str">\'priority\'</span>).<span class="fn">default</span>(<span class="str">\'medium\'</span>),'},
+    {n:32,c:'  position: <span class="fn">integer</span>(<span class="str">\'position\'</span>).<span class="fn">notNull</span>(),'},
+    {n:33,c:'  createdAt: <span class="fn">timestamp</span>(<span class="str">\'created_at\'</span>).<span class="fn">defaultNow</span>(),'},
+    {n:34,c:'})'},
+  ]},
+  '001_init.sql': {name:'001_init',ext:'SQL',lines:[
+    {n:1,c:'<span class="kw">CREATE TABLE</span> users ('},
+    {n:2,c:'  id <span class="type">UUID</span> <span class="kw">PRIMARY KEY DEFAULT</span> <span class="fn">gen_random_uuid</span>(),'},
+    {n:3,c:'  email <span class="type">TEXT</span> <span class="kw">NOT NULL UNIQUE</span>,'},
+    {n:4,c:'  name <span class="type">TEXT</span> <span class="kw">NOT NULL</span>,'},
+    {n:5,c:'  avatar_url <span class="type">TEXT</span>,'},
+    {n:6,c:'  created_at <span class="type">TIMESTAMPTZ</span> <span class="kw">DEFAULT</span> <span class="fn">now</span>()'},
+    {n:7,c:');'},
+    {n:8,c:''},
+    {n:9,c:'<span class="kw">CREATE TABLE</span> boards ('},
+    {n:10,c:'  id <span class="type">UUID</span> <span class="kw">PRIMARY KEY DEFAULT</span> <span class="fn">gen_random_uuid</span>(),'},
+    {n:11,c:'  name <span class="type">TEXT</span> <span class="kw">NOT NULL</span>,'},
+    {n:12,c:'  owner_id <span class="type">UUID</span> <span class="kw">REFERENCES</span> users(id),'},
+    {n:13,c:'  created_at <span class="type">TIMESTAMPTZ</span> <span class="kw">DEFAULT</span> <span class="fn">now</span>()'},
+    {n:14,c:');'},
+  ]},
+  'auth.ts': {name:'auth',ext:'TS',lines:[
+    {n:1,c:'<span class="kw">import</span> { Hono } <span class="kw">from</span> <span class="str">\'hono\'</span>'},
+    {n:2,c:'<span class="kw">import</span> { sign, verify } <span class="kw">from</span> <span class="str">\'hono/jwt\'</span>'},
+    {n:3,c:''},
+    {n:4,c:'<span class="kw">const</span> auth = <span class="kw">new</span> <span class="type">Hono</span>()'},
+    {n:5,c:''},
+    {n:6,c:'<span class="cm">// Middleware: verify JWT token</span>'},
+    {n:7,c:'<span class="kw">export const</span> <span class="fn">authMiddleware</span> = <span class="kw">async</span> (c, next) => {'},
+    {n:8,c:'  <span class="kw">const</span> token = c.req.<span class="fn">header</span>(<span class="str">\'Authorization\'</span>)'},
+    {n:9,c:'  <span class="kw">if</span> (!token) <span class="kw">return</span> c.<span class="fn">json</span>({ error: <span class="str">\'Unauthorized\'</span> }, <span class="num">401</span>)'},
+    {n:10,c:'  <span class="kw">const</span> payload = <span class="kw">await</span> <span class="fn">verify</span>(token, process.env.JWT_SECRET)'},
+    {n:11,c:'  c.<span class="fn">set</span>(<span class="str">\'userId\'</span>, payload.sub)'},
+    {n:12,c:'  <span class="kw">await</span> <span class="fn">next</span>()'},
+    {n:13,c:'}'},
+    {n:14,c:''},
+    {n:15,c:'auth.<span class="fn">post</span>(<span class="str">\'/login\'</span>, <span class="kw">async</span> (c) => {'},
+    {n:16,c:'  <span class="kw">const</span> { email, password } = <span class="kw">await</span> c.req.<span class="fn">json</span>()'},
+    {n:17,c:'  <span class="cm">// Validate credentials against DB</span>'},
+    {n:18,c:'  <span class="kw">const</span> user = <span class="kw">await</span> db.<span class="fn">query</span>.users.<span class="fn">findFirst</span>({'},
+    {n:19,c:'    where: <span class="fn">eq</span>(users.email, email)'},
+    {n:20,c:'  })'},
+    {n:21,c:'  <span class="kw">const</span> token = <span class="kw">await</span> <span class="fn">sign</span>({ sub: user.id }, process.env.JWT_SECRET)'},
+    {n:22,c:'  <span class="kw">return</span> c.<span class="fn">json</span>({ token })'},
+    {n:23,c:'})'},
+  ]},
+  'tasks.ts': {name:'tasks',ext:'TS',lines:[
+    {n:1,c:'<span class="kw">import</span> { Hono } <span class="kw">from</span> <span class="str">\'hono\'</span>'},
+    {n:2,c:'<span class="kw">import</span> { authMiddleware } <span class="kw">from</span> <span class="str">\'./auth\'</span>'},
+    {n:3,c:'<span class="kw">import</span> { db } <span class="kw">from</span> <span class="str">\'../db/client\'</span>'},
+    {n:4,c:'<span class="kw">import</span> { tasks } <span class="kw">from</span> <span class="str">\'../db/schema\'</span>'},
+    {n:5,c:''},
+    {n:6,c:'<span class="kw">const</span> app = <span class="kw">new</span> <span class="type">Hono</span>()'},
+    {n:7,c:'app.<span class="fn">use</span>(<span class="str">\'/*\'</span>, authMiddleware)'},
+    {n:8,c:''},
+    {n:9,c:'<span class="cm">// List tasks for a column</span>'},
+    {n:10,c:'app.<span class="fn">get</span>(<span class="str">\'/columns/:columnId/tasks\'</span>, <span class="kw">async</span> (c) => {'},
+    {n:11,c:'  <span class="kw">const</span> columnId = c.req.<span class="fn">param</span>(<span class="str">\'columnId\'</span>)'},
+    {n:12,c:'  <span class="kw">const</span> result = <span class="kw">await</span> db.<span class="fn">select</span>().<span class="fn">from</span>(tasks)'},
+    {n:13,c:'    .<span class="fn">where</span>(<span class="fn">eq</span>(tasks.columnId, columnId))'},
+    {n:14,c:'    .<span class="fn">orderBy</span>(tasks.position)'},
+    {n:15,c:'  <span class="kw">return</span> c.<span class="fn">json</span>(result)'},
+    {n:16,c:'})'},
+    {n:17,c:''},
+    {n:18,c:'<span class="cm">// Create task</span>'},
+    {n:19,c:'app.<span class="fn">post</span>(<span class="str">\'/tasks\'</span>, <span class="kw">async</span> (c) => {'},
+    {n:20,c:'  <span class="kw">const</span> body = <span class="kw">await</span> c.req.<span class="fn">json</span>()'},
+    {n:21,c:'  <span class="kw">const</span> [task] = <span class="kw">await</span> db.<span class="fn">insert</span>(tasks).<span class="fn">values</span>(body).<span class="fn">returning</span>()'},
+    {n:22,c:'  <span class="kw">return</span> c.<span class="fn">json</span>(task, <span class="num">201</span>)'},
+    {n:23,c:'})'},
+  ]},
+  'KanbanBoard.tsx': {name:'KanbanBoard',ext:'TSX',lines:[
+    {n:1,c:'<span class="kw">import</span> { <span class="fn">useState</span>, <span class="fn">useCallback</span> } <span class="kw">from</span> <span class="str">\'react\'</span>'},
+    {n:2,c:'<span class="kw">import</span> { <span class="type">DndContext</span>, closestCorners } <span class="kw">from</span> <span class="str">\'@dnd-kit/core\'</span>'},
+    {n:3,c:'<span class="kw">import</span> { <span class="type">Column</span> } <span class="kw">from</span> <span class="str">\'./Column\'</span>'},
+    {n:4,c:''},
+    {n:5,c:'<span class="kw">export function</span> <span class="fn">KanbanBoard</span>({ boardId }: { boardId: <span class="type">string</span> }) {'},
+    {n:6,c:'  <span class="kw">const</span> [columns, setColumns] = <span class="fn">useState</span>([])'},
+    {n:7,c:''},
+    {n:8,c:'  <span class="kw">const</span> <span class="fn">handleDragEnd</span> = <span class="fn">useCallback</span>((event) => {'},
+    {n:9,c:'    <span class="kw">const</span> { active, over } = event'},
+    {n:10,c:'    <span class="kw">if</span> (!over || active.id === over.id) <span class="kw">return</span>'},
+    {n:11,c:'    <span class="cm">// Optimistic reorder</span>'},
+    {n:12,c:'    <span class="fn">setColumns</span>(prev => <span class="fn">reorder</span>(prev, active.id, over.id))'},
+    {n:13,c:'  }, [])'},
+    {n:14,c:''},
+    {n:15,c:'  <span class="kw">return</span> ('},
+    {n:16,c:'    &lt;<span class="type">DndContext</span> onDragEnd={handleDragEnd} collisionDetection={closestCorners}&gt;'},
+    {n:17,c:'      &lt;<span class="kw">div</span> className=<span class="str">"flex gap-4 overflow-x-auto p-6"</span>&gt;'},
+    {n:18,c:'        {columns.<span class="fn">map</span>(col =&gt; ('},
+    {n:19,c:'          &lt;<span class="type">Column</span> key={col.id} column={col} /&gt;'},
+    {n:20,c:'        ))}'},
+    {n:21,c:'      &lt;/<span class="kw">div</span>&gt;'},
+    {n:22,c:'    &lt;/<span class="type">DndContext</span>&gt;'},
+    {n:23,c:'  )'},
+    {n:24,c:'}'},
+  ]},
+  'TaskCard.tsx': {name:'TaskCard',ext:'TSX',lines:[
+    {n:1,c:'<span class="kw">import</span> { <span class="fn">useSortable</span> } <span class="kw">from</span> <span class="str">\'@dnd-kit/sortable\'</span>'},
+    {n:2,c:'<span class="kw">import</span> { CSS } <span class="kw">from</span> <span class="str">\'@dnd-kit/utilities\'</span>'},
+    {n:3,c:''},
+    {n:4,c:'<span class="kw">export function</span> <span class="fn">TaskCard</span>({ task }: { task: <span class="type">Task</span> }) {'},
+    {n:5,c:'  <span class="kw">const</span> { attributes, listeners, setNodeRef, transform } = <span class="fn">useSortable</span>({'},
+    {n:6,c:'    id: task.id,'},
+    {n:7,c:'  })'},
+    {n:8,c:''},
+    {n:9,c:'  <span class="kw">const</span> style = { transform: CSS.<span class="fn">Transform</span>.<span class="fn">toString</span>(transform) }'},
+    {n:10,c:''},
+    {n:11,c:'  <span class="kw">return</span> ('},
+    {n:12,c:'    &lt;<span class="kw">div</span> ref={setNodeRef} style={style} {...attributes} {...listeners}'},
+    {n:13,c:'      className=<span class="str">"bg-white rounded-lg border p-3 shadow-sm"</span>&gt;'},
+    {n:14,c:'      &lt;<span class="kw">h3</span> className=<span class="str">"font-medium text-sm"</span>&gt;{task.title}&lt;/<span class="kw">h3</span>&gt;'},
+    {n:15,c:'      &lt;<span class="kw">p</span> className=<span class="str">"text-xs text-gray-500 mt-1"</span>&gt;{task.description}&lt;/<span class="kw">p</span>&gt;'},
+    {n:16,c:'    &lt;/<span class="kw">div</span>&gt;'},
+    {n:17,c:'  )'},
+    {n:18,c:'}'},
+  ]},
+  'Layout.tsx': {name:'Layout',ext:'TSX',lines:[
+    {n:1,c:'<span class="kw">import</span> { <span class="type">Outlet</span> } <span class="kw">from</span> <span class="str">\'react-router-dom\'</span>'},
+    {n:2,c:'<span class="kw">import</span> { <span class="type">Sidebar</span> } <span class="kw">from</span> <span class="str">\'./Sidebar\'</span>'},
+    {n:3,c:''},
+    {n:4,c:'<span class="kw">export function</span> <span class="fn">Layout</span>() {'},
+    {n:5,c:'  <span class="kw">return</span> ('},
+    {n:6,c:'    &lt;<span class="kw">div</span> className=<span class="str">"flex h-screen"</span>&gt;'},
+    {n:7,c:'      &lt;<span class="type">Sidebar</span> /&gt;'},
+    {n:8,c:'      &lt;<span class="kw">main</span> className=<span class="str">"flex-1 overflow-auto"</span>&gt;'},
+    {n:9,c:'        &lt;<span class="type">Outlet</span> /&gt;'},
+    {n:10,c:'      &lt;/<span class="kw">main</span>&gt;'},
+    {n:11,c:'    &lt;/<span class="kw">div</span>&gt;'},
+    {n:12,c:'  )'},
+    {n:13,c:'}'},
+  ]}
+};
+
+function buildCodePanel(filename) {
+  var file = codeFiles[filename];
+  if (!file) return '';
+  var h = '<div class="code-lines">';
+  for (var i = 0; i < file.lines.length; i++) {
+    h += '<div class="code-line"><span class="code-line-num">' + file.lines[i].n + '</span><span class="code-line-content">' + file.lines[i].c + '</span></div>';
+  }
+  h += '</div>';
+  return h;
+}
+
+function buildProgressPanel(live) {
+  var steps = [
+    {t:'Set up sandbox environment', s: live ? 'done' : 'pending'},
+    {t:'Create database schema', s: live ? 'done' : 'pending'},
+    {t:'Build API routes & auth', s: live ? 'active' : 'pending'},
+    {t:'Build UI components', s: 'pending'},
+    {t:'Implement real-time sync', s: 'pending'},
+    {t:'Add notifications system', s: 'pending'},
+    {t:'Run build & deploy preview', s: 'pending'}
+  ];
+  var h = '<div class="progress-card"><div class="progress-card-header"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.801 10A10 10 0 1 1 17 3.335"/><path d="m9 11 3 3L22 4"/></svg> Progress</div><div class="progress-list">';
+  for (var i = 0; i < steps.length; i++) {
+    var s = steps[i];
+    var cls = s.s === 'done' ? 'done' : '';
+    var circCls = s.s;
+    var circContent = s.s === 'done' ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' : String(i+1);
+    h += '<div class="progress-item '+cls+'"><div class="pi-circle '+circCls+'">'+circContent+'</div><span class="pi-text">'+s.t+'</span><button class="pi-action" onclick="addContext(\'Step '+(i+1)+' \u2014 '+s.t+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg><span class="tooltip">Ask a question or recommend a change</span></button></div>';
+  }
+  h += '</div></div>';
+  h += '<div class="artifacts-card"><div class="artifacts-card-header"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg> Artifacts</div>';
+  h += '<div class="al-item" onclick="showPanel(\'strategy\')"><div class="al-icon doc"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg></div><span class="al-name">Product Strategy Playbook</span><span class="al-agent">PM</span></div>';
+  h += '<div class="al-item" onclick="showPanel(\'prd\')"><div class="al-icon doc"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg></div><span class="al-name">Product Requirements Doc</span><span class="al-agent">PM</span></div>';
+  h += '<div class="al-item" onclick="showPanel(\'design\')"><div class="al-icon design"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22a1 1 0 0 1 0-20 10 9 0 0 1 10 9 5 5 0 0 1-5 5h-2.25a1.75 1.75 0 0 0-1.4 2.8l.3.4a1.75 1.75 0 0 1-1.4 2.8z"/><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/></svg></div><span class="al-name">TaskFlow Design System</span><span class="al-agent">Design</span></div>';
+  h += '</div>';
+  return h;
+}
+
+var lastPanelId = null;
+
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('collapsed');
+}
+
+function togglePanel() {
+  var panel = document.getElementById('rightPanel');
+  if (panel.classList.contains('open')) {
+    closePanel();
+  } else if (lastPanelId) {
+    showPanel(lastPanelId);
+  }
+}
+
+function updatePanelToggle(show) {
+  var btn = document.getElementById('panelToggle');
+  if (show) { btn.classList.remove('hidden'); } else { btn.classList.add('hidden'); }
+}
+
+function showPanel(panelId) {
+  lastPanelId = panelId;
+  var panel = document.getElementById('rightPanel');
+  var header = document.getElementById('panelHeader');
+  var body = document.getElementById('panelBody');
+
+  if (panelId === 'artifacts-list') {
+    // Artifacts-only panel (no progress card) — used on steps 2-4
+    header.className = 'panel-header light';
+    header.textContent = '';
+    var iconDiv = document.createElement('div');
+    iconDiv.className = 'panel-icon doc';
+    iconDiv.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>';
+    header.appendChild(iconDiv);
+    var titleSpan = document.createElement('span');
+    titleSpan.className = 'panel-title';
+    titleSpan.textContent = 'Artifacts';
+    header.appendChild(titleSpan);
+    var spacer = document.createElement('div');
+    spacer.className = 'panel-spacer';
+    header.appendChild(spacer);
+    var closeBtn = document.createElement('button');
+    closeBtn.className = 'panel-close';
+    closeBtn.onclick = closePanel;
+    closeBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>';
+    header.appendChild(closeBtn);
+    body.className = 'panel-body compact';
+    body.innerHTML = buildArtifactsOnlyPanel();
+  } else if (panelId === 'project' || panelId === 'project-live') {
+    header.className = 'panel-header light';
+    header.textContent = '';
+    var iconDiv = document.createElement('div');
+    iconDiv.className = 'panel-icon project';
+    iconDiv.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>';
+    header.appendChild(iconDiv);
+    var titleSpan = document.createElement('span');
+    titleSpan.className = 'panel-title';
+    titleSpan.textContent = 'Project Panel';
+    header.appendChild(titleSpan);
+    var spacer = document.createElement('div');
+    spacer.className = 'panel-spacer';
+    header.appendChild(spacer);
+    var closeBtn = document.createElement('button');
+    closeBtn.className = 'panel-close';
+    closeBtn.onclick = closePanel;
+    closeBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>';
+    header.appendChild(closeBtn);
+    body.className = 'panel-body compact';
+    body.innerHTML = buildProgressPanel(panelId === 'project-live');
+  } else if (panelData[panelId]) {
+    var d = panelData[panelId];
+    // Light header bar (Claude artifact style)
+    header.className = 'panel-header artifact';
+    header.textContent = '';
+    var ts = document.createElement('span');
+    ts.className = 'panel-title';
+    ts.textContent = d.title;
+    header.appendChild(ts);
+    var bg = document.createElement('span');
+    bg.className = 'panel-badge';
+    bg.textContent = '\u00b7 DOCX';
+    header.appendChild(bg);
+    var sp = document.createElement('div');
+    sp.className = 'panel-spacer';
+    header.appendChild(sp);
+    // Download button
+    var dlBtn = document.createElement('button');
+    dlBtn.className = 'panel-action-btn';
+    dlBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/></svg>';
+    header.appendChild(dlBtn);
+    // Auto-save indicator
+    var docSaveBtn = document.createElement('button');
+    docSaveBtn.className = 'panel-save-btn saved';
+    docSaveBtn.innerHTML = '<svg class="save-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><svg class="save-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>';
+    header.appendChild(docSaveBtn);
+    var cb = document.createElement('button');
+    cb.className = 'panel-close';
+    cb.onclick = closePanel;
+    cb.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>';
+    header.appendChild(cb);
+    // Editable paper document body with accent stripe
+    body.className = 'panel-body doc-view';
+    body.innerHTML = '<div class="doc-paper"><div class="doc-paper-accent"></div><div class="doc-paper-inner" contenteditable="true" spellcheck="false">' + d.content + '</div></div>';
+    // Wire auto-save on doc edit
+    var docInner = body.querySelector('.doc-paper-inner');
+    var docSaveTimer = null;
+    docInner.addEventListener('input', function() {
+      docSaveBtn.className = 'panel-save-btn saving';
+      clearTimeout(docSaveTimer);
+      docSaveTimer = setTimeout(function() { docSaveBtn.className = 'panel-save-btn saved'; }, 2000);
+    });
+  } else if (panelId.indexOf('code:') === 0) {
+    // Code panel (Claude-style code viewer)
+    var filename = panelId.replace('code:', '');
+    var file = codeFiles[filename];
+    if (file) {
+      header.className = 'panel-header code';
+      header.textContent = '';
+      var ts = document.createElement('span');
+      ts.className = 'panel-title';
+      ts.textContent = file.name + ' \u00b7 ' + file.ext;
+      header.appendChild(ts);
+      var sp = document.createElement('div');
+      sp.className = 'panel-spacer';
+      header.appendChild(sp);
+      var copyBtn = document.createElement('button');
+      copyBtn.className = 'panel-copy-btn';
+      copyBtn.textContent = 'Copy';
+      header.appendChild(copyBtn);
+      var dlChev = document.createElement('button');
+      dlChev.className = 'panel-action-btn';
+      dlChev.style.border = '1px solid var(--border)';
+      dlChev.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>';
+      header.appendChild(dlChev);
+      var rfBtn = document.createElement('button');
+      rfBtn.className = 'panel-action-btn';
+      rfBtn.style.border = 'none';
+      rfBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>';
+      header.appendChild(rfBtn);
+      var cb = document.createElement('button');
+      cb.className = 'panel-close';
+      cb.onclick = closePanel;
+      cb.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>';
+      header.appendChild(cb);
+      body.className = 'panel-body code-view';
+      body.innerHTML = buildCodePanel(filename);
+    }
+  } else if (panelId === 'app-preview') {
+    // App preview panel — matches Claude.ai artifact header exactly:
+    // [eye] [code] | Title · Type | Copy | chevron | refresh | close
+    header.className = 'panel-header artifact';
+    header.textContent = '';
+    // View toggle icons (eye = preview, </> = code)
+    var viewToggle = document.createElement('div');
+    viewToggle.className = 'artifact-view-toggle';
+    viewToggle.innerHTML =
+      '<button class="artifact-view-btn active" data-tab="preview" title="Preview"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg></button>' +
+      '<button class="artifact-view-btn" data-tab="code" title="Code"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg></button>';
+    header.appendChild(viewToggle);
+    // Title: "TaskFlow · React"
+    var ts = document.createElement('span');
+    ts.className = 'panel-title';
+    ts.textContent = 'TaskFlow';
+    header.appendChild(ts);
+    var bg = document.createElement('span');
+    bg.className = 'panel-badge';
+    bg.textContent = '\u00b7 React';
+    header.appendChild(bg);
+    var sp = document.createElement('div');
+    sp.className = 'panel-spacer';
+    header.appendChild(sp);
+    // Deploy button (pill, accent colored)
+    var deployBtn = document.createElement('button');
+    deployBtn.className = 'panel-deploy-btn';
+    deployBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg> Deploy';
+    header.appendChild(deployBtn);
+    // Auto-save indicator
+    var saveBtn = document.createElement('button');
+    saveBtn.className = 'panel-save-btn saved';
+    saveBtn.innerHTML = '<svg class="save-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><svg class="save-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>';
+    header.appendChild(saveBtn);
+    // Close
+    var cb = document.createElement('button');
+    cb.className = 'panel-close';
+    cb.onclick = closePanel;
+    cb.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>';
+    header.appendChild(cb);
+
+    body.className = 'panel-body';
+    body.style.padding = '0';
+    body.innerHTML =
+      '<div id="appPreviewContent" style="width:100%;height:100%;display:flex;flex-direction:column;overflow:hidden">' +
+        '<div class="tf-app">' +
+          '<!-- TaskFlow App Header -->' +
+          '<div class="tf-header">' +
+            '<div class="tf-logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><path d="M21.801 10A10 10 0 1 1 17 3.335"/><path d="m9 11 3 3L22 4"/></svg> TaskFlow</div>' +
+            '<div class="tf-nav"><span class="tf-nav-item active">Board</span><span class="tf-nav-item">List</span><span class="tf-nav-item">Calendar</span></div>' +
+            '<div style="flex:1"></div>' +
+            '<div class="tf-avatar">AM</div>' +
+          '</div>' +
+          '<!-- Kanban Board -->' +
+          '<div class="tf-board">' +
+            '<!-- To Do Column -->' +
+            '<div class="tf-col">' +
+              '<div class="tf-col-header"><span class="tf-col-dot" style="background:#94a3b8"></span> To Do <span class="tf-col-count">3</span></div>' +
+              '<div class="tf-card"><div class="tf-card-tag" style="background:#fef3c7;color:#92400e">Feature</div><div class="tf-card-title">Add notification preferences</div><div class="tf-card-footer"><span class="tf-card-avatar" style="background:#ddd6fe">SK</span><span class="tf-card-date">Mar 2</span></div></div>' +
+              '<div class="tf-card"><div class="tf-card-tag" style="background:#e0e7ff;color:#3730a3">Enhancement</div><div class="tf-card-title">Dark mode toggle</div><div class="tf-card-footer"><span class="tf-card-avatar" style="background:#bbf7d0">JR</span><span class="tf-card-date">Mar 4</span></div></div>' +
+              '<div class="tf-card"><div class="tf-card-tag" style="background:#fce7f3;color:#9d174d">Bug</div><div class="tf-card-title">Fix drag handle on mobile</div><div class="tf-card-footer"><span class="tf-card-avatar" style="background:#fed7aa">LM</span><span class="tf-card-date">Mar 5</span></div></div>' +
+              '<button class="tf-add-card">+ Add card</button>' +
+            '</div>' +
+            '<!-- In Progress Column -->' +
+            '<div class="tf-col">' +
+              '<div class="tf-col-header"><span class="tf-col-dot" style="background:#3b82f6"></span> In Progress <span class="tf-col-count">2</span></div>' +
+              '<div class="tf-card tf-card-active"><div class="tf-card-tag" style="background:#fef3c7;color:#92400e">Feature</div><div class="tf-card-title">Real-time board sync with WebSocket</div><div class="tf-card-progress"><div class="tf-card-progress-fill" style="width:65%"></div></div><div class="tf-card-footer"><span class="tf-card-avatar" style="background:#bfdbfe">AM</span><span class="tf-card-date">Feb 28</span></div></div>' +
+              '<div class="tf-card"><div class="tf-card-tag" style="background:#e0e7ff;color:#3730a3">Enhancement</div><div class="tf-card-title">Keyboard shortcuts for common actions</div><div class="tf-card-footer"><span class="tf-card-avatar" style="background:#ddd6fe">SK</span><span class="tf-card-date">Mar 1</span></div></div>' +
+              '<button class="tf-add-card">+ Add card</button>' +
+            '</div>' +
+            '<!-- Review Column -->' +
+            '<div class="tf-col">' +
+              '<div class="tf-col-header"><span class="tf-col-dot" style="background:#f59e0b"></span> Review <span class="tf-col-count">2</span></div>' +
+              '<div class="tf-card"><div class="tf-card-tag" style="background:#fef3c7;color:#92400e">Feature</div><div class="tf-card-title">User auth with email + OAuth</div><div class="tf-card-footer"><span class="tf-card-avatar" style="background:#bbf7d0">JR</span><span class="tf-card-date">Feb 25</span></div></div>' +
+              '<div class="tf-card"><div class="tf-card-tag" style="background:#fce7f3;color:#9d174d">Bug</div><div class="tf-card-title">Fix column reorder persistence</div><div class="tf-card-footer"><span class="tf-card-avatar" style="background:#fed7aa">LM</span><span class="tf-card-date">Feb 27</span></div></div>' +
+              '<button class="tf-add-card">+ Add card</button>' +
+            '</div>' +
+            '<!-- Done Column -->' +
+            '<div class="tf-col">' +
+              '<div class="tf-col-header"><span class="tf-col-dot" style="background:#22c55e"></span> Done <span class="tf-col-count">4</span></div>' +
+              '<div class="tf-card tf-card-done"><div class="tf-card-title">Project setup + scaffold</div><div class="tf-card-footer"><span class="tf-card-avatar" style="background:#bfdbfe">AM</span><span class="tf-card-date">Feb 20</span></div></div>' +
+              '<div class="tf-card tf-card-done"><div class="tf-card-title">Database schema + migrations</div><div class="tf-card-footer"><span class="tf-card-avatar" style="background:#ddd6fe">SK</span><span class="tf-card-date">Feb 22</span></div></div>' +
+              '<div class="tf-card tf-card-done"><div class="tf-card-title">REST API endpoints</div><div class="tf-card-footer"><span class="tf-card-avatar" style="background:#bbf7d0">JR</span><span class="tf-card-date">Feb 23</span></div></div>' +
+              '<div class="tf-card tf-card-done"><div class="tf-card-title">Board CRUD + drag-and-drop</div><div class="tf-card-footer"><span class="tf-card-avatar" style="background:#fed7aa">LM</span><span class="tf-card-date">Feb 24</span></div></div>' +
+            '</div>' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+      '<div id="appCodeContent" style="display:none;width:100%;height:100%">' +
+        '<div class="ide"></div>' +
+      '</div>';
+
+    // Wire up view toggle (eye / code icons)
+    var ideInit = false;
+    viewToggle.querySelectorAll('.artifact-view-btn').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        viewToggle.querySelectorAll('.artifact-view-btn').forEach(function(b) { b.classList.remove('active'); });
+        btn.classList.add('active');
+        var isPreview = btn.dataset.tab === 'preview';
+        document.getElementById('appPreviewContent').style.display = isPreview ? 'flex' : 'none';
+        document.getElementById('appCodeContent').style.display = isPreview ? 'none' : 'flex';
+        if (!isPreview && !ideInit) { ideInit = true; buildIDE(); }
+      });
+    });
+  }
+
+  panel.classList.add('open');
+  document.getElementById('mainArea').classList.add('has-panel');
+  var isProject = (panelId === 'project' || panelId === 'project-live');
+  updatePanelToggle(false);
+  panel.dataset.isProject = isProject ? '1' : '';
+  // Hide artifacts toggle when any panel is open
+  document.getElementById('artifactsToggle').classList.remove('visible');
+}
+
+function buildArtifactsOnlyPanel() {
+  // Artifacts list only (no progress card) — used on steps 2-4
+  var h = '<div class="artifacts-card"><div class="artifacts-card-header"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg> Artifacts</div>';
+  if (currentStep >= 2) {
+    h += '<div class="al-item" onclick="showPanel(\'strategy\')"><div class="al-icon doc"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg></div><span class="al-name">Product Strategy Playbook</span><span class="al-agent">PM</span></div>';
+  }
+  if (currentStep >= 3) {
+    h += '<div class="al-item" onclick="showPanel(\'prd\')"><div class="al-icon doc"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg></div><span class="al-name">Product Requirements Doc</span><span class="al-agent">PM</span></div>';
+  }
+  if (currentStep >= 4) {
+    h += '<div class="al-item" onclick="showPanel(\'design\')"><div class="al-icon design"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22a1 1 0 0 1 0-20 10 9 0 0 1 10 9 5 5 0 0 1-5 5h-2.25a1.75 1.75 0 0 0-1.4 2.8l.3.4a1.75 1.75 0 0 1-1.4 2.8z"/><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/></svg></div><span class="al-name">TaskFlow Design System</span><span class="al-agent">Design</span></div>';
+  }
+  h += '</div>';
+  return h;
+}
+
+function toggleArtifactsPanel() {
+  var panel = document.getElementById('rightPanel');
+  if (panel.classList.contains('open')) {
+    closePanel();
+  } else {
+    showPanel('artifacts-list');
+  }
+}
+
+function closePanel() {
+  var panel = document.getElementById('rightPanel');
+  var wasProject = panel.dataset.isProject === '1';
+  panel.classList.remove('open');
+  panel.style.width = '';
+  document.getElementById('mainArea').classList.remove('has-panel');
+  updatePanelToggle(wasProject && !!lastPanelId);
+  // Restore artifacts toggle if on steps 2-4
+  if (currentStep >= 2 && currentStep <= 4) {
+    document.getElementById('artifactsToggle').classList.add('visible');
+  }
+}
+
+// --- Panel drag resize ---
+(function() {
+  var handle = document.getElementById('panelDragHandle');
+  var panel = document.getElementById('rightPanel');
+  var mainArea = document.getElementById('mainArea');
+  var dragging = false;
+
+  handle.addEventListener('mousedown', function(e) {
+    // Only allow drag on non-project panels
+    if (panel.dataset.isProject === '1') return;
+    e.preventDefault();
+    dragging = true;
+    panel.classList.add('dragging');
+    handle.classList.add('active');
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  });
+
+  document.addEventListener('mousemove', function(e) {
+    if (!dragging) return;
+    var mainRect = mainArea.getBoundingClientRect();
+    var mainW = mainRect.width;
+    var panelW = mainRect.right - e.clientX;
+    // Clamp: min 340px, max 75% of mainArea
+    var maxW = mainW * 0.75;
+    var minW = 340;
+    panelW = Math.max(minW, Math.min(maxW, panelW));
+    var pct = (panelW / mainW) * 100;
+    panel.style.width = pct + '%';
+  });
+
+  document.addEventListener('mouseup', function() {
+    if (!dragging) return;
+    dragging = false;
+    panel.classList.remove('dragging');
+    handle.classList.remove('active');
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+  });
+})();
+
+function addContext(text) {
+  document.getElementById('inputContext').classList.add('visible');
+  document.getElementById('inputContextText').textContent = 'Re: ' + text;
+  document.getElementById('inputText').focus();
+  document.getElementById('inputText').placeholder = 'Ask a question or recommend a change...';
+  document.getElementById('queueBtn').classList.add('visible');
+}
+
+function hideContext() {
+  document.getElementById('inputContext').classList.remove('visible');
+  document.getElementById('queueBtn').classList.remove('visible');
+}
+
+function goToStep(step) {
+  currentStep = Math.max(0, Math.min(STEP_NAMES.length - 1, step));
+  var thread = document.getElementById('chatThread');
+
+  if (currentStep === 0) {
+    thread.innerHTML = '';
+    thread.appendChild(STEP_CHAT[0].cloneNode(true)).outerHTML;
+    // Use direct innerHTML for step 0
+    thread.innerHTML = STEP_CHAT[0].innerHTML;
+  } else {
+    thread.innerHTML = buildStepHTML(currentStep).join('');
+  }
+
+  // Scroll to bottom
+  var scroll = document.getElementById('chatScroll');
+  scroll.scrollTop = scroll.scrollHeight;
+
+  // Artifacts toggle button (steps 2-4 only)
+  var artToggle = document.getElementById('artifactsToggle');
+  if (currentStep >= 2 && currentStep <= 4) {
+    artToggle.classList.add('visible');
+  } else {
+    artToggle.classList.remove('visible');
+  }
+
+  // Panel logic
+  var panelMap = [null, null, 'strategy', 'prd', 'design', 'project', 'project-live', 'app-preview'];
+  var panelId = panelMap[currentStep];
+  if (panelId) { showPanel(panelId); } else { lastPanelId = null; closePanel(); updatePanelToggle(false); document.getElementById('rightPanel').dataset.isProject = ''; }
+
+  // Queue button (visible during active building)
+  document.getElementById('queueBtn').className = currentStep === 6 ? 'queue-btn visible' : 'queue-btn';
+  document.getElementById('inputText').placeholder = currentStep >= 5 ? 'Ask a question or recommend a change...' : 'Or type your feedback...';
+
+  // Nav buttons
+  document.getElementById('prevBtn').disabled = currentStep === 0;
+  document.getElementById('nextBtn').disabled = currentStep === STEP_NAMES.length - 1;
+
+  // Step dots
+  updateDots();
+}
+
+function nextStep() { goToStep(currentStep + 1); }
+function prevStep() { goToStep(currentStep - 1); }
+function approveAndNext() { setTimeout(function() { nextStep(); }, 400); }
+
+function updateDots() {
+  var dots = document.getElementById('stepDots');
+  var h = '';
+  for (var i = 0; i < STEP_NAMES.length; i++) {
+    var cls = i === currentStep ? 'active' : i < currentStep ? 'completed' : '';
+    h += '<div class="step-dot ' + cls + '" onclick="goToStep(' + i + ')" title="' + STEP_LABELS[i] + '"></div>';
+  }
+  dots.innerHTML = h;
+  document.getElementById('stepLabel').textContent = STEP_LABELS[currentStep];
+}
+
+// Init from ?screen= param
+(function() {
+  var params = new URLSearchParams(window.location.search);
+  var screen = params.get('screen');
+  if (screen) {
+    var idx = STEP_NAMES.indexOf(screen);
+    if (idx >= 0) currentStep = idx;
+    // Hide step indicator for Figma capture
+    document.querySelector('.step-indicator').style.display = 'none';
+  }
+})();
+
+goToStep(currentStep);
+
+// ── IDE Builder ──────────────────────────────────────────
+function buildIDE() {
+  var tsx = '<span class="s-tag">';
+  var kw = '<span class="s-kw">';
+  var str = '<span class="s-str">';
+  var cmt = '<span class="s-cmt">';
+  var fn = '<span class="s-fn">';
+  var attr = '<span class="s-attr">';
+  var num = '<span class="s-num">';
+  var typ = '<span class="s-type">';
+  var op = '<span class="s-op">';
+  var e = '</span>';
+
+  var FILES = {
+    'src/App.tsx': {
+      icon: 'tsx',
+      code:
+        cmt+'// src/App.tsx'+e+'\n'+
+        kw+'import'+e+' { '+fn+'BrowserRouter'+e+', '+fn+'Routes'+e+', '+fn+'Route'+e+' } '+kw+'from'+e+' '+str+"'react-router-dom'"+e+'\n'+
+        kw+'import'+e+' { '+fn+'Dashboard'+e+' } '+kw+'from'+e+' '+str+"'./pages/Dashboard'"+e+'\n'+
+        kw+'import'+e+' { '+fn+'Board'+e+' } '+kw+'from'+e+' '+str+"'./pages/Board'"+e+'\n'+
+        kw+'import'+e+' { '+fn+'AuthProvider'+e+' } '+kw+'from'+e+' '+str+"'./providers/AuthProvider'"+e+'\n'+
+        kw+'import'+e+' { '+fn+'Toaster'+e+' } '+kw+'from'+e+' '+str+"'./components/ui/Toaster'"+e+'\n\n'+
+        kw+'export default function'+e+' '+fn+'App'+e+'() {\n'+
+        '  '+kw+'return'+e+' (\n'+
+        '    &lt;'+tsx+'AuthProvider'+e+'&gt;\n'+
+        '      &lt;'+tsx+'BrowserRouter'+e+'&gt;\n'+
+        '        &lt;'+tsx+'Routes'+e+'&gt;\n'+
+        '          &lt;'+tsx+'Route'+e+' '+attr+'path'+e+'='+str+'"/"'+e+' '+attr+'element'+e+'={&lt;'+tsx+'Dashboard'+e+' /&gt;} /&gt;\n'+
+        '          &lt;'+tsx+'Route'+e+' '+attr+'path'+e+'='+str+'"/board/:id"'+e+' '+attr+'element'+e+'={&lt;'+tsx+'Board'+e+' /&gt;} /&gt;\n'+
+        '        &lt;/'+tsx+'Routes'+e+'&gt;\n'+
+        '      &lt;/'+tsx+'BrowserRouter'+e+'&gt;\n'+
+        '      &lt;'+tsx+'Toaster'+e+' /&gt;\n'+
+        '    &lt;/'+tsx+'AuthProvider'+e+'&gt;\n'+
+        '  )\n'+
+        '}'
+    },
+    'src/pages/Dashboard.tsx': {
+      icon: 'tsx',
+      code:
+        kw+'import'+e+' { '+fn+'useState'+e+' } '+kw+'from'+e+' '+str+"'react'"+e+'\n'+
+        kw+'import'+e+' { '+fn+'useBoards'+e+' } '+kw+'from'+e+' '+str+"'../hooks/useBoards'"+e+'\n'+
+        kw+'import'+e+' { '+fn+'BoardCard'+e+' } '+kw+'from'+e+' '+str+"'../components/BoardCard'"+e+'\n'+
+        kw+'import'+e+' { '+fn+'CreateBoardDialog'+e+' } '+kw+'from'+e+' '+str+"'../components/CreateBoardDialog'"+e+'\n\n'+
+        kw+'export function'+e+' '+fn+'Dashboard'+e+'() {\n'+
+        '  '+kw+'const'+e+' ['+fn+'open'+e+', '+fn+'setOpen'+e+'] = '+fn+'useState'+e+'('+kw+'false'+e+')\n'+
+        '  '+kw+'const'+e+' { '+fn+'boards'+e+', '+fn+'isLoading'+e+' } = '+fn+'useBoards'+e+'()\n\n'+
+        '  '+kw+'return'+e+' (\n'+
+        '    &lt;'+tsx+'div'+e+' '+attr+'className'+e+'='+str+'"min-h-screen bg-gray-50 p-8"'+e+'&gt;\n'+
+        '      &lt;'+tsx+'div'+e+' '+attr+'className'+e+'='+str+'"max-w-6xl mx-auto"'+e+'&gt;\n'+
+        '        &lt;'+tsx+'div'+e+' '+attr+'className'+e+'='+str+'"flex items-center justify-between mb-8"'+e+'&gt;\n'+
+        '          &lt;'+tsx+'h1'+e+' '+attr+'className'+e+'='+str+'"text-2xl font-bold"'+e+'&gt;My Boards&lt;/'+tsx+'h1'+e+'&gt;\n'+
+        '          &lt;'+tsx+'button'+e+' '+attr+'onClick'+e+'={() =&gt; '+fn+'setOpen'+e+'('+kw+'true'+e+')}\n'+
+        '            '+attr+'className'+e+'='+str+'"px-4 py-2 bg-indigo-600 text-white rounded-lg"'+e+'&gt;\n'+
+        '            + New Board\n'+
+        '          &lt;/'+tsx+'button'+e+'&gt;\n'+
+        '        &lt;/'+tsx+'div'+e+'&gt;\n\n'+
+        '        {'+fn+'isLoading'+e+' ? (\n'+
+        '          &lt;'+tsx+'div'+e+' '+attr+'className'+e+'='+str+'"grid grid-cols-3 gap-4"'+e+'&gt;\n'+
+        '            {['+num+'1'+e+', '+num+'2'+e+', '+num+'3'+e+'].'+fn+'map'+e+'('+fn+'i'+e+' =&gt; &lt;'+tsx+'div'+e+' '+attr+'key'+e+'={'+fn+'i'+e+'} '+attr+'className'+e+'='+str+'"h-32 bg-gray-200 rounded-lg animate-pulse"'+e+' /&gt;)}\n'+
+        '          &lt;/'+tsx+'div'+e+'&gt;\n'+
+        '        ) : (\n'+
+        '          &lt;'+tsx+'div'+e+' '+attr+'className'+e+'='+str+'"grid grid-cols-3 gap-4"'+e+'&gt;\n'+
+        '            {'+fn+'boards'+e+'.'+fn+'map'+e+'('+fn+'b'+e+' =&gt; &lt;'+tsx+'BoardCard'+e+' '+attr+'key'+e+'={'+fn+'b'+e+'.id} '+attr+'board'+e+'={'+fn+'b'+e+'} /&gt;)}\n'+
+        '          &lt;/'+tsx+'div'+e+'&gt;\n'+
+        '        )}\n'+
+        '      &lt;/'+tsx+'div'+e+'&gt;\n'+
+        '      &lt;'+tsx+'CreateBoardDialog'+e+' '+attr+'open'+e+'={'+fn+'open'+e+'} '+attr+'onClose'+e+'={() =&gt; '+fn+'setOpen'+e+'('+kw+'false'+e+')} /&gt;\n'+
+        '    &lt;/'+tsx+'div'+e+'&gt;\n'+
+        '  )\n'+
+        '}'
+    },
+    'src/pages/Board.tsx': {
+      icon: 'tsx',
+      code:
+        kw+'import'+e+' { '+fn+'useParams'+e+' } '+kw+'from'+e+' '+str+"'react-router-dom'"+e+'\n'+
+        kw+'import'+e+' { '+fn+'KanbanBoard'+e+' } '+kw+'from'+e+' '+str+"'../components/KanbanBoard'"+e+'\n'+
+        kw+'import'+e+' { '+fn+'useBoard'+e+' } '+kw+'from'+e+' '+str+"'../hooks/useBoard'"+e+'\n'+
+        kw+'import'+e+' { '+fn+'Layout'+e+' } '+kw+'from'+e+' '+str+"'../components/Layout'"+e+'\n\n'+
+        kw+'export function'+e+' '+fn+'Board'+e+'() {\n'+
+        '  '+kw+'const'+e+' { '+fn+'id'+e+' } = '+fn+'useParams'+e+'()\n'+
+        '  '+kw+'const'+e+' { '+fn+'board'+e+', '+fn+'columns'+e+', '+fn+'moveCard'+e+' } = '+fn+'useBoard'+e+'('+fn+'id'+e+'!)\n\n'+
+        '  '+kw+'if'+e+' (!'+fn+'board'+e+') '+kw+'return'+e+' &lt;'+tsx+'div'+e+'&gt;Loading...&lt;/'+tsx+'div'+e+'&gt;\n\n'+
+        '  '+kw+'return'+e+' (\n'+
+        '    &lt;'+tsx+'Layout'+e+' '+attr+'title'+e+'={'+fn+'board'+e+'.name}&gt;\n'+
+        '      &lt;'+tsx+'KanbanBoard'+e+'\n'+
+        '        '+attr+'columns'+e+'={'+fn+'columns'+e+'}\n'+
+        '        '+attr+'onMoveCard'+e+'={'+fn+'moveCard'+e+'}\n'+
+        '      /&gt;\n'+
+        '    &lt;/'+tsx+'Layout'+e+'&gt;\n'+
+        '  )\n'+
+        '}'
+    },
+    'src/components/KanbanBoard.tsx': {
+      icon: 'tsx',
+      code:
+        kw+'import'+e+' { '+fn+'DndContext'+e+', '+fn+'closestCorners'+e+' } '+kw+'from'+e+' '+str+"'@dnd-kit/core'"+e+'\n'+
+        kw+'import'+e+' { '+fn+'SortableContext'+e+' } '+kw+'from'+e+' '+str+"'@dnd-kit/sortable'"+e+'\n'+
+        kw+'import'+e+' { '+fn+'TaskCard'+e+' } '+kw+'from'+e+' '+str+"'./TaskCard'"+e+'\n'+
+        kw+'import'+e+' '+typ+'type'+e+' { '+typ+'Column'+e+', '+typ+'MoveCardFn'+e+' } '+kw+'from'+e+' '+str+"'../lib/types'"+e+'\n\n'+
+        typ+'interface '+e+fn+'Props'+e+' {\n'+
+        '  '+attr+'columns'+e+': '+typ+'Column'+e+'[]\n'+
+        '  '+attr+'onMoveCard'+e+': '+typ+'MoveCardFn'+e+'\n'+
+        '}\n\n'+
+        kw+'export function'+e+' '+fn+'KanbanBoard'+e+'({ '+fn+'columns'+e+', '+fn+'onMoveCard'+e+' }: '+typ+'Props'+e+') {\n'+
+        '  '+kw+'function'+e+' '+fn+'handleDragEnd'+e+'('+fn+'event'+e+': '+typ+'DragEndEvent'+e+') {\n'+
+        '    '+kw+'const'+e+' { '+fn+'active'+e+', '+fn+'over'+e+' } = '+fn+'event'+e+'\n'+
+        '    '+kw+'if'+e+' ('+fn+'over'+e+' && '+fn+'active'+e+'.id !== '+fn+'over'+e+'.id) {\n'+
+        '      '+fn+'onMoveCard'+e+'('+fn+'active'+e+'.id '+kw+'as'+e+' '+typ+'string'+e+', '+fn+'over'+e+'.id '+kw+'as'+e+' '+typ+'string'+e+')\n'+
+        '    }\n'+
+        '  }\n\n'+
+        '  '+kw+'return'+e+' (\n'+
+        '    &lt;'+tsx+'DndContext'+e+' '+attr+'collisionDetection'+e+'={'+fn+'closestCorners'+e+'} '+attr+'onDragEnd'+e+'={'+fn+'handleDragEnd'+e+'}&gt;\n'+
+        '      &lt;'+tsx+'div'+e+' '+attr+'className'+e+'='+str+'"flex gap-4 p-4 overflow-x-auto h-full"'+e+'&gt;\n'+
+        '        {'+fn+'columns'+e+'.'+fn+'map'+e+'('+fn+'col'+e+' =&gt; (\n'+
+        '          &lt;'+tsx+'div'+e+' '+attr+'key'+e+'={'+fn+'col'+e+'.id} '+attr+'className'+e+'='+str+'"w-72 flex-shrink-0 bg-gray-100 rounded-xl p-3"'+e+'&gt;\n'+
+        '            &lt;'+tsx+'h3'+e+' '+attr+'className'+e+'='+str+'"font-semibold text-sm mb-3"'+e+'&gt;{'+fn+'col'+e+'.title}&lt;/'+tsx+'h3'+e+'&gt;\n'+
+        '            &lt;'+tsx+'SortableContext'+e+' '+attr+'items'+e+'={'+fn+'col'+e+'.cards.map('+fn+'c'+e+' =&gt; '+fn+'c'+e+'.id)}&gt;\n'+
+        '              {'+fn+'col'+e+'.cards.'+fn+'map'+e+'('+fn+'card'+e+' =&gt; &lt;'+tsx+'TaskCard'+e+' '+attr+'key'+e+'={'+fn+'card'+e+'.id} '+attr+'card'+e+'={'+fn+'card'+e+'} /&gt;)}\n'+
+        '            &lt;/'+tsx+'SortableContext'+e+'&gt;\n'+
+        '          &lt;/'+tsx+'div'+e+'&gt;\n'+
+        '        ))}\n'+
+        '      &lt;/'+tsx+'div'+e+'&gt;\n'+
+        '    &lt;/'+tsx+'DndContext'+e+'&gt;\n'+
+        '  )\n'+
+        '}'
+    },
+    'src/components/TaskCard.tsx': {
+      icon: 'tsx',
+      code:
+        kw+'import'+e+' { '+fn+'useSortable'+e+' } '+kw+'from'+e+' '+str+"'@dnd-kit/sortable'"+e+'\n'+
+        kw+'import'+e+' { '+fn+'CSS'+e+' } '+kw+'from'+e+' '+str+"'@dnd-kit/utilities'"+e+'\n'+
+        kw+'import'+e+' '+typ+'type'+e+' { '+typ+'Card'+e+' } '+kw+'from'+e+' '+str+"'../lib/types'"+e+'\n\n'+
+        kw+'export function'+e+' '+fn+'TaskCard'+e+'({ '+fn+'card'+e+' }: { '+attr+'card'+e+': '+typ+'Card'+e+' }) {\n'+
+        '  '+kw+'const'+e+' {\n'+
+        '    '+fn+'attributes'+e+', '+fn+'listeners'+e+',\n'+
+        '    '+fn+'setNodeRef'+e+', '+fn+'transform'+e+', '+fn+'transition'+e+'\n'+
+        '  } = '+fn+'useSortable'+e+'({ '+attr+'id'+e+': '+fn+'card'+e+'.id })\n\n'+
+        '  '+kw+'const'+e+' '+fn+'style'+e+' = {\n'+
+        '    '+attr+'transform'+e+': '+fn+'CSS'+e+'.Transform.toString('+fn+'transform'+e+'),\n'+
+        '    '+fn+'transition'+e+',\n'+
+        '  }\n\n'+
+        '  '+kw+'return'+e+' (\n'+
+        '    &lt;'+tsx+'div'+e+'\n'+
+        '      '+attr+'ref'+e+'={'+fn+'setNodeRef'+e+'}\n'+
+        '      '+attr+'style'+e+'={'+fn+'style'+e+'}\n'+
+        '      {...'+fn+'attributes'+e+'}\n'+
+        '      {...'+fn+'listeners'+e+'}\n'+
+        '      '+attr+'className'+e+'='+str+'"bg-white p-3 rounded-lg border shadow-sm mb-2 cursor-grab"'+e+'\n'+
+        '    &gt;\n'+
+        '      {'+fn+'card'+e+'.tag && (\n'+
+        '        &lt;'+tsx+'span'+e+' '+attr+'className'+e+'='+str+'"text-xs font-medium px-2 py-0.5 rounded"'+e+'&gt;\n'+
+        '          {'+fn+'card'+e+'.tag}\n'+
+        '        &lt;/'+tsx+'span'+e+'&gt;\n'+
+        '      )}\n'+
+        '      &lt;'+tsx+'p'+e+' '+attr+'className'+e+'='+str+'"text-sm font-medium mt-2"'+e+'&gt;{'+fn+'card'+e+'.title}&lt;/'+tsx+'p'+e+'&gt;\n'+
+        '      &lt;'+tsx+'div'+e+' '+attr+'className'+e+'='+str+'"flex items-center mt-3 text-xs text-gray-400"'+e+'&gt;\n'+
+        '        &lt;'+tsx+'span'+e+'&gt;{'+fn+'card'+e+'.assignee}&lt;/'+tsx+'span'+e+'&gt;\n'+
+        '        &lt;'+tsx+'span'+e+' '+attr+'className'+e+'='+str+'"ml-auto"'+e+'&gt;{'+fn+'card'+e+'.date}&lt;/'+tsx+'span'+e+'&gt;\n'+
+        '      &lt;/'+tsx+'div'+e+'&gt;\n'+
+        '    &lt;/'+tsx+'div'+e+'&gt;\n'+
+        '  )\n'+
+        '}'
+    },
+    'server/routes/boards.ts': {
+      icon: 'ts',
+      code:
+        kw+'import'+e+' { '+fn+'Hono'+e+' } '+kw+'from'+e+' '+str+"'hono'"+e+'\n'+
+        kw+'import'+e+' { '+fn+'db'+e+' } '+kw+'from'+e+' '+str+"'../lib/db/client'"+e+'\n'+
+        kw+'import'+e+' { '+fn+'boards'+e+', '+fn+'columns'+e+', '+fn+'cards'+e+' } '+kw+'from'+e+' '+str+"'../lib/db/schema'"+e+'\n'+
+        kw+'import'+e+' { '+fn+'eq'+e+' } '+kw+'from'+e+' '+str+"'drizzle-orm'"+e+'\n'+
+        kw+'import'+e+' { '+fn+'authMiddleware'+e+' } '+kw+'from'+e+' '+str+"'../middleware/auth'"+e+'\n\n'+
+        kw+'export const'+e+' '+fn+'boardRoutes'+e+' = '+kw+'new'+e+' '+fn+'Hono'+e+'()\n'+
+        '  .'+fn+'use'+e+'('+str+"'/*'"+e+', '+fn+'authMiddleware'+e+')\n\n'+
+        '  .'+fn+'get'+e+'('+str+"'/'"+e+', '+kw+'async'+e+' ('+fn+'c'+e+') =&gt; {\n'+
+        '    '+kw+'const'+e+' '+fn+'userId'+e+' = '+fn+'c'+e+'.get('+str+"'userId'"+e+')\n'+
+        '    '+kw+'const'+e+' '+fn+'result'+e+' = '+kw+'await'+e+' '+fn+'db'+e+'\n'+
+        '      .'+fn+'select'+e+'()\n'+
+        '      .'+fn+'from'+e+'('+fn+'boards'+e+')\n'+
+        '      .'+fn+'where'+e+'('+fn+'eq'+e+'('+fn+'boards'+e+'.userId, '+fn+'userId'+e+'))\n'+
+        '      .'+fn+'orderBy'+e+'('+fn+'boards'+e+'.createdAt)\n'+
+        '    '+kw+'return'+e+' '+fn+'c'+e+'.json('+fn+'result'+e+')\n'+
+        '  })\n\n'+
+        '  .'+fn+'post'+e+'('+str+"'/'"+e+', '+kw+'async'+e+' ('+fn+'c'+e+') =&gt; {\n'+
+        '    '+kw+'const'+e+' '+fn+'userId'+e+' = '+fn+'c'+e+'.get('+str+"'userId'"+e+')\n'+
+        '    '+kw+'const'+e+' { '+fn+'name'+e+' } = '+kw+'await'+e+' '+fn+'c'+e+'.req.json()\n'+
+        '    '+kw+'const'+e+' ['+fn+'board'+e+'] = '+kw+'await'+e+' '+fn+'db'+e+'\n'+
+        '      .'+fn+'insert'+e+'('+fn+'boards'+e+')\n'+
+        '      .'+fn+'values'+e+'({ '+fn+'name'+e+', '+fn+'userId'+e+' })\n'+
+        '      .'+fn+'returning'+e+'()\n'+
+        '    '+kw+'return'+e+' '+fn+'c'+e+'.json('+fn+'board'+e+', '+num+'201'+e+')\n'+
+        '  })'
+    },
+    'server/lib/db/schema.ts': {
+      icon: 'ts',
+      code:
+        kw+'import'+e+' { '+fn+'pgTable'+e+', '+fn+'text'+e+', '+fn+'timestamp'+e+', '+fn+'uuid'+e+', '+fn+'integer'+e+' } '+kw+'from'+e+' '+str+"'drizzle-orm/pg-core'"+e+'\n\n'+
+        kw+'export const'+e+' '+fn+'boards'+e+' = '+fn+'pgTable'+e+'('+str+"'boards'"+e+', {\n'+
+        '  '+attr+'id'+e+': '+fn+'uuid'+e+'('+str+"'id'"+e+').'+fn+'primaryKey'+e+'().'+fn+'defaultRandom'+e+'(),\n'+
+        '  '+attr+'name'+e+': '+fn+'text'+e+'('+str+"'name'"+e+').'+fn+'notNull'+e+'(),\n'+
+        '  '+attr+'userId'+e+': '+fn+'text'+e+'('+str+"'user_id'"+e+').'+fn+'notNull'+e+'(),\n'+
+        '  '+attr+'createdAt'+e+': '+fn+'timestamp'+e+'('+str+"'created_at'"+e+').'+fn+'defaultNow'+e+'(),\n'+
+        '})\n\n'+
+        kw+'export const'+e+' '+fn+'columns'+e+' = '+fn+'pgTable'+e+'('+str+"'columns'"+e+', {\n'+
+        '  '+attr+'id'+e+': '+fn+'uuid'+e+'('+str+"'id'"+e+').'+fn+'primaryKey'+e+'().'+fn+'defaultRandom'+e+'(),\n'+
+        '  '+attr+'title'+e+': '+fn+'text'+e+'('+str+"'title'"+e+').'+fn+'notNull'+e+'(),\n'+
+        '  '+attr+'boardId'+e+': '+fn+'uuid'+e+'('+str+"'board_id'"+e+').'+fn+'references'+e+'(() =&gt; '+fn+'boards'+e+'.id),\n'+
+        '  '+attr+'position'+e+': '+fn+'integer'+e+'('+str+"'position'"+e+').'+fn+'notNull'+e+'(),\n'+
+        '})\n\n'+
+        kw+'export const'+e+' '+fn+'cards'+e+' = '+fn+'pgTable'+e+'('+str+"'cards'"+e+', {\n'+
+        '  '+attr+'id'+e+': '+fn+'uuid'+e+'('+str+"'id'"+e+').'+fn+'primaryKey'+e+'().'+fn+'defaultRandom'+e+'(),\n'+
+        '  '+attr+'title'+e+': '+fn+'text'+e+'('+str+"'title'"+e+').'+fn+'notNull'+e+'(),\n'+
+        '  '+attr+'tag'+e+': '+fn+'text'+e+'('+str+"'tag'"+e+'),\n'+
+        '  '+attr+'assignee'+e+': '+fn+'text'+e+'('+str+"'assignee'"+e+'),\n'+
+        '  '+attr+'columnId'+e+': '+fn+'uuid'+e+'('+str+"'column_id'"+e+').'+fn+'references'+e+'(() =&gt; '+fn+'columns'+e+'.id),\n'+
+        '  '+attr+'position'+e+': '+fn+'integer'+e+'('+str+"'position'"+e+').'+fn+'notNull'+e+'(),\n'+
+        '  '+attr+'createdAt'+e+': '+fn+'timestamp'+e+'('+str+"'created_at'"+e+').'+fn+'defaultNow'+e+'(),\n'+
+        '})'
+    },
+    'src/hooks/useBoard.ts': {
+      icon: 'ts',
+      code:
+        kw+'import'+e+' { '+fn+'useQuery'+e+', '+fn+'useMutation'+e+', '+fn+'useQueryClient'+e+' } '+kw+'from'+e+' '+str+"'@tanstack/react-query'"+e+'\n'+
+        kw+'import'+e+' '+typ+'type'+e+' { '+typ+'Board'+e+', '+typ+'Column'+e+' } '+kw+'from'+e+' '+str+"'../lib/types'"+e+'\n\n'+
+        kw+'export function'+e+' '+fn+'useBoard'+e+'('+fn+'id'+e+': '+typ+'string'+e+') {\n'+
+        '  '+kw+'const'+e+' '+fn+'qc'+e+' = '+fn+'useQueryClient'+e+'()\n\n'+
+        '  '+kw+'const'+e+' { '+fn+'data'+e+': '+fn+'board'+e+' } = '+fn+'useQuery'+e+'({\n'+
+        '    '+attr+'queryKey'+e+': ['+str+"'board'"+e+', '+fn+'id'+e+'],\n'+
+        '    '+attr+'queryFn'+e+': () =&gt; '+fn+'fetch'+e+'('+str+'`/api/boards/${'+e+fn+'id'+e+str+'}`'+e+').then('+fn+'r'+e+' =&gt; '+fn+'r'+e+'.json()),\n'+
+        '  })\n\n'+
+        '  '+kw+'const'+e+' { '+fn+'data'+e+': '+fn+'columns'+e+' = [] } = '+fn+'useQuery'+e+'({\n'+
+        '    '+attr+'queryKey'+e+': ['+str+"'columns'"+e+', '+fn+'id'+e+'],\n'+
+        '    '+attr+'queryFn'+e+': () =&gt; '+fn+'fetch'+e+'('+str+'`/api/boards/${'+e+fn+'id'+e+str+'}/columns`'+e+').then('+fn+'r'+e+' =&gt; '+fn+'r'+e+'.json()),\n'+
+        '  })\n\n'+
+        '  '+kw+'const'+e+' '+fn+'moveCard'+e+' = '+fn+'useMutation'+e+'({\n'+
+        '    '+attr+'mutationFn'+e+': ('+fn+'args'+e+': { '+attr+'cardId'+e+': '+typ+'string'+e+'; '+attr+'targetId'+e+': '+typ+'string'+e+' }) =&gt;\n'+
+        '      '+fn+'fetch'+e+'('+str+'`/api/cards/${'+e+fn+'args'+e+'.cardId'+str+'}/move`'+e+', {\n'+
+        '        '+attr+'method'+e+': '+str+"'POST'"+e+',\n'+
+        '        '+attr+'headers'+e+': { '+str+"'Content-Type'"+e+': '+str+"'application/json'"+e+' },\n'+
+        '        '+attr+'body'+e+': '+fn+'JSON'+e+'.stringify({ '+attr+'targetId'+e+': '+fn+'args'+e+'.targetId }),\n'+
+        '      }),\n'+
+        '    '+attr+'onSuccess'+e+': () =&gt; '+fn+'qc'+e+'.invalidateQueries({ '+attr+'queryKey'+e+': ['+str+"'columns'"+e+'] }),\n'+
+        '  })\n\n'+
+        '  '+kw+'return'+e+' {\n'+
+        '    '+fn+'board'+e+',\n'+
+        '    '+fn+'columns'+e+' '+kw+'as'+e+' '+typ+'Column'+e+'[],\n'+
+        '    '+fn+'moveCard'+e+': ('+fn+'cardId'+e+': '+typ+'string'+e+', '+fn+'targetId'+e+': '+typ+'string'+e+') =&gt;\n'+
+        '      '+fn+'moveCard'+e+'.mutate({ '+fn+'cardId'+e+', '+fn+'targetId'+e+' }),\n'+
+        '  }\n'+
+        '}'
+    },
+    'src/lib/types.ts': {
+      icon: 'ts',
+      code:
+        kw+'export interface'+e+' '+typ+'Card'+e+' {\n'+
+        '  '+attr+'id'+e+': '+typ+'string'+e+'\n'+
+        '  '+attr+'title'+e+': '+typ+'string'+e+'\n'+
+        '  '+attr+'tag'+e+': '+typ+'string'+e+' | '+kw+'null'+e+'\n'+
+        '  '+attr+'assignee'+e+': '+typ+'string'+e+' | '+kw+'null'+e+'\n'+
+        '  '+attr+'date'+e+': '+typ+'string'+e+'\n'+
+        '  '+attr+'position'+e+': '+typ+'number'+e+'\n'+
+        '}\n\n'+
+        kw+'export interface'+e+' '+typ+'Column'+e+' {\n'+
+        '  '+attr+'id'+e+': '+typ+'string'+e+'\n'+
+        '  '+attr+'title'+e+': '+typ+'string'+e+'\n'+
+        '  '+attr+'cards'+e+': '+typ+'Card'+e+'[]\n'+
+        '}\n\n'+
+        kw+'export interface'+e+' '+typ+'Board'+e+' {\n'+
+        '  '+attr+'id'+e+': '+typ+'string'+e+'\n'+
+        '  '+attr+'name'+e+': '+typ+'string'+e+'\n'+
+        '  '+attr+'createdAt'+e+': '+typ+'string'+e+'\n'+
+        '}\n\n'+
+        kw+'export type'+e+' '+typ+'MoveCardFn'+e+' = ('+fn+'cardId'+e+': '+typ+'string'+e+', '+fn+'targetId'+e+': '+typ+'string'+e+') =&gt; '+typ+'void'+e
+    },
+    'package.json': {
+      icon: 'json',
+      code:
+        '{\n'+
+        '  '+str+'"name"'+e+': '+str+'"taskflow"'+e+',\n'+
+        '  '+str+'"private"'+e+': '+kw+'true'+e+',\n'+
+        '  '+str+'"version"'+e+': '+str+'"0.1.0"'+e+',\n'+
+        '  '+str+'"type"'+e+': '+str+'"module"'+e+',\n'+
+        '  '+str+'"scripts"'+e+': {\n'+
+        '    '+str+'"dev"'+e+': '+str+'"concurrently \\"vite\\" \\"hono-dev\\""'+e+',\n'+
+        '    '+str+'"build"'+e+': '+str+'"tsc -b && vite build"'+e+',\n'+
+        '    '+str+'"preview"'+e+': '+str+'"vite preview"'+e+'\n'+
+        '  },\n'+
+        '  '+str+'"dependencies"'+e+': {\n'+
+        '    '+str+'"react"'+e+': '+str+'"^19.0.0"'+e+',\n'+
+        '    '+str+'"react-dom"'+e+': '+str+'"^19.0.0"'+e+',\n'+
+        '    '+str+'"react-router-dom"'+e+': '+str+'"^7.1.0"'+e+',\n'+
+        '    '+str+'"@tanstack/react-query"'+e+': '+str+'"^5.62.0"'+e+',\n'+
+        '    '+str+'"@dnd-kit/core"'+e+': '+str+'"^6.3.0"'+e+',\n'+
+        '    '+str+'"@dnd-kit/sortable"'+e+': '+str+'"^10.0.0"'+e+',\n'+
+        '    '+str+'"hono"'+e+': '+str+'"^4.7.0"'+e+',\n'+
+        '    '+str+'"drizzle-orm"'+e+': '+str+'"^0.38.0"'+e+',\n'+
+        '    '+str+'"@supabase/supabase-js"'+e+': '+str+'"^2.47.0"'+e+'\n'+
+        '  }\n'+
+        '}'
+    }
+  };
+
+  var FILE_TREE = [
+    { type: 'folder', name: 'src', open: true },
+    { type: 'file', name: 'src/App.tsx', indent: 1 },
+    { type: 'folder', name: 'src/pages', indent: 1, open: true },
+    { type: 'file', name: 'src/pages/Dashboard.tsx', indent: 2 },
+    { type: 'file', name: 'src/pages/Board.tsx', indent: 2 },
+    { type: 'folder', name: 'src/components', indent: 1, open: true },
+    { type: 'file', name: 'src/components/KanbanBoard.tsx', indent: 2 },
+    { type: 'file', name: 'src/components/TaskCard.tsx', indent: 2 },
+    { type: 'folder', name: 'src/hooks', indent: 1, open: true },
+    { type: 'file', name: 'src/hooks/useBoard.ts', indent: 2 },
+    { type: 'folder', name: 'src/lib', indent: 1, open: true },
+    { type: 'file', name: 'src/lib/types.ts', indent: 2 },
+    { type: 'folder', name: 'server', open: true },
+    { type: 'folder', name: 'server/routes', indent: 1, open: true },
+    { type: 'file', name: 'server/routes/boards.ts', indent: 2 },
+    { type: 'folder', name: 'server/lib', indent: 1, open: true },
+    { type: 'folder', name: 'server/lib/db', indent: 2, open: true },
+    { type: 'file', name: 'server/lib/db/schema.ts', indent: 3 },
+    { type: 'file', name: 'package.json' },
+  ];
+
+  var ICONS = {
+    tsx: '<svg class="ide-icon" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.7.7l3.6 3.6a2.4 2.4 0 0 1 .7 1.7v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/></svg>',
+    ts:  '<svg class="ide-icon" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.7.7l3.6 3.6a2.4 2.4 0 0 1 .7 1.7v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/></svg>',
+    json:'<svg class="ide-icon" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.7.7l3.6 3.6a2.4 2.4 0 0 1 .7 1.7v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/></svg>',
+    folder: '<svg class="ide-icon" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2"/></svg>',
+    chevDown: '<svg class="ide-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:10px;height:10px"><path d="m6 9 6 6 6-6"/></svg>',
+    chevRight: '<svg class="ide-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:10px;height:10px"><path d="m9 18 6-6-6-6"/></svg>'
+  };
+
+  var openTabs = ['src/App.tsx', 'src/components/KanbanBoard.tsx', 'server/routes/boards.ts'];
+  var activeFile = 'src/App.tsx';
+
+  var root = document.querySelector('.ide');
+  root.innerHTML = '';
+
+  // Tree
+  var tree = document.createElement('div');
+  tree.className = 'ide-tree';
+  tree.innerHTML = '<div class="ide-tree-header">Explorer</div>';
+  FILE_TREE.forEach(function(item) {
+    var row = document.createElement('div');
+    row.className = 'ide-tree-item' + (item.type === 'folder' ? ' folder' : '') + (item.name === activeFile ? ' active' : '');
+    var indent = '';
+    for (var j = 0; j < (item.indent || 0); j++) indent += '<span class="ide-tree-indent"></span>';
+    var shortName = item.name.split('/').pop();
+    if (item.type === 'folder') {
+      row.innerHTML = indent + (item.open ? ICONS.chevDown : ICONS.chevRight) + ' ' + ICONS.folder + ' ' + shortName;
+    } else {
+      var f = FILES[item.name];
+      row.innerHTML = indent + (f ? ICONS[f.icon] : ICONS.ts) + ' ' + shortName;
+      row.dataset.file = item.name;
+      row.addEventListener('click', function() {
+        if (openTabs.indexOf(item.name) < 0) openTabs.push(item.name);
+        activeFile = item.name;
+        renderIDE();
+      });
+    }
+    tree.appendChild(row);
+  });
+  root.appendChild(tree);
+
+  // Main area
+  var main = document.createElement('div');
+  main.className = 'ide-main';
+  root.appendChild(main);
+
+  function renderIDE() {
+    // Update tree active
+    tree.querySelectorAll('.ide-tree-item[data-file]').forEach(function(el) {
+      el.classList.toggle('active', el.dataset.file === activeFile);
+    });
+
+    // Tabs
+    var tabsHtml = '';
+    openTabs.forEach(function(fname) {
+      var f = FILES[fname];
+      var short = fname.split('/').pop();
+      tabsHtml += '<div class="ide-tab' + (fname === activeFile ? ' active' : '') + '" data-file="' + fname + '">' +
+        (f ? ICONS[f.icon] : ICONS.ts) + ' ' + short +
+        '<span class="ide-tab-close" data-close="' + fname + '"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></span></div>';
+    });
+
+    // Editor
+    var file = FILES[activeFile];
+    var lines = file ? file.code.split('\n') : [''];
+    var gutterHtml = '';
+    for (var i = 0; i < lines.length; i++) {
+      gutterHtml += '<div' + (i === 0 ? ' class="active"' : '') + '>' + (i + 1) + '</div>';
+    }
+
+    var short = activeFile.split('/').pop();
+    var ext = short.split('.').pop().toUpperCase();
+
+    main.innerHTML =
+      '<div class="ide-tabs">' + tabsHtml + '</div>' +
+      '<div class="ide-editor">' +
+        '<div class="ide-gutter">' + gutterHtml + '</div>' +
+        '<div class="ide-code" contenteditable="true" spellcheck="false">' + (file ? file.code : '') + '</div>' +
+      '</div>' +
+      '<div class="ide-statusbar"><span>Ln 1, Col 1</span><span>' + ext + '</span><span>UTF-8</span><span>Spaces: 2</span></div>';
+
+    // Tab click handlers
+    main.querySelectorAll('.ide-tab').forEach(function(tab) {
+      tab.addEventListener('click', function(ev) {
+        if (ev.target.closest('.ide-tab-close')) return;
+        activeFile = tab.dataset.file;
+        renderIDE();
+      });
+    });
+
+    // Tab close handlers
+    main.querySelectorAll('.ide-tab-close').forEach(function(btn) {
+      btn.addEventListener('click', function(ev) {
+        ev.stopPropagation();
+        var fname = btn.dataset.close;
+        var idx = openTabs.indexOf(fname);
+        if (idx >= 0) openTabs.splice(idx, 1);
+        if (activeFile === fname) {
+          activeFile = openTabs[Math.min(idx, openTabs.length - 1)] || openTabs[0] || 'src/App.tsx';
+        }
+        if (openTabs.length === 0) openTabs.push(activeFile);
+        renderIDE();
+      });
+    });
+
+    // Track cursor position in status bar
+    var codeEl = main.querySelector('.ide-code');
+    var statusLine = main.querySelector('.ide-statusbar span');
+    var gutterEl = main.querySelector('.ide-gutter');
+    codeEl.addEventListener('click', function() {
+      var sel = window.getSelection();
+      if (!sel.rangeCount) return;
+      var range = sel.getRangeAt(0);
+      var pre = range.cloneRange();
+      pre.selectNodeContents(codeEl);
+      pre.setEnd(range.startContainer, range.startOffset);
+      var text = pre.toString();
+      var ln = text.split('\n').length;
+      var col = text.split('\n').pop().length + 1;
+      statusLine.textContent = 'Ln ' + ln + ', Col ' + col;
+      gutterEl.querySelectorAll('div').forEach(function(d, i) {
+        d.className = (i === ln - 1) ? 'active' : '';
+      });
+    });
+
+    // Auto-save indicator on code edit
+    var ideSaveTimer = null;
+    codeEl.addEventListener('input', function() {
+      var saveBtn = document.querySelector('.panel-save-btn');
+      if (saveBtn) {
+        saveBtn.className = 'panel-save-btn saving';
+        clearTimeout(ideSaveTimer);
+        ideSaveTimer = setTimeout(function() { saveBtn.className = 'panel-save-btn saved'; }, 2000);
+      }
+    });
+  }
+
+  renderIDE();
+}
+</script>
+</body>
+</html>
