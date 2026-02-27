@@ -145,20 +145,32 @@ Now read each affected CLAUDE.md and make targeted updates. Use the Edit tool fo
 # ── Invoke Claude ───────────────────────────────────────────────────
 echo "[claude-md] Invoking Claude to analyze changes and update docs..."
 
-# Use claude in print mode with restricted tools and a model appropriate for docs
-# Unset CLAUDECODE to allow nested invocation when run from within Claude Code
-# Timeout after 120s to prevent hanging (e.g. nested Claude Code invocations)
-CLAUDE_TIMEOUT=120
+# Strip ALL Claude Code env vars so the nested `claude -p` starts fresh.
+# When this script runs inside Claude Code (e.g. via pre-push hook), the
+# parent session injects CLAUDECODE, CLAUDE_CODE_OAUTH_TOKEN,
+# CLAUDE_CODE_ENTRYPOINT, etc. These cause the child process to conflict
+# with the parent (shared sockets, auth tokens, lock files) and hang.
+CLEAN_ENV="env"
+while IFS='=' read -r key _; do
+  case "$key" in CLAUDE*) CLEAN_ENV="$CLEAN_ENV -u $key" ;; esac
+done < <(env)
 
-# Run claude in background with timeout (POSIX-compatible, no GNU timeout needed)
-echo "$PROMPT" | env -u CLAUDECODE claude -p \
+# Timeout (seconds) — safety net in case clean env isn't sufficient
+CLAUDE_TIMEOUT=180
+
+# Write prompt to temp file (avoids pipe buffering issues with large prompts)
+PROMPT_FILE=$(mktemp)
+echo "$PROMPT" > "$PROMPT_FILE"
+
+# Run claude in background with timeout (POSIX watchdog, no GNU timeout needed)
+$CLEAN_ENV claude -p \
   --allowedTools "Read,Edit,Glob,Grep" \
   --model sonnet \
   --max-turns 30 \
-  2>/dev/null &
+  < "$PROMPT_FILE" &
 CLAUDE_PID=$!
 
-# Wait with timeout — kill if it exceeds the limit
+# Watchdog: kill claude if it exceeds the timeout
 ( sleep "$CLAUDE_TIMEOUT" && kill "$CLAUDE_PID" 2>/dev/null ) &
 WATCHDOG_PID=$!
 
@@ -169,8 +181,11 @@ else
   kill "$WATCHDOG_PID" 2>/dev/null || true
   wait "$WATCHDOG_PID" 2>/dev/null || true
   echo "[claude-md] Claude invocation failed or timed out (non-fatal) — skipping update"
+  rm -f "$PROMPT_FILE"
   exit 0
 fi
+
+rm -f "$PROMPT_FILE"
 
 # ── Check for modifications ─────────────────────────────────────────
 MODIFIED_DOCS=$(git diff --name-only | grep 'CLAUDE.md' || true)
