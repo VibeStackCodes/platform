@@ -105,6 +105,8 @@ server/                  # Hono API server
     types.ts             # StreamEvent types (AgentStreamEvent union)
 supabase/migrations/     # Platform DB migrations
 snapshot/                # Daytona sandbox Docker image (scaffold + tooling)
+.prototypes/             # Interactive HTML design prototypes (agentic flow UI)
+docs/plans/              # Design documents and implementation plans
 ```
 
 ### Path Aliases

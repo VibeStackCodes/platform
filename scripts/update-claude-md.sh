@@ -147,14 +147,30 @@ echo "[claude-md] Invoking Claude to analyze changes and update docs..."
 
 # Use claude in print mode with restricted tools and a model appropriate for docs
 # Unset CLAUDECODE to allow nested invocation when run from within Claude Code
+# Timeout after 120s to prevent hanging (e.g. nested Claude Code invocations)
+CLAUDE_TIMEOUT=120
+
+# Run claude in background with timeout (POSIX-compatible, no GNU timeout needed)
 echo "$PROMPT" | env -u CLAUDECODE claude -p \
   --allowedTools "Read,Edit,Glob,Grep" \
   --model sonnet \
   --max-turns 30 \
-  2>/dev/null || {
-    echo "[claude-md] Claude invocation failed (non-fatal) — skipping update"
-    exit 0
-  }
+  2>/dev/null &
+CLAUDE_PID=$!
+
+# Wait with timeout — kill if it exceeds the limit
+( sleep "$CLAUDE_TIMEOUT" && kill "$CLAUDE_PID" 2>/dev/null ) &
+WATCHDOG_PID=$!
+
+if wait "$CLAUDE_PID" 2>/dev/null; then
+  kill "$WATCHDOG_PID" 2>/dev/null || true
+  wait "$WATCHDOG_PID" 2>/dev/null || true
+else
+  kill "$WATCHDOG_PID" 2>/dev/null || true
+  wait "$WATCHDOG_PID" 2>/dev/null || true
+  echo "[claude-md] Claude invocation failed or timed out (non-fatal) — skipping update"
+  exit 0
+fi
 
 # ── Check for modifications ─────────────────────────────────────────
 MODIFIED_DOCS=$(git diff --name-only | grep 'CLAUDE.md' || true)
