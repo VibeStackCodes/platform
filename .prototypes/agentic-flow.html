@@ -119,6 +119,14 @@ body { min-height: 100vh; overflow: hidden; }
 .user-menu-item .menu-arrow { margin-left: auto; }
 .user-menu-item .menu-shortcut { margin-left: auto; font-size: 11px; color: var(--fg-faint); }
 .user-menu-divider { height: 1px; background: var(--border); margin: 4px 10px; }
+.user-menu-item.has-submenu-open { background: var(--bg-hover); color: var(--fg); }
+.theme-submenu { display: none; position: fixed; width: 200px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: 0 8px 32px rgba(0,0,0,0.12); padding: 6px 0; z-index: 1001; }
+.theme-submenu.open { display: block; }
+.theme-option { display: flex; align-items: center; justify-content: space-between; padding: 8px 14px; cursor: pointer; color: var(--fg-muted); font-size: 13.5px; font-family: var(--font-body); border: none; background: none; width: 100%; text-align: left; }
+.theme-option:hover { background: var(--bg-hover); color: var(--fg); }
+.theme-option .theme-check { width: 16px; height: 16px; opacity: 0; flex-shrink: 0; color: var(--fg); }
+.theme-option.active { color: var(--fg); }
+.theme-option.active .theme-check { opacity: 1; }
 
 /* Collapsed sidebar — icon strip */
 .sidebar.collapsed { width: 52px; min-width: 52px; padding: 12px 6px; align-items: center; }
@@ -175,11 +183,6 @@ body { min-height: 100vh; overflow: hidden; }
 .msg-meta-btn:hover { color: var(--fg-muted); }
 .msg-meta-btn svg { width: 14px; height: 14px; }
 
-/* Assistant message actions (copy, thumbs up/down, retry) */
-.msg-actions { display: flex; align-items: center; gap: 4px; padding: 4px 0 0; }
-.msg-action-btn { width: 28px; height: 28px; border: none; border-radius: var(--radius-sm); background: transparent; color: var(--fg-faint); cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; }
-.msg-action-btn:hover { color: var(--fg-muted); background: var(--bg-hover); }
-.msg-action-btn svg { width: 16px; height: 16px; }
 
 /* Large artifact card with Download button (Claude-style) */
 .artifact-card-lg { display: flex; align-items: center; gap: 14px; padding: 14px 18px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-xl); max-width: 520px; }
@@ -350,12 +353,14 @@ body { min-height: 100vh; overflow: hidden; }
 .panel-close svg { width: 15px; height: 15px; }
 .panel-body { flex: 1; overflow-y: auto; padding: 28px 32px; }
 .panel-body.compact { padding: 16px; }
+.panel-body.panel-body-floating { padding: 36px 16px 20px; background: transparent; }
+.right-panel[data-is-project="1"] { background: transparent; border-left-color: transparent; width: 25%; min-width: 260px; }
 
 /* Document body — paper on gray bg (Claude-style) */
-.panel-body.doc-view { background: #eceae4; padding: 24px; }
-.doc-paper { background: #ffffff; border-radius: 4px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); padding: 0; min-height: 100%; overflow: hidden; }
+.panel-body.doc-view { background: var(--bg-active); padding: 24px; }
+.doc-paper { background: var(--bg-input); border-radius: 4px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); padding: 0; min-height: 100%; overflow: hidden; }
 .doc-paper-accent { height: 4px; background: linear-gradient(90deg, #7ba1c7, #a8c4dd); }
-.doc-paper-inner { padding: 48px 56px; }
+.doc-paper-inner { padding: 48px 56px; color: var(--fg); }
 
 /* Doc styling */
 .doc h2 { font-family: var(--font-display); font-size: 26px; color: #1a1a1a; margin-bottom: 8px; text-align: center; }
@@ -486,6 +491,88 @@ body { min-height: 100vh; overflow: hidden; }
 .s-type { color: #c18401; } /* types: amber */
 .s-op { color: #0184bc; }  /* operators: cyan */
 .s-punc { color: #a0a1a7; } /* punctuation: gray */
+
+/* Design System Panel */
+.ds { padding: 24px; overflow-y: auto; height: 100%; }
+.ds-section { margin-bottom: 28px; }
+.ds-section-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--fg-faint); margin-bottom: 14px; }
+.ds-mode-toggle { display: inline-flex; gap: 2px; background: var(--bg-hover); border-radius: 6px; padding: 2px; margin-bottom: 20px; }
+.ds-mode-btn { padding: 5px 14px; border: none; border-radius: 5px; font-size: 12px; font-weight: 500; color: var(--fg-faint); background: transparent; cursor: pointer; font-family: var(--font-body); }
+.ds-mode-btn.active { background: var(--bg); color: var(--fg); box-shadow: 0 1px 2px rgba(0,0,0,0.06); }
+.ds-color-group { margin-bottom: 16px; }
+.ds-color-label { font-size: 12px; font-weight: 600; color: var(--fg-muted); margin-bottom: 8px; }
+.ds-swatches { display: flex; gap: 6px; }
+.ds-swatch { width: 52px; display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer; }
+.ds-swatch-color { width: 52px; height: 40px; border-radius: 8px; border: 1px solid rgba(0,0,0,0.06); transition: transform 0.15s, box-shadow 0.15s; }
+.ds-swatch:hover .ds-swatch-color { transform: scale(1.08); box-shadow: 0 4px 12px rgba(0,0,0,0.12); }
+.ds-swatch-label { font-size: 9.5px; color: var(--fg-faint); font-weight: 500; }
+.ds-swatch-hex { font-size: 9px; font-family: var(--font-mono); color: var(--fg-faint); }
+.ds-semantic { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.ds-semantic-item { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border); }
+.ds-semantic-dot { width: 24px; height: 24px; border-radius: 6px; flex-shrink: 0; }
+.ds-semantic-info { display: flex; flex-direction: column; }
+.ds-semantic-name { font-size: 12px; font-weight: 600; color: var(--fg); }
+.ds-semantic-hex { font-size: 10px; font-family: var(--font-mono); color: var(--fg-faint); }
+.ds-type-specimen { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; margin-bottom: 8px; }
+.ds-type-row { display: flex; align-items: baseline; padding: 14px 16px; border-bottom: 1px solid var(--border); }
+.ds-type-row:last-child { border-bottom: none; }
+.ds-type-meta { width: 100px; flex-shrink: 0; }
+.ds-type-name { font-size: 11px; font-weight: 600; color: var(--fg); }
+.ds-type-detail { font-size: 10px; color: var(--fg-faint); margin-top: 2px; }
+.ds-type-sample { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg); }
+.ds-spacing-row { display: flex; align-items: flex-end; gap: 10px; margin-bottom: 16px; }
+.ds-spacing-item { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.ds-spacing-bar { background: var(--accent); border-radius: 3px; opacity: 0.7; }
+.ds-spacing-val { font-size: 9.5px; font-family: var(--font-mono); color: var(--fg-faint); }
+.ds-radius-row { display: flex; gap: 12px; }
+.ds-radius-item { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.ds-radius-box { width: 48px; height: 36px; border: 2px solid var(--accent); background: transparent; }
+.ds-radius-label { font-size: 10px; color: var(--fg-faint); font-weight: 500; }
+.ds-comp-section { display: flex; flex-direction: column; gap: 14px; }
+.ds-comp-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.ds-btn-primary { padding: 8px 20px; border: none; border-radius: 9999px; background: #4F46E5; color: #fff; font-size: 13px; font-weight: 600; cursor: pointer; font-family: var(--font-body); }
+.ds-btn-outlined { padding: 8px 20px; border: 1.5px solid #4F46E5; border-radius: 9999px; background: transparent; color: #4F46E5; font-size: 13px; font-weight: 600; cursor: pointer; font-family: var(--font-body); }
+.ds-btn-ghost { padding: 8px 20px; border: none; border-radius: 9999px; background: transparent; color: #4F46E5; font-size: 13px; font-weight: 500; cursor: pointer; font-family: var(--font-body); }
+.ds-btn-ghost:hover { background: rgba(79,70,229,0.06); }
+.ds-input { width: 100%; padding: 10px 14px; border: 1.5px solid var(--border); border-radius: 10px; font-size: 13px; color: var(--fg); background: var(--bg); font-family: var(--font-body); outline: none; }
+.ds-input:focus { border-color: #4F46E5; box-shadow: 0 0 0 3px rgba(79,70,229,0.1); }
+.ds-input::placeholder { color: var(--fg-faint); }
+.ds-card { border: 1px solid var(--border); border-radius: 12px; padding: 16px; background: var(--bg); box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.03); }
+.ds-card-title { font-size: 14px; font-weight: 600; color: var(--fg); margin-bottom: 4px; }
+.ds-card-desc { font-size: 12.5px; color: var(--fg-muted); line-height: 1.45; }
+.ds-badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: 9999px; font-size: 11px; font-weight: 600; }
+/* ── Design System Dark Mode ── */
+.ds-dark { background: #1C1B1A; }
+.ds-dark .ds-section-title { color: #8A8780; }
+.ds-dark .ds-mode-toggle { background: #2A2926; }
+.ds-dark .ds-mode-btn { color: #8A8780; }
+.ds-dark .ds-mode-btn.active { background: #3A3835; color: #E8E6DC; box-shadow: 0 1px 2px rgba(0,0,0,0.3); }
+.ds-dark .ds-color-label { color: #A09D95; }
+.ds-dark .ds-swatch-label, .ds-dark .ds-swatch-hex { color: #8A8780; }
+.ds-dark .ds-swatch-color { border-color: rgba(255,255,255,0.08); }
+.ds-dark .ds-semantic-item { border-color: #333230; background: #232220; }
+.ds-dark .ds-semantic-name { color: #E8E6DC; }
+.ds-dark .ds-semantic-hex { color: #8A8780; }
+.ds-dark .ds-type-specimen { border-color: #333230; background: #232220; }
+.ds-dark .ds-type-row { border-bottom-color: #333230; }
+.ds-dark .ds-type-name { color: #E8E6DC; }
+.ds-dark .ds-type-detail { color: #6B6960; }
+.ds-dark .ds-type-sample { color: #E8E6DC; }
+.ds-dark .ds-spacing-bar { opacity: 0.85; }
+.ds-dark .ds-spacing-val { color: #8A8780; }
+.ds-dark .ds-radius-box { border-color: #A78BFA; }
+.ds-dark .ds-radius-label { color: #8A8780; }
+.ds-dark .ds-btn-primary { background: #818CF8; }
+.ds-dark .ds-btn-outlined { border-color: #818CF8; color: #A5B4FC; }
+.ds-dark .ds-btn-ghost { color: #A5B4FC; }
+.ds-dark .ds-btn-ghost:hover { background: rgba(129,140,248,0.1); }
+.ds-dark .ds-input { background: #2A2926; border-color: #3A3835; color: #E8E6DC; }
+.ds-dark .ds-input::placeholder { color: #6B6960; }
+.ds-dark .ds-input:focus { border-color: #818CF8; box-shadow: 0 0 0 3px rgba(129,140,248,0.15); }
+.ds-dark .ds-card { background: #232220; border-color: #333230; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+.ds-dark .ds-card-title { color: #E8E6DC; }
+.ds-dark .ds-card-desc { color: #A09D95; }
+.ds-dark .ds-badge { opacity: 0.9; }
 .al-name { font-size: 13px; font-weight: 500; color: var(--fg); flex: 1; }
 .al-agent { font-size: 11px; color: var(--fg-faint); }
 
@@ -560,12 +647,18 @@ body { min-height: 100vh; overflow: hidden; }
         <button class="user-menu-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"/><circle cx="12" cy="12" r="3"/></svg>Settings<span class="menu-shortcut">&#x21E7;&#x2318;,</span></button>
         <button class="user-menu-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>Language<svg class="menu-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;margin-left:auto"><path d="m9 18 6-6-6-6"/></svg></button>
         <button class="user-menu-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>Get help</button>
+        <button class="user-menu-item" id="themeMenuToggle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>Theme<svg class="menu-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;margin-left:auto"><path d="m9 18 6-6-6-6"/></svg></button>
         <div class="user-menu-divider"></div>
         <button class="user-menu-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h.01"/><path d="M3 12h.01"/><path d="M3 19h.01"/><path d="M8 5h13"/><path d="M8 12h13"/><path d="M8 19h13"/></svg>View all plans</button>
         <button class="user-menu-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 3v18"/><path d="M3 12h18"/></svg>Gift VibeStack</button>
         <button class="user-menu-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>Learn more<svg class="menu-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;margin-left:auto"><path d="m9 18 6-6-6-6"/></svg></button>
         <div class="user-menu-divider"></div>
         <button class="user-menu-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/></svg>Log out</button>
+      </div>
+      <div class="theme-submenu" id="themeSubmenu">
+        <button class="theme-option active" data-theme="light">Light<svg class="theme-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></button>
+        <button class="theme-option" data-theme="dark">Dark<svg class="theme-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></button>
+        <button class="theme-option" data-theme="system">System<svg class="theme-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></button>
       </div>
       <div class="sidebar-footer-row">
         <div class="sidebar-user" onclick="document.getElementById('userMenu').classList.toggle('open')"><div class="sidebar-avatar">A</div><div><div class="sidebar-user-name">Alex M.</div><div class="sidebar-user-plan">Pro Plan</div></div></div>
@@ -664,7 +757,7 @@ function buildStepHTML(step) {
 
   // Reusable HTML fragments
   var collapse = 'onclick="this.classList.toggle(\'collapsed\');this.nextElementSibling.style.display=this.classList.contains(\'collapsed\')?\'none\':\'block\'"';
-  var msgActions = '<div class="msg-actions"><button class="msg-action-btn">'+I.copy+'</button><button class="msg-action-btn">'+I.thumbsUp+'</button><button class="msg-action-btn">'+I.thumbsDown+'</button><button class="msg-action-btn">'+I.rotateCcw+'</button></div>';
+  var msgActions = '';
 
   function toolStep(icon, text, detail) {
     return '<div class="tool-step"><div class="tool-step-icon">'+icon+'</div><div class="tool-step-body"><div class="tool-step-text">'+text+'</div>'+(detail?'<div class="tool-step-detail">'+detail+'</div>':'')+'</div></div>';
@@ -1066,49 +1159,64 @@ function showPanel(panelId) {
   var header = document.getElementById('panelHeader');
   var body = document.getElementById('panelBody');
 
+  // Reset project panel state
+  header.style.display = '';
+  delete panel.dataset.isProject;
+
   if (panelId === 'artifacts-list') {
-    // Artifacts-only panel (no progress card) — used on steps 2-4
-    header.className = 'panel-header light';
+    // Artifacts-only panel — floating card, no header
+    header.className = 'panel-header';
+    header.style.display = 'none';
     header.textContent = '';
-    var iconDiv = document.createElement('div');
-    iconDiv.className = 'panel-icon doc';
-    iconDiv.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>';
-    header.appendChild(iconDiv);
-    var titleSpan = document.createElement('span');
-    titleSpan.className = 'panel-title';
-    titleSpan.textContent = 'Artifacts';
-    header.appendChild(titleSpan);
-    var spacer = document.createElement('div');
-    spacer.className = 'panel-spacer';
-    header.appendChild(spacer);
-    var closeBtn = document.createElement('button');
-    closeBtn.className = 'panel-close';
-    closeBtn.onclick = closePanel;
-    closeBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>';
-    header.appendChild(closeBtn);
-    body.className = 'panel-body compact';
+    panel.dataset.isProject = '1';
+    body.className = 'panel-body panel-body-floating';
     body.innerHTML = buildArtifactsOnlyPanel();
   } else if (panelId === 'project' || panelId === 'project-live') {
-    header.className = 'panel-header light';
+    // No header — floating cards like Claude's sidebar panels
+    header.className = 'panel-header';
+    header.style.display = 'none';
     header.textContent = '';
-    var iconDiv = document.createElement('div');
-    iconDiv.className = 'panel-icon project';
-    iconDiv.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>';
-    header.appendChild(iconDiv);
-    var titleSpan = document.createElement('span');
-    titleSpan.className = 'panel-title';
-    titleSpan.textContent = 'Project Panel';
-    header.appendChild(titleSpan);
-    var spacer = document.createElement('div');
-    spacer.className = 'panel-spacer';
-    header.appendChild(spacer);
-    var closeBtn = document.createElement('button');
-    closeBtn.className = 'panel-close';
-    closeBtn.onclick = closePanel;
-    closeBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>';
-    header.appendChild(closeBtn);
-    body.className = 'panel-body compact';
+    panel.dataset.isProject = '1';
+    body.className = 'panel-body panel-body-floating';
     body.innerHTML = buildProgressPanel(panelId === 'project-live');
+  } else if (panelId === 'design') {
+    // Interactive Design System panel
+    header.className = 'panel-header artifact';
+    header.textContent = '';
+    var ts = document.createElement('span');
+    ts.className = 'panel-title';
+    ts.textContent = 'Design System';
+    header.appendChild(ts);
+    var sp = document.createElement('div');
+    sp.className = 'panel-spacer';
+    header.appendChild(sp);
+    var dlBtn = document.createElement('button');
+    dlBtn.className = 'panel-action-btn';
+    dlBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/></svg>';
+    header.appendChild(dlBtn);
+    var dsSaveBtn = document.createElement('button');
+    dsSaveBtn.className = 'panel-save-btn saved';
+    dsSaveBtn.innerHTML = '<svg class="save-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><svg class="save-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>';
+    header.appendChild(dsSaveBtn);
+    var cb = document.createElement('button');
+    cb.className = 'panel-close';
+    cb.onclick = closePanel;
+    cb.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>';
+    header.appendChild(cb);
+    body.className = 'panel-body';
+    body.style.padding = '0';
+    body.innerHTML = buildDesignSystemPanel();
+    // Wire mode toggle
+    var dsContainer = body.querySelector('.ds');
+    var mBtns = body.querySelectorAll('.ds-mode-btn');
+    mBtns.forEach(function(btn) {
+      btn.onclick = function() {
+        mBtns.forEach(function(b) { b.classList.remove('active'); });
+        btn.classList.add('active');
+        var isDark = btn.textContent.trim() === 'Dark';
+        dsContainer.classList.toggle('ds-dark', isDark);
+      };
+    });
   } else if (panelData[panelId]) {
     var d = panelData[panelId];
     // Light header bar (Claude artifact style)
@@ -1464,6 +1572,240 @@ function updateDots() {
 })();
 
 goToStep(currentStep);
+
+// ── Theme Toggle ────────────────────────────────────────
+(function() {
+  var toggle = document.getElementById('themeMenuToggle');
+  var submenu = document.getElementById('themeSubmenu');
+  var userMenu = document.getElementById('userMenu');
+  var options = submenu.querySelectorAll('.theme-option');
+
+  function positionSubmenu() {
+    var menuRect = userMenu.getBoundingClientRect();
+    var toggleRect = toggle.getBoundingClientRect();
+    submenu.style.left = (menuRect.right + 6) + 'px';
+    submenu.style.top = (toggleRect.top - 8) + 'px';
+  }
+
+  function openSubmenu() {
+    positionSubmenu();
+    submenu.classList.add('open');
+    toggle.classList.add('has-submenu-open');
+  }
+
+  function closeSubmenu() {
+    submenu.classList.remove('open');
+    toggle.classList.remove('has-submenu-open');
+  }
+
+  toggle.addEventListener('mouseenter', openSubmenu);
+  toggle.addEventListener('mouseleave', function(e) {
+    var to = e.relatedTarget;
+    if (to && (submenu.contains(to) || submenu === to)) return;
+    closeSubmenu();
+  });
+  submenu.addEventListener('mouseleave', function(e) {
+    var to = e.relatedTarget;
+    if (to && (toggle.contains(to) || toggle === to)) return;
+    closeSubmenu();
+  });
+  // Also close on click elsewhere
+  toggle.onclick = function(e) { e.stopPropagation(); openSubmenu(); };
+
+  function applyTheme(mode) {
+    var root = document.documentElement;
+    var isDark = mode === 'dark' || (mode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    if (isDark) {
+      root.style.setProperty('--bg', '#1C1B1A');
+      root.style.setProperty('--bg-sidebar', '#151413');
+      root.style.setProperty('--bg-hover', '#2A2926');
+      root.style.setProperty('--bg-active', '#333230');
+      root.style.setProperty('--bg-card', '#232220');
+      root.style.setProperty('--bg-input', '#2A2926');
+      root.style.setProperty('--bg-user-bubble', '#2A2926');
+      root.style.setProperty('--fg', '#E8E6DC');
+      root.style.setProperty('--fg-muted', '#A09D95');
+      root.style.setProperty('--fg-faint', '#6B6960');
+      root.style.setProperty('--border', '#333230');
+      root.style.setProperty('--border-subtle', '#2A2926');
+      root.style.setProperty('--accent', '#D97757');
+      root.style.setProperty('--accent-hover', '#E08868');
+      root.style.setProperty('--accent-soft', 'rgba(217,119,87,0.15)');
+      root.style.setProperty('--accent-fg', '#ffffff');
+    } else {
+      root.style.setProperty('--bg', '#faf9f5');
+      root.style.setProperty('--bg-sidebar', '#f0ede6');
+      root.style.setProperty('--bg-hover', '#e8e6dc');
+      root.style.setProperty('--bg-active', '#dedad0');
+      root.style.setProperty('--bg-card', '#f5f3ed');
+      root.style.setProperty('--bg-input', '#ffffff');
+      root.style.setProperty('--bg-user-bubble', '#f0ede6');
+      root.style.setProperty('--fg', '#141413');
+      root.style.setProperty('--fg-muted', '#6b6960');
+      root.style.setProperty('--fg-faint', '#b0aea5');
+      root.style.setProperty('--border', '#e8e6dc');
+      root.style.setProperty('--border-subtle', '#efece5');
+      root.style.setProperty('--accent', '#d97757');
+      root.style.setProperty('--accent-hover', '#c8654a');
+      root.style.setProperty('--accent-soft', 'rgba(217,119,87,0.10)');
+      root.style.setProperty('--accent-fg', '#ffffff');
+    }
+  }
+
+  var currentTheme = 'system';
+
+  options.forEach(function(opt) {
+    opt.onclick = function(e) {
+      e.stopPropagation();
+      options.forEach(function(o) { o.classList.remove('active'); });
+      opt.classList.add('active');
+      currentTheme = opt.dataset.theme;
+      applyTheme(currentTheme);
+      closeSubmenu();
+      userMenu.classList.remove('open');
+    };
+  });
+
+  // Listen for system theme changes
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function() {
+    if (currentTheme === 'system') applyTheme('system');
+  });
+
+  // Set default to System
+  options.forEach(function(o) { o.classList.remove('active'); });
+  submenu.querySelector('[data-theme="system"]').classList.add('active');
+  applyTheme('system');
+})();
+
+// ── Design System Panel Builder ──────────────────────────
+function buildDesignSystemPanel() {
+  // Color palette data
+  var primary = [
+    { label: '50',  hex: '#EEF2FF', color: '#EEF2FF' },
+    { label: '100', hex: '#E0E7FF', color: '#E0E7FF' },
+    { label: '200', hex: '#C7D2FE', color: '#C7D2FE' },
+    { label: '500', hex: '#6366F1', color: '#6366F1' },
+    { label: '900', hex: '#312E81', color: '#312E81' }
+  ];
+  var neutral = [
+    { label: '50',  hex: '#FAF9F5', color: '#FAF9F5' },
+    { label: '100', hex: '#F0EDE6', color: '#F0EDE6' },
+    { label: '200', hex: '#E8E6DC', color: '#E8E6DC' },
+    { label: '500', hex: '#6B6960', color: '#6B6960' },
+    { label: '900', hex: '#141413', color: '#141413' }
+  ];
+  var semantic = [
+    { name: 'Success', hex: '#16A34A', color: '#16A34A' },
+    { name: 'Warning', hex: '#EAB308', color: '#EAB308' },
+    { name: 'Error',   hex: '#DC2626', color: '#DC2626' },
+    { name: 'Info',    hex: '#2563EB', color: '#2563EB' }
+  ];
+
+  function swatchRow(items) {
+    return '<div class="ds-swatches">' + items.map(function(s) {
+      return '<div class="ds-swatch" title="' + s.hex + '">' +
+        '<div class="ds-swatch-color" style="background:' + s.color + '"></div>' +
+        '<span class="ds-swatch-label">' + s.label + '</span>' +
+        '<span class="ds-swatch-hex">' + s.hex + '</span></div>';
+    }).join('') + '</div>';
+  }
+
+  function semanticGrid(items) {
+    return '<div class="ds-semantic">' + items.map(function(s) {
+      return '<div class="ds-semantic-item">' +
+        '<div class="ds-semantic-dot" style="background:' + s.color + '"></div>' +
+        '<div class="ds-semantic-info"><span class="ds-semantic-name">' + s.name + '</span>' +
+        '<span class="ds-semantic-hex">' + s.hex + '</span></div></div>';
+    }).join('') + '</div>';
+  }
+
+  var html = '<div class="ds">';
+
+  // Mode toggle
+  html += '<div class="ds-mode-toggle">' +
+    '<button class="ds-mode-btn active">Light</button>' +
+    '<button class="ds-mode-btn">Dark</button></div>';
+
+  // Colors
+  html += '<div class="ds-section"><div class="ds-section-title">Colors</div>';
+  html += '<div class="ds-color-group"><div class="ds-color-label">Primary (Indigo)</div>' + swatchRow(primary) + '</div>';
+  html += '<div class="ds-color-group"><div class="ds-color-label">Neutral (Warm)</div>' + swatchRow(neutral) + '</div>';
+  html += '<div class="ds-color-group"><div class="ds-color-label">Semantic</div>' + semanticGrid(semantic) + '</div>';
+  html += '</div>';
+
+  // Typography
+  html += '<div class="ds-section"><div class="ds-section-title">Typography</div>';
+  html += '<div class="ds-type-specimen">';
+  html += '<div class="ds-type-row"><div class="ds-type-meta"><div class="ds-type-name">Display</div><div class="ds-type-detail">DM Serif / 32px</div></div>' +
+    '<div class="ds-type-sample" style="font-family:\'DM Serif Display\',serif;font-size:28px;">TaskFlow Pro</div></div>';
+  html += '<div class="ds-type-row"><div class="ds-type-meta"><div class="ds-type-name">Heading</div><div class="ds-type-detail">DM Sans / 20px / 600</div></div>' +
+    '<div class="ds-type-sample" style="font-family:\'DM Sans\',sans-serif;font-size:18px;font-weight:600;">Project Dashboard</div></div>';
+  html += '<div class="ds-type-row"><div class="ds-type-meta"><div class="ds-type-name">Body</div><div class="ds-type-detail">DM Sans / 14px / 400</div></div>' +
+    '<div class="ds-type-sample" style="font-family:\'DM Sans\',sans-serif;font-size:14px;">Manage your tasks with intuitive drag-and-drop boards.</div></div>';
+  html += '<div class="ds-type-row"><div class="ds-type-meta"><div class="ds-type-name">Mono</div><div class="ds-type-detail">JetBrains / 13px</div></div>' +
+    '<div class="ds-type-sample" style="font-family:\'JetBrains Mono\',monospace;font-size:13px;">const board = useBoard(id)</div></div>';
+  html += '</div></div>';
+
+  // Spacing & Radius
+  html += '<div class="ds-section"><div class="ds-section-title">Spacing Scale</div>';
+  html += '<div class="ds-spacing-row">';
+  var spacings = [4, 8, 12, 16, 24, 32, 48];
+  spacings.forEach(function(s) {
+    html += '<div class="ds-spacing-item">' +
+      '<div class="ds-spacing-bar" style="width:' + Math.max(s, 8) + 'px;height:' + s + 'px;"></div>' +
+      '<span class="ds-spacing-val">' + s + '</span></div>';
+  });
+  html += '</div></div>';
+
+  html += '<div class="ds-section"><div class="ds-section-title">Border Radius</div>';
+  html += '<div class="ds-radius-row">';
+  var radii = [
+    { label: 'sm', val: '6px' },
+    { label: 'md', val: '10px' },
+    { label: 'lg', val: '16px' },
+    { label: 'xl', val: '20px' },
+    { label: 'pill', val: '9999px' }
+  ];
+  radii.forEach(function(r) {
+    html += '<div class="ds-radius-item">' +
+      '<div class="ds-radius-box" style="border-radius:' + r.val + ';"></div>' +
+      '<span class="ds-radius-label">' + r.label + '</span></div>';
+  });
+  html += '</div></div>';
+
+  // Component Preview
+  html += '<div class="ds-section"><div class="ds-section-title">Components</div>';
+  html += '<div class="ds-comp-section">';
+
+  // Buttons
+  html += '<div class="ds-color-label">Buttons</div>';
+  html += '<div class="ds-comp-row">' +
+    '<button class="ds-btn-primary">Primary</button>' +
+    '<button class="ds-btn-outlined">Outlined</button>' +
+    '<button class="ds-btn-ghost">Ghost</button></div>';
+
+  // Input
+  html += '<div class="ds-color-label" style="margin-top:6px;">Input</div>';
+  html += '<input class="ds-input" placeholder="Search tasks..." />';
+
+  // Card
+  html += '<div class="ds-color-label" style="margin-top:6px;">Card</div>';
+  html += '<div class="ds-card"><div class="ds-card-title">Sprint Planning</div>' +
+    '<div class="ds-card-desc">Review backlog items and assign story points for the upcoming sprint.</div></div>';
+
+  // Badges
+  html += '<div class="ds-color-label" style="margin-top:6px;">Badges</div>';
+  html += '<div class="ds-comp-row">' +
+    '<span class="ds-badge" style="background:#EEF2FF;color:#4F46E5;">Feature</span>' +
+    '<span class="ds-badge" style="background:#FEF2F2;color:#DC2626;">Bug</span>' +
+    '<span class="ds-badge" style="background:#F0FDF4;color:#16A34A;">Done</span>' +
+    '<span class="ds-badge" style="background:#FFFBEB;color:#D97706;">In Progress</span></div>';
+
+  html += '</div></div>';
+
+  html += '</div>';
+  return html;
+}
 
 // ── IDE Builder ──────────────────────────────────────────
 function buildIDE() {
