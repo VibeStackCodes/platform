@@ -735,7 +735,8 @@ var STEP_LABELS = [
   '1. Analyst Plan', '2. Plan Approved', '3. Strategy Playbook', '4. PRD',
   '5. Design System', '6. Implementation', '7. Building...', '8. App Ready'
 ];
-var currentStep = 0;
+var urlParams = new URLSearchParams(window.location.search);
+var currentStep = parseInt(urlParams.get('step') || '0', 10);
 
 // All content is static trusted HTML - this is a design prototype, not a user-facing app
 var STEP_CHAT = {};
@@ -1734,10 +1735,12 @@ goToStep(currentStep);
     if (currentTheme === 'system') applyTheme('system');
   });
 
-  // Set default to System
+  // Check URL param for theme override, default to System
+  var themeParam = urlParams.get('theme');
+  var initTheme = (themeParam === 'dark' || themeParam === 'light') ? themeParam : 'system';
   options.forEach(function(o) { o.classList.remove('active'); });
-  submenu.querySelector('[data-theme="system"]').classList.add('active');
-  applyTheme('system');
+  submenu.querySelector('[data-theme="' + initTheme + '"]').classList.add('active');
+  applyTheme(initTheme);
 })();
 
 // ── Design System Panel Builder ──────────────────────────
