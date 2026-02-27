@@ -195,17 +195,30 @@ body { min-height: 100vh; overflow: hidden; }
 .artifact-dl-btn { padding: 6px 16px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 13px; font-weight: 500; cursor: pointer; }
 .artifact-dl-btn:hover { background: var(--bg-hover); }
 
-/* Agent status */
-.agent-status { display: flex; align-items: center; gap: 10px; padding: 12px 16px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); }
-.agent-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
-.agent-dot.active { background: var(--accent); box-shadow: 0 0 0 3px oklch(0.55 0.20 280 / 0.15); animation: throb 1.5s ease-in-out infinite; }
-.agent-dot.done { background: var(--claude-green); box-shadow: 0 0 0 3px oklch(0.60 0.15 145 / 0.12); }
-@keyframes throb { 0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.85)} }
-.agent-name { font-size: 13.5px; font-weight: 600; color: var(--fg); }
-.agent-role { font-size: 11px; color: var(--fg-muted); font-weight: 500; letter-spacing: 0.02em; }
-.agent-role::before { content: '\00b7'; margin-right: 2px; color: var(--fg-faint); }
-.agent-timer { margin-left: auto; font-size: 11.5px; color: var(--fg-faint); font-family: var(--font-mono); letter-spacing: -0.02em; }
-.agent-stack { display: flex; flex-direction: column; gap: 6px; }
+/* Agent color map */
+:root {
+  --agent-analyst: #788c5d;
+  --agent-pm: #6a9bcc;
+  --agent-designer: #d97757;
+  --agent-architect: #8b5cf6;
+  --agent-backend: #6366f1;
+  --agent-frontend: #14b8a6;
+  --agent-infra: #64748b;
+}
+
+/* Agent avatar + named message */
+.agent-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; cursor: pointer; user-select: none; }
+.agent-header svg.agent-chevron { width: 14px; height: 14px; color: var(--fg-faint); margin-left: auto; transition: transform 0.2s; flex-shrink: 0; }
+.agent-header.collapsed svg.agent-chevron { transform: rotate(-90deg); }
+.agent-header.collapsed + .agent-body { display: none; }
+.agent-avatar { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.agent-avatar svg { width: 15px; height: 15px; }
+.agent-avatar.working { animation: throb 2s ease-in-out infinite; }
+@keyframes throb { 0%,100%{opacity:1;transform:scale(1)}50%{opacity:.7;transform:scale(.92)} }
+.agent-name { font-size: 13px; font-weight: 600; color: var(--fg-muted); }
+.agent-timer { font-size: 11.5px; color: var(--fg-faint); font-family: var(--font-mono); letter-spacing: -0.02em; }
+.agent-working-text { font-size: 13.5px; color: var(--fg-muted); animation: pulse-text 2s ease-in-out infinite; }
+@keyframes pulse-text { 0%,100%{opacity:1}50%{opacity:.4} }
 
 /* Claude-style tool activity */
 .tool-activity { margin: 4px 0; }
@@ -237,12 +250,8 @@ body { min-height: 100vh; overflow: hidden; }
 .tool-script-output { background: var(--bg-card); border-radius: var(--radius-lg); padding: 14px 18px; font-family: var(--font-body); font-size: 13.5px; color: var(--fg); line-height: 1.7; }
 .tool-script-output .output-label { color: var(--fg-muted); display: block; margin-bottom: 4px; }
 
-/* Working indicator (terracotta starburst) */
-.working-indicator { display: flex; align-items: center; gap: 10px; padding: 12px 16px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); }
-.working-indicator .starburst { width: 20px; height: 20px; color: var(--accent); animation: spin 3s linear infinite; }
+/* Spin animation (shared) */
 @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-.working-indicator .working-text { font-size: 13.5px; font-weight: 600; color: var(--fg); }
-.working-indicator .agent-role { margin-left: auto; }
 
 /* HITL */
 .hitl { display: flex; gap: 8px; margin-top: 6px; }
@@ -733,8 +742,7 @@ var STEP_CHAT = {};
 STEP_CHAT[0] = document.createElement('div');
 STEP_CHAT[0].innerHTML = [
   '<div class="msg msg-user"><div class="msg-bubble">Build me a project management app with kanban boards, team collaboration, task assignments, and real-time notifications. Support dark mode and mobile responsive.</div></div>',
-  '<div class="msg msg-assistant"><div class="agent-status"><div class="agent-dot done"></div><span class="agent-name">Analysis complete</span><span class="agent-role">Analyst Agent</span><span class="agent-timer">8.3s</span></div></div>',
-  '<div class="msg msg-assistant"><div class="msg-label">Analyst Agent</div><div class="msg-text"><p>I\'ve analyzed your requirements and prepared a project plan:</p></div></div>',
+  '<div class="msg msg-assistant"><div class="agent-header" onclick="this.classList.toggle(\'collapsed\')"><div class="agent-avatar" style="background:color-mix(in srgb,var(--agent-analyst) 14%,var(--bg));color:var(--agent-analyst)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg></div><span class="agent-name">Analyst Agent</span><span class="agent-timer">8.3s</span><svg class="agent-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></div><div class="agent-body"><div class="msg-text"><p>I\'ve analyzed your requirements and prepared a project plan:</p></div></div></div>',
   '<div class="msg msg-assistant"><div class="plan-block"><h4>Project Plan \u2014 TaskFlow</h4><ol><li><strong>Authentication &amp; User Management</strong> \u2014 Email/password + OAuth, user profiles, team invites</li><li><strong>Kanban Board Engine</strong> \u2014 Drag-and-drop columns, custom statuses, WIP limits</li><li><strong>Task System</strong> \u2014 Assignments, due dates, priorities, labels, subtasks</li><li><strong>Real-time Collaboration</strong> \u2014 WebSocket live updates, presence indicators</li><li><strong>Notifications</strong> \u2014 In-app + email, @mentions, digest settings</li><li><strong>Responsive UI</strong> \u2014 Mobile-first, dark mode, keyboard shortcuts</li></ol></div><div class="hitl" id="hitl-0"><button class="hitl-btn hitl-approve" onclick="approveAndNext()">Approve</button><button class="hitl-btn hitl-changes">Request Changes</button></div></div>'
 ].join('');
 
@@ -776,11 +784,54 @@ function buildStepHTML(step) {
     if (dels) diff += ' <span class="del">-'+dels+'</span>';
     return toolStep(I.pencil, text, '<span class="tool-step-file" onclick="showPanel(\'code:'+filename+'\')">'+filename+'</span><span class="tool-step-diff">'+diff+'</span>');
   }
+  // Agent avatar icons (Lucide)
+  var AGENT_ICONS = {
+    analyst: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>',
+    pm: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8l6 6v12a2 2 0 0 1-2 2z"/><path d="M14 2v6h6"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>',
+    designer: I.palette,
+    architect: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="7" height="7" rx="1"/><rect x="15" y="6" width="7" height="7" rx="1"/><rect x="9" y="14" width="7" height="7" rx="1"/><path d="M5.5 13v3.5a1 1 0 0 0 1 1H9"/><path d="M18.5 13v3.5a1 1 0 0 1-1 1H15"/></svg>',
+    backend: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><circle cx="6" cy="6" r="0" fill="currentColor"/><circle cx="6" cy="18" r="0" fill="currentColor"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>',
+    frontend: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>',
+    infra: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>'
+  };
+  function agentAvatar(type, working) {
+    var color = 'var(--agent-' + type + ')';
+    return '<div class="agent-avatar' + (working ? ' working' : '') + '" style="background:color-mix(in srgb,' + color + ' 14%,var(--bg));color:' + color + '">' + AGENT_ICONS[type] + '</div>';
+  }
+  var chevronSvg = '<svg class="agent-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>';
+  function agentHeader(type, name, timer, working) {
+    return '<div class="agent-header" onclick="this.classList.toggle(\'collapsed\')">' +
+      agentAvatar(type, working) +
+      '<span class="agent-name">' + name + '</span>' +
+      (timer ? '<span class="agent-timer">' + timer + '</span>' : '') +
+      chevronSvg +
+      '</div>';
+  }
+  function agentMsg(type, name, timer, textHTML, activityHTML) {
+    return '<div class="msg msg-assistant">' +
+      agentHeader(type, name, timer) +
+      '<div class="agent-body">' +
+      (textHTML ? '<div class="msg-text">' + textHTML + '</div>' : '') +
+      (activityHTML || '') +
+      '</div></div>';
+  }
+  function agentWorkingMsg(type, name, liveStepsHTML) {
+    return '<div class="msg msg-assistant">' +
+      agentHeader(type, name, '', true) +
+      '<div class="agent-body">' +
+      '<div class="agent-working-text">Working\u2026</div>' +
+      '<div class="tool-activity"><div class="tool-activity-steps">' + liveStepsHTML + '</div></div>' +
+      '</div></div>';
+  }
 
   // Returns an array of HTML strings for cumulative chat
+  var planBlock = '<div class="plan-block"><h4>Project Plan \u2014 TaskFlow</h4><ol><li><strong>Authentication &amp; User Management</strong> \u2014 Email/password + OAuth, user profiles, team invites</li><li><strong>Kanban Board Engine</strong> \u2014 Drag-and-drop columns, custom statuses, WIP limits</li><li><strong>Task System</strong> \u2014 Assignments, due dates, priorities, labels, subtasks</li><li><strong>Real-time Collaboration</strong> \u2014 WebSocket live updates, presence indicators</li><li><strong>Notifications</strong> \u2014 In-app + email, @mentions, digest settings</li><li><strong>Responsive UI</strong> \u2014 Mobile-first, dark mode, keyboard shortcuts</li></ol></div>';
   var base = [
     '<div class="msg msg-user"><div class="msg-bubble">Build me a project management app with kanban boards, team collaboration, task assignments, and real-time notifications.</div></div>',
-    '<div class="msg msg-assistant"><div class="agent-status"><div class="agent-dot done"></div><span class="agent-name">Plan approved</span><span class="agent-role">Analyst</span></div></div>'
+    agentMsg('analyst', 'Analyst Agent', '8.3s',
+      '<p>I\'ve analyzed your requirements and prepared a project plan:</p>',
+      planBlock + '<div class="hitl done-state"><button class="hitl-btn hitl-approve">Approved</button></div>'
+    )
   ];
 
   if (step === 1) return base.concat([
@@ -791,114 +842,126 @@ function buildStepHTML(step) {
   var msgs = base.slice();
   if (step >= 2) {
     var approvedBtn = '<button class="hitl-btn hitl-approve">Approved</button>';
-    // Tool activity
-    msgs.push('<div class="msg msg-assistant">'+toolActivity('Wrote strategy playbook, created document',
-      toolStep(I.pencil, 'Analyze market positioning and user personas', '') +
-      toolStep(I.terminal, 'Generate strategy document', '<span class="tool-step-badge">Script</span>') +
-      toolStep(I.fileText, 'Presented file', '') +
-      toolStepDone()
-    )+'</div>');
-    // Text + large artifact card
-    msgs.push('<div class="msg msg-assistant"><div class="msg-text"><p>Here\'s the comprehensive Product Strategy Playbook for TaskFlow.</p></div>'+artifactCard('strategy', I.fileText, 'Product Strategy Playbook', 'Document \u00b7 DOCX')+msgActions+'</div>');
+    // PM Agent: Strategy Playbook
+    msgs.push(agentMsg('pm', 'Product Manager', '12.1s',
+      '<p>Here\'s the comprehensive Product Strategy Playbook for TaskFlow.</p>',
+      toolActivity('Wrote strategy playbook, created document',
+        toolStep(I.pencil, 'Analyze market positioning and user personas', '') +
+        toolStep(I.terminal, 'Generate strategy document', '<span class="tool-step-badge">Script</span>') +
+        toolStep(I.fileText, 'Presented file', '') +
+        toolStepDone()
+      ) + artifactCard('strategy', I.fileText, 'Product Strategy Playbook', 'Document \u00b7 DOCX')
+    ));
     // HITL
     var hitlClass = step === 2 ? 'hitl' : 'hitl done-state';
     var hitlContent = step === 2 ? '<button class="hitl-btn hitl-approve" onclick="approveAndNext()">Approve</button><button class="hitl-btn hitl-changes">Request Changes</button>' : approvedBtn;
     msgs.push('<div class="msg msg-assistant"><div class="'+hitlClass+'">'+hitlContent+'</div></div>');
   }
   if (step >= 3) {
-    // Tool activity
-    msgs.push('<div class="msg msg-assistant">'+toolActivity('Wrote PRD document, defined user stories',
-      toolStep(I.pencil, 'Analyze strategy playbook for requirements extraction', '') +
-      toolStep(I.pencil, 'Define user stories with acceptance criteria', '') +
-      toolStep(I.terminal, 'Generate PRD document', '<span class="tool-step-badge">Script</span>') +
-      toolStep(I.fileText, 'Presented file', '') +
-      toolStepDone()
-    )+'</div>');
-    // Text + large artifact card
-    msgs.push('<div class="msg msg-assistant"><div class="msg-text"><p>Here\'s the Product Requirements Document with detailed user stories and acceptance criteria for TaskFlow.</p></div>'+artifactCard('prd', I.fileText, 'Product Requirements Document', 'Document \u00b7 DOCX')+msgActions+'</div>');
+    // PM Agent: PRD
+    msgs.push(agentMsg('pm', 'Product Manager', '15.4s',
+      '<p>Here\'s the Product Requirements Document with detailed user stories and acceptance criteria for TaskFlow.</p>',
+      toolActivity('Wrote PRD document, defined user stories',
+        toolStep(I.pencil, 'Analyze strategy playbook for requirements extraction', '') +
+        toolStep(I.pencil, 'Define user stories with acceptance criteria', '') +
+        toolStep(I.terminal, 'Generate PRD document', '<span class="tool-step-badge">Script</span>') +
+        toolStep(I.fileText, 'Presented file', '') +
+        toolStepDone()
+      ) + artifactCard('prd', I.fileText, 'Product Requirements Document', 'Document \u00b7 DOCX')
+    ));
     // HITL
     var hitlClass3 = step === 3 ? 'hitl' : 'hitl done-state';
     var hitlContent3 = step === 3 ? '<button class="hitl-btn hitl-approve" onclick="approveAndNext()">Approve</button><button class="hitl-btn hitl-changes">Request Changes</button>' : approvedBtn;
     msgs.push('<div class="msg msg-assistant"><div class="'+hitlClass3+'">'+hitlContent3+'</div></div>');
   }
   if (step >= 4) {
-    // Tool activity
-    msgs.push('<div class="msg msg-assistant">'+toolActivity('Created design system, generated color swatches',
-      toolStep(I.pencil, 'Analyze PRD for visual requirements', '') +
-      toolStep(I.pencil, 'Generate color palette and typography scale', '') +
-      toolStep(I.terminal, 'Compile design tokens', '<span class="tool-step-badge">Script</span>') +
-      toolStep(I.fileText, 'Presented file', '') +
-      toolStepDone()
-    )+'</div>');
-    // Text + large artifact card
-    msgs.push('<div class="msg msg-assistant"><div class="msg-text"><p>Here\'s the complete Design System for TaskFlow with color palette, typography, and component tokens.</p></div>'+artifactCard('design', I.palette, 'TaskFlow Design System', 'Document \u00b7 Design Tokens')+msgActions+'</div>');
+    // Designer Agent: Design System
+    msgs.push(agentMsg('designer', 'Designer', '9.8s',
+      '<p>Here\'s the complete Design System for TaskFlow with color palette, typography, and component tokens.</p>',
+      toolActivity('Created design system, generated color swatches',
+        toolStep(I.pencil, 'Analyze PRD for visual requirements', '') +
+        toolStep(I.pencil, 'Generate color palette and typography scale', '') +
+        toolStep(I.terminal, 'Compile design tokens', '<span class="tool-step-badge">Script</span>') +
+        toolStep(I.fileText, 'Presented file', '') +
+        toolStepDone()
+      ) + artifactCard('design', I.palette, 'TaskFlow Design System', 'Document \u00b7 Design Tokens')
+    ));
     // HITL
     var hitlClass4 = step === 4 ? 'hitl' : 'hitl done-state';
     var hitlContent4 = step === 4 ? '<button class="hitl-btn hitl-approve" onclick="approveAndNext()">Approve</button><button class="hitl-btn hitl-changes">Request Changes</button>' : approvedBtn;
     msgs.push('<div class="msg msg-assistant"><div class="'+hitlClass4+'">'+hitlContent4+'</div></div>');
   }
   if (step >= 5) {
-    // Tool activity
-    msgs.push('<div class="msg msg-assistant">'+toolActivity('Created task breakdown, assembled agent team',
-      toolStep(I.pencil, 'Decompose PRD into implementation tasks', '') +
-      toolStep(I.pencil, 'Map task dependencies and assign agents', '') +
-      toolStep(I.terminal, 'Assemble development team', '<span class="tool-step-badge">Script</span>') +
-      toolStepDone()
-    )+'</div>');
-    // Text message
-    msgs.push('<div class="msg msg-assistant"><div class="msg-text"><p>I\'ve assembled the implementation plan and assigned tasks to the development team. Track progress in the Project Panel.</p></div>'+msgActions+'</div>');
+    // Architect Agent: Task breakdown + team assembly
+    msgs.push(agentMsg('architect', 'Architect', '7.2s',
+      '<p>I\'ve assembled the implementation plan and assigned tasks to the development team. Track progress in the Project Panel.</p>',
+      toolActivity('Created task breakdown, assembled agent team',
+        toolStep(I.pencil, 'Decompose PRD into implementation tasks', '') +
+        toolStep(I.pencil, 'Map task dependencies and assign agents', '') +
+        toolStep(I.terminal, 'Assemble development team', '<span class="tool-step-badge">Script</span>') +
+        toolStepDone()
+      )
+    ));
     if (step === 5) {
       msgs.push('<div class="msg msg-assistant"><div class="hitl"><button class="hitl-btn hitl-approve" onclick="approveAndNext()">Approve</button><button class="hitl-btn hitl-changes">Request Changes</button></div></div>');
     }
   }
   if (step >= 6) {
-    // Infra Agent — completed tool activity
-    msgs.push('<div class="msg msg-assistant"><div class="agent-status"><div class="agent-dot done"></div><span class="agent-name">Sandbox ready</span><span class="agent-role">Infra Agent</span><span class="agent-timer">4.1s</span></div>'+toolActivity('Created sandbox, installed packages',
+    // Infra Agent — completed
+    msgs.push(agentMsg('infra', 'Infra Agent', '4.1s', '<p>Sandbox ready.</p>',
+      '<div class="tool-activity"><div class="tool-activity-steps">' +
       toolStep(I.terminal, 'Create sandbox environment', '<span class="tool-step-badge">Script</span>') +
       toolStep(I.terminal, 'Install dependencies', '<span class="tool-step-file">bun install</span>') +
-      toolStepDone()
-    )+'</div>');
-    // Backend Agent — completed tool activity (schema)
-    msgs.push('<div class="msg msg-assistant"><div class="agent-status"><div class="agent-dot done"></div><span class="agent-name">Database schema created</span><span class="agent-role">Backend Agent</span><span class="agent-timer">6.3s</span></div>'+toolActivity('Edited 2 files, ran a command',
+      toolStepDone() +
+      '</div></div>'
+    ));
+    // Backend Agent — completed (schema)
+    msgs.push(agentMsg('backend', 'Backend Agent', '6.3s', '<p>Database schema created.</p>',
+      '<div class="tool-activity"><div class="tool-activity-steps">' +
       fileStep('Create database schema with tables', 'schema.ts', '48') +
       fileStep('Create database migration file', '001_init.sql', '32') +
       toolStep(I.terminal, 'Run database migration', '<span class="tool-step-badge">Script</span>') +
-      toolStepDone()
-    )+'</div>');
+      toolStepDone() +
+      '</div></div>'
+    ));
 
     if (step === 6) {
-      // Backend Agent — still working
-      msgs.push('<div class="msg msg-assistant"><div class="working-indicator">'+I.sparkles.replace('<svg ', '<svg class="starburst" ')+'<span class="working-text">Working</span><span class="agent-role">Backend Agent</span></div><div class="tool-activity"><div class="tool-activity-steps">'+
+      // Backend Agent — working
+      msgs.push(agentWorkingMsg('backend', 'Backend Agent',
         fileStep('Create auth middleware and routes', 'auth.ts', '67') +
         fileStep('Build task CRUD API endpoints', 'tasks.ts', '94', '2') +
         toolStep(I.terminal, 'Run build to verify compilation', '') +
-        '<div class="tool-script-wrap"><div class="tool-script-cmd"><span class="script-label">bash</span><span class="kw">bun</span> run build</div><div class="tool-script-output"><span class="output-label">Output</span>Done</div></div>'+
-      '</div></div></div>');
-      // Frontend Agent — still working
-      msgs.push('<div class="msg msg-assistant"><div class="working-indicator">'+I.sparkles.replace('<svg ', '<svg class="starburst" ')+'<span class="working-text">Working</span><span class="agent-role">Frontend Agent</span></div><div class="tool-activity"><div class="tool-activity-steps">'+
+        '<div class="tool-script-wrap"><div class="tool-script-cmd"><span class="script-label">bash</span><span class="kw">bun</span> run build</div><div class="tool-script-output"><span class="output-label">Output</span>Done</div></div>'
+      ));
+      // Frontend Agent — working
+      msgs.push(agentWorkingMsg('frontend', 'Frontend Agent',
         fileStep('Create KanbanBoard component', 'KanbanBoard.tsx', '142') +
         fileStep('Build TaskCard with drag-and-drop', 'TaskCard.tsx', '86') +
-        fileStep('Create navigation layout and sidebar', 'Layout.tsx', '58') +
-      '</div></div></div>');
+        fileStep('Create navigation layout and sidebar', 'Layout.tsx', '58')
+      ));
     }
   }
   if (step >= 7) {
     // Backend Agent — completed
-    msgs.push('<div class="msg msg-assistant"><div class="agent-status"><div class="agent-dot done"></div><span class="agent-name">API routes complete</span><span class="agent-role">Backend Agent</span><span class="agent-timer">14.7s</span></div>'+toolActivity('Edited 4 files, ran 2 commands',
+    msgs.push(agentMsg('backend', 'Backend Agent', '14.7s', '<p>API routes complete.</p>',
+      '<div class="tool-activity"><div class="tool-activity-steps">' +
       fileStep('Create auth middleware and routes', 'auth.ts', '67') +
       fileStep('Build task CRUD API endpoints', 'tasks.ts', '94', '2') +
       toolStep(I.terminal, 'Run build to verify compilation', '<span class="tool-step-badge">Script</span>') +
-      toolStepDone()
-    )+'</div>');
+      toolStepDone() +
+      '</div></div>'
+    ));
     // Frontend Agent — completed
-    msgs.push('<div class="msg msg-assistant"><div class="agent-status"><div class="agent-dot done"></div><span class="agent-name">UI components complete</span><span class="agent-role">Frontend Agent</span><span class="agent-timer">18.3s</span></div>'+toolActivity('Edited 5 files, ran a command',
+    msgs.push(agentMsg('frontend', 'Frontend Agent', '18.3s', '<p>UI components complete.</p>',
+      '<div class="tool-activity"><div class="tool-activity-steps">' +
       fileStep('Create KanbanBoard component', 'KanbanBoard.tsx', '142') +
       fileStep('Build TaskCard with drag-and-drop', 'TaskCard.tsx', '86') +
       fileStep('Create navigation layout and sidebar', 'Layout.tsx', '58') +
       toolStep(I.terminal, 'Run build \u2014 all checks passed', '<span class="tool-step-badge">Script</span>') +
-      toolStepDone()
-    )+'</div>');
-    // Build verification
+      toolStepDone() +
+      '</div></div>'
+    ));
+    // Build verification (orchestrator)
     msgs.push('<div class="msg msg-assistant">'+toolActivity('Ran final build, deployed preview',
       toolStep(I.terminal, 'Run full build verification', '<span class="tool-step-badge">Script</span>') +
       toolStep(I.terminal, 'Deploy to preview URL', '<span class="tool-step-badge">Script</span>') +
