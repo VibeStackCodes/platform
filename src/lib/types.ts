@@ -254,6 +254,7 @@ export type StreamEvent =
   | FileAssembledEvent
   | ValidationCheckEvent
   | SandboxReadyEvent
+  | AgentStreamEvent
 
 export interface StageUpdateEvent {
   type: 'stage_update'
@@ -510,6 +511,57 @@ export interface SandboxReadyEvent {
   type: 'sandbox_ready'
   sandboxId: string
 }
+
+// ============================================================================
+// Agent Stream Events (Single Orchestrator)
+// ============================================================================
+
+export interface ThinkingEvent {
+  type: 'thinking'
+  content: string
+}
+
+export interface ToolStartEvent {
+  type: 'tool_start'
+  tool: string
+  label?: string
+  args?: Record<string, unknown>
+}
+
+export interface ToolCompleteEvent {
+  type: 'tool_complete'
+  tool: string
+  success: boolean
+  result?: string
+  durationMs?: number
+}
+
+export interface DoneEvent {
+  type: 'done'
+  summary: string
+  sandboxId?: string
+  tokensUsed?: number
+}
+
+export interface AgentErrorEvent {
+  type: 'agent_error'
+  message: string
+}
+
+export interface PackageInstalledEvent {
+  type: 'package_installed'
+  packages: string
+}
+
+export type AgentStreamEvent =
+  | ThinkingEvent
+  | ToolStartEvent
+  | ToolCompleteEvent
+  | DoneEvent
+  | AgentErrorEvent
+  | SandboxReadyEvent
+  | PackageInstalledEvent
+  | CreditsUsedEvent
 
 // ============================================================================
 // Timeline Entries (unified chat + pipeline event stream)

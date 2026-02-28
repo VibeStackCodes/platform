@@ -79,6 +79,8 @@ projectRoutes.get('/:id', async (c) => {
  * GET /api/projects/:id/messages
  *
  * Returns chat messages for a project.
+ * Reads from Mastra memory (thread = projectId, resource = userId).
+ * Falls back to chatMessages table for legacy data.
  */
 projectRoutes.get('/:id/messages', async (c) => {
   const user = c.var.user
@@ -90,6 +92,47 @@ projectRoutes.get('/:id/messages', async (c) => {
     return c.json({ error: 'Project not found' }, 404)
   }
 
+  // Try Mastra memory first (single orchestrator stores messages here)
+  try {
+    const { memory } = await import('../lib/agents/memory')
+    const result = await memory.recall({
+      threadId: id,
+      resourceId: user.id,
+    })
+    if (result.messages.length > 0) {
+      // Convert Mastra messages to the format the client expects
+      const converted = result.messages.map((msg) => {
+        // Parse content — Mastra stores format 2 JSON or plain text
+        let textContent = ''
+        try {
+          const parsed = JSON.parse(String(msg.content))
+          if (parsed?.parts) {
+            textContent = parsed.parts
+              .filter((p: { type: string }) => p.type === 'text')
+              .map((p: { text: string }) => p.text)
+              .join('')
+          } else {
+            textContent = String(msg.content)
+          }
+        } catch {
+          textContent = String(msg.content ?? '')
+        }
+
+        return {
+          id: msg.id,
+          role: msg.role,
+          type: 'message',
+          parts: [{ text: textContent }],
+          createdAt: msg.createdAt,
+        }
+      })
+      return c.json(converted)
+    }
+  } catch {
+    // Mastra memory unavailable, fall back to chatMessages
+  }
+
+  // Fall back to legacy chatMessages table
   const messages = await getProjectMessages(id)
   return c.json(messages)
 })

@@ -601,14 +601,10 @@ export function ChatColumn({
                                 meta={entry.deploymentUrl ?? 'Live preview available'}
                                 actionLabel="Open Preview"
                                 onClick={() =>
-                                  entry.deploymentUrl
-                                    ? onPanelOpen({ type: 'preview', previewUrl: entry.deploymentUrl })
-                                    : undefined
+                                  onPanelOpen({ type: 'preview', previewUrl: entry.deploymentUrl ?? '' })
                                 }
                                 onAction={() =>
-                                  entry.deploymentUrl
-                                    ? onPanelOpen({ type: 'preview', previewUrl: entry.deploymentUrl })
-                                    : undefined
+                                  onPanelOpen({ type: 'preview', previewUrl: entry.deploymentUrl ?? '' })
                                 }
                               />
                             )}

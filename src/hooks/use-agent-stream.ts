@@ -16,6 +16,7 @@ import type {
   StreamEvent,
   TimelineEntry,
   ValidationCheckEntry,
+  AgentStreamEvent,
 } from '@/lib/types'
 
 /** Maps agentId to ActionCard display config */
@@ -559,6 +560,62 @@ export function useAgentStream({
         case 'sandbox_ready':
           onSandboxReady?.(event.sandboxId)
           break
+
+        // ── Single Orchestrator (AgentStreamEvent) ──────────────────
+        case 'thinking':
+          // Handled in parseSSEBuffer's onChatText callback
+          break
+
+        case 'tool_start': {
+          // Skip internal Mastra tools that aren't user-facing
+          const INTERNAL_TOOLS = new Set(['updateWorkingMemory', 'readWorkingMemory'])
+          if (INTERNAL_TOOLS.has(event.tool)) break
+
+          pushTimeline({
+            type: 'agent',
+            ts: now,
+            agent: {
+              type: 'agent_start',
+              agentId: `tool-${event.tool}-${now}`,
+              agentName: event.label ?? event.tool,
+              phase: 0,
+            },
+            status: 'running',
+          })
+          break
+        }
+
+        case 'tool_complete': {
+          const INTERNAL_TOOLS = new Set(['updateWorkingMemory', 'readWorkingMemory'])
+          if (INTERNAL_TOOLS.has(event.tool)) break
+
+          updateTimeline(
+            (e) => e.type === 'agent' && e.agent.agentId.startsWith(`tool-${event.tool}-`),
+            (e) => ({
+              ...e,
+              status: 'complete' as const,
+              durationMs: event.durationMs,
+            }),
+          )
+          break
+        }
+
+        case 'done':
+          setGenerationStatus('complete')
+          pushTimeline({ type: 'complete', ts: now })
+          onGenerationComplete?.()
+          if (event.sandboxId) {
+            onSandboxReady?.(event.sandboxId)
+          }
+          break
+
+        case 'agent_error':
+          setGenerationStatus('error')
+          pushTimeline({ type: 'error', ts: now, error: event.message })
+          break
+
+        case 'package_installed':
+          break
       }
     },
     [onGenerationComplete, onSandboxReady, pushTimeline, updateTimeline],
@@ -578,6 +635,12 @@ export function useAgentStream({
         try {
           const event = JSON.parse(eventText.replace(/^data: /, '')) as StreamEvent
 
+          // Pipe thinking text to the assistant message bubble
+          if (onChatText && event.type === 'thinking') {
+            onChatText(event.content)
+          }
+
+          // Legacy: pipe analyst/supervisor progress to chat text
           if (
             onChatText &&
             event.type === 'agent_progress' &&
