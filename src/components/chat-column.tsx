@@ -664,23 +664,25 @@ export function ChatColumn({
         <ConversationScrollButton />
       </Conversation>
 
-      <div className="border-t p-4">
-        {userCredits && (
-          <div className="mb-2 flex items-center justify-between">
-            <CreditDisplay
-              remaining={userCredits.credits_remaining}
-              monthly={userCredits.credits_monthly}
-              plan={userCredits.plan}
-              resetAt={userCredits.credits_reset_at}
-            />
-          </div>
-        )}
-        <PromptBar
-          onSubmit={handleSubmit}
-          onStop={handleStop}
-          placeholder="Describe what you want to build..."
-          status={chatStatus === 'streaming' ? 'streaming' : 'ready'}
-        />
+      <div className="flex justify-center px-6 pb-6">
+        <div className="w-full max-w-[768px]">
+          {userCredits && (
+            <div className="mb-2 flex items-center justify-between">
+              <CreditDisplay
+                remaining={userCredits.credits_remaining}
+                monthly={userCredits.credits_monthly}
+                plan={userCredits.plan}
+                resetAt={userCredits.credits_reset_at}
+              />
+            </div>
+          )}
+          <PromptBar
+            onSubmit={handleSubmit}
+            onStop={handleStop}
+            placeholder="Describe what you want to build..."
+            status={chatStatus === 'streaming' ? 'streaming' : 'ready'}
+          />
+        </div>
       </div>
     </div>
   )
