@@ -2,12 +2,17 @@ import { Link, useRouterState } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import {
   ChevronDown,
+  CreditCard,
   LayoutGrid,
   LogOut,
   MessageSquare,
+  Monitor,
+  Moon,
   PanelLeft,
   Plus,
   Search,
+  Sun,
+  SunMoon,
 } from 'lucide-react'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import {
@@ -15,7 +20,13 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuPortal,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import {
@@ -36,6 +47,7 @@ import {
 } from '@/components/ui/sidebar'
 import { useAuth } from '@/lib/auth'
 import { supabase } from '@/lib/supabase-browser'
+import { useTheme } from '@/components/theme-provider'
 import { apiFetch } from '@/lib/utils'
 
 function relativeTime(dateStr: string): string {
@@ -127,32 +139,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
-                <SidebarMenuButton asChild tooltip="Search">
-                  <Link to="/dashboard">
-                    <Search />
-                    <span>Search</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-
-        <SidebarSeparator />
-
-        {/* Category nav: Chats + Projects */}
-        <SidebarGroup>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild tooltip="Chats">
-                  <Link to="/dashboard">
-                    <MessageSquare />
-                    <span>Chats</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
                 <SidebarMenuButton asChild tooltip="Projects">
                   <Link to="/dashboard">
                     <LayoutGrid />
@@ -163,6 +149,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+
+        {!isCollapsed && <SidebarSeparator/>}
+
 
         {/* Recents with relative timestamps — hidden when sidebar collapsed */}
         {recentProjects && recentProjects.length > 0 && (
@@ -205,6 +194,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 function NavUser() {
   const { user } = useAuth()
   const { isMobile } = useSidebar()
+  const { theme, setTheme } = useTheme()
 
   const initials = user?.email?.slice(0, 2).toUpperCase() ?? '??'
   const displayName =
@@ -237,29 +227,54 @@ function NavUser() {
             </SidebarMenuButton>
           </DropdownMenuTrigger>
           <DropdownMenuContent
-            className="w-(--radix-dropdown-menu-trigger-width) min-w-56 rounded-lg"
+            className="w-(--radix-dropdown-menu-trigger-width) min-w-56 rounded-xl"
             side={isMobile ? 'bottom' : 'right'}
             align="end"
             sideOffset={4}
           >
-            <DropdownMenuLabel className="p-0 font-normal">
-              <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
-                <Avatar className="h-7 w-7 rounded-full">
-                  <AvatarFallback className="rounded-full bg-sidebar-accent text-xs font-semibold">
-                    {initials}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-medium">{displayName}</span>
-                  <span className="truncate text-xs text-muted-foreground">
-                    {user?.email}
-                  </span>
-                </div>
-              </div>
+            <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+              {user?.email}
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger>
+                <SunMoon className="size-4" />
+                Theme
+              </DropdownMenuSubTrigger>
+              <DropdownMenuPortal>
+                <DropdownMenuSubContent className="rounded-xl">
+                  <DropdownMenuRadioGroup
+                    value={theme}
+                    onValueChange={(v) =>
+                      setTheme(v as 'system' | 'light' | 'dark')
+                    }
+                  >
+                    <DropdownMenuRadioItem value="system">
+                      <Monitor className="size-4" />
+                      System
+                    </DropdownMenuRadioItem>
+                    <DropdownMenuRadioItem value="light">
+                      <Sun className="size-4" />
+                      Light
+                    </DropdownMenuRadioItem>
+                    <DropdownMenuRadioItem value="dark">
+                      <Moon className="size-4" />
+                      Dark
+                    </DropdownMenuRadioItem>
+                  </DropdownMenuRadioGroup>
+                </DropdownMenuSubContent>
+              </DropdownMenuPortal>
+            </DropdownMenuSub>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem asChild>
+              <Link to="/dashboard">
+                <CreditCard className="size-4" />
+                View all plans
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => supabase.auth.signOut()}>
-              <LogOut />
+              <LogOut className="size-4" />
               Log out
             </DropdownMenuItem>
           </DropdownMenuContent>
