@@ -164,9 +164,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {/* Recents with relative timestamps */}
+        {/* Recents with relative timestamps — hidden when sidebar collapsed */}
         {recentProjects && recentProjects.length > 0 && (
-          <SidebarGroup>
+          <SidebarGroup className="group-data-[collapsible=icon]:hidden">
             <SidebarGroupLabel className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/60">
               Recents
             </SidebarGroupLabel>
