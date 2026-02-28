@@ -11,7 +11,6 @@ import {
 import {
   useAgentStream,
   AGENT_CARD_CONFIG,
-  SUGGESTIONS,
 } from '@/hooks/use-agent-stream'
 import {
   Conversation,
@@ -39,7 +38,6 @@ import {
   StackTraceFrames,
   StackTraceHeader,
 } from '@/components/ai-elements/stack-trace'
-import { Suggestion, Suggestions } from '@/components/ai-elements/suggestion'
 import { ActionCard, ActionCardContent, ActionCardHeader, ActionCardTabs } from '@/components/ai-elements/action-card'
 import { ThinkingCard } from '@/components/ai-elements/thinking-card'
 import { OperationSummaryCard } from '@/components/ai-elements/operation-summary-card'
@@ -260,7 +258,6 @@ export function ChatColumn({
     handleClarificationSubmit,
     handlePlanApprove,
     handleSubmit,
-    handleSuggestionClick,
   } = useAgentStream({
     projectId,
     initialPrompt,
@@ -281,11 +278,6 @@ export function ChatColumn({
                 title="Start building"
                 description="Describe what you want to build and I'll help you refine the idea before generating code"
               />
-              <Suggestions>
-                {SUGGESTIONS.map((s) => (
-                  <Suggestion key={s} suggestion={s} onClick={handleSuggestionClick} />
-                ))}
-              </Suggestions>
             </div>
           ) : (
             <>
