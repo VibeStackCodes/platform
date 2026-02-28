@@ -286,6 +286,7 @@ agentRoutes.post('/', async (c) => {
       const provider = MODEL_CONFIGS[model]?.provider ?? 'openai'
       const agent = createOrchestrator(provider)
       agent.__registerMastra(mastra)
+
       const streamOutput = await agent.stream(message, {
         requestContext,
         memory: {
