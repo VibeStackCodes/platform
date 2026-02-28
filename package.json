@@ -63,7 +63,6 @@
     "cmdk": "^1.1.1",
     "concurrently": "9.2.1",
     "drizzle-orm": "0.45.1",
-    "embla-carousel-react": "^8.6.0",
     "hono": "4.11.9",
     "lucide-react": "^0.575.0",
     "media-chrome": "^4.18.0",
@@ -85,7 +84,8 @@
     "tokenlens": "^1.3.1",
     "use-stick-to-bottom": "^1.1.3",
     "vite": "8.0.0-beta.14",
-    "zod": "^4.3.6"
+    "zod": "^4.3.6",
+    "zustand": "^5.0.11"
   },
   "devDependencies": {
     "@anthropic-ai/sdk": "^0.74.0",
@@ -114,6 +114,7 @@
     "mastra": "^1.3.1",
     "oxlint": "^1.47.0",
     "playwright": "^1.58.2",
+    "remark-gfm": "^4.0.1",
     "shadcn": "^3.8.4",
     "storybook": "^10.2.13",
     "tailwindcss": "^4",

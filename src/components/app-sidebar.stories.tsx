@@ -44,7 +44,14 @@ import {
   SidebarRail,
   SidebarSeparator,
 } from '@/components/ui/sidebar'
-import { withThemeProvider } from './storybook-decorators'
+import type { Decorator } from '@storybook/react'
+import { ThemeProvider } from './theme-provider'
+
+const withThemeProvider: Decorator = (Story) => (
+  <ThemeProvider defaultTheme="light">
+    <Story />
+  </ThemeProvider>
+)
 
 // ---------------------------------------------------------------------------
 // Static sidebar stand-in (no context required)

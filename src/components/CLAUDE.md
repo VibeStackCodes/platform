@@ -11,16 +11,23 @@ Split-view chat + preview interface for app generation.
 
 ## AI Elements (`ai-elements/` — 18 files)
 Specialized rendering components for SSE event data:
-- `agent.tsx` — Accordion wrapper (BotIcon, model badge)
 - `message.tsx` / `message-response.tsx` — Chat bubbles (user vs assistant)
-- `code-block.tsx` — Syntax-highlighted code (Shiki)
 - `conversation.tsx` — Scrollable container with auto-scroll-to-bottom
 - `file-tree.tsx` — Recursive folder/file tree
-- `plan.tsx` — Collapsible plan display
-- `web-preview.tsx` — iframe wrapper with loading state
-- `theme-tokens-card.tsx`, `architecture-card.tsx`, `page-progress-card.tsx`, `file-assembly-card.tsx` — Timeline cards
-- `prompt-input.tsx` — Chat input component
+- `diff-viewer.tsx` — Unified diff rendering for file changes
 - `stack-trace.tsx` — Error frames + copy button
+- `action-card.tsx` — Tabbed action card container
+- `thinking-card.tsx` — LLM reasoning/thinking display
+- `tool-activity.tsx` — Tool call progress indicator
+- `operation-summary-card.tsx` — Operation result summary
+- `plan-approval-card.tsx` — Plan approval/rejection UI
+- `theme-tokens-card.tsx` — Theme token display card
+- `architecture-card.tsx` — Architecture diagram card
+- `page-progress-card.tsx` — Page generation progress card
+- `package-info.tsx` — Package installation info card
+- `test-results.tsx` — Test run results display
+- `model-selector.tsx` — LLM model picker
+- `prompt-input.tsx` — Chat input component
 
 ## UI Kit (`ui/` — 29 shadcn/ui components)
 Standard shadcn/ui primitives. Do not modify directly — use `npx shadcn@latest add <component>` to update.
