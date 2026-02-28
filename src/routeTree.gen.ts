@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthLoginRouteImport } from './routes/auth/login'
+import { Route as AuthenticatedThemeEditorRouteImport } from './routes/_authenticated/theme-editor'
 import { Route as AuthenticatedDashboardRouteRouteImport } from './routes/_authenticated/_dashboard/route'
 import { Route as AuthenticatedProjectIdRouteImport } from './routes/_authenticated/project.$id'
 import { Route as AuthenticatedDashboardDashboardRouteImport } from './routes/_authenticated/_dashboard/dashboard'
@@ -30,6 +31,12 @@ const AuthLoginRoute = AuthLoginRouteImport.update({
   path: '/auth/login',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthenticatedThemeEditorRoute =
+  AuthenticatedThemeEditorRouteImport.update({
+    id: '/theme-editor',
+    path: '/theme-editor',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedDashboardRouteRoute =
   AuthenticatedDashboardRouteRouteImport.update({
     id: '/_dashboard',
@@ -49,12 +56,14 @@ const AuthenticatedDashboardDashboardRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/theme-editor': typeof AuthenticatedThemeEditorRoute
   '/auth/login': typeof AuthLoginRoute
   '/dashboard': typeof AuthenticatedDashboardDashboardRoute
   '/project/$id': typeof AuthenticatedProjectIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/theme-editor': typeof AuthenticatedThemeEditorRoute
   '/auth/login': typeof AuthLoginRoute
   '/dashboard': typeof AuthenticatedDashboardDashboardRoute
   '/project/$id': typeof AuthenticatedProjectIdRoute
@@ -64,20 +73,27 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/_authenticated/_dashboard': typeof AuthenticatedDashboardRouteRouteWithChildren
+  '/_authenticated/theme-editor': typeof AuthenticatedThemeEditorRoute
   '/auth/login': typeof AuthLoginRoute
   '/_authenticated/_dashboard/dashboard': typeof AuthenticatedDashboardDashboardRoute
   '/_authenticated/project/$id': typeof AuthenticatedProjectIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/auth/login' | '/dashboard' | '/project/$id'
+  fullPaths:
+    | '/'
+    | '/theme-editor'
+    | '/auth/login'
+    | '/dashboard'
+    | '/project/$id'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/auth/login' | '/dashboard' | '/project/$id'
+  to: '/' | '/theme-editor' | '/auth/login' | '/dashboard' | '/project/$id'
   id:
     | '__root__'
     | '/'
     | '/_authenticated'
     | '/_authenticated/_dashboard'
+    | '/_authenticated/theme-editor'
     | '/auth/login'
     | '/_authenticated/_dashboard/dashboard'
     | '/_authenticated/project/$id'
@@ -111,6 +127,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/auth/login'
       preLoaderRoute: typeof AuthLoginRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/_authenticated/theme-editor': {
+      id: '/_authenticated/theme-editor'
+      path: '/theme-editor'
+      fullPath: '/theme-editor'
+      preLoaderRoute: typeof AuthenticatedThemeEditorRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/_dashboard': {
       id: '/_authenticated/_dashboard'
@@ -152,12 +175,14 @@ const AuthenticatedDashboardRouteRouteWithChildren =
 
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedDashboardRouteRoute: typeof AuthenticatedDashboardRouteRouteWithChildren
+  AuthenticatedThemeEditorRoute: typeof AuthenticatedThemeEditorRoute
   AuthenticatedProjectIdRoute: typeof AuthenticatedProjectIdRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedDashboardRouteRoute:
     AuthenticatedDashboardRouteRouteWithChildren,
+  AuthenticatedThemeEditorRoute: AuthenticatedThemeEditorRoute,
   AuthenticatedProjectIdRoute: AuthenticatedProjectIdRoute,
 }
 
