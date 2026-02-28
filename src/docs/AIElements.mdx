@@ -1,0 +1,57 @@
+import { Meta } from '@storybook/blocks'
+
+<Meta title="Docs/AI Elements" />
+
+# AI Elements
+
+Specialized components for rendering AI agent interactions in the builder chat.
+
+## Architecture
+
+The builder chat streams `AgentStreamEvent` from the server via SSE. Each event type maps to an AI element component:
+
+| Event | Component | Purpose |
+|-------|-----------|---------|
+| `thinking` | `ThinkingCard` | Shows agent reasoning with live timer |
+| `tool_start` / `tool_complete` | `ToolActivity` | Collapsible tool execution steps |
+| Text content | `MessageResponse` | Markdown rendering with code blocks |
+| File changes | `DiffViewer` | Unified diff view (LCS-based) |
+| Build output | `Terminal` | ANSI-colored terminal output |
+
+## Component Categories
+
+### Timeline Cards
+Visual progress indicators during generation:
+- `ArchitectureCard` — app structure visualization
+- `PageProgressCard` — per-page build progress
+- `FileAssemblyCard` — file creation tracking
+- `ThemeTokensCard` — design token display
+- `TestResults` — test suite results
+
+### Core Display
+- `CodeBlock` — Syntax-highlighted code with copy button (Shiki)
+- `DiffViewer` — Unified diff with add/delete/context lines
+- `FileTree` — Recursive file/folder tree
+- `Conversation` — Scrollable message container with stick-to-bottom
+
+### Interactive
+- `ToolActivity` — Collapsible tool step timeline
+- `Confirmation` — Accept/reject approval cards
+- `Suggestion` — Clickable suggestion pills
+- `PromptInput` — Chat input with attachments
+
+### Layout
+- `Panel` — ReactFlow-based node panel
+- `Canvas` — Flow graph canvas
+- `Sandbox` — Sandbox state indicator
+
+## Context Requirements
+
+Some AI elements require context providers:
+
+| Provider | Components |
+|----------|-----------|
+| `ReactFlowProvider` | Canvas, Node, Edge, Panel, Controls, Toolbar |
+| `PlanContext` | Plan, PlanHeader, PlanContent |
+| `CodeBlockContext` | CodeBlock compound components |
+| `MessageBranchContext` | Message branching components |

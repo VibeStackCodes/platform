@@ -17,6 +17,9 @@ bun run test:e2e:real # Playwright E2E against real Supabase/Daytona
 bun run db:generate   # Drizzle Kit generate migrations
 bun run db:migrate    # Drizzle Kit run migrations
 bun run db:studio     # Drizzle Kit studio (DB browser)
+bun run storybook       # Storybook dev server (port 6006)
+bun run storybook:build # Build static Storybook
+bun run chromatic       # Run Chromatic visual regression
 ```
 
 ## Stack
@@ -195,6 +198,17 @@ Required in `.env.local`:
 - Real E2E: `bun run test:e2e:real` — requires all env vars set
 - Sequential (not parallel) — tests share auth state
 - Global setup: `e2e/global-setup.ts`
+
+## Storybook
+
+- **Config**: `.storybook/` directory (ESM-only, Storybook 10)
+- Stories colocated next to components: `component.stories.tsx`
+- Mock data in colocated fixtures: `component.fixtures.ts`
+- Story format: CSF3 with `satisfies Meta<typeof Component>` (or plain `Meta` for compound components)
+- All stories tagged `autodocs` for auto-generated prop tables
+- Theme toggle in toolbar (light/dark via className)
+- Chromatic runs on every PR for visual regression
+- Components needing auth/router use structural stand-ins with documentation
 
 ## Branch Merge Protocol (NON-NEGOTIABLE)
 

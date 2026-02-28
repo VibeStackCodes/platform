@@ -26,6 +26,12 @@ const config: StorybookConfig = {
     config.resolve.alias = {
       ...config.resolve.alias,
       '@': new URL('../src', import.meta.url).pathname,
+      // @storybook/blocks@8 imports storybook/internal/theming which was renamed
+      // to storybook/theming in Storybook 10. Alias to fix the resolution.
+      'storybook/internal/theming': new URL(
+        '../node_modules/storybook/dist/theming/index.js',
+        import.meta.url,
+      ).pathname,
     }
     return config
   },

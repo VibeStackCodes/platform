@@ -1,0 +1,32 @@
+import { Meta } from '@storybook/blocks'
+
+<Meta title="Docs/Introduction" />
+
+# VibeStack UI
+
+AI-powered app builder — component library for the builder interface.
+
+## Component Categories
+
+- **UI Primitives** (34 components) — shadcn/ui foundation: Button, Card, Dialog, Sidebar, etc.
+- **AI Elements** (60 components) — specialized rendering for AI agent interactions: code blocks, diff viewers, tool activity, thinking cards, etc.
+- **Builder** (12 components) — page-level components for the app builder: chat column, preview panel, prompt bar, etc.
+
+## Design Tokens
+
+The design system uses Tailwind v4 with oklch colors, CSS-first configuration. Key tokens:
+
+- **Fonts:** DM Sans (body), DM Serif Display (headings), JetBrains Mono (code)
+- **Colors:** oklch-based with automatic dark mode via CSS custom properties
+- **Spacing:** Tailwind v4 default scale
+- **Radii:** Configurable via `--radius` CSS variable
+
+## Getting Started
+
+```bash
+bun run storybook  # Start Storybook dev server on port 6006
+```
+
+## Theme
+
+Toggle between light and dark mode using the toolbar at the top of the Storybook canvas.
