@@ -23,7 +23,6 @@ import {
   DropdownMenuPortal,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
-  DropdownMenuSeparator,
   DropdownMenuSub,
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
@@ -132,7 +131,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             <SidebarMenu>
               <SidebarMenuItem>
                 <SidebarMenuButton asChild tooltip="New project">
-                  <Link to="/dashboard">
+                  <Link to="/">
                     <Plus />
                     <span>New project</span>
                   </Link>
@@ -235,7 +234,6 @@ function NavUser() {
             <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
               {user?.email}
             </DropdownMenuLabel>
-            <DropdownMenuSeparator />
             <DropdownMenuSub>
               <DropdownMenuSubTrigger>
                 <SunMoon className="size-4" />
@@ -265,14 +263,12 @@ function NavUser() {
                 </DropdownMenuSubContent>
               </DropdownMenuPortal>
             </DropdownMenuSub>
-            <DropdownMenuSeparator />
             <DropdownMenuItem asChild>
               <Link to="/dashboard">
                 <CreditCard className="size-4" />
                 View all plans
               </Link>
             </DropdownMenuItem>
-            <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => supabase.auth.signOut()}>
               <LogOut className="size-4" />
               Log out
