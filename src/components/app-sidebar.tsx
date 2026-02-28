@@ -1,6 +1,14 @@
 import { Link, useRouterState } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
-import { ChevronsUpDown, LogOut, MessageSquare, PanelLeft, Plus, Search } from 'lucide-react'
+import {
+  ChevronDown,
+  LayoutGrid,
+  LogOut,
+  MessageSquare,
+  PanelLeft,
+  Plus,
+  Search,
+} from 'lucide-react'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import {
   DropdownMenu,
@@ -22,6 +30,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarRail,
+  SidebarSeparator,
   SidebarTrigger,
   useSidebar,
 } from '@/components/ui/sidebar'
@@ -29,10 +38,20 @@ import { useAuth } from '@/lib/auth'
 import { supabase } from '@/lib/supabase-browser'
 import { apiFetch } from '@/lib/utils'
 
-const NAV_ITEMS = [
-  { label: 'New project', icon: Plus, to: '/dashboard' as const },
-  { label: 'Search', icon: Search, to: '/dashboard' as const },
-] as const
+function relativeTime(dateStr: string): string {
+  const now = Date.now()
+  const then = new Date(dateStr).getTime()
+  const diffMs = now - then
+  const mins = Math.floor(diffMs / 60_000)
+  if (mins < 1) return 'now'
+  if (mins < 60) return `${mins}m`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `${hrs}h`
+  const days = Math.floor(hrs / 24)
+  if (days < 30) return `${days}d`
+  const months = Math.floor(days / 30)
+  return `${months}mo`
+}
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const routerState = useRouterState()
@@ -46,7 +65,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       const res = await apiFetch('/api/projects')
       if (!res.ok) return []
       const projects = await res.json()
-      return (projects as Array<{ id: string; name: string }>).slice(0, 5)
+      return (
+        projects as Array<{ id: string; name: string; updatedAt: string }>
+      ).slice(0, 5)
     },
   })
 
@@ -75,7 +96,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 ) : (
                   <Link to="/">
                     <div className="flex aspect-square size-8 items-center justify-center">
-                      <img src="/vibestack-logo.png" alt="VibeStack" className="size-8" />
+                      <img
+                        src="/vibestack-logo.png"
+                        alt="VibeStack"
+                        className="size-8"
+                      />
                     </div>
                     <div className="grid flex-1 text-left text-sm leading-tight">
                       <span className="truncate font-semibold">VibeStack</span>
@@ -89,29 +114,62 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         </div>
       </SidebarHeader>
       <SidebarContent>
+        {/* Top actions: New project + Search */}
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
-              {NAV_ITEMS.map((item) => (
-                <SidebarMenuItem key={item.label}>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={currentPath === item.to}
-                    tooltip={item.label}
-                  >
-                    <Link to={item.to}>
-                      <item.icon />
-                      <span>{item.label}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild tooltip="New project">
+                  <Link to="/dashboard">
+                    <Plus />
+                    <span>New project</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild tooltip="Search">
+                  <Link to="/dashboard">
+                    <Search />
+                    <span>Search</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+
+        <SidebarSeparator />
+
+        {/* Category nav: Chats + Projects */}
+        <SidebarGroup>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild tooltip="Chats">
+                  <Link to="/dashboard">
+                    <MessageSquare />
+                    <span>Chats</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild tooltip="Projects">
+                  <Link to="/dashboard">
+                    <LayoutGrid />
+                    <span>Projects</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        {/* Recents with relative timestamps */}
         {recentProjects && recentProjects.length > 0 && (
           <SidebarGroup>
-            <SidebarGroupLabel>Recents</SidebarGroupLabel>
+            <SidebarGroupLabel className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+              Recents
+            </SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
                 {recentProjects.map((project) => (
@@ -120,10 +178,13 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                       asChild
                       isActive={currentPath === `/project/${project.id}`}
                       tooltip={project.name}
+                      className="justify-between"
                     >
                       <Link to="/project/$id" params={{ id: project.id }}>
-                        <MessageSquare />
-                        <span>{project.name}</span>
+                        <span className="truncate">{project.name}</span>
+                        <span className="shrink-0 text-[11px] text-muted-foreground/50">
+                          {relativeTime(project.updatedAt)}
+                        </span>
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
@@ -146,7 +207,9 @@ function NavUser() {
   const { isMobile } = useSidebar()
 
   const initials = user?.email?.slice(0, 2).toUpperCase() ?? '??'
-  const displayName = user?.user_metadata?.full_name ?? user?.email ?? 'User'
+  const displayName =
+    user?.user_metadata?.full_name ?? user?.email?.split('@')[0] ?? 'User'
+  const plan = user?.user_metadata?.plan ?? 'Free Plan'
 
   return (
     <SidebarMenu>
@@ -157,16 +220,20 @@ function NavUser() {
               size="lg"
               className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
             >
-              <Avatar className="h-8 w-8 rounded-lg">
-                <AvatarFallback className="rounded-lg">
+              <Avatar className="h-7 w-7 rounded-full">
+                <AvatarFallback className="rounded-full bg-sidebar-accent text-xs font-semibold">
                   {initials}
                 </AvatarFallback>
               </Avatar>
               <div className="grid flex-1 text-left text-sm leading-tight">
-                <span className="truncate font-medium">{displayName}</span>
-                <span className="truncate text-xs">{user?.email}</span>
+                <span className="truncate text-[13px] font-medium">
+                  {displayName}
+                </span>
+                <span className="truncate text-[11px] text-muted-foreground/60">
+                  {plan}
+                </span>
               </div>
-              <ChevronsUpDown className="ml-auto size-4" />
+              <ChevronDown className="ml-auto size-4 text-muted-foreground/50" />
             </SidebarMenuButton>
           </DropdownMenuTrigger>
           <DropdownMenuContent
@@ -177,14 +244,16 @@ function NavUser() {
           >
             <DropdownMenuLabel className="p-0 font-normal">
               <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
-                <Avatar className="h-8 w-8 rounded-lg">
-                  <AvatarFallback className="rounded-lg">
+                <Avatar className="h-7 w-7 rounded-full">
+                  <AvatarFallback className="rounded-full bg-sidebar-accent text-xs font-semibold">
                     {initials}
                   </AvatarFallback>
                 </Avatar>
                 <div className="grid flex-1 text-left text-sm leading-tight">
                   <span className="truncate font-medium">{displayName}</span>
-                  <span className="truncate text-xs">{user?.email}</span>
+                  <span className="truncate text-xs text-muted-foreground">
+                    {user?.email}
+                  </span>
                 </div>
               </div>
             </DropdownMenuLabel>

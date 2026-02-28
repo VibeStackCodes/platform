@@ -17,7 +17,7 @@ projectRoutes.get('/', async (c) => {
   const projects = await getUserProjects(user.id)
   // Return only fields needed by dashboard (id, name, description, prompt, status, previewUrl, createdAt)
   return c.json(
-    projects.map(({ id, name, description, prompt, status, previewUrl, createdAt }) => ({
+    projects.map(({ id, name, description, prompt, status, previewUrl, createdAt, updatedAt }) => ({
       id,
       name,
       description,
@@ -25,6 +25,7 @@ projectRoutes.get('/', async (c) => {
       status,
       previewUrl,
       createdAt,
+      updatedAt,
     })),
   )
 })
