@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
-import { ProjectLayout } from '@/components/project-layout'
+import { BuilderPage } from '@/components/builder-page'
 import { apiFetch } from '@/lib/utils'
 
 export const Route = createFileRoute('/_authenticated/project/$id')({
@@ -42,7 +42,7 @@ function ProjectPage() {
   }
 
   return (
-    <ProjectLayout
+    <BuilderPage
       projectId={id}
       initialPrompt={project.status === 'pending' ? (project.prompt ?? undefined) : undefined}
       initialSandboxId={project.sandboxId ?? undefined}
