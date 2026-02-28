@@ -1,5 +1,6 @@
 import { Link, useRouterState } from '@tanstack/react-router'
-import { ChevronsUpDown, FolderOpen, Home, LogOut, PanelLeft } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
+import { ChevronsUpDown, LogOut, MessageSquare, PanelLeft, Plus, Search } from 'lucide-react'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import {
   DropdownMenu,
@@ -15,6 +16,7 @@ import {
   SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
+  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
@@ -25,10 +27,11 @@ import {
 } from '@/components/ui/sidebar'
 import { useAuth } from '@/lib/auth'
 import { supabase } from '@/lib/supabase-browser'
+import { apiFetch } from '@/lib/utils'
 
 const NAV_ITEMS = [
-  { label: 'Home', icon: Home, to: '/' as const },
-  { label: 'All Projects', icon: FolderOpen, to: '/dashboard' as const },
+  { label: 'New project', icon: Plus, to: '/dashboard' as const },
+  { label: 'Search', icon: Search, to: '/dashboard' as const },
 ] as const
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
@@ -36,6 +39,16 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const currentPath = routerState.location.pathname
   const { toggleSidebar, state } = useSidebar()
   const isCollapsed = state === 'collapsed'
+
+  const { data: recentProjects } = useQuery({
+    queryKey: ['recent-projects'],
+    queryFn: async () => {
+      const res = await apiFetch('/api/projects')
+      if (!res.ok) return []
+      const projects = await res.json()
+      return (projects as Array<{ id: string; name: string }>).slice(0, 5)
+    },
+  })
 
   return (
     <Sidebar collapsible="icon" {...props}>
@@ -96,6 +109,29 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+        {recentProjects && recentProjects.length > 0 && (
+          <SidebarGroup>
+            <SidebarGroupLabel>Recents</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {recentProjects.map((project) => (
+                  <SidebarMenuItem key={project.id}>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={currentPath === `/project/${project.id}`}
+                      tooltip={project.name}
+                    >
+                      <Link to="/project/$id" params={{ id: project.id }}>
+                        <MessageSquare />
+                        <span>{project.name}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
       </SidebarContent>
       <SidebarFooter>
         <NavUser />
