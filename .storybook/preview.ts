@@ -1,7 +1,9 @@
 import '../src/index.css'
 
+import React from 'react'
 import type { Preview, ReactRenderer } from '@storybook/react'
 import { withThemeByClassName } from '@storybook/addon-themes'
+import { TooltipProvider } from '../src/components/ui/tooltip'
 
 const preview: Preview = {
   parameters: {
@@ -25,6 +27,7 @@ const preview: Preview = {
       },
       defaultTheme: 'light',
     }),
+    (Story) => React.createElement(TooltipProvider, null, React.createElement(Story)),
   ],
   tags: ['autodocs'],
 }

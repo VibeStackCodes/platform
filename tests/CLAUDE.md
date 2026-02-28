@@ -1,25 +1,30 @@
 # Tests — Vitest
 
-26 test files. Config in `vitest.config.ts` (happy-dom, globals enabled).
+132 test files across 3 projects. Config in `vitest.config.ts` (Vitest 4 `projects` API).
+
+## Projects
+
+| Project | Env | Files | What |
+|---------|-----|-------|------|
+| `unit` | Node.js | 18 `.test.ts` | Server routes, tools, credits, rate-limit |
+| `component` | Chromium (Playwright) | 8 `.test.tsx` | React component tests via `@testing-library/react` |
+| `storybook` | Chromium (Playwright) | 106 `.stories.tsx` | Storybook portable stories (auto-discovered) |
 
 ## Setup
-- `setup.ts` — Minimal: sets API key env stubs for isolation
+- `tests/setup.ts` — Unit project: sets API key env stubs
+- `.storybook/vitest.setup.ts` — Browser projects: `setProjectAnnotations` + `@testing-library/jest-dom`
 - Path aliases: `@/` → `src/`, `@server/` → `server/`
-
-## Test Categories
-- **UI components** (9 files): AI element cards (thinking, action, architecture, theme-tokens, page-progress, plan-approval, operation-summary), prompt bar modes, property panel
-- **Route/API** (7 files): Admin, agent-route, projects, sandbox-urls, Stripe webhook/checkout, security-auth
-- **Agent/tools** (5 files): Orchestrator factory, agent-tools wiring, integration (tool-belt + event shapes), tools (editFile/installPackage), relace client
-- **Infrastructure** (4 files): Credits schema, credits settlement, rate-limit, vibestack-overlay
-- **Live generation** (1 file): local-gen.test.ts — real Daytona/LLM, skipped in CI
 
 ## Key Patterns
 - Mocking: `vi.mock()` for external services; env stubs in setup.ts
-- Naming: `<module>.test.ts` mirrors source file
+- Naming: `<module>.test.ts` mirrors source file; stories are colocated next to components
 - `local-gen.test.ts` requires OPENAI_API_KEY + DAYTONA_API_KEY — auto-skipped when missing
+- Storybook stories are auto-included by `@storybook/addon-vitest` plugin — no manual include needed
 
 ## Run
 ```bash
-bun run test          # All tests (excludes local-gen by env guard)
-bun run test:ui       # Vitest UI
+bun run test                   # All 3 projects (unit + component + storybook)
+bun run test -- --project unit # Server tests only (fast, ~1.5s)
+bun run test -- --project component  # Component tests in Chromium (~3s)
+bun run test -- --project storybook  # All 106 stories in Chromium (~33s)
 ```

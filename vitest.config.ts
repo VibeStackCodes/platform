@@ -1,17 +1,22 @@
-import { resolve } from 'node:path'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vitest/config'
+import { storybookTest } from '@storybook/addon-vitest/vitest-plugin'
+import { playwright } from '@vitest/browser-playwright'
+
+const dirname = path.dirname(fileURLToPath(import.meta.url))
+
+const aliases = {
+  '@server': path.resolve(dirname, './server'),
+  '@': path.resolve(dirname, './src'),
+}
 
 export default defineConfig({
   test: {
-    environment: 'happy-dom',
-    globals: true,
-    setupFiles: ['./tests/setup.ts'],
     env: {
       VITE_SUPABASE_URL: 'https://test.supabase.co',
       VITE_SUPABASE_ANON_KEY: 'test-anon-key',
     },
-    include: ['tests/**/*.test.ts', 'tests/**/*.test.tsx'],
-    exclude: ['tests/local-gen.test.ts', 'node_modules/**'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
@@ -23,11 +28,51 @@ export default defineConfig({
         lines: 50,
       },
     },
-  },
-  resolve: {
-    alias: {
-      '@server': resolve(__dirname, './server'),
-      '@': resolve(__dirname, './src'),
-    },
+    projects: [
+      // Project 1: Server/logic tests (Node — no DOM needed)
+      {
+        resolve: { alias: aliases },
+        test: {
+          name: 'unit',
+          environment: 'node',
+          globals: true,
+          setupFiles: ['./tests/setup.ts'],
+          include: ['tests/**/*.test.ts'],
+          exclude: ['tests/local-gen.test.ts', 'node_modules/**'],
+        },
+      },
+      // Project 2: Component tests (real Chromium via Playwright)
+      {
+        resolve: { alias: aliases },
+        test: {
+          name: 'component',
+          globals: true,
+          include: ['tests/**/*.test.tsx'],
+          browser: {
+            enabled: true,
+            provider: playwright(),
+            instances: [{ browser: 'chromium' }],
+          },
+          setupFiles: ['.storybook/vitest.setup.ts'],
+        },
+      },
+      // Project 3: Storybook portable stories (real Chromium via Playwright)
+      {
+        resolve: { alias: aliases },
+        plugins: [
+          storybookTest({ configDir: path.join(dirname, '.storybook') }),
+        ],
+        test: {
+          name: 'storybook',
+          globals: true,
+          browser: {
+            enabled: true,
+            provider: playwright(),
+            instances: [{ browser: 'chromium' }],
+          },
+          setupFiles: ['.storybook/vitest.setup.ts'],
+        },
+      },
+    ],
   },
 })
