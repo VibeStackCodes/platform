@@ -102,20 +102,41 @@ projectRoutes.get('/:id/messages', async (c) => {
     if (result.messages.length > 0) {
       // Convert Mastra messages to the format the client expects
       const converted = result.messages.map((msg) => {
-        // Parse content — Mastra stores format 2 JSON or plain text
+        // Extract text from Mastra's MastraMessageContentV2
+        // Content can be: string, JSON string, or object { format: 2, parts: [...] }
         let textContent = ''
-        try {
-          const parsed = JSON.parse(String(msg.content))
-          if (parsed?.parts) {
-            textContent = parsed.parts
-              .filter((p: { type: string }) => p.type === 'text')
-              .map((p: { text: string }) => p.text)
-              .join('')
-          } else {
-            textContent = String(msg.content)
+        // biome-ignore lint/suspicious/noExplicitAny: Mastra content type is opaque
+        const content = msg.content as any
+
+        if (typeof content === 'string') {
+          // Could be plain text or JSON-encoded format 2
+          try {
+            const parsed = JSON.parse(content)
+            if (parsed?.parts && Array.isArray(parsed.parts)) {
+              textContent = parsed.parts
+                .filter((p: { type: string }) => p.type === 'text')
+                .map((p: { text: string }) => p.text ?? '')
+                .join('')
+            } else {
+              textContent = content
+            }
+          } catch {
+            textContent = content
           }
-        } catch {
-          textContent = String(msg.content ?? '')
+        } else if (content && typeof content === 'object') {
+          // Direct object — format 2 with parts array
+          if (content.parts && Array.isArray(content.parts)) {
+            textContent = content.parts
+              .filter((p: { type: string }) => p.type === 'text')
+              .map((p: { text: string }) => p.text ?? '')
+              .join('')
+          } else if (Array.isArray(content)) {
+            // Array of content parts (AI SDK CoreMessage format)
+            textContent = content
+              .filter((p: { type: string }) => p.type === 'text')
+              .map((p: { text: string }) => p.text ?? '')
+              .join('')
+          }
         }
 
         return {
