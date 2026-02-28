@@ -1,10 +1,12 @@
 import type { ReactNode } from 'react'
-import { Code, Eye, FileText, X } from 'lucide-react'
+import { Code, Eye, FileText, GitCompareArrows, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { DiffViewer } from '@/components/ai-elements/diff-viewer'
 
 export type PanelContent =
   | { type: 'preview'; previewUrl: string }
   | { type: 'code'; filename: string; code: string; language?: string }
+  | { type: 'diff'; filename: string; oldContent?: string; newContent: string }
   | { type: 'artifact'; title: string; content: string }
   | null
 
@@ -26,6 +28,8 @@ function getContentTitle(content: PanelContent): string {
       return 'Preview'
     case 'code':
       return content.filename
+    case 'diff':
+      return content.filename
     case 'artifact':
       return content.title
   }
@@ -46,6 +50,13 @@ function getContentBadge(content: PanelContent): ReactNode {
         <span className="flex items-center gap-1 rounded-full bg-purple-500/15 px-2 py-0.5 text-xs font-medium text-purple-400">
           <Code className="h-3 w-3" />
           {content.language ?? 'Code'}
+        </span>
+      )
+    case 'diff':
+      return (
+        <span className="flex items-center gap-1 rounded-full bg-orange-500/15 px-2 py-0.5 text-xs font-medium text-orange-400">
+          <GitCompareArrows className="h-3 w-3" />
+          Diff
         </span>
       )
     case 'artifact':
@@ -98,6 +109,15 @@ function PanelBody({
             </pre>
           </div>
         </div>
+      )
+    case 'diff':
+      return (
+        <DiffViewer
+          filename={content.filename}
+          oldContent={content.oldContent}
+          newContent={content.newContent}
+          className="h-full"
+        />
       )
     case 'artifact':
       return (

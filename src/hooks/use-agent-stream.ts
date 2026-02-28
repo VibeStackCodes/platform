@@ -16,7 +16,6 @@ import type {
   StreamEvent,
   TimelineEntry,
   ValidationCheckEntry,
-  AgentStreamEvent,
 } from '@/lib/types'
 
 /** Maps agentId to ActionCard display config */
@@ -34,6 +33,20 @@ export const SUGGESTIONS = [
   'An e-commerce store with Stripe',
   'A real-time chat application',
 ]
+
+// Tool step for compact tool activity display
+export interface ToolStep {
+  id: string
+  tool: string
+  label: string
+  status: 'running' | 'complete' | 'error'
+  filePath?: string       // Extracted from args.path
+  oldContent?: string     // Previous file content (for diffs)
+  newContent?: string     // New file content (for diffs)
+  result?: string         // Summary from tool_complete
+  durationMs?: number
+  startedAt: number
+}
 
 // Custom message type
 export interface ChatMessage {
@@ -62,6 +75,7 @@ export interface UseAgentStreamReturn {
   fileAssembly: FileAssemblyEntry[]
   validationChecks: ValidationCheckEntry[]
   timelineEvents: TimelineEntry[]
+  toolSteps: ToolStep[]
   pendingClarification: ClarificationQuestion[] | null
   pendingPlan: PlanReadyEvent['plan'] | null
   userCredits: { credits_remaining: number; credits_monthly: number; plan: 'free' | 'pro'; credits_reset_at: string | null } | null
@@ -103,6 +117,7 @@ export function useAgentStream({
   const [validationChecks, setValidationChecks] = useState<ValidationCheckEntry[]>([])
 
   const [timelineEvents, setTimelineEvents] = useState<TimelineEntry[]>([])
+  const [toolSteps, setToolSteps] = useState<ToolStep[]>([])
 
   const [pendingClarification, setPendingClarification] = useState<ClarificationQuestion[] | null>(
     null,
@@ -571,17 +586,22 @@ export function useAgentStream({
           const INTERNAL_TOOLS = new Set(['updateWorkingMemory', 'readWorkingMemory'])
           if (INTERNAL_TOOLS.has(event.tool)) break
 
-          pushTimeline({
-            type: 'agent',
-            ts: now,
-            agent: {
-              type: 'agent_start',
-              agentId: `tool-${event.tool}-${now}`,
-              agentName: event.label ?? event.tool,
-              phase: 0,
+          // Extract file path from tool args
+          const args = event.args as Record<string, unknown> | undefined
+          const filePath = (args?.path as string) ?? (args?.filePath as string) ?? undefined
+
+          const stepId = `${event.tool}-${now}`
+          setToolSteps((prev) => [
+            ...prev,
+            {
+              id: stepId,
+              tool: event.tool,
+              label: event.label ?? event.tool,
+              status: 'running',
+              filePath,
+              startedAt: now,
             },
-            status: 'running',
-          })
+          ])
           break
         }
 
@@ -589,14 +609,24 @@ export function useAgentStream({
           const INTERNAL_TOOLS = new Set(['updateWorkingMemory', 'readWorkingMemory'])
           if (INTERNAL_TOOLS.has(event.tool)) break
 
-          updateTimeline(
-            (e) => e.type === 'agent' && e.agent.agentId.startsWith(`tool-${event.tool}-`),
-            (e) => ({
-              ...e,
-              status: 'complete' as const,
+          setToolSteps((prev) => {
+            // Find the last running step for this tool
+            const idx = prev.findLastIndex(
+              (s) => s.tool === event.tool && s.status === 'running',
+            )
+            if (idx < 0) return prev
+            const updated = [...prev]
+            updated[idx] = {
+              ...updated[idx],
+              status: event.success ? 'complete' : 'error',
+              result: event.result,
               durationMs: event.durationMs,
-            }),
-          )
+              filePath: event.filePath ?? updated[idx].filePath,
+              oldContent: event.oldContent,
+              newContent: event.newContent,
+            }
+            return updated
+          })
           break
         }
 
@@ -677,6 +707,7 @@ export function useAgentStream({
       setGenerationStatus('generating')
       setGenerationFiles([])
       setTimelineEvents([])
+      setToolSteps([])
       setBuildErrors([])
       setPageProgress([])
       setFileAssembly([])
@@ -888,7 +919,7 @@ export function useAgentStream({
   }, [planRunId, parseSSEBuffer, handleGenerationEvent])
 
   const hasFiles = generationFiles.length > 0
-  const showTimeline = generationStatus === 'generating' || timelineEvents.length > 0
+  const showTimeline = generationStatus === 'generating' || timelineEvents.length > 0 || toolSteps.length > 0
 
   return {
     // State
@@ -901,6 +932,7 @@ export function useAgentStream({
     fileAssembly,
     validationChecks,
     timelineEvents,
+    toolSteps,
     pendingClarification,
     pendingPlan,
     userCredits,

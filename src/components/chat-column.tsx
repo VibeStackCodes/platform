@@ -12,6 +12,7 @@ import {
   useAgentStream,
   AGENT_CARD_CONFIG,
 } from '@/hooks/use-agent-stream'
+import { ToolActivity } from '@/components/ai-elements/tool-activity'
 import {
   Conversation,
   ConversationContent,
@@ -246,6 +247,7 @@ export function ChatColumn({
     fileAssembly,
     validationChecks,
     timelineEvents,
+    toolSteps,
     pendingClarification,
     pendingPlan,
     userCredits,
@@ -615,6 +617,14 @@ export function ChatColumn({
                         return null
                     }
                   })}
+
+                  {/* Tool Activity (single orchestrator tool steps) */}
+                  {toolSteps.length > 0 && (
+                    <ToolActivity
+                      steps={toolSteps}
+                      onPanelOpen={onPanelOpen}
+                    />
+                  )}
 
                   {/* Build Errors (outside timeline entries) */}
                   {buildErrors.length > 0 && (

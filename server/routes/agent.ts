@@ -22,6 +22,7 @@ import {
   updateProject,
 } from '../lib/db/queries'
 import { reserveCredits, settleCredits } from '../lib/credits'
+import { getSandbox } from '../lib/sandbox'
 import { createSSEStream } from '../lib/sse'
 import type { AgentStreamEvent, CreditsUsedEvent } from '../lib/types'
 import { authMiddleware } from '../middleware/auth'
@@ -53,6 +54,10 @@ async function bridgeStreamToSSE(
   let sandboxId: string | undefined
   let lastTextChunk = ''
   const toolStartTimes = new Map<string, number>()
+  // Track file contents for diff computation (path → last known content)
+  const fileContents = new Map<string, string>()
+  // Track writeFile content from tool-call args (toolCallId → content)
+  const pendingWriteContent = new Map<string, { path: string; content: string }>()
 
   const reader = streamOutput.fullStream.getReader()
 
@@ -104,7 +109,20 @@ async function bridgeStreamToSSE(
             label = `Searching: ${args.query ?? ''}`
           }
 
-          emit({ type: 'tool_start', tool: toolName, label, args })
+          // Cache writeFile content for diff (available at tool-call time)
+          if (toolName === 'writeFile' && args.content && args.path) {
+            pendingWriteContent.set(toolName + '-' + toolCallId, {
+              path: args.path as string,
+              content: args.content as string,
+            })
+          }
+
+          // Don't send full file content to client in args (wasteful)
+          const leanArgs = (toolName === 'writeFile' || toolName === 'editFile')
+            ? { path: args.path, sandboxId: args.sandboxId }
+            : args
+
+          emit({ type: 'tool_start', tool: toolName, label, args: leanArgs })
           break
         }
 
@@ -134,17 +152,54 @@ async function bridgeStreamToSSE(
           }
 
           // Build result summary (lean — file names only, no content)
+          let filePath: string | undefined
+          let oldContent: string | undefined
+          let newContent: string | undefined
+
           if (toolName === 'runBuild') {
             resultSummary = success
               ? 'Build passed'
               : `Build failed: ${result?.output?.slice(0, 200) ?? ''}`
-          } else if (toolName === 'writeFile' || toolName === 'editFile') {
-            resultSummary = `${result?.path ?? 'file'} (${result?.bytesWritten ?? '?'} bytes)`
+          } else if (toolName === 'writeFile') {
+            filePath = result?.path as string | undefined
+            resultSummary = `${filePath ?? 'file'} (${result?.bytesWritten ?? '?'} bytes)`
+            // Get old content from tracker (undefined if new file)
+            if (filePath) oldContent = fileContents.get(filePath)
+            // Get new content from cached tool-call args
+            const cached = pendingWriteContent.get(toolName + '-' + toolCallId)
+            if (cached) {
+              newContent = cached.content
+              fileContents.set(cached.path, cached.content)
+              pendingWriteContent.delete(toolName + '-' + toolCallId)
+            }
+          } else if (toolName === 'editFile') {
+            filePath = result?.path as string | undefined
+            resultSummary = `${filePath ?? 'file'} (${result?.bytesWritten ?? '?'} bytes)`
+            // Get old content from tracker
+            if (filePath) oldContent = fileContents.get(filePath)
+            // Read new content from sandbox after edit
+            if (filePath && sandboxId && success) {
+              try {
+                const sb = await getSandbox(sandboxId)
+                const buf = await sb.fs.downloadFile(`/workspace/${filePath}`)
+                newContent = buf.toString('utf-8')
+                fileContents.set(filePath, newContent)
+              } catch {
+                // Couldn't read — skip diff data
+              }
+            }
           } else if (toolName === 'writeFiles') {
             const paths = result?.paths as string[] | undefined
             resultSummary = paths?.length
               ? `Wrote ${paths.join(', ')}`
               : `Wrote ${result?.filesWritten ?? '?'} files`
+          } else if (toolName === 'readFile') {
+            // Track file content from readFile for future diffs
+            const readPath = result?.path as string | undefined
+            const readContent = result?.content as string | undefined
+            if (readPath && readContent) {
+              fileContents.set(readPath, readContent)
+            }
           }
 
           emit({
@@ -152,6 +207,9 @@ async function bridgeStreamToSSE(
             tool: toolName,
             success,
             result: resultSummary,
+            filePath,
+            oldContent,
+            newContent,
             durationMs,
           })
           break

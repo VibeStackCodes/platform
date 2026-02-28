@@ -534,6 +534,12 @@ export interface ToolCompleteEvent {
   success: boolean
   result?: string
   durationMs?: number
+  /** File path for file operations */
+  filePath?: string
+  /** Previous file content (for diffs) */
+  oldContent?: string
+  /** New file content (for diffs) */
+  newContent?: string
 }
 
 export interface DoneEvent {
