@@ -6,8 +6,8 @@ interface UseResizablePanelOptions {
   maxWidth?: number
 }
 
-export function useResizablePanel(options: UseResizablePanelOptions = {}) {
-  const { defaultWidth = 50, minWidth = 340, maxWidth = 75 } = options
+export function useResizablePanel(options?: UseResizablePanelOptions) {
+  const { defaultWidth = 50, minWidth = 340, maxWidth = 75 } = options ?? {}
   const [isOpen, setIsOpen] = useState(false)
   const [width, setWidth] = useState(defaultWidth)
   const [isDragging, setIsDragging] = useState(false)

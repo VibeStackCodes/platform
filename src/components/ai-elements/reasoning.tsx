@@ -207,7 +207,8 @@ export type ReasoningContentProps = ComponentProps<
   children: string;
 };
 
-const streamdownPlugins = { cjk, code, math, mermaid };
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- shiki version mismatch between streamdown and @streamdown/code
+const streamdownPlugins = { cjk, code, math, mermaid } as any;
 
 export const ReasoningContent = memo(
   ({ className, children, ...props }: ReasoningContentProps) => (

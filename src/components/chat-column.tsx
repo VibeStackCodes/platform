@@ -240,8 +240,8 @@ export function ChatColumn({
   onGenerationComplete,
 }: ChatColumnProps) {
   const {
-    model,
-    generationStatus,
+    model: _model,
+    generationStatus: _generationStatus,
     generationFiles,
     buildErrors,
     pageProgress,

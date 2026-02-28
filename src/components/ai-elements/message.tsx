@@ -322,7 +322,8 @@ export const MessageBranchPage = ({
 
 export type MessageResponseProps = ComponentProps<typeof Streamdown>;
 
-const streamdownPlugins = { cjk, code, math, mermaid };
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- shiki version mismatch between streamdown and @streamdown/code
+const streamdownPlugins = { cjk, code, math, mermaid } as any;
 
 export const MessageResponse = memo(
   ({ className, ...props }: MessageResponseProps) => (

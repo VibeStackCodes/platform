@@ -23,12 +23,12 @@ export function BuilderPage({
   initialSandboxId,
 }: BuilderPageProps) {
   const [panelContent, setPanelContent] = useState<PanelContent>(null)
-  const [sandboxId, setSandboxId] = useState(initialSandboxId)
+  const [_sandboxId, setSandboxId] = useState(initialSandboxId)
   const [previewUrl, setPreviewUrl] = useState<string>()
   const [codeServerUrl, setCodeServerUrl] = useState<string>()
   const [expiresAt, setExpiresAt] = useState<string>()
   const [selectedElement, setSelectedElement] = useState<ElementContext | null>(null)
-  const refreshTimerRef = useRef<ReturnType<typeof setTimeout>>()
+  const refreshTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
   const panel = useResizablePanel()
 
   // Fetch sandbox URLs with automatic polling until available
