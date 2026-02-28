@@ -5,8 +5,6 @@ import { useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
-import { Checkbox } from '@/components/ui/checkbox'
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import type { ClarificationQuestion } from '@/lib/types'
 
 interface ClarificationQuestionsProps {
@@ -94,24 +92,33 @@ export function ClarificationQuestions({
 
       <CardContent className="pb-3">
         {question.selectionMode === 'single' ? (
-          <RadioGroup
-            value={answers[currentIndex][0] ?? ''}
-            onValueChange={handleSingleSelect}
-            disabled={disabled}
-          >
-            {question.options.map((opt) => (
-              <label
-                key={opt.label}
-                className="flex cursor-pointer items-start gap-3 rounded-lg border border-border/50 p-3 transition-colors hover:bg-accent/50 has-[[data-state=checked]]:border-primary/50 has-[[data-state=checked]]:bg-primary/5"
-              >
-                <RadioGroupItem value={opt.label} className="mt-0.5" />
-                <div className="grid gap-0.5">
-                  <span className="text-sm font-medium leading-none">{opt.label}</span>
-                  <span className="text-xs text-muted-foreground">{opt.description}</span>
-                </div>
-              </label>
-            ))}
-          </RadioGroup>
+          <div className="grid gap-3" role="radiogroup">
+            {question.options.map((opt) => {
+              const selected = answers[currentIndex][0] === opt.label
+              return (
+                <label
+                  key={opt.label}
+                  className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors hover:bg-accent/50 ${
+                    selected ? 'border-primary/50 bg-primary/5' : 'border-border/50'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name={`q-${currentIndex}`}
+                    value={opt.label}
+                    checked={selected}
+                    onChange={() => handleSingleSelect(opt.label)}
+                    disabled={disabled}
+                    className="mt-1 accent-primary"
+                  />
+                  <div className="grid gap-0.5">
+                    <span className="text-sm font-medium leading-none">{opt.label}</span>
+                    <span className="text-xs text-muted-foreground">{opt.description}</span>
+                  </div>
+                </label>
+              )
+            })}
+          </div>
         ) : (
           <div className="grid gap-3">
             {question.options.map((opt) => {
@@ -123,11 +130,12 @@ export function ClarificationQuestions({
                     checked ? 'border-primary/50 bg-primary/5' : 'border-border/50'
                   }`}
                 >
-                  <Checkbox
+                  <input
+                    type="checkbox"
                     checked={checked}
-                    onCheckedChange={() => handleMultiToggle(opt.label)}
+                    onChange={() => handleMultiToggle(opt.label)}
                     disabled={disabled}
-                    className="mt-0.5"
+                    className="mt-1 accent-primary"
                   />
                   <div className="grid gap-0.5">
                     <span className="text-sm font-medium leading-none">{opt.label}</span>
