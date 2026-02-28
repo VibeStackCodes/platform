@@ -85,6 +85,7 @@ describe('Project Routes', () => {
         status: 'deployed',
         previewUrl: 'https://example.com',
         createdAt: '2026-02-16T10:00:00.000Z',
+        updatedAt: '2026-02-16T10:00:00.000Z',
       })
 
       // Verify internal fields are NOT exposed
