@@ -799,7 +799,14 @@ export const PromptInput = ({
         ref={formRef}
         {...props}
       >
-        <InputGroup className="overflow-hidden">{children}</InputGroup>
+        <InputGroup
+          className={cn(
+            "overflow-hidden rounded-3xl border border-[#e8e6dc] bg-white p-3.5 shadow-sm",
+            "has-[[data-slot=input-group-control]:focus-visible]:border-[#d97757] has-[[data-slot=input-group-control]:focus-visible]:ring-[#d97757]/20"
+          )}
+        >
+          {children}
+        </InputGroup>
       </form>
     </>
   );
@@ -933,7 +940,10 @@ export const PromptInputTextarea = ({
 
   return (
     <InputGroupTextarea
-      className={cn("field-sizing-content max-h-48 min-h-16", className)}
+      className={cn(
+        "field-sizing-content max-h-48 min-h-16 bg-transparent placeholder:text-muted-foreground/60",
+        className
+      )}
       name="message"
       onCompositionEnd={handleCompositionEnd}
       onCompositionStart={handleCompositionStart}
@@ -1102,6 +1112,7 @@ export const PromptInputSubmit = ({
   ...props
 }: PromptInputSubmitProps) => {
   const isGenerating = status === "submitted" || status === "streaming";
+  // Claude-style: use orange send button
 
   let Icon = <CornerDownLeftIcon className="size-4" />;
 
@@ -1128,7 +1139,10 @@ export const PromptInputSubmit = ({
   return (
     <InputGroupButton
       aria-label={isGenerating ? "Stop" : "Submit"}
-      className={cn(className)}
+      className={cn(
+        "rounded-full bg-[#d97757] text-white hover:bg-[#c4684a] disabled:opacity-40",
+        className
+      )}
       onClick={handleClick}
       size={size}
       type={isGenerating && onStop ? "button" : "submit"}
