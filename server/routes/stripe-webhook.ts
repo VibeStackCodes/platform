@@ -3,6 +3,7 @@
  * Handles Stripe webhook events for subscription lifecycle
  */
 
+import { describeRoute } from 'hono-openapi'
 import { Hono } from 'hono'
 import { Stripe } from 'stripe'
 import { getProfileByStripeId, updateProfileByStripeId, updateProfilePlan } from '../lib/db/queries'
@@ -27,7 +28,19 @@ export const stripeWebhookRoutes = new Hono()
  * POST /api/stripe/webhook
  * Processes Stripe webhook events (subscription lifecycle)
  */
-stripeWebhookRoutes.post('/', async (c) => {
+stripeWebhookRoutes.post(
+  '/',
+  describeRoute({
+    summary: 'Handle Stripe webhook events',
+    description: 'No auth middleware — Stripe calls this directly. Validates signature before processing.',
+    tags: ['stripe'],
+    responses: {
+      200: { description: 'Webhook received and processed' },
+      400: { description: 'Missing signature or invalid payload' },
+      500: { description: 'Webhook processing failed' },
+    },
+  }),
+  async (c) => {
   try {
     // Get raw body for signature verification
     const body = await c.req.text()
@@ -142,4 +155,5 @@ stripeWebhookRoutes.post('/', async (c) => {
       500,
     )
   }
-})
+  },
+)

@@ -9,6 +9,8 @@ import { bodyLimit } from 'hono/body-limit'
 import { cors } from 'hono/cors'
 import { secureHeaders } from 'hono/secure-headers'
 import { handle } from 'hono/vercel'
+import { openAPIRouteHandler } from 'hono-openapi'
+import { Scalar } from '@scalar/hono-api-reference'
 
 import { db } from './lib/db/client'
 import { createRateLimiter } from './lib/rate-limit'
@@ -104,15 +106,46 @@ app.get('/health', async (c) => {
   }
 })
 
-// Mount routes
-app.route('/projects', projectRoutes)
-app.route('/projects', sandboxUrlRoutes)
-app.route('/projects/deploy', projectDeployRoutes)
-app.route('/stripe/checkout', stripeCheckoutRoutes)
-app.route('/stripe/webhook', stripeWebhookRoutes)
-app.route('/auth/callback', authCallbackRoutes)
-app.route('/admin', adminRoutes)
-app.route('/agent', agentRoutes)
+// Mount routes — chained so TypeScript can infer the full AppType for Hono RPC
+const routes = app
+  .route('/projects', projectRoutes)
+  .route('/projects', sandboxUrlRoutes)
+  .route('/projects/deploy', projectDeployRoutes)
+  .route('/stripe/checkout', stripeCheckoutRoutes)
+  .route('/stripe/webhook', stripeWebhookRoutes)
+  .route('/auth/callback', authCallbackRoutes)
+  .route('/admin', adminRoutes)
+  .route('/agent', agentRoutes)
+
+// OpenAPI JSON spec — generated from describeRoute() metadata across all mounted routes
+app.get(
+  '/doc',
+  openAPIRouteHandler(app, {
+    documentation: {
+      info: {
+        title: 'VibeStack API',
+        version: '1.0.0',
+        description: 'AI-powered app builder API',
+      },
+      servers: [{ url: '/api' }],
+    },
+  }),
+)
+
+// Scalar interactive API reference UI — served at /api/reference
+// Uses a permissive CSP for this route only so the Scalar CDN scripts load
+app.get('/reference', (c, next) => {
+  // Scalar loads assets from its CDN — set a permissive CSP for this route only
+  c.res.headers.set(
+    'Content-Security-Policy',
+    "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self'",
+  )
+  return next()
+}, Scalar({ url: '/api/doc' }))
+
+// Type-only export consumed by src/lib/api-client.ts via `import type`
+// The client NEVER imports the implementation — only the type shape
+export type AppType = typeof routes
 
 // Vercel adapter for production (serverless)
 export default handle(app)

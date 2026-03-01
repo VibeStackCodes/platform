@@ -3,6 +3,7 @@
  * Handles OAuth callback from Supabase and exchanges code for session
  */
 
+import { describeRoute } from 'hono-openapi'
 import { createClient } from '@supabase/supabase-js'
 import { Hono } from 'hono'
 
@@ -13,7 +14,17 @@ export const authCallbackRoutes = new Hono()
  * No auth middleware — user isn't authenticated yet.
  * Exchanges OAuth code for session and redirects to dashboard.
  */
-authCallbackRoutes.get('/', async (c) => {
+authCallbackRoutes.get(
+  '/',
+  describeRoute({
+    summary: 'OAuth callback — exchange code for session',
+    description: 'No auth middleware. Exchanges Supabase OAuth code for session and redirects to dashboard.',
+    tags: ['auth'],
+    responses: {
+      302: { description: 'Redirect to dashboard on success or error page on failure' },
+    },
+  }),
+  async (c) => {
   const code = c.req.query('code')
 
   // Hardcode allowed origin — never derive from Host header (open redirect risk)
@@ -53,4 +64,5 @@ authCallbackRoutes.get('/', async (c) => {
 
   // URL to redirect to after successful sign in
   return c.redirect(`${origin}/dashboard`)
-})
+  },
+)

@@ -10,6 +10,7 @@
 
 import crypto from 'node:crypto'
 import { z } from 'zod'
+import { describeRoute } from 'hono-openapi'
 import { Hono } from 'hono'
 import * as Sentry from '@sentry/node'
 import { RequestContext } from '@mastra/core/di'
@@ -282,7 +283,22 @@ async function bridgeStreamToSSE(
  * POST /api/agent
  * Stream orchestrator execution via SSE
  */
-agentRoutes.post('/', async (c) => {
+agentRoutes.post(
+  '/',
+  describeRoute({
+    summary: 'Stream AI agent generation via SSE',
+    description:
+      'Credit-gated SSE endpoint. Streams AgentStreamEvent events as the orchestrator generates app code. Returns text/event-stream.',
+    tags: ['agent'],
+    responses: {
+      200: { description: 'SSE stream of AgentStreamEvent (text/event-stream)' },
+      400: { description: 'Missing or invalid request body' },
+      401: { description: 'Unauthorized' },
+      402: { description: 'Insufficient credits' },
+      404: { description: 'Project not found' },
+    },
+  }),
+  async (c) => {
   const agentLog = log.child({ module: 'agent' })
 
   let body: {
@@ -415,4 +431,5 @@ agentRoutes.post('/', async (c) => {
       })
     }
   })
-})
+  },
+)

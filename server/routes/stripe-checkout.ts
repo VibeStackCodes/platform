@@ -3,6 +3,7 @@
  * Creates a Stripe Checkout session for Pro plan subscription
  */
 
+import { describeRoute } from 'hono-openapi'
 import { Hono } from 'hono'
 import { Stripe } from 'stripe'
 import { getProfileForCheckout, setStripeCustomerId } from '../lib/db/queries'
@@ -23,7 +24,19 @@ stripeCheckoutRoutes.use('*', authMiddleware)
  * POST /api/stripe/checkout
  * Creates a Stripe Checkout session for Pro subscription
  */
-stripeCheckoutRoutes.post('/', async (c) => {
+stripeCheckoutRoutes.post(
+  '/',
+  describeRoute({
+    summary: 'Create Stripe Checkout session',
+    tags: ['stripe'],
+    responses: {
+      200: { description: 'Checkout session URL' },
+      400: { description: 'User email not found' },
+      401: { description: 'Unauthorized' },
+      500: { description: 'Failed to create checkout session' },
+    },
+  }),
+  async (c) => {
   try {
     const user = c.var.user
 
@@ -101,4 +114,5 @@ stripeCheckoutRoutes.post('/', async (c) => {
       500,
     )
   }
-})
+  },
+)

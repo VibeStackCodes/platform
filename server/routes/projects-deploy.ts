@@ -4,6 +4,7 @@
  * Downloads files from Daytona sandbox and deploys to Vercel
  */
 
+import { describeRoute } from 'hono-openapi'
 import type { Deployment } from '@vercel/client'
 import { checkDeploymentStatus } from '@vercel/client'
 import { Hono } from 'hono'
@@ -24,7 +25,21 @@ projectDeployRoutes.use('*', authMiddleware)
  *
  * Deploys a generated project to Vercel
  */
-projectDeployRoutes.post('/', async (c) => {
+projectDeployRoutes.post(
+  '/',
+  describeRoute({
+    summary: 'Deploy project to Vercel',
+    description: 'Downloads files from Daytona sandbox and deploys to Vercel. Uses GitHub repo if available.',
+    tags: ['deploy'],
+    responses: {
+      200: { description: 'Deployment successful — returns deployUrl' },
+      400: { description: 'Missing projectId or project has no sandbox' },
+      401: { description: 'Unauthorized' },
+      404: { description: 'Project or sandbox not found' },
+      500: { description: 'Deployment failed' },
+    },
+  }),
+  async (c) => {
   try {
     // Parse request
     const body: DeployRequest = await c.req.json()
@@ -118,7 +133,8 @@ projectDeployRoutes.post('/', async (c) => {
       500,
     )
   }
-})
+  },
+)
 
 // ============================================================================
 // Vercel Deployment

@@ -10,6 +10,7 @@
  * See packages/preview-proxy/ for the proxy implementation.
  */
 
+import { describeRoute } from 'hono-openapi'
 import { Hono } from 'hono'
 import {
   buildProxyUrl,
@@ -28,7 +29,19 @@ sandboxUrlRoutes.use('*', authMiddleware)
 /**
  * GET /api/projects/:id/sandbox-urls
  */
-sandboxUrlRoutes.get('/:id/sandbox-urls', async (c) => {
+sandboxUrlRoutes.get(
+  '/:id/sandbox-urls',
+  describeRoute({
+    summary: 'Get sandbox preview and code server URLs',
+    description: 'Returns signed preview and code server URLs for a project sandbox. URLs expire after 1 hour.',
+    tags: ['sandbox'],
+    responses: {
+      200: { description: 'Sandbox URLs (previewUrl, codeServerUrl, expiresAt)' },
+      401: { description: 'Unauthorized' },
+      404: { description: 'Project not found' },
+    },
+  }),
+  async (c) => {
   const id = c.req.param('id')
   const user = c.var.user
 
@@ -65,4 +78,5 @@ sandboxUrlRoutes.get('/:id/sandbox-urls', async (c) => {
   } catch {
     return c.json({ sandboxId: sandbox.id, previewUrl: null, codeServerUrl: null, expiresAt: null })
   }
-})
+  },
+)

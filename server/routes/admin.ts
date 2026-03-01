@@ -9,6 +9,7 @@
  * - GET  /api/admin/env-check  — Verify required environment variables
  */
 
+import { describeRoute } from 'hono-openapi'
 import { Hono } from 'hono'
 import { sql } from 'drizzle-orm'
 import { db } from '../lib/db/client'
@@ -48,7 +49,19 @@ adminRoutes.use('*', createRateLimiter({ windowMs: 60_000, max: 10, prefix: 'adm
  * GET /api/admin/health
  * Comprehensive system health check
  */
-adminRoutes.get('/health', async (c) => {
+adminRoutes.get(
+  '/health',
+  describeRoute({
+    summary: 'System health check',
+    tags: ['admin'],
+    responses: {
+      200: { description: 'System is healthy' },
+      401: { description: 'Unauthorized' },
+      403: { description: 'Forbidden — admin access required' },
+      503: { description: 'System degraded or admin endpoints disabled' },
+    },
+  }),
+  async (c) => {
   const checks: Record<string, { status: 'ok' | 'error' | 'warning'; details?: string }> = {}
 
   // 1. Database connectivity
@@ -117,13 +130,25 @@ adminRoutes.get('/health', async (c) => {
     timestamp: new Date().toISOString(),
     checks,
   }, hasErrors ? 503 : 200)
-})
+  },
+)
 
 /**
  * GET /api/admin/env-check
  * Verify all required and optional environment variables
  */
-adminRoutes.get('/env-check', async (c) => {
+adminRoutes.get(
+  '/env-check',
+  describeRoute({
+    summary: 'Verify environment variables',
+    tags: ['admin'],
+    responses: {
+      200: { description: 'Environment variable status report' },
+      401: { description: 'Unauthorized' },
+      403: { description: 'Forbidden — admin access required' },
+    },
+  }),
+  async (c) => {
   const required = [
     { name: 'DATABASE_URL', purpose: 'PostgreSQL connection' },
     { name: 'VITE_SUPABASE_URL', purpose: 'Platform Supabase' },
@@ -174,4 +199,5 @@ adminRoutes.get('/env-check', async (c) => {
     optional: optionalStatus,
     missingCount: missingRequired.length,
   })
-})
+  },
+)
