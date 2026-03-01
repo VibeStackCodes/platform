@@ -10,7 +10,7 @@
 
 import crypto from 'node:crypto'
 import { z } from 'zod'
-import { describeRoute } from 'hono-openapi'
+import { describeRoute, resolver } from 'hono-openapi'
 import { Hono } from 'hono'
 import * as Sentry from '@sentry/node'
 import { RequestContext } from '@mastra/core/di'
@@ -28,6 +28,32 @@ import { createSSEStream } from '../lib/sse'
 import type { AgentStreamEvent, CreditsUsedEvent } from '../lib/types'
 import { authMiddleware } from '../middleware/auth'
 import { log } from '../lib/logger'
+
+// ---------------------------------------------------------------------------
+// Request / response schemas
+// ---------------------------------------------------------------------------
+
+const AgentRequest = z.object({
+  message: z.string().min(1).describe('User prompt describing the app to build or change'),
+  projectId: z.string().uuid().describe('Project ID to run the agent against'),
+  model: z
+    .string()
+    .optional()
+    .default('gpt-5.2-codex')
+    .describe('Model identifier — gpt-5.2-codex | claude-opus-4-6 | claude-sonnet-4-6'),
+})
+
+const ErrorResponse = z.object({
+  error: z.string().describe('Human-readable error message'),
+})
+
+const InsufficientCreditsResponse = z.object({
+  error: z.literal('insufficient_credits'),
+  message: z.string().describe('Explanation of why the request was rejected'),
+  credits_remaining: z.number().int().describe('Credits remaining in the user account'),
+})
+
+// ---------------------------------------------------------------------------
 
 export const agentRoutes = new Hono()
 
@@ -290,12 +316,69 @@ agentRoutes.post(
     description:
       'Credit-gated SSE endpoint. Streams AgentStreamEvent events as the orchestrator generates app code. Returns text/event-stream.',
     tags: ['agent'],
+    security: [{ bearerAuth: [] }],
+    requestBody: {
+      required: true,
+      content: {
+        'application/json': {
+          schema: {
+            type: 'object',
+            required: ['message', 'projectId'],
+            properties: {
+              message: {
+                type: 'string',
+                minLength: 1,
+                description: 'User prompt describing the app to build or change',
+              },
+              projectId: {
+                type: 'string',
+                format: 'uuid',
+                description: 'Project ID to run the agent against',
+              },
+              model: {
+                type: 'string',
+                default: 'gpt-5.2-codex',
+                description: 'Model identifier — gpt-5.2-codex | claude-opus-4-6 | claude-sonnet-4-6',
+              },
+            },
+          },
+        },
+      },
+    },
     responses: {
-      200: { description: 'SSE stream of AgentStreamEvent (text/event-stream)' },
-      400: { description: 'Missing or invalid request body' },
-      401: { description: 'Unauthorized' },
-      402: { description: 'Insufficient credits' },
-      404: { description: 'Project not found' },
+      200: {
+        description:
+          'SSE stream of AgentStreamEvent — events: thinking, tool_start, tool_complete, done, agent_error, sandbox_ready, package_installed, credits_used',
+        content: {
+          'text/event-stream': {
+            schema: resolver(z.string().describe('Server-Sent Events stream')),
+          },
+        },
+      },
+      400: {
+        description: 'Missing or invalid request body',
+        content: {
+          'application/json': { schema: resolver(ErrorResponse) },
+        },
+      },
+      401: {
+        description: 'Unauthorized',
+        content: {
+          'application/json': { schema: resolver(ErrorResponse) },
+        },
+      },
+      402: {
+        description: 'Insufficient credits',
+        content: {
+          'application/json': { schema: resolver(InsufficientCreditsResponse) },
+        },
+      },
+      404: {
+        description: 'Project not found',
+        content: {
+          'application/json': { schema: resolver(ErrorResponse) },
+        },
+      },
     },
   }),
   async (c) => {

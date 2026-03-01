@@ -125,9 +125,39 @@ app.get(
       info: {
         title: 'VibeStack API',
         version: '1.0.0',
-        description: 'AI-powered app builder API',
+        description: 'AI-powered app builder — users describe an app, the platform generates a full Vite + React project with live preview.',
+        contact: { name: 'VibeStack', url: 'https://vibestack.com' },
+        license: { name: 'Proprietary' },
       },
-      servers: [{ url: '/api' }],
+      servers: [
+        { url: '/api', description: 'Current environment' },
+      ],
+      tags: [
+        { name: 'projects', description: 'Project CRUD operations' },
+        { name: 'agent', description: 'AI generation pipeline (SSE stream)' },
+        { name: 'deploy', description: 'Vercel deployment' },
+        { name: 'sandbox', description: 'Daytona sandbox preview URLs' },
+        { name: 'stripe', description: 'Stripe billing & webhooks' },
+        { name: 'auth', description: 'OAuth callback flow' },
+        { name: 'admin', description: 'System health & diagnostics' },
+      ],
+      components: {
+        securitySchemes: {
+          bearerAuth: {
+            type: 'http',
+            scheme: 'bearer',
+            bearerFormat: 'JWT',
+            description: 'Supabase JWT access token. Get from Supabase Auth login flow.',
+          },
+          stripeSignature: {
+            type: 'apiKey',
+            in: 'header',
+            name: 'stripe-signature',
+            description: 'Stripe webhook signature (v1 HMAC)',
+          },
+        },
+      },
+      security: [{ bearerAuth: [] }],
     },
   }),
 )
@@ -136,12 +166,68 @@ app.get(
 // Uses a permissive CSP for this route only so the Scalar CDN scripts load
 app.get('/reference', (c, next) => {
   // Scalar loads assets from its CDN — set a permissive CSP for this route only
+  // connect-src includes localhost and production origins so "Try it" requests work
   c.res.headers.set(
     'Content-Security-Policy',
-    "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self'",
+    "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' http://localhost:* https://vibestack.com https://app.vibestack.com",
   )
   return next()
-}, Scalar({ url: '/api/doc' }))
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+}, Scalar({
+  url: '/api/doc',
+  pageTitle: 'VibeStack API Reference',
+  theme: 'deepSpace',
+  layout: 'modern',
+  darkMode: true,
+  _integration: 'hono',
+  defaultHttpClient: { targetKey: 'node', clientKey: 'fetch' },
+  baseServerURL: '/api',
+  persistAuth: true,
+  authentication: {
+    preferredSecurityScheme: 'bearerAuth',
+    http: {
+      bearer: {
+        token: '',
+      },
+    },
+  },
+  defaultOpenAllTags: true,
+  searchHotKey: 'k',
+  showSidebar: true,
+  hideDarkModeToggle: false,
+  hideModels: false,
+  hideDownloadButton: false,
+  hideClientButton: false,
+  hideTestRequestButton: false,
+  showOperationId: false,
+  expandAllResponses: false,
+  operationsSorter: 'method',
+  tagsSorter: 'alpha',
+  withDefaultFonts: true,
+  customCss: `
+    .dark-mode {
+      --scalar-color-accent: #e36002;
+      --scalar-background-1: #0f0f11;
+    }
+    .light-mode {
+      --scalar-color-accent: #e36002;
+    }
+  `,
+  hiddenClients: {
+    powershell: true,
+    objc: true,
+    ocaml: true,
+    clojure: true,
+    c: true,
+    r: true,
+    fsharp: true,
+    dart: true,
+    kotlin: true,
+    csharp: true,
+    java: true,
+  },
+  telemetry: false,
+} as any))
 
 // Type-only export consumed by src/lib/api-client.ts via `import type`
 // The client NEVER imports the implementation — only the type shape

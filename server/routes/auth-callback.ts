@@ -3,9 +3,18 @@
  * Handles OAuth callback from Supabase and exchanges code for session
  */
 
-import { describeRoute } from 'hono-openapi'
+import { describeRoute, resolver } from 'hono-openapi'
 import { createClient } from '@supabase/supabase-js'
 import { Hono } from 'hono'
+import { z } from 'zod'
+
+// ---------------------------------------------------------------------------
+// Zod schemas
+// ---------------------------------------------------------------------------
+
+const RedirectResponseSchema = z
+  .string()
+  .describe('302 redirect — Location header points to /dashboard or /?error=<code>')
 
 export const authCallbackRoutes = new Hono()
 
@@ -20,8 +29,21 @@ authCallbackRoutes.get(
     summary: 'OAuth callback — exchange code for session',
     description: 'No auth middleware. Exchanges Supabase OAuth code for session and redirects to dashboard.',
     tags: ['auth'],
+    security: [],
+    parameters: [
+      {
+        name: 'code',
+        in: 'query',
+        required: false,
+        description: 'OAuth authorization code provided by Supabase',
+        schema: { type: 'string' },
+      },
+    ],
     responses: {
-      302: { description: 'Redirect to dashboard on success or error page on failure' },
+      302: {
+        description: 'Redirect to dashboard on success or /?error=<code> on failure',
+        content: { 'text/plain': { schema: resolver(RedirectResponseSchema) } },
+      },
     },
   }),
   async (c) => {

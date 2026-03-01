@@ -3,11 +3,24 @@
  * Creates a Stripe Checkout session for Pro plan subscription
  */
 
-import { describeRoute } from 'hono-openapi'
+import { describeRoute, resolver } from 'hono-openapi'
 import { Hono } from 'hono'
 import { Stripe } from 'stripe'
+import { z } from 'zod'
 import { getProfileForCheckout, setStripeCustomerId } from '../lib/db/queries'
 import { authMiddleware } from '../middleware/auth'
+
+// ---------------------------------------------------------------------------
+// Zod schemas
+// ---------------------------------------------------------------------------
+
+const CheckoutResponseSchema = z.object({
+  url: z.string().url().nullable().describe('Stripe Checkout session URL'),
+})
+
+const ErrorResponseSchema = z.object({
+  error: z.string().describe('Error message'),
+})
 
 function getStripe() {
   const key = process.env.STRIPE_SECRET_KEY
@@ -29,11 +42,24 @@ stripeCheckoutRoutes.post(
   describeRoute({
     summary: 'Create Stripe Checkout session',
     tags: ['stripe'],
+    security: [{ bearerAuth: [] }],
     responses: {
-      200: { description: 'Checkout session URL' },
-      400: { description: 'User email not found' },
-      401: { description: 'Unauthorized' },
-      500: { description: 'Failed to create checkout session' },
+      200: {
+        description: 'Checkout session URL',
+        content: { 'application/json': { schema: resolver(CheckoutResponseSchema) } },
+      },
+      400: {
+        description: 'User email not found',
+        content: { 'application/json': { schema: resolver(ErrorResponseSchema) } },
+      },
+      401: {
+        description: 'Unauthorized',
+        content: { 'application/json': { schema: resolver(ErrorResponseSchema) } },
+      },
+      500: {
+        description: 'Failed to create checkout session',
+        content: { 'application/json': { schema: resolver(ErrorResponseSchema) } },
+      },
     },
   }),
   async (c) => {

@@ -9,12 +9,57 @@
  * - GET  /api/admin/env-check  — Verify required environment variables
  */
 
-import { describeRoute } from 'hono-openapi'
+import { z } from 'zod'
+import { describeRoute, resolver } from 'hono-openapi'
 import { Hono } from 'hono'
 import { sql } from 'drizzle-orm'
 import { db } from '../lib/db/client'
 import { authMiddleware } from '../middleware/auth'
 import { createRateLimiter } from '../lib/rate-limit'
+
+// ---------------------------------------------------------------------------
+// Response schemas
+// ---------------------------------------------------------------------------
+
+const HealthCheckStatus = z.union([
+  z.literal('healthy'),
+  z.literal('degraded'),
+  z.literal('error'),
+])
+
+const CheckResult = z.object({
+  status: z.union([z.literal('ok'), z.literal('error'), z.literal('warning')]),
+  details: z.string().optional().describe('Human-readable detail for this check'),
+})
+
+const HealthResponse = z.object({
+  status: HealthCheckStatus.describe('Overall system status'),
+  timestamp: z.string().datetime().describe('ISO-8601 timestamp of the health check'),
+  checks: z
+    .record(z.string(), CheckResult)
+    .describe('Per-subsystem check results (database, daytona, env_vars, rate_limits, …)'),
+})
+
+const EnvVarEntry = z.object({
+  name: z.string().describe('Environment variable name'),
+  purpose: z.string().describe('Human-readable description of what the variable controls'),
+  set: z.boolean().describe('Whether the variable is currently set'),
+  preview: z.string().optional().describe('"SET" or "NOT SET"'),
+  value: z.string().optional().describe('Safe display value (only for non-secret vars)'),
+})
+
+const EnvCheckResponse = z.object({
+  status: z.string().describe('"ok" if all required vars are set, "missing_required" otherwise'),
+  required: z.array(EnvVarEntry).describe('Status of every required environment variable'),
+  optional: z.array(EnvVarEntry).describe('Status of every optional environment variable'),
+  missingCount: z.number().int().describe('Number of required variables that are unset'),
+})
+
+const AdminErrorResponse = z.object({
+  error: z.string().describe('Human-readable error message'),
+})
+
+// ---------------------------------------------------------------------------
 
 export const adminRoutes = new Hono()
 
@@ -53,12 +98,34 @@ adminRoutes.get(
   '/health',
   describeRoute({
     summary: 'System health check',
+    description: 'Comprehensive system health check covering DB, Daytona, env vars, and rate-limit table housekeeping.',
     tags: ['admin'],
+    security: [{ bearerAuth: [] }],
     responses: {
-      200: { description: 'System is healthy' },
-      401: { description: 'Unauthorized' },
-      403: { description: 'Forbidden — admin access required' },
-      503: { description: 'System degraded or admin endpoints disabled' },
+      200: {
+        description: 'System is healthy',
+        content: {
+          'application/json': { schema: resolver(HealthResponse) },
+        },
+      },
+      401: {
+        description: 'Unauthorized',
+        content: {
+          'application/json': { schema: resolver(AdminErrorResponse) },
+        },
+      },
+      403: {
+        description: 'Forbidden — admin access required',
+        content: {
+          'application/json': { schema: resolver(AdminErrorResponse) },
+        },
+      },
+      503: {
+        description: 'System degraded or admin endpoints disabled',
+        content: {
+          'application/json': { schema: resolver(HealthResponse) },
+        },
+      },
     },
   }),
   async (c) => {
@@ -141,11 +208,28 @@ adminRoutes.get(
   '/env-check',
   describeRoute({
     summary: 'Verify environment variables',
+    description: 'Returns the set/unset status of every required and optional environment variable. Never exposes actual secret values.',
     tags: ['admin'],
+    security: [{ bearerAuth: [] }],
     responses: {
-      200: { description: 'Environment variable status report' },
-      401: { description: 'Unauthorized' },
-      403: { description: 'Forbidden — admin access required' },
+      200: {
+        description: 'Environment variable status report',
+        content: {
+          'application/json': { schema: resolver(EnvCheckResponse) },
+        },
+      },
+      401: {
+        description: 'Unauthorized',
+        content: {
+          'application/json': { schema: resolver(AdminErrorResponse) },
+        },
+      },
+      403: {
+        description: 'Forbidden — admin access required',
+        content: {
+          'application/json': { schema: resolver(AdminErrorResponse) },
+        },
+      },
     },
   }),
   async (c) => {

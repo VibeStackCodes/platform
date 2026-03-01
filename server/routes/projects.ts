@@ -1,8 +1,62 @@
 // server/routes/projects.ts
-import { describeRoute } from 'hono-openapi'
+import { describeRoute, resolver } from 'hono-openapi'
 import { Hono } from 'hono'
+import { z } from 'zod'
 import { createProject, getProject, getProjectMessages, getUserProjects } from '../lib/db/queries'
 import { authMiddleware } from '../middleware/auth'
+
+// ---------------------------------------------------------------------------
+// Shared Zod schemas — used in describeRoute() responses and request bodies
+// ---------------------------------------------------------------------------
+
+const ProjectStatusSchema = z.enum([
+  'pending',
+  'planning',
+  'generating',
+  'verifying',
+  'complete',
+  'error',
+  'deploying',
+  'deployed',
+])
+
+const ProjectSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+  description: z.string().nullable(),
+  prompt: z.string().nullable(),
+  status: ProjectStatusSchema,
+  previewUrl: z.string().nullable(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+})
+
+const CreateProjectBodySchema = z.object({
+  name: z.string(),
+  prompt: z.string().optional(),
+})
+
+const MessagePartSchema = z.object({
+  text: z.string(),
+})
+
+const MessageSchema = z.object({
+  id: z.string().uuid(),
+  role: z.enum(['user', 'assistant', 'system', 'tool']),
+  type: z.string(),
+  parts: z.array(MessagePartSchema),
+  createdAt: z.string().datetime(),
+})
+
+const ErrorSchema = z.object({ error: z.string() })
+
+const UuidPathParam = {
+  name: 'id',
+  in: 'path' as const,
+  required: true,
+  schema: { type: 'string' as const, format: 'uuid' },
+  description: 'Project UUID',
+}
 
 export const projectRoutes = new Hono()
 
@@ -18,8 +72,16 @@ projectRoutes.get(
   describeRoute({
     summary: 'List user projects',
     tags: ['projects'],
+    security: [{ bearerAuth: [] }],
     responses: {
-      200: { description: 'Array of projects belonging to the authenticated user' },
+      200: {
+        description: 'Array of projects belonging to the authenticated user',
+        content: {
+          'application/json': {
+            schema: resolver(z.array(ProjectSchema)),
+          },
+        },
+      },
       401: { description: 'Unauthorized' },
     },
   }),
@@ -52,11 +114,48 @@ projectRoutes.post(
   describeRoute({
     summary: 'Create a new project',
     tags: ['projects'],
+    security: [{ bearerAuth: [] }],
+    requestBody: {
+      required: true,
+      content: {
+        'application/json': {
+          schema: {
+            type: 'object',
+            required: ['name'],
+            properties: {
+              name: { type: 'string', description: 'Project display name' },
+              prompt: { type: 'string', description: 'Initial generation prompt (optional)' },
+            },
+          },
+        },
+      },
+    },
     responses: {
-      201: { description: 'Project created successfully' },
-      400: { description: 'Missing project name' },
+      201: {
+        description: 'Project created successfully',
+        content: {
+          'application/json': {
+            schema: resolver(ProjectSchema),
+          },
+        },
+      },
+      400: {
+        description: 'Missing project name',
+        content: {
+          'application/json': {
+            schema: resolver(ErrorSchema),
+          },
+        },
+      },
       401: { description: 'Unauthorized' },
-      500: { description: 'Failed to create project' },
+      500: {
+        description: 'Failed to create project',
+        content: {
+          'application/json': {
+            schema: resolver(ErrorSchema),
+          },
+        },
+      },
     },
   }),
   async (c) => {
@@ -93,10 +192,26 @@ projectRoutes.get(
   describeRoute({
     summary: 'Get project by ID',
     tags: ['projects'],
+    security: [{ bearerAuth: [] }],
+    parameters: [UuidPathParam],
     responses: {
-      200: { description: 'Project details' },
+      200: {
+        description: 'Project details',
+        content: {
+          'application/json': {
+            schema: resolver(ProjectSchema),
+          },
+        },
+      },
       401: { description: 'Unauthorized' },
-      404: { description: 'Project not found' },
+      404: {
+        description: 'Project not found',
+        content: {
+          'application/json': {
+            schema: resolver(ErrorSchema),
+          },
+        },
+      },
     },
   }),
   async (c) => {
@@ -124,10 +239,26 @@ projectRoutes.get(
   describeRoute({
     summary: 'Get project chat messages',
     tags: ['projects'],
+    security: [{ bearerAuth: [] }],
+    parameters: [UuidPathParam],
     responses: {
-      200: { description: 'Array of chat messages for the project' },
+      200: {
+        description: 'Array of chat messages for the project',
+        content: {
+          'application/json': {
+            schema: resolver(z.array(MessageSchema)),
+          },
+        },
+      },
       401: { description: 'Unauthorized' },
-      404: { description: 'Project not found' },
+      404: {
+        description: 'Project not found',
+        content: {
+          'application/json': {
+            schema: resolver(ErrorSchema),
+          },
+        },
+      },
     },
   }),
   async (c) => {

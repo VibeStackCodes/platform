@@ -10,8 +10,9 @@
  * See packages/preview-proxy/ for the proxy implementation.
  */
 
-import { describeRoute } from 'hono-openapi'
+import { describeRoute, resolver } from 'hono-openapi'
 import { Hono } from 'hono'
+import { z } from 'zod'
 import {
   buildProxyUrl,
   findSandboxByProject,
@@ -21,6 +22,28 @@ import {
 } from '../lib/sandbox'
 import { getProject } from '../lib/db/queries'
 import { authMiddleware } from '../middleware/auth'
+
+// ---------------------------------------------------------------------------
+// Zod schemas for OpenAPI metadata
+// ---------------------------------------------------------------------------
+
+const SandboxUrlsResponseSchema = z.object({
+  sandboxId: z.string(),
+  previewUrl: z.string().nullable(),
+  previewToken: z.string().nullable(),
+  codeServerUrl: z.string().nullable(),
+  expiresAt: z.string().datetime().nullable(),
+})
+
+const ErrorSchema = z.object({ error: z.string() })
+
+const UuidPathParam = {
+  name: 'id',
+  in: 'path' as const,
+  required: true,
+  schema: { type: 'string' as const, format: 'uuid' },
+  description: 'Project UUID',
+}
 
 export const sandboxUrlRoutes = new Hono()
 
@@ -35,10 +58,26 @@ sandboxUrlRoutes.get(
     summary: 'Get sandbox preview and code server URLs',
     description: 'Returns signed preview and code server URLs for a project sandbox. URLs expire after 1 hour.',
     tags: ['sandbox'],
+    security: [{ bearerAuth: [] }],
+    parameters: [UuidPathParam],
     responses: {
-      200: { description: 'Sandbox URLs (previewUrl, codeServerUrl, expiresAt)' },
+      200: {
+        description: 'Sandbox URLs (previewUrl, codeServerUrl, expiresAt)',
+        content: {
+          'application/json': {
+            schema: resolver(SandboxUrlsResponseSchema),
+          },
+        },
+      },
       401: { description: 'Unauthorized' },
-      404: { description: 'Project not found' },
+      404: {
+        description: 'Project not found',
+        content: {
+          'application/json': {
+            schema: resolver(ErrorSchema),
+          },
+        },
+      },
     },
   }),
   async (c) => {

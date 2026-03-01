@@ -3,10 +3,26 @@
  * Handles Stripe webhook events for subscription lifecycle
  */
 
-import { describeRoute } from 'hono-openapi'
+import { describeRoute, resolver } from 'hono-openapi'
+import type { OpenAPIV3_1 } from 'openapi-types'
 import { Hono } from 'hono'
 import { Stripe } from 'stripe'
+import { z } from 'zod'
 import { getProfileByStripeId, updateProfileByStripeId, updateProfilePlan } from '../lib/db/queries'
+
+// ---------------------------------------------------------------------------
+// Zod schemas
+// ---------------------------------------------------------------------------
+
+const WebhookRequestSchema = z.string().describe('Raw Stripe event payload (JSON string)')
+
+const WebhookResponseSchema = z.object({
+  received: z.literal(true).describe('Acknowledgement flag'),
+})
+
+const ErrorResponseSchema = z.object({
+  error: z.string().describe('Error message'),
+})
 
 function getStripe() {
   const key = process.env.STRIPE_SECRET_KEY
@@ -34,10 +50,24 @@ stripeWebhookRoutes.post(
     summary: 'Handle Stripe webhook events',
     description: 'No auth middleware — Stripe calls this directly. Validates signature before processing.',
     tags: ['stripe'],
+    security: [{ stripeSignature: [] }],
+    requestBody: {
+      required: true,
+      content: { 'text/plain': { schema: resolver(WebhookRequestSchema) as unknown as OpenAPIV3_1.SchemaObject } },
+    },
     responses: {
-      200: { description: 'Webhook received and processed' },
-      400: { description: 'Missing signature or invalid payload' },
-      500: { description: 'Webhook processing failed' },
+      200: {
+        description: 'Webhook received and processed',
+        content: { 'application/json': { schema: resolver(WebhookResponseSchema) } },
+      },
+      400: {
+        description: 'Missing signature or invalid payload',
+        content: { 'application/json': { schema: resolver(ErrorResponseSchema) } },
+      },
+      500: {
+        description: 'Webhook processing failed',
+        content: { 'application/json': { schema: resolver(ErrorResponseSchema) } },
+      },
     },
   }),
   async (c) => {

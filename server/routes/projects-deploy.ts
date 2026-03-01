@@ -4,16 +4,38 @@
  * Downloads files from Daytona sandbox and deploys to Vercel
  */
 
-import { describeRoute } from 'hono-openapi'
+import { describeRoute, resolver } from 'hono-openapi'
+import type { OpenAPIV3_1 } from 'openapi-types'
 import type { Deployment } from '@vercel/client'
 import { checkDeploymentStatus } from '@vercel/client'
 import { Hono } from 'hono'
+import { z } from 'zod'
 import { getProject, updateProject } from '../lib/db/queries'
 import { fetchWithTimeout } from '../lib/fetch'
 import { downloadDirectory, getDaytonaClient } from '../lib/sandbox'
 import { buildAppSlug } from '../lib/slug'
 import type { DeployRequest } from '../lib/types'
 import { authMiddleware } from '../middleware/auth'
+
+// ---------------------------------------------------------------------------
+// Zod schemas
+// ---------------------------------------------------------------------------
+
+const DeployRequestSchema = z.object({
+  projectId: z.string().describe('ID of the project to deploy'),
+  vercelTeamId: z.string().optional().describe('Vercel team ID (overrides VERCEL_TEAM_ID env var)'),
+})
+
+const DeployResponseSchema = z.object({
+  success: z.literal(true),
+  deployUrl: z.string().url().describe('Public URL of the deployed app'),
+  projectId: z.string().describe('ID of the deployed project'),
+})
+
+const ErrorResponseSchema = z.object({
+  error: z.string().describe('Error message'),
+  message: z.string().optional().describe('Human-readable detail'),
+})
 
 export const projectDeployRoutes = new Hono()
 
@@ -31,12 +53,32 @@ projectDeployRoutes.post(
     summary: 'Deploy project to Vercel',
     description: 'Downloads files from Daytona sandbox and deploys to Vercel. Uses GitHub repo if available.',
     tags: ['deploy'],
+    security: [{ bearerAuth: [] }],
+    requestBody: {
+      required: true,
+      content: { 'application/json': { schema: resolver(DeployRequestSchema) as unknown as OpenAPIV3_1.SchemaObject } },
+    },
     responses: {
-      200: { description: 'Deployment successful — returns deployUrl' },
-      400: { description: 'Missing projectId or project has no sandbox' },
-      401: { description: 'Unauthorized' },
-      404: { description: 'Project or sandbox not found' },
-      500: { description: 'Deployment failed' },
+      200: {
+        description: 'Deployment successful — returns deployUrl',
+        content: { 'application/json': { schema: resolver(DeployResponseSchema) } },
+      },
+      400: {
+        description: 'Missing projectId or project has no sandbox',
+        content: { 'application/json': { schema: resolver(ErrorResponseSchema) } },
+      },
+      401: {
+        description: 'Unauthorized',
+        content: { 'application/json': { schema: resolver(ErrorResponseSchema) } },
+      },
+      404: {
+        description: 'Project or sandbox not found',
+        content: { 'application/json': { schema: resolver(ErrorResponseSchema) } },
+      },
+      500: {
+        description: 'Deployment failed',
+        content: { 'application/json': { schema: resolver(ErrorResponseSchema) } },
+      },
     },
   }),
   async (c) => {
