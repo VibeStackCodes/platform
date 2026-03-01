@@ -26,8 +26,12 @@
   ],
   "references": [
     {
-      "name": "API Reference",
-      "path": "/api/doc"
+      "name": "Platform API",
+      "path": "docs/openapi.json"
+    },
+    {
+      "name": "Mastra Studio API",
+      "path": "docs/mastra-openapi.json"
     }
   ]
 }

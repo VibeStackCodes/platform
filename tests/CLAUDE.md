@@ -34,4 +34,10 @@ bun run test -- --project storybook  # All 106 stories in Chromium (~33s)
 bun run docs:validate  # Validate OpenAPI spec (requires dev server running)
 bun run docs:mock      # Start mock API server on port 8788 (from OpenAPI spec)
 bun run docs:preview   # Preview Scalar docs locally on port 8789
+bun run docs:export    # Export both Hono + Mastra OpenAPI specs to docs/ (requires both servers)
 ```
+
+## OpenAPI Specs
+- `docs/openapi.json` — Platform API (Hono, from `localhost:8787/api/doc`)
+- `docs/mastra-openapi.json` — Mastra Studio API (168 endpoints, from `localhost:4111/api/openapi.json`)
+- Both referenced in `scalar.config.json` for Scalar Docs hosted site
