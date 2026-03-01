@@ -57,10 +57,10 @@ if (process.env.SENTRY_DSN) {
   app.use('*', sentry({ dsn: process.env.SENTRY_DSN }))
 }
 
-// Security headers (all routes)
-app.use(
-  '*',
-  secureHeaders({
+// Security headers (all routes except /doc and /reference — Scalar needs its own CSP)
+app.use('*', async (c, next) => {
+  if (c.req.path === '/api/doc' || c.req.path === '/api/reference') return next()
+  return secureHeaders({
     contentSecurityPolicy: {
       defaultSrc: ["'self'"],
       scriptSrc: ["'self'"],
@@ -79,8 +79,8 @@ app.use(
       microphone: [],
       camera: [],
     },
-  }),
-)
+  })(c, next)
+})
 
 // Body size limit (10MB for all API routes)
 // Note: basePath is '/api', so '/*' matches '/api/*' in the actual URL
