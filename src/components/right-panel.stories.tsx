@@ -1,8 +1,10 @@
 import type { Meta, StoryObj } from '@storybook/react'
 import { fn } from '@storybook/test'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { CheckCircle2, Code2, Download, Eye, FileText, Rocket, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useDebouncedSave } from '@/hooks/use-debounced-save'
+import { SaveIndicator } from '@/components/save-indicator'
 import { RightPanel } from './right-panel'
 
 const sampleCode = `import { useState } from 'react'
@@ -40,6 +42,7 @@ const newCode = `export function Header() {
 const sharedArgs = {
   onDragStart: fn(),
   onClose: fn(),
+  onSave: fn(),
   isDragging: false,
   width: 50,
 }
@@ -126,132 +129,45 @@ export const DiffPanelNewFile: Story = {
   },
 }
 
-export const ArtifactPanel: Story = {
+const prdContent = `TaskFlow — PRD
+Detailed product requirements with user stories and acceptance criteria.
+
+1. Authentication
+
+US-001: Email Sign Up
+As a new user, I want to create an account with email and password.
+  • Email validation with confirmation
+  • Password min 8 chars, 1 uppercase, 1 number
+  • Rate limit: 5 attempts/min
+
+US-002: OAuth Login
+As a user, I want to sign in with Google/GitHub.
+
+2. Kanban Board
+
+US-003: Create Board
+As a team lead, I want to create a new board with custom columns.
+  • Default columns: To Do, In Progress, Done
+  • Custom column names and colors
+  • WIP limits per column
+
+US-004: Drag & Drop Cards
+As a user, I want to drag task cards between columns to update their status.`
+
+/**
+ * Prototype steps 3-4: Document viewer panel.
+ * Editable paper-like artifact body with auto-save indicator in the header.
+ * Type in the document body to see the spinner → checkmark transition.
+ */
+export const DocumentPanel: Story = {
   args: {
     isOpen: true,
     content: {
       type: 'artifact',
       title: 'Product Requirements Document',
-      content: `# Task Manager App\n\n## Overview\nA minimal task management app for individuals who want a distraction-free to-do list.\n\n## Core Features\n- Create, edit and delete tasks\n- Mark tasks as complete\n- Filter by status (All / Active / Completed)\n- Persist tasks between sessions (localStorage)\n\n## Non-Goals\n- Team collaboration\n- Due dates and reminders (v2)\n- Integrations with external tools`,
+      content: prdContent,
     },
   },
-}
-
-/**
- * Prototype steps 3-4: Document viewer panel.
- * Shows a rendered document (Strategy Playbook / PRD) with a paper-like
- * background, proper header with doc-type badge, and action icons.
- * Structural stand-in — rendered directly without the RightPanel wrapper.
- */
-function StaticDocumentPanel({
-  title,
-  docType,
-  onClose,
-}: {
-  title: string
-  docType: string
-  onClose: () => void
-}) {
-  return (
-    <div className="flex h-full w-[480px] flex-col border-l bg-background">
-      {/* Header */}
-      <div className="flex items-center justify-between border-b px-4 py-3">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-medium">{title}</span>
-          <span className="text-xs text-muted-foreground">· {docType}</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <Download size={16} className="cursor-pointer text-muted-foreground hover:text-foreground" />
-          <CheckCircle2 size={16} className="cursor-pointer text-muted-foreground hover:text-foreground" />
-          <button type="button" onClick={onClose} className="rounded p-1 hover:bg-muted">
-            <X size={16} />
-          </button>
-        </div>
-      </div>
-
-      {/* Document body — paper-like */}
-      <div className="flex-1 overflow-y-auto bg-muted/30 p-6">
-        <div className="mx-auto max-w-md rounded-lg bg-background p-8 shadow-sm">
-          <h1 className="mb-2 text-center text-2xl font-bold">TaskFlow — PRD</h1>
-          <p className="mb-8 text-center text-sm text-muted-foreground">
-            Detailed product requirements with user stories and acceptance criteria.
-          </p>
-
-          <h2 className="mb-3 text-lg font-bold">1. Authentication</h2>
-
-          <p className="mb-2 text-sm font-semibold text-primary">US-001: Email Sign Up</p>
-          <p className="mb-2 text-sm">
-            As a new user, I want to create an account with email and password.
-          </p>
-          <ul className="mb-4 list-disc space-y-1 pl-5 text-sm">
-            <li>Email validation with confirmation</li>
-            <li>Password min 8 chars, 1 uppercase, 1 number</li>
-            <li>Rate limit: 5 attempts/min</li>
-          </ul>
-
-          <p className="mb-2 text-sm font-semibold text-primary">US-002: OAuth Login</p>
-          <p className="mb-4 text-sm">As a user, I want to sign in with Google/GitHub.</p>
-
-          <h2 className="mb-3 text-lg font-bold">2. Kanban Board</h2>
-
-          <p className="mb-2 text-sm font-semibold text-primary">US-003: Create Board</p>
-          <p className="mb-2 text-sm">
-            As a team lead, I want to create a new board with custom columns.
-          </p>
-          <ul className="mb-4 list-disc space-y-1 pl-5 text-sm">
-            <li>Default columns: To Do, In Progress, Done</li>
-            <li>Custom column names and colors</li>
-            <li>WIP limits per column</li>
-          </ul>
-
-          <p className="mb-2 text-sm font-semibold text-primary">US-004: Drag & Drop Cards</p>
-          <p className="text-sm">
-            As a user, I want to drag task cards between columns to update their status.
-          </p>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-export const DocumentPanel: Story = {
-  args: {
-    isOpen: true,
-    content: null,
-  },
-  render: () => (
-    <div className="flex h-screen w-full">
-      <div className="flex-1 bg-muted/20 p-4">
-        <p className="text-sm text-muted-foreground">Chat column (left)</p>
-      </div>
-      <StaticDocumentPanel
-        title="Product Requirements Document"
-        docType="DOCX"
-        onClose={fn()}
-      />
-    </div>
-  ),
-  parameters: { layout: 'fullscreen' },
-}
-
-export const StrategyPlaybookPanel: Story = {
-  args: {
-    isOpen: true,
-    content: null,
-  },
-  render: () => (
-    <div className="flex h-screen w-full">
-      <div className="flex-1 bg-muted/20 p-4">
-        <p className="text-sm text-muted-foreground">Chat column (left)</p>
-      </div>
-      <StaticDocumentPanel
-        title="Product Strategy Playbook"
-        docType="DOCX"
-        onClose={fn()}
-      />
-    </div>
-  ),
-  parameters: { layout: 'fullscreen' },
 }
 
 export const WhileDragging: Story = {
@@ -548,8 +464,33 @@ export const DesignSystemPanel: Story = {
 
 // ---------------------------------------------------------------------------
 
+const kanbanCode = `import { useState } from 'react'
+import { DndContext } from '@dnd-kit/core'
+
+export function KanbanBoard() {
+  const [columns, setColumns] = useState([
+    { id: 'todo', title: 'To Do', cards: [] },
+    { id: 'progress', title: 'In Progress', cards: [] },
+    { id: 'done', title: 'Done', cards: [] },
+  ])
+
+  return (
+    <DndContext onDragEnd={handleDragEnd}>
+      <div className="flex gap-4 p-6">
+        {columns.map(col => (
+          <Column key={col.id} {...col} />
+        ))}
+      </div>
+    </DndContext>
+  )
+}`
+
 function StaticPreviewWithTabsPanel({ onClose }: { onClose: () => void }) {
   const [activeTab, setActiveTab] = useState<'preview' | 'code'>('preview')
+  const codeRef = useRef<HTMLDivElement>(null)
+  const { status: saveStatus, trigger: triggerSave } = useDebouncedSave({
+    onSave: fn(),
+  })
 
   return (
     <div className="flex h-full w-[50%] min-w-[400px] flex-col border-l bg-background">
@@ -591,7 +532,7 @@ function StaticPreviewWithTabsPanel({ onClose }: { onClose: () => void }) {
             <Rocket size={12} />
             Deploy
           </button>
-          <CheckCircle2 size={14} className="text-muted-foreground" />
+          <SaveIndicator status={saveStatus} />
           <button type="button" onClick={onClose} className="rounded p-1 hover:bg-muted">
             <X size={14} />
           </button>
@@ -646,30 +587,20 @@ function StaticPreviewWithTabsPanel({ onClose }: { onClose: () => void }) {
                 <div className="px-2 py-1 text-muted-foreground">tasks.ts</div>
               </div>
             </div>
-            {/* Editor */}
-            <div className="flex-1 overflow-auto bg-[oklch(0.15_0_0)] p-4">
-              <pre className="font-mono text-xs leading-5 text-green-400">
-                {`import { useState } from 'react'
-import { DndContext } from '@dnd-kit/core'
-
-export function KanbanBoard() {
-  const [columns, setColumns] = useState([
-    { id: 'todo', title: 'To Do', cards: [] },
-    { id: 'progress', title: 'In Progress', cards: [] },
-    { id: 'done', title: 'Done', cards: [] },
-  ])
-
-  return (
-    <DndContext onDragEnd={handleDragEnd}>
-      <div className="flex gap-4 p-6">
-        {columns.map(col => (
-          <Column key={col.id} {...col} />
-        ))}
-      </div>
-    </DndContext>
-  )
-}`}
-              </pre>
+            {/* Editable code editor — matches CodePanel formatting */}
+            <div className="min-h-0 flex-1 overflow-auto">
+              <div
+                ref={codeRef}
+                contentEditable
+                suppressContentEditableWarning
+                spellCheck={false}
+                onInput={() => {
+                  if (codeRef.current) triggerSave(codeRef.current.textContent ?? '')
+                }}
+                className="h-full p-4 font-mono text-sm leading-relaxed text-foreground/90 whitespace-pre-wrap outline-none"
+              >
+                {kanbanCode}
+              </div>
             </div>
           </div>
         )}

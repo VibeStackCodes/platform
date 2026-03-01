@@ -1,7 +1,10 @@
 import type { ReactNode } from 'react'
+import { useRef } from 'react'
 import { Code, Eye, FileText, GitCompareArrows, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { DiffViewer } from '@/components/ai-elements/diff-viewer'
+import { SaveIndicator } from '@/components/save-indicator'
+import { useDebouncedSave } from '@/hooks/use-debounced-save'
 
 export type PanelContent =
   | { type: 'preview'; previewUrl: string }
@@ -19,6 +22,7 @@ interface RightPanelProps {
   codeServerUrl?: string
   onDragStart: (e: React.MouseEvent) => void
   onClose: () => void
+  onSave?: (content: string) => void
 }
 
 function getContentTitle(content: PanelContent): string {
@@ -69,14 +73,85 @@ function getContentBadge(content: PanelContent): ReactNode {
   }
 }
 
+function isEditable(content: PanelContent): boolean {
+  return content?.type === 'artifact' || content?.type === 'code'
+}
+
+function EditableArtifactBody({
+  content,
+  onInput,
+}: {
+  content: string
+  onInput: (text: string) => void
+}) {
+  const ref = useRef<HTMLDivElement>(null)
+
+  return (
+    <div className="h-full overflow-auto bg-muted/20 p-6">
+      <div className="mx-auto max-w-2xl rounded-lg bg-background shadow-sm">
+        <div className="h-1 rounded-t-lg bg-emerald-500" />
+        <div
+          ref={ref}
+          contentEditable
+          suppressContentEditableWarning
+          spellCheck={false}
+          onInput={() => {
+            if (ref.current) onInput(ref.current.textContent ?? '')
+          }}
+          className="min-h-[200px] p-8 text-sm leading-relaxed text-foreground/85 whitespace-pre-wrap outline-none"
+        >
+          {content}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function EditableCodeBody({
+  filename,
+  code,
+  onInput,
+}: {
+  filename: string
+  code: string
+  onInput: (text: string) => void
+}) {
+  const ref = useRef<HTMLDivElement>(null)
+
+  return (
+    <div className="flex h-full flex-col">
+      <div className="flex shrink-0 items-center gap-2 border-b border-border bg-muted/40 px-3 py-2">
+        <Code className="h-3.5 w-3.5 text-muted-foreground" />
+        <span className="font-mono text-xs text-muted-foreground">{filename}</span>
+      </div>
+      <div className="min-h-0 flex-1 overflow-auto">
+        <div
+          ref={ref}
+          contentEditable
+          suppressContentEditableWarning
+          spellCheck={false}
+          onInput={() => {
+            if (ref.current) onInput(ref.current.textContent ?? '')
+          }}
+          className="h-full p-4 font-mono text-sm leading-relaxed text-foreground/90 whitespace-pre-wrap outline-none"
+        >
+          {code}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function PanelBody({
   content,
   previewUrl,
   codeServerUrl: _codeServerUrl,
+  onInput,
 }: {
   content: PanelContent
   previewUrl?: string
   codeServerUrl?: string
+  onInput: (text: string) => void
 }) {
   if (!content) return null
 
@@ -96,19 +171,11 @@ function PanelBody({
     }
     case 'code':
       return (
-        <div className="flex h-full flex-col">
-          <div className="flex shrink-0 items-center gap-2 border-b border-border bg-muted/40 px-3 py-2">
-            <Code className="h-3.5 w-3.5 text-muted-foreground" />
-            <span className="font-mono text-xs text-muted-foreground">{content.filename}</span>
-          </div>
-          <div className="min-h-0 flex-1 overflow-auto">
-            <pre className="h-full p-4 text-sm">
-              <code className="font-mono text-foreground/90 break-words whitespace-pre-wrap">
-                {content.code}
-              </code>
-            </pre>
-          </div>
-        </div>
+        <EditableCodeBody
+          filename={content.filename}
+          code={content.code}
+          onInput={onInput}
+        />
       )
     case 'diff':
       return (
@@ -121,13 +188,7 @@ function PanelBody({
       )
     case 'artifact':
       return (
-        <div className="h-full overflow-auto p-6">
-          <article className="prose prose-sm prose-invert max-w-none">
-            <div className="whitespace-pre-wrap text-sm leading-relaxed text-foreground/85">
-              {content.content}
-            </div>
-          </article>
-        </div>
+        <EditableArtifactBody content={content.content} onInput={onInput} />
       )
   }
 }
@@ -141,7 +202,10 @@ export function RightPanel({
   codeServerUrl,
   onDragStart,
   onClose,
+  onSave,
 }: RightPanelProps) {
+  const { status: saveStatus, trigger: triggerSave } = useDebouncedSave({ onSave })
+
   const panelStyle: React.CSSProperties = {
     width: isOpen ? `${width}%` : '0',
     minWidth: isOpen ? '340px' : '0',
@@ -154,6 +218,7 @@ export function RightPanel({
   const title = getContentTitle(content)
   const badge = getContentBadge(content)
   const showCodeServerTab = content?.type === 'preview' && !!codeServerUrl
+  const showSaveIndicator = isEditable(content)
 
   return (
     <div
@@ -206,6 +271,8 @@ export function RightPanel({
           </a>
         )}
 
+        {showSaveIndicator && <SaveIndicator status={saveStatus} />}
+
         <button
           type="button"
           onClick={onClose}
@@ -227,6 +294,7 @@ export function RightPanel({
           content={content}
           previewUrl={previewUrl}
           codeServerUrl={codeServerUrl}
+          onInput={triggerSave}
         />
       </div>
     </div>
