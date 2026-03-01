@@ -53,7 +53,7 @@ function StaticNavbar({ isLoggedIn = false }: { isLoggedIn?: boolean }) {
 }
 
 const meta = {
-  title: 'Builder/LandingNavbar',
+  title: 'VibeStack/LandingNavbar',
   component: StaticNavbar,
   tags: ['autodocs'],
   parameters: {

@@ -151,7 +151,7 @@ const queryClient = new QueryClient({
 })
 
 const meta = {
-  title: 'Builder/AppSidebar',
+  title: 'VibeStack/AppSidebar',
   component: StaticSidebar,
   tags: ['autodocs'],
   parameters: {

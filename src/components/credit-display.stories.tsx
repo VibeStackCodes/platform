@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react'
 import { CreditDisplay } from './credit-display'
 
 const meta = {
-  title: 'Builder/CreditDisplay',
+  title: 'VibeStack/CreditDisplay',
   component: CreditDisplay,
   tags: ['autodocs'],
   parameters: { layout: 'padded' },

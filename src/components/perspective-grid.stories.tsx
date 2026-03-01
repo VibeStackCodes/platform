@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react'
 import { PerspectiveGrid } from './perspective-grid'
 
 const meta = {
-  title: 'Builder/PerspectiveGrid',
+  title: 'VibeStack/PerspectiveGrid',
   component: PerspectiveGrid,
   tags: ['autodocs'],
   parameters: {

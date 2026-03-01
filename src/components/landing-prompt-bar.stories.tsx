@@ -3,7 +3,7 @@ import { fn } from '@storybook/test'
 import { LandingPromptBar } from './landing-prompt-bar'
 
 const meta = {
-  title: 'Builder/LandingPromptBar',
+  title: 'VibeStack/LandingPromptBar',
   component: LandingPromptBar,
   tags: ['autodocs'],
   parameters: { layout: 'padded' },

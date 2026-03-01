@@ -8,7 +8,7 @@ import {
 } from './clarification-questions.fixtures'
 
 const meta = {
-  title: 'Builder/ClarificationQuestions',
+  title: 'VibeStack/ClarificationQuestions',
   component: ClarificationQuestions,
   tags: ['autodocs'],
   parameters: { layout: 'padded' },
