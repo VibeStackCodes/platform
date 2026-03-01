@@ -29,7 +29,7 @@ export function HitlActions({
             type="button"
             disabled={disabled}
             onClick={onApprove}
-            className="bg-[#d97757] hover:bg-[#c8654a] text-white px-5 py-2 rounded-full text-[13px] font-medium transition-all hover:-translate-y-px disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
+            className="bg-primary hover:bg-primary/90 text-primary-foreground px-5 py-2 rounded-full text-[13px] font-medium transition-all hover:-translate-y-px disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
           >
             Approve
           </button>

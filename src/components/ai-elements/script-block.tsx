@@ -22,7 +22,7 @@ export function ScriptBlock({
         className,
       )}
     >
-      <div className="bg-[#f5f3ed] dark:bg-muted rounded-xl px-4 py-3.5">
+      <div className="bg-secondary rounded-xl px-4 py-3.5">
         <span className="text-muted-foreground block mb-1.5 text-[13.5px] font-sans">
           {commandLabel}
         </span>
@@ -32,7 +32,7 @@ export function ScriptBlock({
       </div>
 
       {output !== undefined && (
-        <div className="bg-[#f5f3ed] dark:bg-muted rounded-xl px-4 py-3.5">
+        <div className="bg-secondary rounded-xl px-4 py-3.5">
           <span className="text-muted-foreground block mb-1.5 text-[13.5px] font-sans">
             {outputLabel}
           </span>

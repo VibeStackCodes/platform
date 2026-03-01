@@ -15,7 +15,7 @@ export function PlanBlock({ title, items, className }: PlanBlockProps) {
   return (
     <div
       className={cn(
-        'bg-[#f5f3ed] dark:bg-muted border border-border rounded-xl px-5 py-4 max-w-[600px]',
+        'bg-secondary border border-border rounded-xl px-5 py-4 max-w-[600px]',
         className,
       )}
     >

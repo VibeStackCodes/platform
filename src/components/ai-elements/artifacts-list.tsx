@@ -72,7 +72,7 @@ export function ArtifactsList({ title = 'Artifacts', items, className }: Artifac
   return (
     <div
       className={cn(
-        'bg-[#f5f3ed] dark:bg-muted border border-border rounded-xl overflow-hidden',
+        'bg-secondary border border-border rounded-xl overflow-hidden',
         className,
       )}
     >

@@ -801,8 +801,8 @@ export const PromptInput = ({
       >
         <InputGroup
           className={cn(
-            "overflow-hidden rounded-3xl border border-[#e8e6dc] bg-white p-3.5 shadow-sm",
-            "has-[[data-slot=input-group-control]:focus-visible]:border-[#d97757] has-[[data-slot=input-group-control]:focus-visible]:ring-[#d97757]/20"
+            "overflow-hidden rounded-3xl border border-border bg-background p-3.5 shadow-sm",
+            "has-[[data-slot=input-group-control]:focus-visible]:border-primary has-[[data-slot=input-group-control]:focus-visible]:ring-primary/20"
           )}
         >
           {children}
@@ -1140,7 +1140,7 @@ export const PromptInputSubmit = ({
     <InputGroupButton
       aria-label={isGenerating ? "Stop" : "Submit"}
       className={cn(
-        "rounded-full bg-[#d97757] text-white hover:bg-[#c4684a] disabled:opacity-40",
+        "rounded-full bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-40",
         className
       )}
       onClick={handleClick}

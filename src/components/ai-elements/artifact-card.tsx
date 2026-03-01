@@ -16,9 +16,9 @@ export interface ArtifactCardProps {
 }
 
 const VARIANT_ICON_CLASSES: Record<ArtifactVariant, string> = {
-  doc: 'bg-[#6a9bcc]/12 text-[#6a9bcc]',
-  design: 'bg-[#d97757]/12 text-[#d97757]',
-  code: 'bg-[#8b5cf6]/12 text-[#8b5cf6]',
+  doc: 'bg-blue-500/12 text-blue-600 dark:text-blue-400',
+  design: 'bg-orange-500/12 text-orange-600 dark:text-orange-400',
+  code: 'bg-purple-500/12 text-purple-600 dark:text-purple-400',
   default: 'bg-muted text-muted-foreground',
 }
 
@@ -103,8 +103,8 @@ export function ArtifactCard({
           : undefined
       }
       className={cn(
-        'flex items-center gap-3 p-3 bg-[#f5f3ed] dark:bg-muted border border-border rounded-xl transition-all max-w-[400px]',
-        onClick && 'cursor-pointer hover:border-[#d97757] hover:shadow-md',
+        'flex items-center gap-3 p-3 bg-secondary border border-border rounded-xl transition-all max-w-[400px]',
+        onClick && 'cursor-pointer hover:border-primary hover:shadow-md',
         className,
       )}
     >
