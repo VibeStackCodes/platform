@@ -1,6 +1,6 @@
 'use client'
 
-import { Suspense, useMemo } from 'react'
+import { Suspense } from 'react'
 import {
   Bot,
   CheckCircle2,
@@ -20,13 +20,6 @@ import {
   ConversationScrollButton,
 } from '@/components/ai-elements/conversation'
 import { Message, MessageContent, MessageResponse } from '@/components/ai-elements/message'
-import {
-  FileTree,
-  FileTreeFile,
-  FileTreeFolder,
-  FileTreeIcon,
-  FileTreeName,
-} from '@/components/ai-elements/file-tree'
 import { ThinkingCard } from '@/components/ai-elements/thinking-card'
 import { ThemeTokensCard } from '@/components/ai-elements/theme-tokens-card'
 import type { ThemeTokens as ThemeTokensCardTokens } from '@/components/ai-elements/theme-tokens-card'
@@ -99,113 +92,6 @@ function ClarificationAnswersOrText({ content }: { content: string }) {
         ))}
       </div>
     </div>
-  )
-}
-
-// ============================================================================
-// File Tree Helpers
-// ============================================================================
-
-interface TreeNode {
-  name: string
-  path: string
-  isDir: boolean
-  children: TreeNode[]
-  status?: 'pending' | 'generating' | 'complete' | 'error'
-  lines?: number
-}
-
-function buildFileTree(
-  files: { path: string; status: 'pending' | 'generating' | 'complete' | 'error'; lines?: number }[],
-): TreeNode[] {
-  const root: TreeNode[] = []
-
-  for (const file of files) {
-    const parts = file.path.split('/')
-    let current = root
-
-    for (let i = 0; i < parts.length; i++) {
-      const part = parts[i]
-      const isLast = i === parts.length - 1
-      const fullPath = parts.slice(0, i + 1).join('/')
-
-      const existing = current.find((n) => n.name === part)
-      if (existing) {
-        if (isLast) {
-          existing.status = file.status
-          existing.lines = file.lines
-        }
-        current = existing.children
-      } else {
-        const node: TreeNode = {
-          name: part,
-          path: fullPath,
-          isDir: !isLast,
-          children: [],
-          status: isLast ? file.status : undefined,
-          lines: isLast ? file.lines : undefined,
-        }
-        current.push(node)
-        current = node.children
-      }
-    }
-  }
-
-  return root
-}
-
-/** Renders generated files as a collapsible tree */
-function GeneratedFileTree({
-  files,
-}: {
-  files: { path: string; status: 'pending' | 'generating' | 'complete' | 'error'; lines?: number }[]
-}) {
-  const tree = useMemo(() => buildFileTree(files), [files])
-  const defaultExpanded = useMemo(
-    () => new Set(tree.filter((n) => n.isDir).map((n) => n.path)),
-    [tree],
-  )
-
-  function renderNode(node: TreeNode) {
-    if (node.isDir) {
-      return (
-        <FileTreeFolder key={node.path} path={node.path} name={node.name}>
-          {node.children.map(renderNode)}
-        </FileTreeFolder>
-      )
-    }
-
-    const statusIcon =
-      node.status === 'complete' ? (
-        <CheckCircle2 className="size-3.5 text-green-500" />
-      ) : node.status === 'generating' ? (
-        <Loader2 className="size-3.5 animate-spin text-blue-400" />
-      ) : node.status === 'error' ? (
-        <span className="size-3.5 text-red-500">!</span>
-      ) : (
-        <span className="size-3.5 text-muted-foreground/50" />
-      )
-
-    return (
-      <FileTreeFile key={node.path} path={node.path} name={node.name}>
-        <span className="size-4" />
-        <FileTreeIcon>{statusIcon}</FileTreeIcon>
-        <FileTreeName
-          className={node.status === 'complete' ? 'text-muted-foreground' : 'text-foreground'}
-        >
-          {node.name}
-          {node.lines !== undefined && (
-            <span className="ml-1 text-xs text-muted-foreground">({node.lines}L)</span>
-          )}
-        </FileTreeName>
-      </FileTreeFile>
-    )
-  }
-
-  return (
-    <FileTree defaultExpanded={defaultExpanded} className="border-0 bg-transparent text-xs">
-      {tree.map(renderNode)}
-    </FileTree>
   )
 }
 
@@ -489,7 +375,20 @@ export function ChatColumn({
                               working={!isComplete}
                               timer={formatTimer(entry.durationMs)}
                             >
-                              <GeneratedFileTree files={generationFiles} />
+                              <div className="space-y-1 text-sm text-muted-foreground">
+                                {generationFiles.map((f) => (
+                                  <div key={f.path} className="flex items-center gap-2">
+                                    {f.status === 'complete' ? (
+                                      <CheckCircle2 className="size-3.5 shrink-0 text-green-500" />
+                                    ) : f.status === 'generating' ? (
+                                      <Loader2 className="size-3.5 shrink-0 animate-spin text-blue-400" />
+                                    ) : (
+                                      <span className="size-3.5 shrink-0" />
+                                    )}
+                                    <span className="font-mono text-xs">{f.path}</span>
+                                  </div>
+                                ))}
+                              </div>
                             </AgentHeader>
                           )
                         }

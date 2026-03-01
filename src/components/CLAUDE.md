@@ -9,11 +9,10 @@ Split-view chat + preview interface for app generation.
 - `clarification-questions.tsx` — Multi-choice form for analyst clarification requests
 - `prompt-bar.tsx` — Chat input bar (Ctrl+Enter to send)
 
-## AI Elements (`ai-elements/` — 17 files)
+## AI Elements (`ai-elements/` — 16 files)
 Specialized rendering components for SSE event data:
 - `message.tsx` / `message-response.tsx` — Chat bubbles (user vs assistant)
 - `conversation.tsx` — Scrollable container with auto-scroll-to-bottom
-- `file-tree.tsx` — Recursive folder/file tree
 - `diff-viewer.tsx` — Unified diff rendering for file changes
 - `thinking-card.tsx` — LLM reasoning/thinking display
 - `tool-activity.tsx` — Tool call progress indicator
