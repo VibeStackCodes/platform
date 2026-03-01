@@ -27,34 +27,12 @@ import {
   FileTreeIcon,
   FileTreeName,
 } from '@/components/ai-elements/file-tree'
-import {
-  StackTrace,
-  StackTraceActions,
-  StackTraceContent,
-  StackTraceCopyButton,
-  StackTraceError,
-  StackTraceErrorMessage,
-  StackTraceErrorType,
-  StackTraceExpandButton,
-  StackTraceFrames,
-  StackTraceHeader,
-} from '@/components/ai-elements/stack-trace'
-import { ActionCard, ActionCardContent, ActionCardHeader, ActionCardTabs } from '@/components/ai-elements/action-card'
 import { ThinkingCard } from '@/components/ai-elements/thinking-card'
-import { OperationSummaryCard } from '@/components/ai-elements/operation-summary-card'
-import {
-  TestResults,
-  TestResultsContent,
-  TestResultsHeader,
-  TestResultsProgress,
-  TestResultsSummary,
-  Test,
-} from '@/components/ai-elements/test-results'
-import { PlanApprovalCard } from '@/components/ai-elements/plan-approval-card'
 import { ThemeTokensCard } from '@/components/ai-elements/theme-tokens-card'
 import type { ThemeTokens as ThemeTokensCardTokens } from '@/components/ai-elements/theme-tokens-card'
-import { ArchitectureCard } from '@/components/ai-elements/architecture-card'
-import { PageProgressCard } from '@/components/ai-elements/page-progress-card'
+import { AgentHeader, type AgentType } from '@/components/ai-elements/agent-header'
+import { HitlActions } from '@/components/ai-elements/hitl-actions'
+import { ScriptBlock } from '@/components/ai-elements/script-block'
 import { ClarificationQuestions } from '@/components/clarification-questions'
 import { CreditDisplay } from '@/components/credit-display'
 import { PromptBar } from '@/components/prompt-bar'
@@ -79,6 +57,12 @@ interface ChatColumnProps {
 // ============================================================================
 // Helper Components
 // ============================================================================
+
+function formatTimer(ms?: number): string | undefined {
+  if (ms == null) return undefined
+  const s = Math.round(ms / 1000)
+  return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${s % 60}s`
+}
 
 /** Renders clarification answers as a structured list, or plain text for normal messages */
 function ClarificationAnswersOrText({ content }: { content: string }) {
@@ -371,161 +355,142 @@ export function ChatColumn({
                           )
                         }
 
-                        // Backend → OperationSummaryCard
+                        // Backend → AgentHeader
                         if (agentId === 'backend') {
                           return (
-                            <OperationSummaryCard
+                            <AgentHeader
                               key={cardKey}
-                              files={fileAssembly}
-                              status={cardStatus}
-                              durationMs={entry.durationMs}
-                            />
+                              agentType="backend"
+                              name="Backend"
+                              icon={<Bot className="size-4" />}
+                              working={!isComplete}
+                              timer={formatTimer(entry.durationMs)}
+                            >
+                              {fileAssembly.length > 0 && (
+                                <div className="space-y-1 text-sm text-muted-foreground">
+                                  {fileAssembly.map((f) => (
+                                    <div key={f.path} className="flex items-center gap-2">
+                                      <CheckCircle2 className="size-3.5 shrink-0 text-green-500" />
+                                      <span className="font-mono text-xs">{f.path}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </AgentHeader>
                           )
                         }
 
-                        // Architect → ActionCard with Details + Preview tabs
+                        // Architect → AgentHeader with theme tokens + plan approval
                         if (agentId === 'architect') {
                           const hasTokens = !!entry.designTokens
-                          const hasArch = !!entry.architecture
-                          const colors = entry.designTokens?.colors
                           const architectLabel = isComplete
                             ? (config?.completeLabel ?? 'Designed app architecture')
                             : (config?.runningLabel ?? 'Designing architecture...')
                           return (
                             <div key={cardKey} className="space-y-3">
-                              <ActionCard>
-                                <ActionCardHeader
-                                  icon={config?.icon ?? 'sparkles'}
-                                  label={architectLabel}
-                                  status={cardStatus}
-                                  durationMs={entry.durationMs}
-                                />
-                                {(hasTokens || hasArch) && (
-                                  <ActionCardTabs>
-                                    <ActionCardContent tab="details">
-                                      <div className="space-y-3">
-                                        {hasTokens && (
-                                          <ThemeTokensCard
-                                            tokens={entry.designTokens as unknown as ThemeTokensCardTokens}
-                                          />
-                                        )}
-                                        {hasArch && <ArchitectureCard spec={entry.architecture!} />}
-                                      </div>
-                                    </ActionCardContent>
-                                    {colors && (
-                                      <ActionCardContent tab="preview">
-                                        <div className="flex flex-wrap gap-2">
-                                          {Object.entries(colors).map(([name, value]) => (
-                                            <div key={name} className="flex items-center gap-1.5">
-                                              <div
-                                                className="size-4 rounded-full border border-border"
-                                                style={{ backgroundColor: value }}
-                                                title={value}
-                                              />
-                                              <span className="text-xs text-muted-foreground capitalize">
-                                                {name.replace(/([A-Z])/g, ' $1').toLowerCase()}
-                                              </span>
-                                            </div>
-                                          ))}
-                                        </div>
-                                      </ActionCardContent>
-                                    )}
-                                  </ActionCardTabs>
+                              <AgentHeader
+                                agentType="architect"
+                                name={architectLabel}
+                                icon={<Bot className="size-4" />}
+                                working={!isComplete}
+                                timer={formatTimer(entry.durationMs)}
+                              >
+                                {hasTokens && (
+                                  <ThemeTokensCard
+                                    tokens={entry.designTokens as unknown as ThemeTokensCardTokens}
+                                  />
                                 )}
-                              </ActionCard>
+                              </AgentHeader>
                               {entry.plan && pendingPlan && (
-                                <PlanApprovalCard
-                                  plan={entry.plan}
-                                  onApprove={handlePlanApprove}
-                                  status={pendingPlan ? 'pending' : 'approved'}
+                                <HitlActions
+                                  onApprove={() => handlePlanApprove()}
                                 />
                               )}
                             </div>
                           )
                         }
 
-                        // Frontend → ActionCard with PageProgressCard
+                        // Frontend → AgentHeader with page progress
                         if (agentId === 'frontend') {
                           const completedPages = pageProgress.filter((p) => p.status === 'complete').length
                           const frontendLabel = isComplete
                             ? `Generated ${completedPages} page${completedPages !== 1 ? 's' : ''}`
                             : (config?.runningLabel ?? 'Generating pages...')
                           return (
-                            <ActionCard key={cardKey}>
-                              <ActionCardHeader
-                                icon={config?.icon ?? 'code'}
-                                label={frontendLabel}
-                                status={cardStatus}
-                                durationMs={entry.durationMs}
-                              />
+                            <AgentHeader
+                              key={cardKey}
+                              agentType="frontend"
+                              name={frontendLabel}
+                              icon={<Bot className="size-4" />}
+                              working={!isComplete}
+                              timer={formatTimer(entry.durationMs)}
+                            >
                               {pageProgress.length > 0 && (
-                                <ActionCardTabs>
-                                  <ActionCardContent tab="details">
-                                    <PageProgressCard pages={pageProgress} className="border-0 shadow-none p-0" />
-                                  </ActionCardContent>
-                                </ActionCardTabs>
+                                <div className="space-y-1.5 text-sm">
+                                  {pageProgress.map((p) => (
+                                    <div key={p.componentName} className="flex items-center gap-2">
+                                      {p.status === 'complete' ? (
+                                        <CheckCircle2 className="size-3.5 shrink-0 text-green-500" />
+                                      ) : (
+                                        <Loader2 className="size-3.5 shrink-0 animate-spin text-blue-400" />
+                                      )}
+                                      <span className="text-muted-foreground">{p.componentName}</span>
+                                    </div>
+                                  ))}
+                                </div>
                               )}
-                            </ActionCard>
+                            </AgentHeader>
                           )
                         }
 
-                        // QA → ActionCard with TestResults
+                        // QA → AgentHeader with validation checks
                         if (agentId === 'qa') {
-                          const passed = validationChecks.filter((c) => c.status === 'passed').length
                           const failed = validationChecks.filter((c) => c.status === 'failed').length
-                          const total = validationChecks.length
                           const qaLabel = isComplete
                             ? (failed > 0 ? 'Validation failed' : 'Validation passed')
                             : (config?.runningLabel ?? 'Validating...')
                           return (
-                            <ActionCard key={cardKey}>
-                              <ActionCardHeader
-                                icon={config?.icon ?? 'shield'}
-                                label={qaLabel}
-                                status={cardStatus}
-                                durationMs={entry.durationMs}
-                              />
+                            <AgentHeader
+                              key={cardKey}
+                              agentType={'analyst' as AgentType}
+                              name={qaLabel}
+                              icon={<Bot className="size-4" />}
+                              working={!isComplete}
+                              timer={formatTimer(entry.durationMs)}
+                            >
                               {validationChecks.length > 0 && (
-                                <ActionCardTabs>
-                                  <ActionCardContent tab="details">
-                                    <TestResults summary={{ passed, failed, skipped: 0, total }}>
-                                      <TestResultsHeader>
-                                        <TestResultsSummary />
-                                      </TestResultsHeader>
-                                      <TestResultsProgress />
-                                      <TestResultsContent>
-                                        {validationChecks.map((check) => (
-                                          <Test
-                                            key={check.name}
-                                            name={check.name}
-                                            status={check.status === 'running' ? 'running' : check.status === 'failed' ? 'failed' : 'passed'}
-                                          />
-                                        ))}
-                                      </TestResultsContent>
-                                    </TestResults>
-                                  </ActionCardContent>
-                                </ActionCardTabs>
+                                <div className="space-y-1.5 text-sm">
+                                  {validationChecks.map((check) => (
+                                    <div key={check.name} className="flex items-center gap-2">
+                                      {check.status === 'passed' ? (
+                                        <CheckCircle2 className="size-3.5 shrink-0 text-green-500" />
+                                      ) : check.status === 'failed' ? (
+                                        <span className="size-3.5 shrink-0 text-center text-red-500">✕</span>
+                                      ) : (
+                                        <Loader2 className="size-3.5 shrink-0 animate-spin text-blue-400" />
+                                      )}
+                                      <span className="text-muted-foreground">{check.name}</span>
+                                    </div>
+                                  ))}
+                                </div>
                               )}
-                            </ActionCard>
+                            </AgentHeader>
                           )
                         }
 
                         // Legacy Pipeline A (codegen)
                         if (agentId === 'codegen' && hasFiles) {
                           return (
-                            <ActionCard key={cardKey}>
-                              <ActionCardHeader
-                                icon="code"
-                                label={isComplete ? 'Generated files' : 'Generating files...'}
-                                status={cardStatus}
-                                durationMs={entry.durationMs}
-                              />
-                              <ActionCardTabs>
-                                <ActionCardContent tab="details">
-                                  <GeneratedFileTree files={generationFiles} />
-                                </ActionCardContent>
-                              </ActionCardTabs>
-                            </ActionCard>
+                            <AgentHeader
+                              key={cardKey}
+                              agentType="frontend"
+                              name={isComplete ? 'Generated files' : 'Generating files...'}
+                              icon={<Bot className="size-4" />}
+                              working={!isComplete}
+                              timer={formatTimer(entry.durationMs)}
+                            >
+                              <GeneratedFileTree files={generationFiles} />
+                            </AgentHeader>
                           )
                         }
 
@@ -535,55 +500,38 @@ export function ChatColumn({
                             ? (config?.completeLabel ?? entry.agent.agentName)
                             : (config?.runningLabel ?? `${entry.agent.agentName}...`)
                           return (
-                            <ActionCard key={cardKey}>
-                              <ActionCardHeader
-                                icon={config?.icon ?? 'sparkles'}
-                                label={genericLabel}
-                                status={cardStatus}
-                                durationMs={entry.durationMs}
-                              />
+                            <AgentHeader
+                              key={cardKey}
+                              agentType="infra"
+                              name={genericLabel}
+                              icon={<Bot className="size-4" />}
+                              working={!isComplete}
+                              timer={formatTimer(entry.durationMs)}
+                            >
                               {entry.progressMessages && entry.progressMessages.length > 0 && (
-                                <ActionCardTabs>
-                                  <ActionCardContent tab="details">
-                                    <div className="space-y-1.5 text-sm text-muted-foreground">
-                                      {entry.progressMessages.map((msg) => (
-                                        <div key={msg} className="flex items-center gap-2">
-                                          <CheckCircle2 className="size-3.5 shrink-0 text-green-500" />
-                                          <span>{msg}</span>
-                                        </div>
-                                      ))}
+                                <div className="space-y-1.5 text-sm text-muted-foreground">
+                                  {entry.progressMessages.map((msg) => (
+                                    <div key={msg} className="flex items-center gap-2">
+                                      <CheckCircle2 className="size-3.5 shrink-0 text-green-500" />
+                                      <span>{msg}</span>
                                     </div>
-                                  </ActionCardContent>
-                                </ActionCardTabs>
+                                  ))}
+                                </div>
                               )}
-                            </ActionCard>
+                            </AgentHeader>
                           )
                         }
                       }
 
                       case 'error':
                         return (
-                          <StackTrace
+                          <ScriptBlock
                             key={`error-${entry.ts}`}
-                            trace={entry.error}
-                            defaultOpen
-                          >
-                            <StackTraceHeader>
-                              <StackTraceError>
-                                <StackTraceErrorType>Pipeline Error</StackTraceErrorType>
-                                <StackTraceErrorMessage>
-                                  {entry.error}
-                                </StackTraceErrorMessage>
-                              </StackTraceError>
-                              <StackTraceActions>
-                                <StackTraceCopyButton />
-                                <StackTraceExpandButton />
-                              </StackTraceActions>
-                            </StackTraceHeader>
-                            <StackTraceContent>
-                              <StackTraceFrames showInternalFrames={false} />
-                            </StackTraceContent>
-                          </StackTrace>
+                            command="Pipeline Error"
+                            commandLabel="Error"
+                            output={entry.error}
+                            outputLabel="Details"
+                          />
                         )
 
                       case 'complete':
@@ -630,27 +578,13 @@ export function ChatColumn({
                   {buildErrors.length > 0 && (
                     <div className="space-y-2">
                       {buildErrors.map((err) => (
-                        <StackTrace
+                        <ScriptBlock
                           key={`${err.file}-${err.message}`}
-                          trace={err.raw}
-                          defaultOpen={false}
-                        >
-                          <StackTraceHeader>
-                            <StackTraceError>
-                              <StackTraceErrorType>Build Error</StackTraceErrorType>
-                              <StackTraceErrorMessage>
-                                {err.message}
-                              </StackTraceErrorMessage>
-                            </StackTraceError>
-                            <StackTraceActions>
-                              <StackTraceCopyButton />
-                              <StackTraceExpandButton />
-                            </StackTraceActions>
-                          </StackTraceHeader>
-                          <StackTraceContent>
-                            <StackTraceFrames showInternalFrames={false} />
-                          </StackTraceContent>
-                        </StackTrace>
+                          command={`Build Error: ${err.file}`}
+                          commandLabel="Error"
+                          output={err.raw}
+                          outputLabel="Details"
+                        />
                       ))}
                     </div>
                   )}

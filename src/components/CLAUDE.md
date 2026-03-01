@@ -9,25 +9,24 @@ Split-view chat + preview interface for app generation.
 - `clarification-questions.tsx` — Multi-choice form for analyst clarification requests
 - `prompt-bar.tsx` — Chat input bar (Ctrl+Enter to send)
 
-## AI Elements (`ai-elements/` — 18 files)
+## AI Elements (`ai-elements/` — 17 files)
 Specialized rendering components for SSE event data:
 - `message.tsx` / `message-response.tsx` — Chat bubbles (user vs assistant)
 - `conversation.tsx` — Scrollable container with auto-scroll-to-bottom
 - `file-tree.tsx` — Recursive folder/file tree
 - `diff-viewer.tsx` — Unified diff rendering for file changes
-- `stack-trace.tsx` — Error frames + copy button
-- `action-card.tsx` — Tabbed action card container
 - `thinking-card.tsx` — LLM reasoning/thinking display
 - `tool-activity.tsx` — Tool call progress indicator
-- `operation-summary-card.tsx` — Operation result summary
-- `plan-approval-card.tsx` — Plan approval/rejection UI
 - `theme-tokens-card.tsx` — Theme token display card
-- `architecture-card.tsx` — Architecture diagram card
-- `page-progress-card.tsx` — Page generation progress card
-- `package-info.tsx` — Package installation info card
-- `test-results.tsx` — Test run results display
 - `model-selector.tsx` — LLM model picker
 - `prompt-input.tsx` — Chat input component
+- `agent-header.tsx` — Collapsible agent avatar/name/timer header (prototype-matched)
+- `script-block.tsx` — Terminal command + output card pair
+- `plan-block.tsx` — Titled ordered list for plans
+- `hitl-actions.tsx` — Approve / Request Changes buttons
+- `artifact-card.tsx` — Icon + title + meta artifact display
+- `artifacts-list.tsx` — Card with list of artifact items
+- `preview-card.tsx` — iframe preview with URL footer
 
 ## UI Kit (`ui/` — 29 shadcn/ui components)
 Standard shadcn/ui primitives. Do not modify directly — use `npx shadcn@latest add <component>` to update.
