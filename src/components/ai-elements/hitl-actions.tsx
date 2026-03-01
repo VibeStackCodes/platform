@@ -19,7 +19,7 @@ export function HitlActions({
   return (
     <div className={cn('flex gap-2 mt-1.5', className)}>
       {approved ? (
-        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-[#788c5d]/12 text-[#788c5d]">
+        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-[oklch(0.6118_0.0713_127.15)]/12 text-[oklch(0.6118_0.0713_127.15)]">
           <CheckCircle2 size={13} />
           Approved
         </span>

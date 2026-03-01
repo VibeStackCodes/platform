@@ -12,13 +12,13 @@ import './agent-header.css'
 // ── Agent color map ──────────────────────────────────────────────────
 
 export const AGENT_COLORS = {
-  analyst: '#788c5d',
-  pm: '#6a9bcc',
-  designer: '#d97757',
-  architect: '#8b5cf6',
-  backend: '#6366f1',
-  frontend: '#14b8a6',
-  infra: '#64748b',
+  analyst: 'oklch(0.6118 0.0713 127.15)',
+  pm: 'oklch(0.6742 0.0902 249.31)',
+  designer: 'oklch(0.6724 0.1308 38.74)',
+  architect: 'oklch(0.6056 0.2190 292.72)',
+  backend: 'oklch(0.5854 0.2041 277.12)',
+  frontend: 'oklch(0.7037 0.1230 182.53)',
+  infra: 'oklch(0.5544 0.0408 257.43)',
 } as const
 
 export type AgentType = keyof typeof AGENT_COLORS

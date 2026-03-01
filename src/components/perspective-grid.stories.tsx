@@ -35,7 +35,7 @@ export const Default: Story = {
 export const DarkBackground: Story = {
   decorators: [
     (Story) => (
-      <div className="relative h-screen w-full overflow-hidden" style={{ background: '#0a0a0a' }}>
+      <div className="relative h-screen w-full overflow-hidden" style={{ background: 'oklch(0.1448 0 0)' }}>
         <Story />
       </div>
     ),

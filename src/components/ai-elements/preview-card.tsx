@@ -48,7 +48,7 @@ export function PreviewCard({
     >
       {/* Header */}
       <div className="flex items-center gap-2 px-4 py-3 text-[13px] font-semibold text-foreground border-b border-border">
-        <Globe size={15} className="text-[#788c5d]" />
+        <Globe size={15} className="text-[oklch(0.6118_0.0713_127.15)]" />
         {title}
       </div>
 
@@ -59,7 +59,7 @@ export function PreviewCard({
 
       {/* Footer */}
       <div className="flex items-center gap-2 px-4 py-2.5 border-t border-border">
-        <span className="text-xs font-mono text-[#6a9bcc] flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
+        <span className="text-xs font-mono text-[oklch(0.6742_0.0902_249.31)] flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
           {url ?? 'No URL'}
         </span>
         <button
