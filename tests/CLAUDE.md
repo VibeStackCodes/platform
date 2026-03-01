@@ -28,3 +28,10 @@ bun run test -- --project unit # Server tests only (fast, ~1.5s)
 bun run test -- --project component  # Component tests in Chromium (~3s)
 bun run test -- --project storybook  # All 106 stories in Chromium (~33s)
 ```
+
+## Scalar Tools
+```bash
+bun run docs:validate  # Validate OpenAPI spec (requires dev server running)
+bun run docs:mock      # Start mock API server on port 8788 (from OpenAPI spec)
+bun run docs:preview   # Preview Scalar docs locally on port 8789
+```

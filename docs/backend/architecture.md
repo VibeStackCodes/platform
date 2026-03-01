@@ -1,3 +1,8 @@
+---
+title: Architecture
+description: System overview, middleware stack, and request lifecycle
+---
+
 # Backend Architecture
 
 ## System Overview

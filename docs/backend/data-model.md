@@ -1,3 +1,8 @@
+---
+title: Data Model
+description: Drizzle schema, table relationships, and credit flow
+---
+
 # Data Model
 
 The platform database uses PostgreSQL (Supabase) accessed via Drizzle ORM. Schema is defined in `server/lib/db/schema.ts`, relations in `server/lib/db/relations.ts`, and all query functions in `server/lib/db/queries.ts`.

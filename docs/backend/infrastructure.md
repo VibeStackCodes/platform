@@ -1,3 +1,8 @@
+---
+title: Infrastructure
+description: Sandbox lifecycle, GitHub integration, Stripe billing, rate limiting, and SSE
+---
+
 # Infrastructure
 
 ## Daytona Sandbox

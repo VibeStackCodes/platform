@@ -1,3 +1,8 @@
+---
+title: Mastra Studio
+description: Agent dev UI, tool playground, and observability
+---
+
 # Mastra Studio — Agent & Tool Playground
 
 Mastra Studio is a local developer UI for testing the VibeStack orchestrator agent

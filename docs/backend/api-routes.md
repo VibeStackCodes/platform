@@ -1,3 +1,8 @@
+---
+title: API Routes
+description: All 13 API endpoints with methods, auth, and response types
+---
+
 # API Routes
 
 All routes are mounted under the `/api` base path in `server/index.ts`. Authentication is applied per-route via `authMiddleware` from `server/middleware/auth.ts`. Routes that bypass auth are explicitly noted.

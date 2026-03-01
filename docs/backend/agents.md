@@ -1,3 +1,8 @@
+---
+title: AI Agent
+description: Single orchestrator agent with 11 tools, memory, and model routing
+---
+
 # Agent System
 
 ## Overview
