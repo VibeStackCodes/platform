@@ -29,7 +29,7 @@ function AuthenticatedHome() {
     <SidebarProvider defaultOpen={false}>
       <AppSidebar />
       <SidebarInset>
-        <div className="relative flex flex-1 flex-col overflow-hidden bg-[oklch(0.1929_0.0692_300.44)]">
+        <div className="relative flex flex-1 flex-col overflow-hidden bg-[oklch(0.1929_0.0691_300.44)]">
           <PerspectiveGrid />
           <div className="pointer-events-none absolute inset-0 bg-radial-gradient from-transparent via-transparent to-black/20" />
           <main className="relative z-10 flex flex-1 items-center justify-center px-4 sm:px-6 lg:px-8">
@@ -50,7 +50,7 @@ function AuthenticatedHome() {
 
 function PublicLanding() {
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[oklch(0.1929_0.0692_300.44)]">
+    <div className="relative min-h-screen overflow-hidden bg-[oklch(0.1929_0.0691_300.44)]">
       <PerspectiveGrid />
       <div className="pointer-events-none absolute inset-0 bg-radial-gradient from-transparent via-transparent to-black/20" />
       <div className="relative z-10 flex flex-col min-h-screen">
