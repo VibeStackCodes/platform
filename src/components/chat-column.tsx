@@ -29,7 +29,7 @@ import { ScriptBlock } from '@/components/ai-elements/script-block'
 import { ClarificationQuestions } from '@/components/clarification-questions'
 import { CreditDisplay } from '@/components/credit-display'
 import { PromptBar } from '@/components/prompt-bar'
-import { ArtifactCard } from '@/components/artifact-card'
+import { ArtifactCard } from '@/components/ai-elements/artifact-card'
 import type { PanelContent } from '@/components/right-panel'
 import type { ElementContext } from '@/lib/types'
 
@@ -208,7 +208,6 @@ export function ChatColumn({
                         const agentId = entry.agent.agentId
                         const cardKey = `agent-${agentId}-${entry.ts}`
                         const config = AGENT_CARD_CONFIG[agentId]
-                        const cardStatus = isComplete ? 'complete' as const : 'running' as const
 
                         // Analyst → ThinkingCard (+ optional clarification questions)
                         if (agentId === 'analyst') {
@@ -448,11 +447,7 @@ export function ChatColumn({
                                 icon={<Rocket className="size-6" />}
                                 title="App Preview"
                                 meta={entry.deploymentUrl ?? 'Live preview available'}
-                                actionLabel="Open Preview"
                                 onClick={() =>
-                                  onPanelOpen({ type: 'preview', previewUrl: entry.deploymentUrl ?? '' })
-                                }
-                                onAction={() =>
                                   onPanelOpen({ type: 'preview', previewUrl: entry.deploymentUrl ?? '' })
                                 }
                               />
