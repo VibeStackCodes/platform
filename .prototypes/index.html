@@ -1,0 +1,1276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VibeStack — Claude UI Clone Prototypes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300..700;1,9..40,300..700&family=DM+Serif+Display&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ═══════════════════════════════════════════
+   CLAUDE.AI EXACT DESIGN TOKENS
+   ═══════════════════════════════════════════ */
+:root {
+  /* Claude Brand Colors — exact */
+  --claude-dark:       #141413;
+  --claude-light:      #faf9f5;
+  --claude-mid-gray:   #b0aea5;
+  --claude-light-gray: #e8e6dc;
+  --claude-orange:     #d97757;
+  --claude-orange-hover: #c8654a;
+  --claude-blue:       #6a9bcc;
+  --claude-green:      #788c5d;
+
+  /* Semantic mapping */
+  --bg:                #faf9f5;
+  --bg-sidebar:        #f0ede6;
+  --bg-hover:          #e8e6dc;
+  --bg-active:         #dedad0;
+  --bg-card:           #f5f3ed;
+  --bg-input:          #ffffff;
+  --bg-user-bubble:    #f0ede6;
+
+  --fg:                #141413;
+  --fg-muted:          #6b6960;
+  --fg-faint:          #b0aea5;
+
+  --border:            #e8e6dc;
+  --border-subtle:     #efece5;
+
+  --accent:            #d97757;
+  --accent-hover:      #c8654a;
+  --accent-soft:       rgba(217, 119, 87, 0.10);
+  --accent-fg:         #ffffff;
+
+  /* Radius — Claude uses generous rounding */
+  --radius-sm:         6px;
+  --radius-md:         10px;
+  --radius-lg:         16px;
+  --radius-xl:         20px;
+  --radius-2xl:        24px;
+  --radius-pill:       9999px;
+
+  /* Shadows — Claude is very flat, minimal shadows */
+  --shadow-sm:         0 1px 2px rgba(20, 20, 19, 0.04);
+  --shadow-md:         0 2px 8px rgba(20, 20, 19, 0.06);
+  --shadow-input:      0 1px 4px rgba(20, 20, 19, 0.05);
+
+  /* Layout */
+  --sidebar-width:     267px;
+  --chat-max-width:    768px;
+
+  /* Typography — using DM Sans as accessible Styrene B substitute */
+  --font-body:         'DM Sans', -apple-system, system-ui, sans-serif;
+  --font-display:      'DM Serif Display', Georgia, serif;
+  --font-mono:         'JetBrains Mono', ui-monospace, monospace;
+}
+
+/* Claude Dark Mode — warm dark, not cold */
+.dark {
+  --bg:                #1c1c1a;
+  --bg-sidebar:        #171715;
+  --bg-hover:          #2a2a27;
+  --bg-active:         #333330;
+  --bg-card:           #222220;
+  --bg-input:          #2a2a27;
+  --bg-user-bubble:    #2a2a27;
+
+  --fg:                #e8e6dc;
+  --fg-muted:          #8a887f;
+  --fg-faint:          #5a5850;
+
+  --border:            #333330;
+  --border-subtle:     #2a2a27;
+
+  --accent:            #d97757;
+  --accent-hover:      #e0845f;
+  --accent-soft:       rgba(217, 119, 87, 0.12);
+
+  --shadow-sm:         0 1px 2px rgba(0, 0, 0, 0.15);
+  --shadow-md:         0 2px 8px rgba(0, 0, 0, 0.20);
+  --shadow-input:      0 1px 4px rgba(0, 0, 0, 0.15);
+}
+
+/* ═══════════════════════════════════════════
+   RESET & BASE
+   ═══════════════════════════════════════════ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html {
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--fg);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body { min-height: 100vh; overflow: hidden; }
+
+/* ═══════════════════════════════════════════
+   PROTOTYPE NAVIGATION (top-right overlay)
+   ═══════════════════════════════════════════ */
+.proto-nav {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 1000;
+  display: flex;
+  gap: 4px;
+  padding: 5px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  font-size: 12px;
+}
+
+.proto-nav button {
+  padding: 5px 10px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--fg-muted);
+  cursor: pointer;
+  font-family: var(--font-body);
+  font-size: 11.5px;
+  font-weight: 500;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+.proto-nav button:hover { background: var(--bg-hover); color: var(--fg); }
+.proto-nav button.active { background: var(--accent); color: var(--accent-fg); }
+.proto-nav .divider { width: 1px; background: var(--border); margin: 2px 3px; }
+
+/* ═══════════════════════════════════════════
+   SCREEN CONTAINER
+   ═══════════════════════════════════════════ */
+.screen { display: none; width: 100vw; height: 100vh; }
+.screen.active { display: flex; }
+
+/* ═══════════════════════════════════════════
+   SIDEBAR — Claude.ai exact pattern
+   ═══════════════════════════════════════════ */
+.sidebar {
+  width: var(--sidebar-width);
+  min-width: var(--sidebar-width);
+  height: 100vh;
+  background: var(--bg-sidebar);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  padding: 12px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.sidebar-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 6px;
+  margin-bottom: 8px;
+}
+
+.sidebar-logo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow: hidden;
+}
+
+.sidebar-logo-text {
+  font-family: var(--font-display);
+  font-size: 17px;
+  color: var(--fg);
+  white-space: nowrap;
+}
+
+.sidebar-toggle-btn {
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--fg-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.12s ease;
+}
+.sidebar-toggle-btn:hover { background: var(--bg-hover); color: var(--fg); }
+.sidebar-toggle-btn svg { width: 18px; height: 18px; }
+
+/* Nav items */
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 4px;
+}
+.sidebar-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  color: var(--fg-muted);
+  font-size: 13.5px;
+  border: none;
+  background: none;
+  width: 100%;
+  text-align: left;
+  font-family: var(--font-body);
+  line-height: 1.3;
+  transition: all 0.1s ease;
+}
+.sidebar-nav-item:hover { background: var(--bg-hover); color: var(--fg); }
+.sidebar-nav-item svg { width: 18px; height: 18px; flex-shrink: 0; }
+.sidebar-nav-item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.sidebar-divider { height: 1px; background: var(--border); margin: 8px 6px; }
+
+/* Category items */
+.sidebar-cat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 4px;
+}
+.sidebar-cat-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  color: var(--fg-muted);
+  font-size: 13.5px;
+  border: none;
+  background: none;
+  width: 100%;
+  text-align: left;
+  font-family: var(--font-body);
+  line-height: 1.3;
+  transition: all 0.1s ease;
+}
+.sidebar-cat-item:hover { background: var(--bg-hover); color: var(--fg); }
+.sidebar-cat-item svg { width: 18px; height: 18px; flex-shrink: 0; }
+.sidebar-cat-item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.sidebar-section-label {
+  padding: 6px 8px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--fg-faint);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.sidebar-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.1s ease;
+  color: var(--fg-muted);
+  font-size: 13.5px;
+  border: none;
+  background: none;
+  width: 100%;
+  text-align: left;
+  font-family: var(--font-body);
+  line-height: 1.3;
+}
+.sidebar-item:hover { background: var(--bg-hover); color: var(--fg); }
+.sidebar-item.active { background: var(--bg-active); color: var(--fg); font-weight: 500; }
+.sidebar-item-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+.sidebar-item-meta {
+  font-size: 11px;
+  color: var(--fg-faint);
+  flex-shrink: 0;
+}
+
+.sidebar-spacer { flex: 1; }
+
+.sidebar-footer { padding-top: 8px; border-top: 1px solid var(--border); margin-top: 8px; position: relative; }
+.sidebar-footer-row { display: flex; align-items: center; gap: 6px; }
+.sidebar-user { display: flex; align-items: center; gap: 10px; padding: 7px 8px; border-radius: var(--radius-sm); cursor: pointer; flex: 1; min-width: 0; transition: all 0.1s ease; }
+.sidebar-user:hover { background: var(--bg-hover); }
+.sidebar-avatar { width: 28px; height: 28px; border-radius: var(--radius-pill); background: var(--bg-hover); display: flex; align-items: center; justify-content: center; color: var(--fg); font-size: 12px; font-weight: 600; flex-shrink: 0; }
+.sidebar-user-name { font-size: 13px; font-weight: 500; color: var(--fg); white-space: nowrap; overflow: hidden; }
+.sidebar-user-plan { font-size: 11px; color: var(--fg-faint); white-space: nowrap; overflow: hidden; }
+.sidebar-footer-btn { width: 28px; height: 28px; border: none; border-radius: var(--radius-sm); background: transparent; color: var(--fg-faint); cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; position: relative; }
+.sidebar-footer-btn:hover { background: var(--bg-hover); color: var(--fg); }
+.sidebar-footer-btn svg { width: 16px; height: 16px; }
+.sidebar-footer-btn .badge-dot { position: absolute; top: 4px; right: 4px; width: 6px; height: 6px; border-radius: 50%; background: #4a90d9; }
+
+/* User menu popup */
+.user-menu { position: fixed; bottom: 60px; left: 12px; width: 260px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: 0 8px 32px rgba(0,0,0,0.12); padding: 6px 0; display: none; z-index: 1000; }
+.user-menu.open { display: block; }
+.user-menu-email { padding: 8px 14px; font-size: 12.5px; color: var(--fg-faint); }
+.user-menu-item { display: flex; align-items: center; gap: 10px; padding: 8px 14px; cursor: pointer; color: var(--fg-muted); font-size: 13.5px; font-family: var(--font-body); border: none; background: none; width: 100%; text-align: left; }
+.user-menu-item:hover { background: var(--bg-hover); color: var(--fg); }
+.user-menu-item svg { width: 16px; height: 16px; flex-shrink: 0; }
+.user-menu-item .menu-shortcut { margin-left: auto; font-size: 11px; color: var(--fg-faint); }
+.user-menu-divider { height: 1px; background: var(--border); margin: 4px 10px; }
+
+/* Collapsed sidebar — icon strip */
+.sidebar.collapsed { width: 52px; min-width: 52px; padding: 12px 6px; align-items: center; }
+.sidebar.collapsed .sidebar-top { justify-content: center; padding: 4px 0; }
+.sidebar.collapsed .sidebar-logo-text { display: none; }
+.sidebar.collapsed .sidebar-nav-item span,
+.sidebar.collapsed .sidebar-cat-item span { display: none; }
+.sidebar.collapsed .sidebar-nav-item,
+.sidebar.collapsed .sidebar-cat-item { justify-content: center; padding: 8px; }
+.sidebar.collapsed .sidebar-section-label { display: none; }
+.sidebar.collapsed .sidebar-item { display: none; }
+.sidebar.collapsed .sidebar-divider { margin: 8px 2px; }
+.sidebar.collapsed .sidebar-user { justify-content: center; gap: 0; }
+.sidebar.collapsed .sidebar-user > div:last-child { display: none; }
+.sidebar.collapsed .sidebar-footer { border-top: none; }
+.sidebar.collapsed .sidebar-footer-btn { display: none; }
+.sidebar.collapsed .sidebar-footer-row { justify-content: center; }
+.sidebar.collapsed .sidebar-item-meta { display: none; }
+
+/* ═══════════════════════════════════════════
+   MAIN AREA
+   ═══════════════════════════════════════════ */
+.main { flex: 1; display: flex; flex-direction: column; overflow: hidden; position: relative; }
+
+/* ═══════════════════════════════════════════
+   DASHBOARD — project cards in centered grid
+   ═══════════════════════════════════════════ */
+.dashboard-content { flex: 1; overflow-y: auto; padding: 40px 32px; }
+
+.dashboard-header {
+  max-width: 900px;
+  margin: 0 auto 28px;
+}
+.dashboard-title {
+  font-family: var(--font-display);
+  font-size: 26px;
+  color: var(--fg);
+  margin-bottom: 4px;
+}
+.dashboard-subtitle { font-size: 14px; color: var(--fg-muted); }
+
+.project-grid {
+  max-width: 900px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
+  gap: 14px;
+}
+
+.project-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 18px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.project-card:hover { border-color: var(--accent); box-shadow: var(--shadow-md); }
+
+.project-card-preview {
+  width: 100%;
+  height: 130px;
+  border-radius: var(--radius-md);
+  background: var(--bg-hover);
+  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+}
+.project-card-preview::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(90deg, var(--border) 1px, transparent 1px),
+    linear-gradient(var(--border) 1px, transparent 1px);
+  background-size: 18px 18px;
+  opacity: 0.4;
+}
+.project-card-preview svg { width: 28px; height: 28px; color: var(--fg-faint); z-index: 1; }
+
+.project-card-name { font-weight: 600; font-size: 14.5px; color: var(--fg); margin-bottom: 3px; }
+.project-card-desc {
+  font-size: 13px;
+  color: var(--fg-muted);
+  margin-bottom: 10px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  line-height: 1.4;
+}
+.project-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11.5px;
+  color: var(--fg-faint);
+}
+.project-card-model {
+  padding: 2px 8px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-radius: var(--radius-pill);
+  font-weight: 500;
+  font-size: 11px;
+}
+
+/* ═══════════════════════════════════════════
+   CHAT — Claude.ai exact layout
+   ═══════════════════════════════════════════ */
+.chat-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 32px 24px;
+}
+
+.chat-messages-inner {
+  max-width: var(--chat-max-width);
+  width: 100%;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+/* Messages — Claude style: user has bubble, assistant has NO bubble */
+.message { display: flex; flex-direction: column; gap: 4px; }
+
+.message-user { align-items: flex-end; }
+.message-user .message-bubble {
+  background: var(--bg-user-bubble);
+  padding: 12px 16px;
+  border-radius: var(--radius-xl);
+  border-bottom-right-radius: 6px;
+  max-width: 70%;
+  font-size: 14.5px;
+  line-height: 1.55;
+  color: var(--fg);
+}
+
+.message-assistant { align-items: flex-start; }
+.message-assistant .message-content {
+  max-width: 100%;
+  font-size: 15px;
+  line-height: 1.7;
+  color: var(--fg);
+}
+.message-assistant .message-content p { margin-bottom: 14px; }
+.message-assistant .message-content p:last-child { margin-bottom: 0; }
+.message-assistant .message-content strong { font-weight: 600; }
+.message-assistant .message-content code {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  background: var(--bg-hover);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+.message-label {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--fg-faint);
+  padding: 0 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+/* Tool / action cards */
+.action-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  max-width: 520px;
+}
+.action-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--fg);
+}
+.action-card-icon { width: 16px; height: 16px; color: var(--accent); }
+.action-card-icon.success { color: var(--claude-green); }
+.action-card-timer {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--fg-faint);
+  font-family: var(--font-mono);
+}
+.action-card-body {
+  padding: 0 14px 10px;
+  font-size: 12px;
+  color: var(--fg-muted);
+  font-family: var(--font-mono);
+  line-height: 1.5;
+}
+
+/* Thinking */
+.thinking-card {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  background: var(--accent-soft);
+  border-radius: var(--radius-md);
+}
+.thinking-dot {
+  width: 8px;
+  height: 8px;
+  background: var(--accent);
+  border-radius: 50%;
+  animation: throb 1.5s ease-in-out infinite;
+}
+@keyframes throb {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.85); }
+}
+.thinking-card-text { font-size: 13px; color: var(--accent); font-weight: 500; }
+.thinking-card-timer { font-size: 11px; font-family: var(--font-mono); color: var(--fg-faint); margin-left: 4px; }
+
+/* ═══════════════════════════════════════════
+   INPUT BAR — Claude.ai exact style
+   ═══════════════════════════════════════════ */
+.input-wrapper { padding: 0 24px 24px; display: flex; justify-content: center; }
+
+.input-bar {
+  max-width: var(--chat-max-width);
+  width: 100%;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-2xl);
+  padding: 14px 16px;
+  box-shadow: var(--shadow-input);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: border-color 0.15s ease;
+}
+.input-bar:focus-within {
+  border-color: var(--accent);
+}
+
+.input-textarea {
+  width: 100%;
+  border: none;
+  outline: none;
+  resize: none;
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--fg);
+  background: transparent;
+  min-height: 24px;
+}
+.input-textarea::placeholder { color: var(--fg-faint); }
+
+.input-bottom { display: flex; align-items: center; justify-content: space-between; }
+.input-actions { display: flex; align-items: center; gap: 2px; }
+
+.input-icon-btn {
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--fg-faint);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.1s ease;
+}
+.input-icon-btn:hover { background: var(--bg-hover); color: var(--fg-muted); }
+.input-icon-btn svg { width: 18px; height: 18px; }
+
+.model-chip {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--fg-muted);
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.1s ease;
+}
+.model-chip:hover { border-color: var(--accent); color: var(--accent); }
+.model-chip svg { width: 12px; height: 12px; }
+
+.send-btn {
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+  margin-left: 4px;
+}
+.send-btn:hover { background: var(--accent-hover); }
+.send-btn svg { width: 15px; height: 15px; }
+
+/* ═══════════════════════════════════════════
+   PREVIEW PANEL — Artifacts-style slide-out
+   ═══════════════════════════════════════════ */
+.preview-panel {
+  width: 0;
+  min-width: 0;
+  border-left: 0px solid var(--border);
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.preview-panel.open {
+  width: 50%;
+  min-width: 400px;
+  border-left-width: 1px;
+}
+
+.preview-header {
+  display: flex;
+  align-items: center;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.preview-tabs {
+  display: flex;
+  gap: 2px;
+  background: var(--bg-hover);
+  border-radius: var(--radius-sm);
+  padding: 2px;
+}
+.preview-tab {
+  padding: 4px 12px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--fg-muted);
+  font-family: var(--font-body);
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.1s ease;
+}
+.preview-tab.active {
+  background: var(--bg-input);
+  color: var(--fg);
+  box-shadow: var(--shadow-sm);
+}
+
+.preview-title { font-size: 13px; font-weight: 500; color: var(--fg-muted); margin-left: 6px; }
+.preview-spacer { flex: 1; }
+
+.preview-deploy-btn {
+  padding: 5px 14px;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: white;
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.preview-deploy-btn:hover { background: var(--accent-hover); }
+
+.preview-close-btn {
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--fg-faint);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 4px;
+}
+.preview-close-btn:hover { background: var(--bg-hover); color: var(--fg); }
+.preview-close-btn svg { width: 15px; height: 15px; }
+
+.preview-body {
+  flex: 1;
+  background: var(--bg-card);
+  margin: 10px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+/* Fake app inside preview */
+.preview-fake-app { width: 100%; height: 100%; background: #fff; display: flex; flex-direction: column; }
+.preview-fake-nav {
+  height: 44px;
+  background: #f8f8f8;
+  border-bottom: 1px solid #eee;
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  gap: 8px;
+}
+.preview-fake-logo {
+  width: 22px; height: 22px;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  border-radius: 5px;
+}
+.preview-fake-nav-text { font-size: 12px; font-weight: 600; color: #222; }
+.preview-fake-nav-links { margin-left: auto; display: flex; gap: 14px; }
+.preview-fake-nav-link { font-size: 11px; color: #888; }
+.preview-fake-hero {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 16px;
+}
+.preview-fake-hero h2 { font-size: 20px; font-weight: 700; color: #111; }
+.preview-fake-hero p { font-size: 12px; color: #666; text-align: center; max-width: 260px; }
+.preview-fake-cta {
+  padding: 7px 18px;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  color: white;
+  border: none;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* Code view in preview */
+.code-view {
+  width: 100%; height: 100%;
+  background: #1a1a18;
+  color: #c9c7be;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.65;
+  padding: 18px;
+  overflow: auto;
+  display: none;
+}
+.code-view .kw { color: #d97757; }
+.code-view .str { color: #788c5d; }
+.code-view .cmt { color: #5a5850; font-style: italic; }
+.code-view .tag { color: #6a9bcc; }
+.code-view .attr { color: #d97757; }
+
+/* ═══════════════════════════════════════════
+   EMPTY STATE — Claude-style centered prompt
+   ═══════════════════════════════════════════ */
+.empty-state {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 40px;
+}
+.empty-state-greeting {
+  font-family: var(--font-display);
+  font-size: 28px;
+  color: var(--fg);
+}
+.empty-state-subtitle {
+  font-size: 14.5px;
+  color: var(--fg-muted);
+  margin-bottom: 8px;
+}
+
+.suggestion-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-width: 520px;
+  justify-content: center;
+  margin-top: 4px;
+}
+.suggestion-chip {
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--fg-muted);
+  font-family: var(--font-body);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+.suggestion-chip:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+/* Label overlay */
+.screen-label {
+  position: fixed;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 999;
+  padding: 5px 14px;
+  background: var(--fg);
+  color: var(--bg);
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  pointer-events: none;
+  opacity: 0.65;
+}
+</style>
+</head>
+<body>
+
+<!-- ═══════ PROTOTYPE NAV ═══════ -->
+<nav class="proto-nav">
+  <button class="active" onclick="showScreen('dashboard')">Dashboard</button>
+  <button onclick="showScreen('builder-empty')">Builder (Empty)</button>
+  <button onclick="showScreen('builder-chat')">Builder (Chat)</button>
+  <button onclick="showScreen('builder-preview')">Builder (Preview)</button>
+  <div class="divider"></div>
+  <button onclick="toggleTheme()" style="padding:5px 8px">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+  </button>
+</nav>
+
+<!-- ═══════════════ SHARED SIDEBAR TEMPLATE ═══════════════ -->
+<!-- Reused via JS clone, defined once here as template -->
+
+<!-- ═══════════════ SCREEN 1: DASHBOARD ═══════════════ -->
+<div id="screen-dashboard" class="screen active">
+  <aside class="sidebar">
+    <div class="sidebar-top">
+      <div class="sidebar-logo"><span class="sidebar-logo-text">VibeStack</span></div>
+      <button class="sidebar-toggle-btn" onclick="this.closest('.sidebar').classList.toggle('collapsed')" title="Toggle sidebar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg></button>
+    </div>
+    <div class="sidebar-nav">
+      <button class="sidebar-nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg><span>New project</span></button>
+      <button class="sidebar-nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><span>Search</span></button>
+    </div>
+    <div class="sidebar-divider"></div>
+    <div class="sidebar-cat">
+      <button class="sidebar-cat-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg><span>Chats</span></button>
+      <button class="sidebar-cat-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/></svg><span>Projects</span></button>
+    </div>
+    <div class="sidebar-section-label">Recents</div>
+    <button class="sidebar-item active"><span class="sidebar-item-text">SaaS Landing Page</span><span class="sidebar-item-meta">2h</span></button>
+    <button class="sidebar-item"><span class="sidebar-item-text">Task Manager App</span><span class="sidebar-item-meta">5h</span></button>
+    <button class="sidebar-item"><span class="sidebar-item-text">E-commerce Dashboard</span><span class="sidebar-item-meta">1d</span></button>
+    <button class="sidebar-item"><span class="sidebar-item-text">Recipe Finder</span><span class="sidebar-item-meta">1d</span></button>
+    <button class="sidebar-item"><span class="sidebar-item-text">Portfolio Website</span><span class="sidebar-item-meta">3d</span></button>
+    <button class="sidebar-item"><span class="sidebar-item-text">Fitness Tracker</span><span class="sidebar-item-meta">5d</span></button>
+    <button class="sidebar-item"><span class="sidebar-item-text">Weather App</span><span class="sidebar-item-meta">6d</span></button>
+    <div class="sidebar-spacer"></div>
+    <div class="sidebar-footer">
+      <div class="user-menu"><div class="user-menu-email">alex.m@example.com</div><button class="user-menu-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>Settings<span class="menu-shortcut">&#x21E7;&#x2318;,</span></button><button class="user-menu-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>Language<svg style="width:14px;height:14px;margin-left:auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg></button><button class="user-menu-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>Get help</button><div class="user-menu-divider"></div><button class="user-menu-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>View all plans</button><button class="user-menu-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>Gift VibeStack</button><button class="user-menu-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>Learn more<svg style="width:14px;height:14px;margin-left:auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg></button><div class="user-menu-divider"></div><button class="user-menu-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>Log out</button></div>
+      <div class="sidebar-footer-row"><div class="sidebar-user" onclick="this.closest('.sidebar-footer').querySelector('.user-menu').classList.toggle('open')"><div class="sidebar-avatar">A</div><div><div class="sidebar-user-name">Alex M.</div><div class="sidebar-user-plan">Pro Plan</div></div></div><button class="sidebar-footer-btn" onclick="this.closest('.sidebar-footer').querySelector('.user-menu').classList.toggle('open')" title="More"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg></button></div>
+    </div>
+  </aside>
+  <div class="main">
+    <div class="dashboard-content">
+      <div class="dashboard-header">
+        <h1 class="dashboard-title">Your Projects</h1>
+        <p class="dashboard-subtitle">8 projects &middot; 3 deployed</p>
+      </div>
+      <div class="project-grid">
+        <div class="project-card">
+          <div class="project-card-preview"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg></div>
+          <div class="project-card-name">SaaS Landing Page</div>
+          <div class="project-card-desc">Modern landing with hero, pricing, and testimonials</div>
+          <div class="project-card-footer"><span>2 hours ago</span><span class="project-card-model">Claude Sonnet</span></div>
+        </div>
+        <div class="project-card">
+          <div class="project-card-preview"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg></div>
+          <div class="project-card-name">Task Manager App</div>
+          <div class="project-card-desc">Kanban boards with drag-and-drop and real-time sync</div>
+          <div class="project-card-footer"><span>5 hours ago</span><span class="project-card-model">GPT-5.2 Codex</span></div>
+        </div>
+        <div class="project-card">
+          <div class="project-card-preview"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 3v18h18"/><path d="M18.7 8l-5.1 5.2-2.8-2.7L7 14.3"/></svg></div>
+          <div class="project-card-name">E-commerce Dashboard</div>
+          <div class="project-card-desc">Analytics with sales charts, inventory, and orders</div>
+          <div class="project-card-footer"><span>1 day ago</span><span class="project-card-model">Claude Opus</span></div>
+        </div>
+        <div class="project-card">
+          <div class="project-card-preview"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg></div>
+          <div class="project-card-name">Recipe Finder</div>
+          <div class="project-card-desc">Recipe search with filters, favorites, and meal planning</div>
+          <div class="project-card-footer"><span>1 day ago</span><span class="project-card-model">Claude Sonnet</span></div>
+        </div>
+        <div class="project-card">
+          <div class="project-card-preview"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></div>
+          <div class="project-card-name">Portfolio Website</div>
+          <div class="project-card-desc">Personal portfolio with project showcase</div>
+          <div class="project-card-footer"><span>3 days ago</span><span class="project-card-model">Claude Sonnet</span></div>
+        </div>
+        <div class="project-card">
+          <div class="project-card-preview"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg></div>
+          <div class="project-card-name">Fitness Tracker</div>
+          <div class="project-card-desc">Workout logging with progress charts</div>
+          <div class="project-card-footer"><span>5 days ago</span><span class="project-card-model">GPT-5.2 Codex</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="screen-label">Dashboard</div>
+</div>
+
+<!-- ═══════════════ SCREEN 2: BUILDER EMPTY ═══════════════ -->
+<div id="screen-builder-empty" class="screen">
+  <aside class="sidebar">
+    <div class="sidebar-top">
+      <div class="sidebar-logo"><span class="sidebar-logo-text">VibeStack</span></div>
+      <button class="sidebar-toggle-btn" onclick="this.closest('.sidebar').classList.toggle('collapsed')" title="Toggle sidebar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg></button>
+    </div>
+    <div class="sidebar-nav">
+      <button class="sidebar-nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg><span>New project</span></button>
+      <button class="sidebar-nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><span>Search</span></button>
+    </div>
+    <div class="sidebar-divider"></div>
+    <div class="sidebar-cat">
+      <button class="sidebar-cat-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg><span>Chats</span></button>
+      <button class="sidebar-cat-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/></svg><span>Projects</span></button>
+    </div>
+    <div class="sidebar-section-label">Recents</div>
+    <button class="sidebar-item active"><span class="sidebar-item-text">New Project</span></button>
+    <button class="sidebar-item"><span class="sidebar-item-text">SaaS Landing Page</span><span class="sidebar-item-meta">2h</span></button>
+    <button class="sidebar-item"><span class="sidebar-item-text">Task Manager App</span><span class="sidebar-item-meta">5h</span></button>
+    <div class="sidebar-spacer"></div>
+    <div class="sidebar-footer">
+      <div class="user-menu"><div class="user-menu-email">alex.m@example.com</div><button class="user-menu-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>Settings<span class="menu-shortcut">&#x21E7;&#x2318;,</span></button><button class="user-menu-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>Language<svg style="width:14px;height:14px;margin-left:auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg></button><button class="user-menu-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>Get help</button><div class="user-menu-divider"></div><button class="user-menu-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>View all plans</button><button class="user-menu-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>Gift VibeStack</button><button class="user-menu-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>Learn more<svg style="width:14px;height:14px;margin-left:auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg></button><div class="user-menu-divider"></div><button class="user-menu-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>Log out</button></div>
+      <div class="sidebar-footer-row"><div class="sidebar-user" onclick="this.closest('.sidebar-footer').querySelector('.user-menu').classList.toggle('open')"><div class="sidebar-avatar">A</div><div><div class="sidebar-user-name">Alex M.</div><div class="sidebar-user-plan">Pro Plan</div></div></div><button class="sidebar-footer-btn" onclick="this.closest('.sidebar-footer').querySelector('.user-menu').classList.toggle('open')" title="More"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg></button></div>
+    </div>
+  </aside>
+  <div class="main">
+    <div class="empty-state">
+      <div class="empty-state-greeting">What would you like to build?</div>
+      <div class="empty-state-subtitle">Describe your app and I'll build it for you</div>
+      <div class="suggestion-chips">
+        <button class="suggestion-chip">E-commerce store</button>
+        <button class="suggestion-chip">Portfolio website</button>
+        <button class="suggestion-chip">Dashboard with charts</button>
+        <button class="suggestion-chip">Social media app</button>
+      </div>
+    </div>
+    <div class="input-wrapper">
+      <div class="input-bar">
+        <textarea class="input-textarea" placeholder="Describe what you want to build..." rows="1"></textarea>
+        <div class="input-bottom">
+          <div class="input-actions">
+            <button class="input-icon-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg></button>
+          </div>
+          <div class="input-actions">
+            <button class="model-chip">Claude Sonnet 4.6<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg></button>
+            <button class="send-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="screen-label">Builder — Empty State</div>
+</div>
+
+<!-- ═══════════════ SCREEN 3: BUILDER CHAT ═══════════════ -->
+<div id="screen-builder-chat" class="screen">
+  <aside class="sidebar">
+    <div class="sidebar-top">
+      <div class="sidebar-logo"><span class="sidebar-logo-text">VibeStack</span></div>
+      <button class="sidebar-toggle-btn" onclick="this.closest('.sidebar').classList.toggle('collapsed')" title="Toggle sidebar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg></button>
+    </div>
+    <div class="sidebar-nav">
+      <button class="sidebar-nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg><span>New project</span></button>
+      <button class="sidebar-nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><span>Search</span></button>
+    </div>
+    <div class="sidebar-divider"></div>
+    <div class="sidebar-cat">
+      <button class="sidebar-cat-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg><span>Chats</span></button>
+      <button class="sidebar-cat-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/></svg><span>Projects</span></button>
+    </div>
+    <div class="sidebar-section-label">Recents</div>
+    <button class="sidebar-item active"><span class="sidebar-item-text">SaaS Landing Page</span><span class="sidebar-item-meta">2m</span></button>
+    <button class="sidebar-item"><span class="sidebar-item-text">Task Manager App</span><span class="sidebar-item-meta">5h</span></button>
+    <div class="sidebar-spacer"></div>
+    <div class="sidebar-footer">
+      <div class="user-menu"><div class="user-menu-email">alex.m@example.com</div><button class="user-menu-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>Settings<span class="menu-shortcut">&#x21E7;&#x2318;,</span></button><button class="user-menu-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>Language<svg style="width:14px;height:14px;margin-left:auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg></button><button class="user-menu-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>Get help</button><div class="user-menu-divider"></div><button class="user-menu-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>View all plans</button><button class="user-menu-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>Gift VibeStack</button><button class="user-menu-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>Learn more<svg style="width:14px;height:14px;margin-left:auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg></button><div class="user-menu-divider"></div><button class="user-menu-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>Log out</button></div>
+      <div class="sidebar-footer-row"><div class="sidebar-user" onclick="this.closest('.sidebar-footer').querySelector('.user-menu').classList.toggle('open')"><div class="sidebar-avatar">A</div><div><div class="sidebar-user-name">Alex M.</div><div class="sidebar-user-plan">Pro Plan</div></div></div><button class="sidebar-footer-btn" onclick="this.closest('.sidebar-footer').querySelector('.user-menu').classList.toggle('open')" title="More"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg></button></div>
+    </div>
+  </aside>
+  <div class="main">
+    <div class="chat-area">
+      <div class="chat-messages">
+        <div class="chat-messages-inner">
+          <div class="message message-user">
+                        <div class="message-bubble">Build me a modern SaaS landing page with a hero section, feature grid, pricing table with 3 tiers, testimonials carousel, and a footer. Use a clean blue-to-purple gradient theme.</div>
+          </div>
+          <div class="message message-assistant">
+            <div class="thinking-card">
+              <div class="thinking-dot"></div>
+              <span class="thinking-card-text">Thinking</span>
+              <span class="thinking-card-timer">12s</span>
+            </div>
+          </div>
+          <div class="message message-assistant">
+            <div class="message-label">VibeStack</div>
+            <div class="message-content">
+              <p>I'll build a polished SaaS landing page with all five sections. Let me set up the project and create the components.</p>
+              <p>Here's my plan:</p>
+              <p>1. <strong>Hero section</strong> — gradient background, headline, CTA<br>
+              2. <strong>Feature grid</strong> — 6 features, 3-column layout with icons<br>
+              3. <strong>Pricing table</strong> — Free, Pro, Enterprise tiers<br>
+              4. <strong>Testimonials carousel</strong> — 3 quotes with auto-rotation<br>
+              5. <strong>Footer</strong> — links, social icons, newsletter</p>
+            </div>
+          </div>
+          <div class="message message-assistant">
+            <div class="action-card">
+              <div class="action-card-header">
+                <svg class="action-card-icon success" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                Creating sandbox environment
+                <span class="action-card-timer">3.2s</span>
+              </div>
+            </div>
+          </div>
+          <div class="message message-assistant">
+            <div class="action-card">
+              <div class="action-card-header">
+                <svg class="action-card-icon success" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                Writing 6 files
+                <span class="action-card-timer">8.4s</span>
+              </div>
+              <div class="action-card-body">src/App.tsx, src/components/Hero.tsx, Features.tsx, Pricing.tsx, Testimonials.tsx, Footer.tsx</div>
+            </div>
+          </div>
+          <div class="message message-assistant">
+            <div class="action-card">
+              <div class="action-card-header">
+                <svg class="action-card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation: throb 1.5s ease-in-out infinite"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+                Running build...
+                <span class="action-card-timer">2.1s</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="input-wrapper">
+      <div class="input-bar">
+        <textarea class="input-textarea" placeholder="Ask for changes..." rows="1"></textarea>
+        <div class="input-bottom">
+          <div class="input-actions"><button class="input-icon-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg></button></div>
+          <div class="input-actions">
+            <button class="model-chip">Claude Sonnet 4.6<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg></button>
+            <button class="send-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="screen-label">Builder — Chat (No Preview)</div>
+</div>
+
+<!-- ═══════════════ SCREEN 4: BUILDER + PREVIEW ═══════════════ -->
+<div id="screen-builder-preview" class="screen">
+  <aside class="sidebar">
+    <div class="sidebar-top">
+      <div class="sidebar-logo"><span class="sidebar-logo-text">VibeStack</span></div>
+      <button class="sidebar-toggle-btn" onclick="this.closest('.sidebar').classList.toggle('collapsed')" title="Toggle sidebar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg></button>
+    </div>
+    <div class="sidebar-nav">
+      <button class="sidebar-nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg><span>New project</span></button>
+      <button class="sidebar-nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><span>Search</span></button>
+    </div>
+    <div class="sidebar-divider"></div>
+    <div class="sidebar-cat">
+      <button class="sidebar-cat-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg><span>Chats</span></button>
+      <button class="sidebar-cat-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/></svg><span>Projects</span></button>
+    </div>
+    <div class="sidebar-section-label">Recents</div>
+    <button class="sidebar-item active"><span class="sidebar-item-text">SaaS Landing Page</span><span class="sidebar-item-meta">now</span></button>
+    <button class="sidebar-item"><span class="sidebar-item-text">Task Manager App</span><span class="sidebar-item-meta">5h</span></button>
+    <div class="sidebar-spacer"></div>
+    <div class="sidebar-footer">
+      <div class="user-menu"><div class="user-menu-email">alex.m@example.com</div><button class="user-menu-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>Settings<span class="menu-shortcut">&#x21E7;&#x2318;,</span></button><button class="user-menu-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>Language<svg style="width:14px;height:14px;margin-left:auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg></button><button class="user-menu-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>Get help</button><div class="user-menu-divider"></div><button class="user-menu-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>View all plans</button><button class="user-menu-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>Gift VibeStack</button><button class="user-menu-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>Learn more<svg style="width:14px;height:14px;margin-left:auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg></button><div class="user-menu-divider"></div><button class="user-menu-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>Log out</button></div>
+      <div class="sidebar-footer-row"><div class="sidebar-user" onclick="this.closest('.sidebar-footer').querySelector('.user-menu').classList.toggle('open')"><div class="sidebar-avatar">A</div><div><div class="sidebar-user-name">Alex M.</div><div class="sidebar-user-plan">Pro Plan</div></div></div><button class="sidebar-footer-btn" onclick="this.closest('.sidebar-footer').querySelector('.user-menu').classList.toggle('open')" title="More"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg></button></div>
+    </div>
+  </aside>
+  <div class="main" style="flex-direction:row">
+    <div class="chat-area" style="flex:1;min-width:340px">
+      <div class="chat-messages">
+        <div class="chat-messages-inner" style="max-width:100%">
+          <div class="message message-user">
+                        <div class="message-bubble">Build me a modern SaaS landing page with a hero section, feature grid, pricing table, testimonials, and a footer.</div>
+          </div>
+          <div class="message message-assistant">
+            <div class="message-label">VibeStack</div>
+            <div class="message-content">
+              <p>I've built your SaaS landing page with all 5 sections. The hero uses a blue-to-purple gradient, features are in a 3-column grid, and pricing has Free/Pro/Enterprise tiers. Take a look at the preview!</p>
+            </div>
+          </div>
+          <div class="message message-assistant">
+            <div class="action-card">
+              <div class="action-card-header">
+                <svg class="action-card-icon success" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                Build successful
+                <span class="action-card-timer">14.2s</span>
+              </div>
+            </div>
+          </div>
+          <div class="message message-user">
+                        <div class="message-bubble">Make the pricing cards have a hover effect and highlight the Pro tier as recommended</div>
+          </div>
+          <div class="message message-assistant">
+            <div class="message-label">VibeStack</div>
+            <div class="message-content">
+              <p>Done! I've added a scale-up hover effect to all pricing cards and highlighted the Pro tier with a border and "Recommended" badge.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="input-wrapper">
+        <div class="input-bar" style="max-width:100%">
+          <textarea class="input-textarea" placeholder="Ask for changes..." rows="1"></textarea>
+          <div class="input-bottom">
+            <div class="input-actions"><button class="input-icon-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg></button></div>
+            <div class="input-actions">
+              <button class="model-chip">Claude Sonnet 4.6<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg></button>
+              <button class="send-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="preview-panel open">
+      <div class="preview-header">
+        <div class="preview-tabs">
+          <button class="preview-tab active" onclick="showTab(this,'preview')">Preview</button>
+          <button class="preview-tab" onclick="showTab(this,'code')">Code</button>
+        </div>
+        <span class="preview-title">SaaS Landing Page</span>
+        <div class="preview-spacer"></div>
+        <button class="preview-deploy-btn">Deploy</button>
+        <button class="preview-close-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+      </div>
+      <div class="preview-body">
+        <div class="preview-fake-app" id="pv-app">
+          <div class="preview-fake-nav">
+            <div class="preview-fake-logo"></div>
+            <span class="preview-fake-nav-text">AppName</span>
+            <div class="preview-fake-nav-links"><span class="preview-fake-nav-link">Features</span><span class="preview-fake-nav-link">Pricing</span><span class="preview-fake-nav-link">About</span></div>
+          </div>
+          <div class="preview-fake-hero">
+            <h2>Build Something Amazing</h2>
+            <p>The modern platform for teams who want to ship faster.</p>
+            <button class="preview-fake-cta">Get Started Free</button>
+          </div>
+        </div>
+        <div class="code-view" id="pv-code">
+<span class="kw">import</span> { Hero } <span class="kw">from</span> <span class="str">'./components/Hero'</span>
+<span class="kw">import</span> { Features } <span class="kw">from</span> <span class="str">'./components/Features'</span>
+<span class="kw">import</span> { Pricing } <span class="kw">from</span> <span class="str">'./components/Pricing'</span>
+
+<span class="kw">export default function</span> App() {
+  <span class="kw">return</span> (
+    <span class="tag">&lt;div</span> <span class="attr">className</span>=<span class="str">"min-h-screen"</span><span class="tag">&gt;</span>
+      <span class="tag">&lt;Hero /&gt;</span>
+      <span class="tag">&lt;Features /&gt;</span>
+      <span class="tag">&lt;Pricing</span> <span class="attr">highlighted</span>=<span class="str">"pro"</span> <span class="tag">/&gt;</span>
+      <span class="tag">&lt;Testimonials /&gt;</span>
+      <span class="tag">&lt;Footer /&gt;</span>
+    <span class="tag">&lt;/div&gt;</span>
+  )
+}
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="screen-label">Builder — Chat + Preview</div>
+</div>
+
+<script src="https://mcp.figma.com/mcp/html-to-design/capture.js" async></script>
+<script>
+// Auto-show screen from ?screen= query param (for Figma capture)
+(function() {
+  var params = new URLSearchParams(window.location.search);
+  var screen = params.get('screen');
+  if (screen) {
+    document.addEventListener('DOMContentLoaded', function() {
+      document.querySelectorAll('.screen').forEach(function(s) { s.classList.remove('active'); });
+      var target = document.getElementById('screen-' + screen);
+      if (target) target.classList.add('active');
+      document.querySelector('.proto-nav').style.display = 'none';
+      document.querySelector('.screen-label').style.display = 'none';
+    });
+  }
+})();
+
+function showScreen(name) {
+  document.querySelectorAll('.screen').forEach(function(s) { s.classList.remove('active'); });
+  document.getElementById('screen-' + name).classList.add('active');
+  document.querySelectorAll('.proto-nav button:not([onclick*="toggle"])').forEach(function(b) { b.classList.remove('active'); });
+  event.target.classList.add('active');
+}
+
+function toggleTheme() { document.documentElement.classList.toggle('dark'); }
+
+function showTab(btn, tab) {
+  btn.parentElement.querySelectorAll('.preview-tab').forEach(function(t) { t.classList.remove('active'); });
+  btn.classList.add('active');
+  document.getElementById('pv-app').style.display = tab === 'code' ? 'none' : 'flex';
+  document.getElementById('pv-code').style.display = tab === 'code' ? 'block' : 'none';
+}
+</script>
+</body>
+</html>

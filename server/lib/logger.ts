@@ -43,9 +43,10 @@ function createLogger(defaultContext: LogContext = {}): Logger {
 
   function formatConsole(level: string, message: string, ctx: LogContext): string {
     const tag = ctx.module ? `[${ctx.module}]` : ''
-    const extra = Object.keys(ctx).filter(k => k !== 'module').length > 0
-      ? ` ${JSON.stringify(Object.fromEntries(Object.entries(ctx).filter(([k]) => k !== 'module')))}`
-      : ''
+    const extra =
+      Object.keys(ctx).filter((k) => k !== 'module').length > 0
+        ? ` ${JSON.stringify(Object.fromEntries(Object.entries(ctx).filter(([k]) => k !== 'module')))}`
+        : ''
     return `${tag} ${message}${extra}`
   }
 

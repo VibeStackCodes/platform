@@ -16,7 +16,10 @@ export interface ArtifactsListProps {
   className?: string
 }
 
-const VARIANT_STYLES: Record<NonNullable<ArtifactListItem['variant']>, { wrapper: string; icon: string; Icon: ReactNode }> = {
+const VARIANT_STYLES: Record<
+  NonNullable<ArtifactListItem['variant']>,
+  { wrapper: string; icon: string; Icon: ReactNode }
+> = {
   doc: {
     wrapper: 'bg-blue-100 dark:bg-blue-950',
     icon: 'text-blue-600 dark:text-blue-400',
@@ -70,12 +73,7 @@ function ArtifactItem({ item }: { item: ArtifactListItem }) {
 
 export function ArtifactsList({ title = 'Artifacts', items, className }: ArtifactsListProps) {
   return (
-    <div
-      className={cn(
-        'bg-secondary border border-border rounded-xl overflow-hidden',
-        className,
-      )}
-    >
+    <div className={cn('bg-secondary border border-border rounded-xl overflow-hidden', className)}>
       <div className="flex items-center gap-2 px-4 py-3 text-[13px] font-semibold text-foreground border-b border-border">
         <FileText size={15} className="text-muted-foreground" />
         {title}

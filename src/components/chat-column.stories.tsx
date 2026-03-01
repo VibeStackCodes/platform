@@ -65,7 +65,6 @@ function StaticChatTimeline() {
       {/* Scrollable message area */}
       <div className="flex-1 overflow-y-auto">
         <div className="mx-auto w-full max-w-[768px] space-y-6 px-4 py-6">
-
           {/* 1 — User message */}
           <Message from="user">
             <MessageContent>
@@ -121,8 +120,8 @@ function StaticChatTimeline() {
             icon={<ClipboardList size={14} />}
           >
             <p className="mb-3 text-[13.5px] leading-relaxed text-muted-foreground">
-              Here&apos;s the Product Requirements Document with detailed user stories and acceptance
-              criteria for TaskFlow.
+              Here&apos;s the Product Requirements Document with detailed user stories and
+              acceptance criteria for TaskFlow.
             </p>
             <ToolActivity steps={prdSteps} className="mb-3" />
             <ArtifactCard
@@ -162,12 +161,7 @@ function StaticChatTimeline() {
           <HitlActions approved />
 
           {/* 7 — Architect */}
-          <AgentHeader
-            agentType="architect"
-            name="Architect"
-            timer="7.2s"
-            icon={<Cpu size={14} />}
-          >
+          <AgentHeader agentType="architect" name="Architect" timer="7.2s" icon={<Cpu size={14} />}>
             <p className="mb-3 text-[13.5px] leading-relaxed text-muted-foreground">
               I&apos;ve assembled the implementation plan and assigned tasks to the development
               team. Track progress in the Project Panel.
@@ -233,14 +227,16 @@ function StaticChatTimeline() {
           {/* 13 — Completion message + compact preview card */}
           <p className="text-[13.5px] leading-relaxed text-muted-foreground">
             TaskFlow is ready! The app includes kanban boards with drag-and-drop, user
-            authentication, task CRUD with assignments, and real-time updates. You can preview
-            it live or continue iterating.
+            authentication, task CRUD with assignments, and real-time updates. You can preview it
+            live or continue iterating.
           </p>
           <div className="flex cursor-pointer items-center gap-3 rounded-xl border bg-card px-4 py-3 transition-colors hover:bg-accent/50">
             <Globe size={20} className="shrink-0 text-[oklch(0.6118_0.0713_127.12)]" />
             <div className="min-w-0 flex-1">
               <p className="text-sm font-semibold">TaskFlow — Project Management App</p>
-              <p className="text-xs text-muted-foreground">React + Hono · 12 files · Live preview</p>
+              <p className="text-xs text-muted-foreground">
+                React + Hono · 12 files · Live preview
+              </p>
             </div>
             <button
               type="button"
@@ -250,7 +246,6 @@ function StaticChatTimeline() {
               Open Preview
             </button>
           </div>
-
         </div>
       </div>
 
@@ -276,7 +271,6 @@ function StaticChatTimelineWorking() {
     <div className="flex h-screen w-full flex-col bg-background">
       <div className="flex-1 overflow-y-auto">
         <div className="mx-auto w-full max-w-[768px] space-y-6 px-4 py-6">
-
           {/* 1 — User message */}
           <Message from="user">
             <MessageContent>
@@ -310,7 +304,6 @@ function StaticChatTimelineWorking() {
           >
             <ToolActivity steps={prdWorkingSteps} />
           </AgentHeader>
-
         </div>
       </div>
 

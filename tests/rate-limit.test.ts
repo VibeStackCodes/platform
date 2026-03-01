@@ -303,10 +303,7 @@ describe('cleanupExpiredRateLimits', () => {
 
     const count = await cleanupExpiredRateLimits()
     expect(count).toBe(0)
-    expect(consoleErrorSpy).toHaveBeenCalledWith(
-      '[rate-limit] Cleanup failed:',
-      expect.any(Error),
-    )
+    expect(consoleErrorSpy).toHaveBeenCalledWith('[rate-limit] Cleanup failed:', expect.any(Error))
 
     consoleErrorSpy.mockRestore()
   })

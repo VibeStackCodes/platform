@@ -128,9 +128,12 @@ export default {
 
     const parsed = parseSandboxFromHost(host)
     if (!parsed) {
-      return new Response('Invalid subdomain. Expected: {port}-{sandboxId}-preview.vibestack.site', {
-        status: 400,
-      })
+      return new Response(
+        'Invalid subdomain. Expected: {port}-{sandboxId}-preview.vibestack.site',
+        {
+          status: 400,
+        },
+      )
     }
 
     const { sandboxId, port } = parsed

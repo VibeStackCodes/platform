@@ -308,7 +308,11 @@ export const getPreviewUrlTool = createTool({
       const sandbox = await getSandbox(inputData.sandboxId)
       const port = inputData.port || 3000
       const preview = await getPreviewUrlFn(sandbox, port)
-      return { url: buildProxyUrl(inputData.sandboxId, preview.port), port: preview.port, expiresAt: preview.expiresAt.toISOString() }
+      return {
+        url: buildProxyUrl(inputData.sandboxId, preview.port),
+        port: preview.port,
+        expiresAt: preview.expiresAt.toISOString(),
+      }
     } catch (e) {
       return {
         url: '',
@@ -325,14 +329,13 @@ export const createSandboxTool = createTool({
   description:
     'Create a new Daytona sandbox from snapshot. Optionally pass labels as a key-value object.',
   inputSchema: z.object({
-    labels: z.preprocess(
-      (val) => {
+    labels: z
+      .preprocess((val) => {
         if (typeof val === 'string') return { project: val }
         if (typeof val === 'boolean' || typeof val === 'number') return {}
         return val
-      },
-      z.record(z.string(), z.string()).optional(),
-    ).describe('Optional labels, e.g. {"project": "my-app"}. A plain string is also accepted.'),
+      }, z.record(z.string(), z.string()).optional())
+      .describe('Optional labels, e.g. {"project": "my-app"}. A plain string is also accepted.'),
   }),
   outputSchema: z.object({
     sandboxId: z.string(),
@@ -359,7 +362,8 @@ export const createSandboxTool = createTool({
 
 export const commitAndPushTool = createTool({
   id: 'commit-and-push',
-  description: 'Commit all changes and push to GitHub. Creates a repo if none exists. Call after each meaningful change.',
+  description:
+    'Commit all changes and push to GitHub. Creates a repo if none exists. Call after each meaningful change.',
   inputSchema: z.object({
     sandboxId: z.string().describe('Daytona sandbox ID'),
     message: z.string().describe('Git commit message'),
@@ -474,8 +478,13 @@ This is faster and cheaper than rewriting the entire file.`,
   inputSchema: z.object({
     sandboxId: z.string().describe('Daytona sandbox ID'),
     path: z.string().describe('File path relative to /workspace'),
-    editSnippet: z.string().describe('Edit snippet with "// ... keep existing code" markers for unchanged parts'),
-    instruction: z.string().optional().describe('Optional natural language instruction for the merge'),
+    editSnippet: z
+      .string()
+      .describe('Edit snippet with "// ... keep existing code" markers for unchanged parts'),
+    instruction: z
+      .string()
+      .optional()
+      .describe('Optional natural language instruction for the merge'),
   }),
   outputSchema: z.object({
     success: z.boolean(),
@@ -529,7 +538,9 @@ Use this when you need a library not included in the pre-installed snapshot.
 The LLM is free to install any package it needs.`,
   inputSchema: z.object({
     sandboxId: z.string().describe('Daytona sandbox ID'),
-    packages: z.string().describe('Package names to install, space-separated (e.g. "dnd-kit @dnd-kit/core")'),
+    packages: z
+      .string()
+      .describe('Package names to install, space-separated (e.g. "dnd-kit @dnd-kit/core")'),
   }),
   outputSchema: z.object({
     success: z.boolean(),

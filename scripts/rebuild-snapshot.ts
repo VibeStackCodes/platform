@@ -51,9 +51,8 @@ async function main() {
   // Having them pre-installed means: zero upload cost, zero import errors, warm Vite cache
   const uiKitFiles = readdirSync('snapshot/ui-kit')
   for (const file of uiKitFiles) {
-    const dest = file === 'utils.ts'
-      ? '/workspace/src/lib/utils.ts'
-      : `/workspace/src/components/ui/${file}`
+    const dest =
+      file === 'utils.ts' ? '/workspace/src/lib/utils.ts' : `/workspace/src/components/ui/${file}`
     image.addLocalFile(`snapshot/ui-kit/${file}`, dest)
   }
 

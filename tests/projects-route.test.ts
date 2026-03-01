@@ -18,7 +18,12 @@ vi.mock('@server/lib/db/queries', () => ({
   getProjectMessages: vi.fn(),
 }))
 
-import { createProject, getProject, getProjectMessages, getUserProjects } from '@server/lib/db/queries'
+import {
+  createProject,
+  getProject,
+  getProjectMessages,
+  getUserProjects,
+} from '@server/lib/db/queries'
 import { projectRoutes } from '@server/routes/projects'
 
 describe('Project Routes', () => {

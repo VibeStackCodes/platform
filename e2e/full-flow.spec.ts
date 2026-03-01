@@ -265,7 +265,6 @@ test.describe('VibeStack E2E', () => {
       // Code tab — no codeServerUrl means no iframe
       await page.getByRole('tab', { name: 'Code' }).click()
       await expect(page.locator('iframe[title="Code Editor"]')).not.toBeVisible()
-
     })
   })
 

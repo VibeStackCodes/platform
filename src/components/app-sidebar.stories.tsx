@@ -62,9 +62,7 @@ interface StaticSidebarProps {
   collapsed?: boolean
 }
 
-function StaticSidebar({
-  recentProjects = [],
-}: StaticSidebarProps) {
+function StaticSidebar({ recentProjects = [] }: StaticSidebarProps) {
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader>
@@ -115,7 +113,9 @@ function StaticSidebar({
                   <SidebarMenuItem key={project.id}>
                     <SidebarMenuButton className="justify-between" tooltip={project.name}>
                       <span className="truncate">{project.name}</span>
-                      <span className="shrink-0 text-[11px] text-muted-foreground/50">{project.age}</span>
+                      <span className="shrink-0 text-[11px] text-muted-foreground/50">
+                        {project.age}
+                      </span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 ))}

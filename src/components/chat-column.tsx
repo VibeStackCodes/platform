@@ -1,17 +1,8 @@
 'use client'
 
 import { Suspense } from 'react'
-import {
-  Bot,
-  CheckCircle2,
-  CircleCheck,
-  Loader2,
-  Rocket,
-} from 'lucide-react'
-import {
-  useAgentStream,
-  AGENT_CARD_CONFIG,
-} from '@/hooks/use-agent-stream'
+import { Bot, CheckCircle2, CircleCheck, Loader2, Rocket } from 'lucide-react'
+import { useAgentStream, AGENT_CARD_CONFIG } from '@/hooks/use-agent-stream'
 import { ToolActivity } from '@/components/ai-elements/tool-activity'
 import {
   Conversation,
@@ -287,9 +278,7 @@ export function ChatColumn({
                                 )}
                               </AgentHeader>
                               {entry.plan && pendingPlan && (
-                                <HitlActions
-                                  onApprove={() => handlePlanApprove()}
-                                />
+                                <HitlActions onApprove={() => handlePlanApprove()} />
                               )}
                             </div>
                           )
@@ -297,7 +286,9 @@ export function ChatColumn({
 
                         // Frontend → AgentHeader with page progress
                         if (agentId === 'frontend') {
-                          const completedPages = pageProgress.filter((p) => p.status === 'complete').length
+                          const completedPages = pageProgress.filter(
+                            (p) => p.status === 'complete',
+                          ).length
                           const frontendLabel = isComplete
                             ? `Generated ${completedPages} page${completedPages !== 1 ? 's' : ''}`
                             : (config?.runningLabel ?? 'Generating pages...')
@@ -319,7 +310,9 @@ export function ChatColumn({
                                       ) : (
                                         <Loader2 className="size-3.5 shrink-0 animate-spin text-blue-400" />
                                       )}
-                                      <span className="text-muted-foreground">{p.componentName}</span>
+                                      <span className="text-muted-foreground">
+                                        {p.componentName}
+                                      </span>
                                     </div>
                                   ))}
                                 </div>
@@ -330,9 +323,13 @@ export function ChatColumn({
 
                         // QA → AgentHeader with validation checks
                         if (agentId === 'qa') {
-                          const failed = validationChecks.filter((c) => c.status === 'failed').length
+                          const failed = validationChecks.filter(
+                            (c) => c.status === 'failed',
+                          ).length
                           const qaLabel = isComplete
-                            ? (failed > 0 ? 'Validation failed' : 'Validation passed')
+                            ? failed > 0
+                              ? 'Validation failed'
+                              : 'Validation passed'
                             : (config?.runningLabel ?? 'Validating...')
                           return (
                             <AgentHeader
@@ -350,7 +347,9 @@ export function ChatColumn({
                                       {check.status === 'passed' ? (
                                         <CheckCircle2 className="size-3.5 shrink-0 text-green-500" />
                                       ) : check.status === 'failed' ? (
-                                        <span className="size-3.5 shrink-0 text-center text-red-500">✕</span>
+                                        <span className="size-3.5 shrink-0 text-center text-red-500">
+                                          ✕
+                                        </span>
                                       ) : (
                                         <Loader2 className="size-3.5 shrink-0 animate-spin text-blue-400" />
                                       )}
@@ -434,10 +433,7 @@ export function ChatColumn({
 
                       case 'complete':
                         return (
-                          <div
-                            key={`complete-${entry.ts}`}
-                            className="space-y-3"
-                          >
+                          <div key={`complete-${entry.ts}`} className="space-y-3">
                             <div className="flex items-center gap-2 rounded-lg border border-green-500/30 bg-green-500/10 p-3 text-sm text-green-600 dark:text-green-400">
                               <Rocket className="size-4" />
                               <span>Your app is ready!</span>
@@ -448,7 +444,10 @@ export function ChatColumn({
                                 title="App Preview"
                                 meta={entry.deploymentUrl ?? 'Live preview available'}
                                 onClick={() =>
-                                  onPanelOpen({ type: 'preview', previewUrl: entry.deploymentUrl ?? '' })
+                                  onPanelOpen({
+                                    type: 'preview',
+                                    previewUrl: entry.deploymentUrl ?? '',
+                                  })
                                 }
                               />
                             )}
@@ -462,10 +461,7 @@ export function ChatColumn({
 
                   {/* Tool Activity (single orchestrator tool steps) */}
                   {toolSteps.length > 0 && (
-                    <ToolActivity
-                      steps={toolSteps}
-                      onPanelOpen={onPanelOpen}
-                    />
+                    <ToolActivity steps={toolSteps} onPanelOpen={onPanelOpen} />
                   )}
 
                   {/* Build Errors (outside timeline entries) */}

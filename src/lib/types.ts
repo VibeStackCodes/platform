@@ -497,7 +497,17 @@ export interface FileAssembledEvent {
 
 export interface ValidationCheckEvent {
   type: 'validation_check'
-  name: 'imports' | 'links' | 'accessibility' | 'hardcoded_colors' | 'typescript' | 'lint' | 'build' | 'manifest' | 'scaffold' | 'typecheck'
+  name:
+    | 'imports'
+    | 'links'
+    | 'accessibility'
+    | 'hardcoded_colors'
+    | 'typescript'
+    | 'lint'
+    | 'build'
+    | 'manifest'
+    | 'scaffold'
+    | 'typecheck'
   status: 'passed' | 'failed' | 'running'
   errors?: Array<{
     file: string
@@ -615,9 +625,9 @@ export type TimelineEntry =
 // ============================================================================
 
 export interface ElementContext {
-  fileName: string      // Source file path, e.g. "src/components/Form.tsx"
-  lineNumber: number    // Line number in source file
-  columnNumber: number  // Column number in source file
+  fileName: string // Source file path, e.g. "src/components/Form.tsx"
+  lineNumber: number // Line number in source file
+  columnNumber: number // Column number in source file
   tagName: string
   className: string
   textContent: string

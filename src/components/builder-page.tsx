@@ -17,11 +17,7 @@ interface BuilderPageProps {
 // Refresh signed URLs 10 min before 1h expiry
 const REFRESH_BEFORE_EXPIRY_MS = 10 * 60 * 1000
 
-export function BuilderPage({
-  projectId,
-  initialPrompt,
-  initialSandboxId,
-}: BuilderPageProps) {
+export function BuilderPage({ projectId, initialPrompt, initialSandboxId }: BuilderPageProps) {
   const [panelContent, setPanelContent] = useState<PanelContent>(null)
   const [_sandboxId, setSandboxId] = useState(initialSandboxId)
   const [previewUrl, setPreviewUrl] = useState<string>()

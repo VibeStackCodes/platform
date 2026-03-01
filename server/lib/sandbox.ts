@@ -436,7 +436,10 @@ export async function downloadDirectory(
     )
 
     const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error(`downloadDirectory timed out after ${DOWNLOAD_TIMEOUT_MS}ms`)), DOWNLOAD_TIMEOUT_MS)
+      setTimeout(
+        () => reject(new Error(`downloadDirectory timed out after ${DOWNLOAD_TIMEOUT_MS}ms`)),
+        DOWNLOAD_TIMEOUT_MS,
+      ),
     )
 
     const files = await Promise.race([downloadPromise, timeoutPromise])

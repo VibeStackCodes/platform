@@ -155,9 +155,7 @@ describe('Project Deploy Routes', () => {
       vi.mocked(getProject).mockResolvedValue(projectWithGitHub as any)
 
       // Step 1: GitHub repo info
-      mockFetch.mockResolvedValueOnce(
-        mockResponse({ id: 12345, default_branch: 'main' }),
-      )
+      mockFetch.mockResolvedValueOnce(mockResponse({ id: 12345, default_branch: 'main' }))
       // Step 2: Create Vercel project (201 Created)
       mockFetch.mockResolvedValueOnce(mockResponse({ id: 'vp_abc' }, 201))
       // Step 3: Create Vercel deployment
@@ -240,9 +238,7 @@ describe('Project Deploy Routes', () => {
       vi.mocked(getProject).mockResolvedValue(projectWithGitHub as any)
 
       // GitHub repo info succeeds
-      mockFetch.mockResolvedValueOnce(
-        mockResponse({ id: 12345, default_branch: 'main' }),
-      )
+      mockFetch.mockResolvedValueOnce(mockResponse({ id: 12345, default_branch: 'main' }))
       // Vercel project creation fails
       mockFetch.mockResolvedValueOnce(mockResponse({ error: 'Rate limit exceeded' }, 429))
 
@@ -363,9 +359,7 @@ describe('Project Deploy Routes', () => {
       vi.mocked(getProject).mockResolvedValue(projectWithGitHub as any)
 
       // GitHub repo info
-      mockFetch.mockResolvedValueOnce(
-        mockResponse({ id: 99999, default_branch: 'main' }),
-      )
+      mockFetch.mockResolvedValueOnce(mockResponse({ id: 99999, default_branch: 'main' }))
       // Vercel project creation returns 409 (already exists) — must NOT throw
       mockFetch.mockResolvedValueOnce(mockResponse({ error: 'Project already exists' }, 409))
       // Deployment creation succeeds

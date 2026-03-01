@@ -158,7 +158,13 @@ const MASTER_LEARNINGS_PATH = `docs/10-apps-learnings.md`
 // ============================================================================
 
 const startTime = Date.now()
-const phaseTimings: Array<{ phase: string; durationMs: number; tokens: number; status: string; notes: string }> = []
+const phaseTimings: Array<{
+  phase: string
+  durationMs: number
+  tokens: number
+  status: string
+  notes: string
+}> = []
 
 function elapsed(): string {
   return `[${((Date.now() - startTime) / 1000).toFixed(1)}s]`
@@ -180,7 +186,9 @@ function logError(msg: string, error: unknown) {
 function trackPhase(phase: string, durationMs: number, tokens: number, status: string, notes = '') {
   phaseTimings.push({ phase, durationMs, tokens, status, notes })
   const statusIcon = status === 'PASS' ? '✅' : status === 'SKIP' ? '⏭️' : '❌'
-  log(`${statusIcon} ${phase}: ${status} (${(durationMs / 1000).toFixed(1)}s, ${tokens} tokens) ${notes}`)
+  log(
+    `${statusIcon} ${phase}: ${status} (${(durationMs / 1000).toFixed(1)}s, ${tokens} tokens) ${notes}`,
+  )
 }
 
 // ============================================================================
@@ -219,12 +227,14 @@ async function phase1_analysis() {
 // Phase 2: Blueprint (deterministic)
 // ============================================================================
 
-async function phase2_blueprint(analysisResult: Extract<Awaited<ReturnType<typeof phase1_analysis>>, { type: 'done' }>) {
+async function phase2_blueprint(
+  analysisResult: Extract<Awaited<ReturnType<typeof phase1_analysis>>, { type: 'done' }>,
+) {
   const { runBlueprint } = await import('../server/lib/agents/orchestrator')
 
   log(`App: ${analysisResult.appName}`)
   log(`Description: ${analysisResult.appDescription}`)
-  log(`Tables: ${analysisResult.contract.tables.map(t => t.name).join(', ')}`)
+  log(`Tables: ${analysisResult.contract.tables.map((t) => t.name).join(', ')}`)
 
   const result = await runBlueprint({
     userPrompt: TEST_PROMPT,
@@ -234,7 +244,7 @@ async function phase2_blueprint(analysisResult: Extract<Awaited<ReturnType<typeo
   })
 
   log(`Blueprint files: ${result.blueprint.fileTree.length}`)
-  log(`LLM slot files: ${result.blueprint.fileTree.filter(f => f.isLLMSlot).length}`)
+  log(`LLM slot files: ${result.blueprint.fileTree.filter((f) => f.isLLMSlot).length}`)
 
   for (const file of result.blueprint.fileTree) {
     const slotTag = file.isLLMSlot ? ' [SLOT]' : ''
@@ -379,7 +389,9 @@ async function phase8_githubPush(
   }
   const allFiles = Array.from(fileMap.entries()).map(([path, content]) => ({ path, content }))
 
-  log(`Pushing ${allFiles.length} files to GitHub via REST API (${blueprintFiles.length} blueprint + ${assembledFiles.length} assembled)...`)
+  log(
+    `Pushing ${allFiles.length} files to GitHub via REST API (${blueprintFiles.length} blueprint + ${assembledFiles.length} assembled)...`,
+  )
   log(`  Repo: ${owner}/${repo}`)
 
   await pushFilesViaAPI(allFiles, owner, repo)
@@ -460,7 +472,13 @@ async function phase9_vercelDeploy(
   const teamQuery = VERCEL_TEAM_ID ? `?teamId=${VERCEL_TEAM_ID}` : ''
 
   // Build a slug from app name (fresh project per app, no wildcard project)
-  const slug = appName.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 30) + '-' + Date.now().toString(36)
+  const slug =
+    appName
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .slice(0, 30) +
+    '-' +
+    Date.now().toString(36)
 
   for (let attempt = 0; attempt < 2; attempt++) {
     const deployPayload: Record<string, unknown> = {
@@ -491,7 +509,12 @@ async function phase9_vercelDeploy(
       continue
     }
 
-    const data = (await res.json()) as { id?: string; url?: string; error?: { message: string }; readyState?: string }
+    const data = (await res.json()) as {
+      id?: string
+      url?: string
+      error?: { message: string }
+      readyState?: string
+    }
     if (data.error) throw new Error(`Vercel API error: ${data.error.message}`)
 
     const deploymentId = data.id!
@@ -500,10 +523,17 @@ async function phase9_vercelDeploy(
     // Wait for ready — poll every 5s, up to 3 minutes
     for (let i = 0; i < 36; i++) {
       await new Promise((r) => setTimeout(r, 5000))
-      const pollRes = await fetch(`https://api.vercel.com/v13/deployments/${deploymentId}${teamQuery}`, {
-        headers: { Authorization: `Bearer ${VERCEL_TOKEN}` },
-      })
-      const pollData = (await pollRes.json()) as { readyState?: string; url?: string; errorMessage?: string }
+      const pollRes = await fetch(
+        `https://api.vercel.com/v13/deployments/${deploymentId}${teamQuery}`,
+        {
+          headers: { Authorization: `Bearer ${VERCEL_TOKEN}` },
+        },
+      )
+      const pollData = (await pollRes.json()) as {
+        readyState?: string
+        url?: string
+        errorMessage?: string
+      }
       if (pollData.readyState === 'READY') {
         const url = `https://${pollData.url}`
         log(`✓ Deployed: ${url}`)
@@ -513,12 +543,14 @@ async function phase9_vercelDeploy(
         // Fetch build logs to diagnose
         const logsRes = await fetch(
           `https://api.vercel.com/v2/deployments/${deploymentId}/events${teamQuery}`,
-          { headers: { Authorization: `Bearer ${VERCEL_TOKEN}` } }
+          { headers: { Authorization: `Bearer ${VERCEL_TOKEN}` } },
         )
         const logsText = logsRes.ok ? await logsRes.text() : '(no logs)'
         const lastLines = logsText.split('\n').slice(-20).join('\n')
         log(`Build logs (last 20 lines):\n${lastLines}`)
-        throw new Error(`Vercel deploy failed: ${pollData.readyState}${pollData.errorMessage ? `: ${pollData.errorMessage}` : ''}`)
+        throw new Error(
+          `Vercel deploy failed: ${pollData.readyState}${pollData.errorMessage ? `: ${pollData.errorMessage}` : ''}`,
+        )
       }
       process.stdout.write(`  ${i * 5}s: ${pollData.readyState ?? 'pending'}...\r`)
     }
@@ -563,11 +595,14 @@ function writeLearnings(results: {
 }) {
   const totalDuration = Date.now() - startTime
   const totalTokens = phaseTimings.reduce((sum, p) => sum + p.tokens, 0)
-  const estimatedCost = (totalTokens / 1_000_000 * 2.5).toFixed(4) // ~$2.50/MTok for gpt-4o level
+  const estimatedCost = ((totalTokens / 1_000_000) * 2.5).toFixed(4) // ~$2.50/MTok for gpt-4o level
 
-  const tableRows = phaseTimings.map((p, i) =>
-    `| ${i + 1} | ${p.phase} | ${p.status} | ${(p.durationMs / 1000).toFixed(1)}s | ${p.tokens} | ${p.notes.slice(0, 80)} |`
-  ).join('\n')
+  const tableRows = phaseTimings
+    .map(
+      (p, i) =>
+        `| ${i + 1} | ${p.phase} | ${p.status} | ${(p.durationMs / 1000).toFixed(1)}s | ${p.tokens} | ${p.notes.slice(0, 80)} |`,
+    )
+    .join('\n')
 
   const content = `# App ${TEST_CONFIG.id}: ${TEST_CONFIG.name}
 
@@ -593,57 +628,97 @@ ${tableRows}
 
 ## Design Choices (from analyst)
 
-${results.analysis ? `- **App Name**: ${results.analysis.appName}
+${
+  results.analysis
+    ? `- **App Name**: ${results.analysis.appName}
 - **Description**: ${results.analysis.appDescription}
-- **Tables**: ${results.analysis.contract?.tables?.map((t: any) => t.name).join(', ')}` : 'Failed'}
+- **Tables**: ${results.analysis.contract?.tables?.map((t: any) => t.name).join(', ')}`
+    : 'Failed'
+}
 
 ## Blueprint
 
-${results.blueprint ? `- **Total Files**: ${results.blueprint.fileTree?.length}
+${
+  results.blueprint
+    ? `- **Total Files**: ${results.blueprint.fileTree?.length}
 - **LLM Slot Files**: ${results.blueprint.fileTree?.filter((f: any) => f.isLLMSlot).length}
-- **Auth**: ${results.blueprint.features?.auth ? 'Yes' : 'No'}` : 'Failed'}
+- **Auth**: ${results.blueprint.features?.auth ? 'Yes' : 'No'}`
+    : 'Failed'
+}
 
 ## Code Generation
 
-${results.codegen ? `- **Assembled Files**: ${results.codegen.assembledFiles?.length}
+${
+  results.codegen
+    ? `- **Assembled Files**: ${results.codegen.assembledFiles?.length}
 - **Tokens**: ${results.codegen.tokensUsed}
-- **Warnings**: ${results.codegen.warnings?.length ?? 0}` : 'Failed'}
+- **Warnings**: ${results.codegen.warnings?.length ?? 0}`
+    : 'Failed'
+}
 
 ## Validation
 
-${results.validation ? `- **Manifest**: ${results.validation.validation?.manifest?.passed ? 'PASS' : 'FAIL'}
+${
+  results.validation
+    ? `- **Manifest**: ${results.validation.validation?.manifest?.passed ? 'PASS' : 'FAIL'}
 - **TypeCheck**: ${results.validation.validation?.typecheck?.passed ? 'PASS' : 'FAIL'}
 - **Build**: ${results.validation.validation?.build?.passed ? 'PASS' : 'FAIL'}
-- **Overall**: ${results.validation.allPassed ? '✅ ALL PASSED' : '❌ FAILED'}` : 'Failed'}
+- **Overall**: ${results.validation.allPassed ? '✅ ALL PASSED' : '❌ FAILED'}`
+    : 'Failed'
+}
 
 ## Code Review
 
-${results.review ? `- **Passed**: ${results.review.passed}
+${
+  results.review
+    ? `- **Passed**: ${results.review.passed}
 - **Deterministic Issues**: ${results.review.deterministicIssues?.length}
-- **LLM Issues**: ${results.review.llmIssues?.length}` : 'Skipped'}
+- **LLM Issues**: ${results.review.llmIssues?.length}`
+    : 'Skipped'
+}
 
 ## Provisioning
 
-${results.provisioning ? `- **GitHub**: ${results.provisioning.githubHtmlUrl}
-- **Supabase**: ${results.provisioning.supabaseUrl}` : 'Failed'}
+${
+  results.provisioning
+    ? `- **GitHub**: ${results.provisioning.githubHtmlUrl}
+- **Supabase**: ${results.provisioning.supabaseUrl}`
+    : 'Failed'
+}
 
 ## Learnings
 
 ### Architecture Observations
-${results.notes.filter((n: string) => n.startsWith('[ARCH]')).map((n: string) => `- ${n.replace('[ARCH] ', '')}`).join('\n') || '(none)'}
+${
+  results.notes
+    .filter((n: string) => n.startsWith('[ARCH]'))
+    .map((n: string) => `- ${n.replace('[ARCH] ', '')}`)
+    .join('\n') || '(none)'
+}
 
 ### Bugs Found
-${results.notes.filter((n: string) => n.startsWith('[BUG]')).map((n: string) => `- ${n.replace('[BUG] ', '')}`).join('\n') || '(none)'}
+${
+  results.notes
+    .filter((n: string) => n.startsWith('[BUG]'))
+    .map((n: string) => `- ${n.replace('[BUG] ', '')}`)
+    .join('\n') || '(none)'
+}
 
 ### Performance Notes
-${results.notes.filter((n: string) => n.startsWith('[PERF]')).map((n: string) => `- ${n.replace('[PERF] ', '')}`).join('\n') || '(none)'}
+${
+  results.notes
+    .filter((n: string) => n.startsWith('[PERF]'))
+    .map((n: string) => `- ${n.replace('[PERF] ', '')}`)
+    .join('\n') || '(none)'
+}
 `
 
   writeFileSync(LEARNINGS_PATH, content)
   log(`\nLearnings written to ${LEARNINGS_PATH}`)
 
   // Append to master learnings file
-  const masterEntry = `\n## App ${TEST_CONFIG.id}: ${TEST_CONFIG.name}\n` +
+  const masterEntry =
+    `\n## App ${TEST_CONFIG.id}: ${TEST_CONFIG.name}\n` +
     `- **URL**: ${results.vercelUrl ? results.vercelUrl : 'N/A'}\n` +
     `- **Duration**: ${(totalDuration / 1000).toFixed(1)}s | **Tokens**: ${totalTokens} (~$${estimatedCost})\n` +
     `- **Tables**: ${results.analysis?.contract?.tables?.map((t: any) => t.name).join(', ')}\n` +
@@ -651,7 +726,10 @@ ${results.notes.filter((n: string) => n.startsWith('[PERF]')).map((n: string) =>
 
   try {
     if (!existsSync(MASTER_LEARNINGS_PATH)) {
-      writeFileSync(MASTER_LEARNINGS_PATH, `# 10 Apps Build Log\n\nGenerated by VibeStack — ${new Date().toISOString().split('T')[0]}\n`)
+      writeFileSync(
+        MASTER_LEARNINGS_PATH,
+        `# 10 Apps Build Log\n\nGenerated by VibeStack — ${new Date().toISOString().split('T')[0]}\n`,
+      )
     }
     appendFileSync(MASTER_LEARNINGS_PATH, masterEntry)
     log(`Appended to master learnings: ${MASTER_LEARNINGS_PATH}`)
@@ -665,7 +743,9 @@ ${results.notes.filter((n: string) => n.startsWith('[PERF]')).map((n: string) =>
 // ============================================================================
 
 async function main() {
-  log(`=== VibeStack E2E Pipeline — App ${TEST_CONFIG.id}/${TEST_PROMPTS.length}: ${TEST_CONFIG.name} ===`)
+  log(
+    `=== VibeStack E2E Pipeline — App ${TEST_CONFIG.id}/${TEST_PROMPTS.length}: ${TEST_CONFIG.name} ===`,
+  )
   log(`Prompt: "${TEST_PROMPT.slice(0, 80)}..."`)
   log('')
 
@@ -702,12 +782,13 @@ async function main() {
         (name) => !analysisResult.capabilityManifest.includes(name),
       )
       if (missing.length > 0) {
-        throw new Error(`Capability selection mismatch. Missing: ${missing.join(', ')}. Got: ${analysisResult.capabilityManifest.join(', ')}`)
+        throw new Error(
+          `Capability selection mismatch. Missing: ${missing.join(', ')}. Got: ${analysisResult.capabilityManifest.join(', ')}`,
+        )
       }
     }
 
-    trackPhase('1. Analysis', d1, tokens1, 'PASS',
-      `app: ${analysisResult.appName}`)
+    trackPhase('1. Analysis', d1, tokens1, 'PASS', `app: ${analysisResult.appName}`)
     results.analysis = analysisResult
 
     // --- Phase 2: Blueprint ---
@@ -717,7 +798,9 @@ async function main() {
     trackPhase('2. Blueprint', d2, 0, 'PASS', `${blueprint.fileTree.length} files (deterministic)`)
     results.blueprint = blueprint
 
-    notes.push(`[ARCH] Blueprint generates ${blueprint.fileTree.length} files across ${new Set(blueprint.fileTree.map((f: any) => f.layer)).size} layers`)
+    notes.push(
+      `[ARCH] Blueprint generates ${blueprint.fileTree.length} files across ${new Set(blueprint.fileTree.map((f: any) => f.layer)).size} layers`,
+    )
 
     // --- Phase 3: Provisioning ---
     const t3 = Date.now()
@@ -726,17 +809,19 @@ async function main() {
     sandboxId = provisioningResult.sandboxId
     trackPhase('3. Provisioning', d3, 0, 'PASS', `sandbox + github`)
     results.provisioning = provisioningResult
-    notes.push(`[PERF] Provisioning: ${(d3/1000).toFixed(1)}s`)
+    notes.push(`[PERF] Provisioning: ${(d3 / 1000).toFixed(1)}s`)
 
     // --- Phase 4: Code Generation ---
     const t4 = Date.now()
-    const codegenResult = await phase4_codegen(
-      blueprint, analysisResult.contract, sandboxId,
-    )
+    const codegenResult = await phase4_codegen(blueprint, analysisResult.contract, sandboxId)
     const d4 = Date.now() - t4
-    trackPhase('4. Code Generation', d4, codegenResult.tokensUsed,
+    trackPhase(
+      '4. Code Generation',
+      d4,
+      codegenResult.tokensUsed,
       codegenResult.skippedEntities?.length ? 'PARTIAL' : 'PASS',
-      `${codegenResult.assembledFiles.length} files`)
+      `${codegenResult.assembledFiles.length} files`,
+    )
     results.codegen = codegenResult
 
     if (codegenResult.warnings?.length) {
@@ -747,8 +832,13 @@ async function main() {
     const t5 = Date.now()
     let validationResult = await phase5_validation(blueprint, sandboxId)
     const d5 = Date.now() - t5
-    trackPhase('5. Validation', d5, 0, validationResult.allPassed ? 'PASS' : 'FAIL',
-      `manifest=${validationResult.validation.manifest.passed} tsc=${validationResult.validation.typecheck.passed} build=${validationResult.validation.build.passed}`)
+    trackPhase(
+      '5. Validation',
+      d5,
+      0,
+      validationResult.allPassed ? 'PASS' : 'FAIL',
+      `manifest=${validationResult.validation.manifest.passed} tsc=${validationResult.validation.typecheck.passed} build=${validationResult.validation.build.passed}`,
+    )
     results.validation = validationResult
 
     // --- Phase 6: Repair (if needed, up to 2 attempts) ---
@@ -760,9 +850,13 @@ async function main() {
 
         // Re-validate
         validationResult = await phase5_validation(blueprint, sandboxId)
-        trackPhase(`6. Repair #${attempt}`, d6, 0,
+        trackPhase(
+          `6. Repair #${attempt}`,
+          d6,
+          0,
           validationResult.allPassed ? 'PASS' : 'FAIL',
-          `tsc=${validationResult.validation.typecheck.passed} build=${validationResult.validation.build.passed}`)
+          `tsc=${validationResult.validation.typecheck.passed} build=${validationResult.validation.build.passed}`,
+        )
         results.validation = validationResult
         notes.push(`[BUG] Needed repair attempt ${attempt}`)
       }
@@ -774,9 +868,13 @@ async function main() {
         const t7 = Date.now()
         const reviewResult = await phase7_codeReview(blueprint, analysisResult.contract, sandboxId)
         const d7 = Date.now() - t7
-        trackPhase('7. Code Review', d7, reviewResult.tokensUsed,
+        trackPhase(
+          '7. Code Review',
+          d7,
+          reviewResult.tokensUsed,
           reviewResult.passed ? 'PASS' : 'WARN',
-          `${reviewResult.deterministicIssues.length} det + ${reviewResult.llmIssues.length} LLM issues`)
+          `${reviewResult.deterministicIssues.length} det + ${reviewResult.llmIssues.length} LLM issues`,
+        )
         results.review = reviewResult
       } catch (error) {
         logError('Code review failed (non-blocking)', error)
@@ -787,12 +885,18 @@ async function main() {
     if (provisioningResult.githubCloneUrl) {
       try {
         const t8 = Date.now()
-        await phase8_githubPush(provisioningResult.githubCloneUrl, blueprint.fileTree, codegenResult.assembledFiles)
+        await phase8_githubPush(
+          provisioningResult.githubCloneUrl,
+          blueprint.fileTree,
+          codegenResult.assembledFiles,
+        )
         const d8 = Date.now() - t8
         trackPhase('8. GitHub Push', d8, 0, 'PASS', provisioningResult.githubHtmlUrl)
       } catch (error) {
         logError('GitHub push failed', error)
-        notes.push(`[BUG] GitHub push failed: ${error instanceof Error ? error.message : String(error)}`)
+        notes.push(
+          `[BUG] GitHub push failed: ${error instanceof Error ? error.message : String(error)}`,
+        )
       }
     }
 
@@ -812,11 +916,18 @@ async function main() {
 
         log(`\n🚀 APP ${TEST_CONFIG.id} LIVE: ${vercelUrl}`)
         log(`   App: ${analysisResult.appName}`)
-
       } catch (error) {
         logError('Vercel deploy failed', error)
-        notes.push(`[BUG] Vercel deploy failed: ${error instanceof Error ? error.message : String(error)}`)
-        trackPhase('9. Vercel Deploy', 0, 0, 'FAIL', (error instanceof Error ? error.message : String(error)).slice(0, 100))
+        notes.push(
+          `[BUG] Vercel deploy failed: ${error instanceof Error ? error.message : String(error)}`,
+        )
+        trackPhase(
+          '9. Vercel Deploy',
+          0,
+          0,
+          'FAIL',
+          (error instanceof Error ? error.message : String(error)).slice(0, 100),
+        )
       }
     } else {
       trackPhase('9. Vercel Deploy', 0, 0, 'SKIP', 'validation failed')
@@ -830,11 +941,12 @@ async function main() {
     log(`APP ${TEST_CONFIG.id} COMPLETE: ${TEST_CONFIG.name}`)
     log('='.repeat(60))
     log(`Total duration: ${(totalDuration / 1000).toFixed(1)}s`)
-    log(`Total tokens: ${totalTokens} (~$${(totalTokens / 1_000_000 * 2.5).toFixed(4)})`)
-    log(`Phases: ${phaseTimings.filter(p => p.status === 'PASS').length}/${phaseTimings.length} passed`)
+    log(`Total tokens: ${totalTokens} (~$${((totalTokens / 1_000_000) * 2.5).toFixed(4)})`)
+    log(
+      `Phases: ${phaseTimings.filter((p) => p.status === 'PASS').length}/${phaseTimings.length} passed`,
+    )
     if (results.vercelUrl) log(`🔗 Live URL: ${results.vercelUrl}`)
     if (provisioningResult?.githubHtmlUrl) log(`📦 GitHub: ${provisioningResult.githubHtmlUrl}`)
-
   } catch (error) {
     logError('Pipeline failed', error)
     notes.push(`[BUG] Pipeline failed: ${error instanceof Error ? error.message : String(error)}`)

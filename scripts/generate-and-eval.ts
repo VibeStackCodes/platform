@@ -31,8 +31,8 @@ import { execFileSync, spawn } from 'node:child_process'
 // ---------------------------------------------------------------------------
 
 const PRICING = {
-  'gpt-5.2': { input: 2.50, output: 10.0 },
-  'gpt-5.2-codex': { input: 2.50, output: 10.0 },
+  'gpt-5.2': { input: 2.5, output: 10.0 },
+  'gpt-5.2-codex': { input: 2.5, output: 10.0 },
   'claude-sonnet-4-6': { input: 3.0, output: 15.0 },
 } as const
 
@@ -86,7 +86,10 @@ Respond with ONLY valid JSON (no markdown fences):
 
 function loadTestPrompt(id: string): string {
   const file = readFileSync(join(import.meta.dirname, 'test-prompts.md'), 'utf-8')
-  const regex = new RegExp(`###\\s+${id.replace(/[-]/g, '[-]')}\\s+[^\\n]*\\n\`\`\`\\n([\\s\\S]*?)\`\`\``, 'i')
+  const regex = new RegExp(
+    `###\\s+${id.replace(/[-]/g, '[-]')}\\s+[^\\n]*\\n\`\`\`\\n([\\s\\S]*?)\`\`\``,
+    'i',
+  )
   const match = file.match(regex)
   if (!match) {
     const ids = [...file.matchAll(/###\s+([\w-]+)\s+/g)].map((m) => m[1])
@@ -126,11 +129,19 @@ interface TokenUsage {
 
 const tokenLog: TokenUsage[] = []
 
-function trackUsage(phase: string, model: string, input: number, output: number, durationMs: number) {
+function trackUsage(
+  phase: string,
+  model: string,
+  input: number,
+  output: number,
+  durationMs: number,
+) {
   const pricing = PRICING[model as keyof typeof PRICING] ?? { input: 2.5, output: 10.0 }
   const cost = (input * pricing.input + output * pricing.output) / 1_000_000
   tokenLog.push({ phase, model, inputTokens: input, outputTokens: output, cost, durationMs })
-  log(`  [cost] ${model} — ${input} in / ${output} out — $${cost.toFixed(4)} (${(durationMs / 1000).toFixed(1)}s)`)
+  log(
+    `  [cost] ${model} — ${input} in / ${output} out — $${cost.toFixed(4)} (${(durationMs / 1000).toFixed(1)}s)`,
+  )
 }
 
 // ---------------------------------------------------------------------------
@@ -151,7 +162,9 @@ function log(msg: string) {
 // Screenshot capture via Playwright
 // ---------------------------------------------------------------------------
 
-async function captureScreenshots(appDir: string): Promise<{ desktop: string[]; mobile: string[] }> {
+async function captureScreenshots(
+  appDir: string,
+): Promise<{ desktop: string[]; mobile: string[] }> {
   const screenshotDir = join(appDir, '.eval-screenshots')
   mkdirSync(screenshotDir, { recursive: true })
 
@@ -172,7 +185,10 @@ async function captureScreenshots(appDir: string): Promise<{ desktop: string[]; 
         resolve()
       }
     })
-    viteProcess.on('error', (err) => { clearTimeout(timeout); reject(err) })
+    viteProcess.on('error', (err) => {
+      clearTimeout(timeout)
+      reject(err)
+    })
   })
   log('  Vite ready on port 4444')
 
@@ -184,7 +200,9 @@ async function captureScreenshots(appDir: string): Promise<{ desktop: string[]; 
     for (const m of routeMatches) {
       if (m[1] !== '/' && !m[1].includes('$')) routes.push(m[1])
     }
-  } catch { /* only screenshot / if route tree is unreadable */ }
+  } catch {
+    /* only screenshot / if route tree is unreadable */
+  }
 
   const desktopFiles: string[] = []
   const mobileFiles: string[] = []
@@ -199,7 +217,9 @@ async function captureScreenshots(appDir: string): Promise<{ desktop: string[]; 
 
       // Desktop: 1440x900
       const desktopPage = await browser.newPage({ viewport: { width: 1440, height: 900 } })
-      await desktopPage.goto(`http://127.0.0.1:4444${route}`, { waitUntil: 'networkidle', timeout: 15000 }).catch(() => {})
+      await desktopPage
+        .goto(`http://127.0.0.1:4444${route}`, { waitUntil: 'networkidle', timeout: 15000 })
+        .catch(() => {})
       await desktopPage.waitForTimeout(1000)
 
       // Full-page screenshot
@@ -211,7 +231,9 @@ async function captureScreenshots(appDir: string): Promise<{ desktop: string[]; 
 
       // Mobile: 375x812
       const mobilePage = await browser.newPage({ viewport: { width: 375, height: 812 } })
-      await mobilePage.goto(`http://127.0.0.1:4444${route}`, { waitUntil: 'networkidle', timeout: 15000 }).catch(() => {})
+      await mobilePage
+        .goto(`http://127.0.0.1:4444${route}`, { waitUntil: 'networkidle', timeout: 15000 })
+        .catch(() => {})
       await mobilePage.waitForTimeout(1000)
 
       const mobilePath = join(screenshotDir, `mobile-${routeSlug}.png`)
@@ -294,7 +316,10 @@ ${EVAL_RUBRIC}`,
 
   const text = response.content.find((c) => c.type === 'text')?.text ?? '{}'
   // Strip markdown fences if present
-  const jsonStr = text.replace(/```json?\n?/g, '').replace(/```/g, '').trim()
+  const jsonStr = text
+    .replace(/```json?\n?/g, '')
+    .replace(/```/g, '')
+    .trim()
   const parsed = JSON.parse(jsonStr) as EvalResult
 
   return {
@@ -308,7 +333,17 @@ ${EVAL_RUBRIC}`,
 // Generation pipeline
 // ---------------------------------------------------------------------------
 
-async function runGenerationPipeline(): Promise<{ tmpDir: string; validation: { errors: { type: string; file: string; line?: number; message: string }[]; warnings: { type: string; file: string; message: string }[]; valid: boolean }; tscErrors: string[]; generatedPages: { route: string; fileName: string; content: string }[]; spec: any }> {
+async function runGenerationPipeline(): Promise<{
+  tmpDir: string
+  validation: {
+    errors: { type: string; file: string; line?: number; message: string }[]
+    warnings: { type: string; file: string; message: string }[]
+    valid: boolean
+  }
+  tscErrors: string[]
+  generatedPages: { route: string; fileName: string; content: string }[]
+  spec: any
+}> {
   // --- Phase 1: Analyst ---
   log('Phase 1: Running analyst agent...')
   const { runAnalysis } = await import('../server/lib/agents/orchestrator')
@@ -361,7 +396,13 @@ async function runGenerationPipeline(): Promise<{ tmpDir: string; validation: { 
   const t3 = Date.now()
   const pageResult = await generatePages({ spec, tokens })
   const generatedPages = pageResult.pages
-  trackUsage('page-generation', 'gpt-5.2-codex', pageResult.usage.inputTokens, pageResult.usage.outputTokens, Date.now() - t3)
+  trackUsage(
+    'page-generation',
+    'gpt-5.2-codex',
+    pageResult.usage.inputTokens,
+    pageResult.usage.outputTokens,
+    Date.now() - t3,
+  )
   log(`  Generated ${generatedPages.length} pages in ${((Date.now() - t3) / 1000).toFixed(1)}s`)
   for (const page of generatedPages) {
     log(`    ${page.route} → src/${page.fileName} (${page.content.length} chars)`)
@@ -394,29 +435,54 @@ async function runGenerationPipeline(): Promise<{ tmpDir: string; validation: { 
   // Scaffold files
   const appSlug = analysisResult.appName.toLowerCase().replace(/\s+/g, '-')
   const tsconfig = {
-    compilerOptions: { target: 'ES2022', module: 'ESNext', moduleResolution: 'bundler', jsx: 'react-jsx', strict: true, esModuleInterop: true, skipLibCheck: true, noEmit: true, baseUrl: '.', paths: { '@/*': ['./src/*'] }, types: ['vite/client'] },
+    compilerOptions: {
+      target: 'ES2022',
+      module: 'ESNext',
+      moduleResolution: 'bundler',
+      jsx: 'react-jsx',
+      strict: true,
+      esModuleInterop: true,
+      skipLibCheck: true,
+      noEmit: true,
+      baseUrl: '.',
+      paths: { '@/*': ['./src/*'] },
+      types: ['vite/client'],
+    },
     include: ['src/**/*.ts', 'src/**/*.tsx'],
     exclude: ['node_modules'],
   }
-  writeFileSync(join(tmpDir, 'package.json'), JSON.stringify({ name: appSlug, private: true }, null, 2))
+  writeFileSync(
+    join(tmpDir, 'package.json'),
+    JSON.stringify({ name: appSlug, private: true }, null, 2),
+  )
   writeFileSync(join(tmpDir, 'tsconfig.json'), JSON.stringify(tsconfig, null, 2))
-  writeFileSync(join(tmpDir, 'index.html'), [
-    '<!DOCTYPE html>', '<html lang="en">', '<head>',
-    '  <meta charset="UTF-8" />',
-    '  <meta name="viewport" content="width=device-width, initial-scale=1.0" />',
-    `  <title>${analysisResult.appName}</title>`,
-    '  <link rel="preconnect" href="https://fonts.googleapis.com" />',
-    `  <link href="${tokens.fonts.googleFontsUrl}" rel="stylesheet" />`,
-    '</head>', '<body>', '  <div id="root"></div>',
-    '  <script type="module" src="/src/main.tsx"></script>',
-    '</body>', '</html>',
-  ].join('\n'))
+  writeFileSync(
+    join(tmpDir, 'index.html'),
+    [
+      '<!DOCTYPE html>',
+      '<html lang="en">',
+      '<head>',
+      '  <meta charset="UTF-8" />',
+      '  <meta name="viewport" content="width=device-width, initial-scale=1.0" />',
+      `  <title>${analysisResult.appName}</title>`,
+      '  <link rel="preconnect" href="https://fonts.googleapis.com" />',
+      `  <link href="${tokens.fonts.googleFontsUrl}" rel="stylesheet" />`,
+      '</head>',
+      '<body>',
+      '  <div id="root"></div>',
+      '  <script type="module" src="/src/main.tsx"></script>',
+      '</body>',
+      '</html>',
+    ].join('\n'),
+  )
 
   // Symlink node_modules
   const projectRoot = join(import.meta.dirname, '..')
   try {
     execFileSync('ln', ['-sf', join(projectRoot, 'node_modules'), join(tmpDir, 'node_modules')])
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
 
   // Copy ui-kit
   log('\n  Copying shadcn components from snapshot/ui-kit/...')
@@ -436,7 +502,9 @@ async function runGenerationPipeline(): Promise<{ tmpDir: string; validation: { 
         writeFileSync(join(uiDest, entry), fileContent)
       }
     }
-    log(`  Copied ${entries.filter(e => e.endsWith('.tsx') || e.endsWith('.ts')).length} ui-kit files`)
+    log(
+      `  Copied ${entries.filter((e) => e.endsWith('.tsx') || e.endsWith('.ts')).length} ui-kit files`,
+    )
   } catch (err) {
     log(`  WARNING: Could not copy ui-kit: ${err}`)
   }
@@ -454,7 +522,9 @@ async function runGenerationPipeline(): Promise<{ tmpDir: string; validation: { 
   } else {
     log(`  Static analysis: FAIL (${validation.errors.length} errors)`)
     for (const err of validation.errors.slice(0, 20)) {
-      log(`    ERROR [${err.type}] ${err.file}${err.line != null ? `:${err.line}` : ''} — ${err.message}`)
+      log(
+        `    ERROR [${err.type}] ${err.file}${err.line != null ? `:${err.line}` : ''} — ${err.message}`,
+      )
     }
   }
   if (validation.warnings.length > 0) {
@@ -469,7 +539,9 @@ async function runGenerationPipeline(): Promise<{ tmpDir: string; validation: { 
   let tscOutput = ''
   try {
     tscOutput = execFileSync('npx', ['tsc', '--noEmit', '--pretty', 'false'], {
-      encoding: 'utf-8', timeout: 60000, cwd: tmpDir,
+      encoding: 'utf-8',
+      timeout: 60000,
+      cwd: tmpDir,
     })
   } catch (error: unknown) {
     const e = error as { stdout?: string; stderr?: string }
@@ -482,7 +554,7 @@ async function runGenerationPipeline(): Promise<{ tmpDir: string; validation: { 
     if (/is not assignable to type '"\."/.test(line)) return false
     if (/Type '"\/[^"]*"' is not assignable/.test(line)) return false
     if (/Type '`\/[^`]*`' is not assignable/.test(line)) return false
-    if (line.includes("is not assignable to type '\"") && line.includes('"."')) return false
+    if (line.includes('is not assignable to type \'"') && line.includes('"."')) return false
     if (line.includes('routeTree.gen')) return false
     return true
   })
@@ -521,13 +593,25 @@ async function runVisualEval(tmpDir: string) {
   log('\n  Scoring desktop screenshots with Claude Vision...')
   const t6d = Date.now()
   const desktopEval = await scoreWithClaudeVision(desktop, 'desktop', userPrompt)
-  trackUsage('visual-eval-desktop', 'claude-sonnet-4-6', desktopEval.inputTokens, desktopEval.outputTokens, Date.now() - t6d)
+  trackUsage(
+    'visual-eval-desktop',
+    'claude-sonnet-4-6',
+    desktopEval.inputTokens,
+    desktopEval.outputTokens,
+    Date.now() - t6d,
+  )
 
   // Score mobile screenshots
   log('  Scoring mobile screenshots with Claude Vision...')
   const t6m = Date.now()
   const mobileEval = await scoreWithClaudeVision(mobile, 'mobile', userPrompt)
-  trackUsage('visual-eval-mobile', 'claude-sonnet-4-6', mobileEval.inputTokens, mobileEval.outputTokens, Date.now() - t6m)
+  trackUsage(
+    'visual-eval-mobile',
+    'claude-sonnet-4-6',
+    mobileEval.inputTokens,
+    mobileEval.outputTokens,
+    Date.now() - t6m,
+  )
 
   // Merge scores — average desktop and mobile, use mobile for responsiveness
   const d = desktopEval.result.scores
@@ -550,9 +634,10 @@ async function runVisualEval(tmpDir: string) {
   }
 
   const scoredValues = Object.values(merged).filter((v): v is number => v != null)
-  const overallAvg = scoredValues.length > 0
-    ? Math.round((scoredValues.reduce((a, b) => a + b, 0) / scoredValues.length) * 10) / 10
-    : 0
+  const overallAvg =
+    scoredValues.length > 0
+      ? Math.round((scoredValues.reduce((a, b) => a + b, 0) / scoredValues.length) * 10) / 10
+      : 0
 
   return {
     desktop: desktopEval.result,
@@ -624,14 +709,20 @@ async function main() {
   log('COST REPORT')
   log(`${'═'.repeat(70)}`)
 
-  log('\n| Phase                        | Model            | Input    | Output   | Cost     | Time   |')
-  log('|------------------------------|------------------|----------|----------|----------|--------|')
+  log(
+    '\n| Phase                        | Model            | Input    | Output   | Cost     | Time   |',
+  )
+  log(
+    '|------------------------------|------------------|----------|----------|----------|--------|',
+  )
   for (const t of tokenLog) {
     log(
       `| ${t.phase.padEnd(28)} | ${t.model.padEnd(16)} | ${String(t.inputTokens).padEnd(8)} | ${String(t.outputTokens).padEnd(8)} | $${t.cost.toFixed(4).padEnd(7)} | ${(t.durationMs / 1000).toFixed(1).padEnd(5)}s |`,
     )
   }
-  log('|------------------------------|------------------|----------|----------|----------|--------|')
+  log(
+    '|------------------------------|------------------|----------|----------|----------|--------|',
+  )
   log(
     `| ${'TOTAL'.padEnd(28)} | ${' '.repeat(16)} | ${String(totalInputTokens).padEnd(8)} | ${String(totalOutputTokens).padEnd(8)} | $${totalCost.toFixed(4).padEnd(7)} | ${(totalDuration / 1000).toFixed(1).padEnd(5)}s |`,
   )
@@ -651,7 +742,15 @@ async function main() {
 
     log('\n| Criterion              | Desktop | Mobile | Merged |')
     log('|------------------------|---------|--------|--------|')
-    const criteria = ['design_coherence', 'content_quality', 'image_relevance', 'interactivity_signals', 'responsiveness', 'distinctiveness', 'visual_polish'] as const
+    const criteria = [
+      'design_coherence',
+      'content_quality',
+      'image_relevance',
+      'interactivity_signals',
+      'responsiveness',
+      'distinctiveness',
+      'visual_polish',
+    ] as const
     for (const key of criteria) {
       const dScore = evalResult.desktop.scores[key]
       const mScore = evalResult.mobile.scores[key]
@@ -661,7 +760,9 @@ async function main() {
       )
     }
     log('|------------------------|---------|--------|--------|')
-    log(`| ${'OVERALL'.padEnd(22)} | ${String(evalResult.desktop.overall).padEnd(7)} | ${String(evalResult.mobile.overall).padEnd(6)} | ${String(evalResult.overall).padEnd(6)} |`)
+    log(
+      `| ${'OVERALL'.padEnd(22)} | ${String(evalResult.desktop.overall).padEnd(7)} | ${String(evalResult.mobile.overall).padEnd(6)} | ${String(evalResult.overall).padEnd(6)} |`,
+    )
 
     log(`\nDesktop verdict: ${evalResult.desktop.one_line_summary}`)
     log(`Mobile verdict:  ${evalResult.mobile.one_line_summary}`)
@@ -679,7 +780,9 @@ async function main() {
     // Determine pass/fail
     const passThreshold = 6.0
     const passed = evalResult.overall >= passThreshold
-    log(`\n${passed ? 'PASS' : 'FAIL'} — Overall: ${evalResult.overall}/10 (threshold: ${passThreshold})`)
+    log(
+      `\n${passed ? 'PASS' : 'FAIL'} — Overall: ${evalResult.overall}/10 (threshold: ${passThreshold})`,
+    )
   }
 
   log(`\nOutput directory: ${tmpDir}`)
@@ -697,15 +800,26 @@ async function main() {
   // Write eval report as JSON
   if (evalResult) {
     const reportPath = join(tmpDir, 'eval-report.json')
-    writeFileSync(reportPath, JSON.stringify({
-      prompt: userPrompt,
-      testId: testArg?.split('=')[1] ?? null,
-      timestamp: new Date().toISOString(),
-      costs: tokenLog,
-      totalCost,
-      validation: { errors: validation.errors.length, warnings: validation.warnings.length, tscErrors: tscErrors.length },
-      scores: evalResult,
-    }, null, 2))
+    writeFileSync(
+      reportPath,
+      JSON.stringify(
+        {
+          prompt: userPrompt,
+          testId: testArg?.split('=')[1] ?? null,
+          timestamp: new Date().toISOString(),
+          costs: tokenLog,
+          totalCost,
+          validation: {
+            errors: validation.errors.length,
+            warnings: validation.warnings.length,
+            tscErrors: tscErrors.length,
+          },
+          scores: evalResult,
+        },
+        null,
+        2,
+      ),
+    )
     log(`Eval report: ${reportPath}`)
   }
 }

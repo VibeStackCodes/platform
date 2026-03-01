@@ -189,7 +189,7 @@ function validateLocally(
     // Template literal route types: Type '`/categories/${string}`' is not assignable
     if (/Type '`\/[^`]*`' is not assignable/.test(line)) return false
     // Catch-all: any "is not assignable to type" involving route path strings
-    if (line.includes("is not assignable to type '\"") && line.includes('"."')) return false
+    if (line.includes('is not assignable to type \'"') && line.includes('"."')) return false
     return true
   })
 
@@ -371,7 +371,9 @@ async function main() {
   log(
     `| ${'#'.padEnd(colW.id)} | ${'App'.padEnd(colW.name)} | ${'Tbls'.padEnd(colW.tables)} | ${'Files'.padEnd(colW.files)} | ${'Routes'.padEnd(colW.routes)} | ${'TSC'.padEnd(colW.tsc)} | ${'Time'.padEnd(colW.time)} |`,
   )
-  log(`|${'-'.repeat(colW.id + 2)}|${'-'.repeat(colW.name + 2)}|${'-'.repeat(colW.tables + 2)}|${'-'.repeat(colW.files + 2)}|${'-'.repeat(colW.routes + 2)}|${'-'.repeat(colW.tsc + 2)}|${'-'.repeat(colW.time + 2)}|`)
+  log(
+    `|${'-'.repeat(colW.id + 2)}|${'-'.repeat(colW.name + 2)}|${'-'.repeat(colW.tables + 2)}|${'-'.repeat(colW.files + 2)}|${'-'.repeat(colW.routes + 2)}|${'-'.repeat(colW.tsc + 2)}|${'-'.repeat(colW.time + 2)}|`,
+  )
 
   for (const r of results) {
     const tscStatus = r.error ? 'ERR' : r.tscPassed ? 'PASS' : 'FAIL'

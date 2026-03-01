@@ -43,35 +43,40 @@ export const storage = new PostgresStore({
  */
 // biome-ignore lint/suspicious/noExplicitAny: Mastra message types are internal and vary across versions
 function stripReasoningFromMessages(messages: any[]): any[] {
-  return messages.map((msg: any) => {
-    if (msg.role !== 'assistant') return msg
+  return messages
+    .map((msg: any) => {
+      if (msg.role !== 'assistant') return msg
 
-    let parsed: unknown
-    try {
-      parsed = JSON.parse(msg.content)
-    } catch {
+      let parsed: unknown
+      try {
+        parsed = JSON.parse(msg.content)
+      } catch {
+        return msg
+      }
+
+      // Format 2 messages: { format: 2, parts: [...] }
+      if (
+        typeof parsed === 'object' &&
+        parsed !== null &&
+        'parts' in parsed &&
+        Array.isArray((parsed as { parts: unknown[] }).parts)
+      ) {
+        const obj = parsed as {
+          format: number
+          parts: Array<{ type: string; [k: string]: unknown }>
+        }
+        const filtered = obj.parts.filter(
+          (p) => p.type !== 'reasoning' && p.type !== 'redacted-reasoning',
+        )
+        // If all parts were reasoning (nothing left), skip the message entirely
+        if (filtered.length === 0) return null
+        if (filtered.length === obj.parts.length) return msg // no change
+        return { ...msg, content: JSON.stringify({ ...obj, parts: filtered }) }
+      }
+
       return msg
-    }
-
-    // Format 2 messages: { format: 2, parts: [...] }
-    if (
-      typeof parsed === 'object' &&
-      parsed !== null &&
-      'parts' in parsed &&
-      Array.isArray((parsed as { parts: unknown[] }).parts)
-    ) {
-      const obj = parsed as { format: number; parts: Array<{ type: string; [k: string]: unknown }> }
-      const filtered = obj.parts.filter(
-        (p) => p.type !== 'reasoning' && p.type !== 'redacted-reasoning',
-      )
-      // If all parts were reasoning (nothing left), skip the message entirely
-      if (filtered.length === 0) return null
-      if (filtered.length === obj.parts.length) return msg // no change
-      return { ...msg, content: JSON.stringify({ ...obj, parts: filtered }) }
-    }
-
-    return msg
-  }).filter(Boolean)
+    })
+    .filter(Boolean)
 }
 
 /**

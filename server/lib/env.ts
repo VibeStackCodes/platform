@@ -39,12 +39,8 @@ function validateEnv() {
 
   const result = envSchema.safeParse(process.env)
   if (!result.success) {
-    const missing = result.error.issues.map(
-      (i) => `  ${i.path.join('.')}: ${i.message}`
-    )
-    console.error(
-      `[env] Missing or invalid environment variables:\n${missing.join('\n')}`
-    )
+    const missing = result.error.issues.map((i) => `  ${i.path.join('.')}: ${i.message}`)
+    console.error(`[env] Missing or invalid environment variables:\n${missing.join('\n')}`)
     if (process.env.NODE_ENV === 'production') {
       throw new Error('Server startup aborted — invalid environment configuration')
     }

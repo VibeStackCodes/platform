@@ -77,7 +77,7 @@ export function createRateLimiter(config: RateLimitConfig) {
       return next()
     } catch (error) {
       const criticalPaths = ['/api/agent', '/api/stripe']
-      const isCritical = criticalPaths.some(p => c.req.path.startsWith(p))
+      const isCritical = criticalPaths.some((p) => c.req.path.startsWith(p))
       if (isCritical) {
         console.error('[rate-limit] DB failure on critical endpoint, denying request:', error)
         return c.json({ error: 'Service temporarily unavailable' }, 503)

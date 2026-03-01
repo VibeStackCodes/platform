@@ -41,11 +41,7 @@ export const taskflowPlan: PlanItem[] = [
 // Fake ToolStep data matching the prototype's agent tool activities.
 
 let stepId = 0
-function makeStep(
-  tool: string,
-  label: string,
-  opts: Partial<ToolStep> = {},
-): ToolStep {
+function makeStep(tool: string, label: string, opts: Partial<ToolStep> = {}): ToolStep {
   stepId += 1
   return {
     id: `step-${stepId}`,

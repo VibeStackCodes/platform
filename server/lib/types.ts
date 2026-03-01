@@ -459,7 +459,15 @@ export interface FileAssembledEvent {
 
 export interface ValidationCheckEvent {
   type: 'validation_check'
-  name: 'imports' | 'links' | 'accessibility' | 'hardcoded_colors' | 'typescript' | 'lint' | 'build' | 'typecheck'
+  name:
+    | 'imports'
+    | 'links'
+    | 'accessibility'
+    | 'hardcoded_colors'
+    | 'typescript'
+    | 'lint'
+    | 'build'
+    | 'typecheck'
   status: 'passed' | 'failed' | 'running'
   errors?: Array<{
     file: string

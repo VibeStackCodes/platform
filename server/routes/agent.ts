@@ -17,11 +17,7 @@ import { RequestContext } from '@mastra/core/di'
 import { createOrchestrator } from '../lib/agents/orchestrator'
 import { mastra } from '../lib/agents/mastra'
 import { isAllowedModel, MODEL_CONFIGS } from '../lib/agents/provider'
-import {
-  getProject,
-  getUserCredits,
-  updateProject,
-} from '../lib/db/queries'
+import { getProject, getUserCredits, updateProject } from '../lib/db/queries'
 import { reserveCredits, settleCredits } from '../lib/credits'
 import { getSandbox } from '../lib/sandbox'
 import { createSSEStream } from '../lib/sse'
@@ -145,9 +141,10 @@ async function bridgeStreamToSSE(
           }
 
           // Don't send full file content to client in args (wasteful)
-          const leanArgs = (toolName === 'writeFile' || toolName === 'editFile')
-            ? { path: args.path, sandboxId: args.sandboxId }
-            : args
+          const leanArgs =
+            toolName === 'writeFile' || toolName === 'editFile'
+              ? { path: args.path, sandboxId: args.sandboxId }
+              : args
 
           emit({ type: 'tool_start', tool: toolName, label, args: leanArgs })
           break
@@ -170,7 +167,9 @@ async function bridgeStreamToSSE(
             sandboxId = resolvedSandboxId
             emit({ type: 'sandbox_ready', sandboxId: resolvedSandboxId })
             // Update project with sandboxId
-            updateProject(meta.projectId, { sandboxId: resolvedSandboxId }, meta.userId).catch(() => {})
+            updateProject(meta.projectId, { sandboxId: resolvedSandboxId }, meta.userId).catch(
+              () => {},
+            )
           }
 
           // Detect package installs
@@ -338,7 +337,8 @@ agentRoutes.post(
               model: {
                 type: 'string',
                 default: 'gpt-5.2-codex',
-                description: 'Model identifier — gpt-5.2-codex | claude-opus-4-6 | claude-sonnet-4-6',
+                description:
+                  'Model identifier — gpt-5.2-codex | claude-opus-4-6 | claude-sonnet-4-6',
               },
             },
           },
@@ -382,137 +382,137 @@ agentRoutes.post(
     },
   }),
   async (c) => {
-  const agentLog = log.child({ module: 'agent' })
+    const agentLog = log.child({ module: 'agent' })
 
-  let body: {
-    message?: string
-    projectId?: string
-    model?: string
-  }
-  try {
-    body = await c.req.json()
-  } catch {
-    return c.json({ error: 'Invalid request body' }, 400)
-  }
-
-  const { message, projectId, model = 'gpt-5.2-codex' } = body
-  agentLog.info(`Generation: project=${projectId} model=${model}`, { projectId, model })
-
-  if (!message || !projectId) {
-    return c.json({ error: 'Missing message or projectId' }, 400)
-  }
-
-  if (!isAllowedModel(model)) {
-    return c.json({ error: `Model "${model}" is not available` }, 400)
-  }
-
-  const user = c.var.user
-
-  // Verify project ownership
-  const project = await getProject(projectId, user.id)
-  if (!project) {
-    return c.json({ error: 'Project not found' }, 404)
-  }
-
-  // Credit reservation
-  const CREDIT_RESERVATION = 50
-  const reserved = await reserveCredits(user.id, CREDIT_RESERVATION)
-  if (!reserved) {
-    const credits = await getUserCredits(user.id)
-    return c.json(
-      {
-        error: 'insufficient_credits',
-        message: 'Not enough credits to start generation',
-        credits_remaining: credits?.creditsRemaining ?? 0,
-      },
-      402,
-    )
-  }
-
-  const runId = crypto.randomUUID()
-
-  // Set up Mastra request context for model routing
-  const requestContext = new RequestContext()
-  requestContext.set('selectedModel', model)
-
-  return createSSEStream<AgentStreamEvent | CreditsUsedEvent>(async (emit, signal) => {
-    let settled = false
-
+    let body: {
+      message?: string
+      projectId?: string
+      model?: string
+    }
     try {
-      // Create agent with provider-appropriate web search tool
-      const provider = MODEL_CONFIGS[model]?.provider ?? 'openai'
-      const agent = createOrchestrator(provider)
-      agent.__registerMastra(mastra)
+      body = await c.req.json()
+    } catch {
+      return c.json({ error: 'Invalid request body' }, 400)
+    }
 
-      const streamOutput = await agent.stream(message, {
-        requestContext,
-        memory: {
-          thread: projectId,
-          resource: user.id,
-        },
-        maxSteps: 50,
-        savePerStep: true,
-        abortSignal: signal,
-        structuredOutput: {
-          schema: z.object({
-            summary: z.string().describe('One-line summary of what was built or changed'),
-          }),
-        },
-      })
+    const { message, projectId, model = 'gpt-5.2-codex' } = body
+    agentLog.info(`Generation: project=${projectId} model=${model}`, { projectId, model })
 
-      // Bridge Mastra stream to SSE
-      const result = await bridgeStreamToSSE(streamOutput, emit, signal, {
-        projectId,
-        userId: user.id,
-        runId,
-      })
+    if (!message || !projectId) {
+      return c.json({ error: 'Missing message or projectId' }, 400)
+    }
 
-      // Update project status
-      updateProject(
-        projectId,
+    if (!isAllowedModel(model)) {
+      return c.json({ error: `Model "${model}" is not available` }, 400)
+    }
+
+    const user = c.var.user
+
+    // Verify project ownership
+    const project = await getProject(projectId, user.id)
+    if (!project) {
+      return c.json({ error: 'Project not found' }, 404)
+    }
+
+    // Credit reservation
+    const CREDIT_RESERVATION = 50
+    const reserved = await reserveCredits(user.id, CREDIT_RESERVATION)
+    if (!reserved) {
+      const credits = await getUserCredits(user.id)
+      return c.json(
         {
-          status: 'complete',
-          sandboxId: result.sandboxId,
+          error: 'insufficient_credits',
+          message: 'Not enough credits to start generation',
+          credits_remaining: credits?.creditsRemaining ?? 0,
         },
-        user.id,
-      ).catch(() => {})
+        402,
+      )
+    }
 
-      // Settle credits
-      const creditsUsed = Math.ceil(result.totalTokens / 1000)
-      const settlement = await settleCredits(user.id, CREDIT_RESERVATION, creditsUsed)
-      settled = true
+    const runId = crypto.randomUUID()
 
-      emit({
-        type: 'credits_used',
-        creditsUsed,
-        creditsRemaining: settlement.creditsRemaining,
-        tokensTotal: result.totalTokens,
-      })
-    } catch (error) {
-      if (signal.aborted) {
-        agentLog.info('Stream aborted by client', { projectId, runId })
+    // Set up Mastra request context for model routing
+    const requestContext = new RequestContext()
+    requestContext.set('selectedModel', model)
+
+    return createSSEStream<AgentStreamEvent | CreditsUsedEvent>(async (emit, signal) => {
+      let settled = false
+
+      try {
+        // Create agent with provider-appropriate web search tool
+        const provider = MODEL_CONFIGS[model]?.provider ?? 'openai'
+        const agent = createOrchestrator(provider)
+        agent.__registerMastra(mastra)
+
+        const streamOutput = await agent.stream(message, {
+          requestContext,
+          memory: {
+            thread: projectId,
+            resource: user.id,
+          },
+          maxSteps: 50,
+          savePerStep: true,
+          abortSignal: signal,
+          structuredOutput: {
+            schema: z.object({
+              summary: z.string().describe('One-line summary of what was built or changed'),
+            }),
+          },
+        })
+
+        // Bridge Mastra stream to SSE
+        const result = await bridgeStreamToSSE(streamOutput, emit, signal, {
+          projectId,
+          userId: user.id,
+          runId,
+        })
+
+        // Update project status
+        updateProject(
+          projectId,
+          {
+            status: 'complete',
+            sandboxId: result.sandboxId,
+          },
+          user.id,
+        ).catch(() => {})
+
+        // Settle credits
+        const creditsUsed = Math.ceil(result.totalTokens / 1000)
+        const settlement = await settleCredits(user.id, CREDIT_RESERVATION, creditsUsed)
+        settled = true
+
+        emit({
+          type: 'credits_used',
+          creditsUsed,
+          creditsRemaining: settlement.creditsRemaining,
+          tokensTotal: result.totalTokens,
+        })
+      } catch (error) {
+        if (signal.aborted) {
+          agentLog.info('Stream aborted by client', { projectId, runId })
+          if (!settled) {
+            await settleCredits(user.id, CREDIT_RESERVATION, 0)
+            settled = true
+          }
+          return
+        }
+
         if (!settled) {
           await settleCredits(user.id, CREDIT_RESERVATION, 0)
           settled = true
         }
-        return
+
+        Sentry.captureException(error, {
+          tags: { route: '/api/agent' },
+          extra: { projectId, model, userId: user.id },
+        })
+
+        emit({
+          type: 'agent_error',
+          message: error instanceof Error ? error.message : 'Generation failed',
+        })
       }
-
-      if (!settled) {
-        await settleCredits(user.id, CREDIT_RESERVATION, 0)
-        settled = true
-      }
-
-      Sentry.captureException(error, {
-        tags: { route: '/api/agent' },
-        extra: { projectId, model, userId: user.id },
-      })
-
-      emit({
-        type: 'agent_error',
-        message: error instanceof Error ? error.message : 'Generation failed',
-      })
-    }
-  })
+    })
   },
 )

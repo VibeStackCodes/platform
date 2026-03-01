@@ -59,9 +59,7 @@ export default defineConfig({
       // Project 3: Storybook portable stories (real Chromium via Playwright)
       {
         resolve: { alias: aliases },
-        plugins: [
-          storybookTest({ configDir: path.join(dirname, '.storybook') }),
-        ],
+        plugins: [storybookTest({ configDir: path.join(dirname, '.storybook') })],
         test: {
           name: 'storybook',
           globals: true,

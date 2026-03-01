@@ -2,11 +2,7 @@ import { type ReactNode, useState } from 'react'
 import { ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from '@/components/ui/collapsible'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import './agent-header.css'
 
 // ── Agent color map ──────────────────────────────────────────────────
@@ -56,19 +52,13 @@ export function AgentHeader({
           {/* Agent avatar */}
           <Avatar
             size="sm"
-            className={cn(
-              'size-7 shrink-0',
-              working && 'animate-[throb_2s_ease-in-out_infinite]',
-            )}
+            className={cn('size-7 shrink-0', working && 'animate-[throb_2s_ease-in-out_infinite]')}
             style={{
               backgroundColor: `color-mix(in srgb, ${color} 14%, var(--background))`,
               color,
             }}
           >
-            <AvatarFallback
-              className="size-full bg-transparent [&>svg]:size-3.5"
-              style={{ color }}
-            >
+            <AvatarFallback className="size-full bg-transparent [&>svg]:size-3.5" style={{ color }}>
               {icon}
             </AvatarFallback>
           </Avatar>

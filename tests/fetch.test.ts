@@ -76,13 +76,9 @@ describe('fetchWithTimeout', () => {
 
     timeoutSpy.mockReturnValueOnce(controller.signal)
 
-    mockFetch.mockRejectedValueOnce(
-      new DOMException('The operation timed out.', 'TimeoutError'),
-    )
+    mockFetch.mockRejectedValueOnce(new DOMException('The operation timed out.', 'TimeoutError'))
 
-    await expect(
-      fetchWithTimeout('https://slow.example.com/', { timeout: 100 }),
-    ).rejects.toThrow()
+    await expect(fetchWithTimeout('https://slow.example.com/', { timeout: 100 })).rejects.toThrow()
   })
 
   it('passes custom headers through to fetch', async () => {
@@ -141,8 +137,8 @@ describe('fetchWithTimeout', () => {
     const networkError = new TypeError('Failed to fetch')
     mockFetch.mockRejectedValueOnce(networkError)
 
-    await expect(
-      fetchWithTimeout('https://unreachable.example.com/'),
-    ).rejects.toThrow('Failed to fetch')
+    await expect(fetchWithTimeout('https://unreachable.example.com/')).rejects.toThrow(
+      'Failed to fetch',
+    )
   })
 })

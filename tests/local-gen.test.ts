@@ -111,8 +111,7 @@ function summarizeArgs(args: unknown): string {
   if (obj.query) return `query="${obj.query}"`
   if (obj.packages) return `packages=${obj.packages}`
   if (obj.command) return `command="${String(obj.command).slice(0, 60)}"`
-  if (obj.files && Array.isArray(obj.files))
-    return `${obj.files.length} files`
+  if (obj.files && Array.isArray(obj.files)) return `${obj.files.length} files`
   return Object.keys(obj).join(', ')
 }
 
@@ -120,150 +119,147 @@ function summarizeArgs(args: unknown): string {
 // Test
 // ---------------------------------------------------------------------------
 
-describeReal(
-  'Local Generation (real services)',
-  () => {
-    it(
-      'builds a todo app end-to-end',
-      { timeout: 300_000 }, // 5 minutes — agent may use 30-50 tool calls
-      async () => {
-        if (missingKeys.length > 0) {
-          console.log(`⏭ Skipping: missing env vars: ${missingKeys.join(', ')}`)
-          return
-        }
+describeReal('Local Generation (real services)', () => {
+  it(
+    'builds a todo app end-to-end',
+    { timeout: 300_000 }, // 5 minutes — agent may use 30-50 tool calls
+    async () => {
+      if (missingKeys.length > 0) {
+        console.log(`⏭ Skipping: missing env vars: ${missingKeys.join(', ')}`)
+        return
+      }
 
-        console.log('\n━━━ Local Gen Test ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-        console.log(`Model: gpt-5.2-codex`)
-        console.log(`Snapshot: ${process.env.DAYTONA_SNAPSHOT_ID}`)
-        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n')
+      console.log('\n━━━ Local Gen Test ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+      console.log(`Model: gpt-5.2-codex`)
+      console.log(`Snapshot: ${process.env.DAYTONA_SNAPSHOT_ID}`)
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n')
 
-        // 1. Set up RequestContext for model routing
-        const requestContext = new RequestContext()
-        requestContext.set('selectedModel', 'gpt-5.2-codex')
+      // 1. Set up RequestContext for model routing
+      const requestContext = new RequestContext()
+      requestContext.set('selectedModel', 'gpt-5.2-codex')
 
-        // 2. Create agent
-        const agent = createOrchestrator()
+      // 2. Create agent
+      const agent = createOrchestrator()
 
-        // 3. Stream the generation
-        const streamOutput = await agent.stream(
-          'Build a todo app with add, complete, and delete tasks. Use a clean minimal design with a blue accent color.',
-          {
-            requestContext,
-            maxSteps: 50,
-          },
-        )
+      // 3. Stream the generation
+      const streamOutput = await agent.stream(
+        'Build a todo app with add, complete, and delete tasks. Use a clean minimal design with a blue accent color.',
+        {
+          requestContext,
+          maxSteps: 50,
+        },
+      )
 
-        // 4. Read the fullStream — same pattern as bridgeStreamToSSE()
-        const reader = streamOutput.fullStream.getReader()
-        let totalTokens = 0
-        let sandboxId: string | undefined
-        let thinkingBuffer = ''
-        const toolResults: Array<{ tool: string; success: boolean }> = []
+      // 4. Read the fullStream — same pattern as bridgeStreamToSSE()
+      const reader = streamOutput.fullStream.getReader()
+      let totalTokens = 0
+      let sandboxId: string | undefined
+      let thinkingBuffer = ''
+      const toolResults: Array<{ tool: string; success: boolean }> = []
 
-        try {
-          while (true) {
-            const { done, value: chunk } = await reader.read()
-            if (done) break
-            if (!chunk || !chunk.type) continue
+      try {
+        while (true) {
+          const { done, value: chunk } = await reader.read()
+          if (done) break
+          if (!chunk || !chunk.type) continue
 
-            // Log every chunk for observability
-            logChunk(chunk)
+          // Log every chunk for observability
+          logChunk(chunk)
 
-            switch (chunk.type) {
-              case 'text-delta': {
-                thinkingBuffer += extractTextDelta(chunk)
-                // Flush thinking in ~200-char batches
-                if (thinkingBuffer.length > 200) {
-                  console.log(`  💭 ${thinkingBuffer.slice(0, 120)}...`)
-                  thinkingBuffer = ''
-                }
-                break
+          switch (chunk.type) {
+            case 'text-delta': {
+              thinkingBuffer += extractTextDelta(chunk)
+              // Flush thinking in ~200-char batches
+              if (thinkingBuffer.length > 200) {
+                console.log(`  💭 ${thinkingBuffer.slice(0, 120)}...`)
+                thinkingBuffer = ''
               }
+              break
+            }
 
-              case 'tool-result': {
-                const result = extractResult(chunk)
-                const toolName = extractToolName(chunk)
-                const success = result?.success !== false && result?.exitCode !== 1
+            case 'tool-result': {
+              const result = extractResult(chunk)
+              const toolName = extractToolName(chunk)
+              const success = result?.success !== false && result?.exitCode !== 1
 
-                toolResults.push({ tool: toolName, success })
+              toolResults.push({ tool: toolName, success })
 
-                // Capture sandboxId from createSandbox result
-                if (toolName === 'createSandbox' && result?.sandboxId) {
-                  sandboxId = result.sandboxId as string
-                  console.log(`\n  🏗️  Sandbox created: ${sandboxId}\n`)
-                }
-                // Fallback: scan any tool result for sandboxId (in case tool name extraction fails)
-                if (!sandboxId && result?.sandboxId) {
-                  sandboxId = result.sandboxId as string
-                  console.log(`\n  🏗️  Sandbox detected (from ${toolName}): ${sandboxId}\n`)
-                }
-                break
+              // Capture sandboxId from createSandbox result
+              if (toolName === 'createSandbox' && result?.sandboxId) {
+                sandboxId = result.sandboxId as string
+                console.log(`\n  🏗️  Sandbox created: ${sandboxId}\n`)
               }
-
-              case 'step-finish': {
-                const payload = (chunk.payload ?? chunk) as { usage?: { totalTokens?: number } }
-                const usage = chunk.usage as { totalTokens?: number } | undefined ?? payload.usage
-                if (usage?.totalTokens) {
-                  totalTokens += usage.totalTokens
-                }
-                break
+              // Fallback: scan any tool result for sandboxId (in case tool name extraction fails)
+              if (!sandboxId && result?.sandboxId) {
+                sandboxId = result.sandboxId as string
+                console.log(`\n  🏗️  Sandbox detected (from ${toolName}): ${sandboxId}\n`)
               }
+              break
+            }
+
+            case 'step-finish': {
+              const payload = (chunk.payload ?? chunk) as { usage?: { totalTokens?: number } }
+              const usage = (chunk.usage as { totalTokens?: number } | undefined) ?? payload.usage
+              if (usage?.totalTokens) {
+                totalTokens += usage.totalTokens
+              }
+              break
             }
           }
-        } finally {
-          reader.releaseLock()
         }
+      } finally {
+        reader.releaseLock()
+      }
 
-        // Flush remaining thinking
-        if (thinkingBuffer) {
-          console.log(`  💭 ${thinkingBuffer.slice(0, 200)}`)
+      // Flush remaining thinking
+      if (thinkingBuffer) {
+        console.log(`  💭 ${thinkingBuffer.slice(0, 200)}`)
+      }
+
+      // 5. Get final usage
+      try {
+        const usage = await streamOutput.usage
+        if (usage?.totalTokens) {
+          totalTokens = usage.totalTokens
         }
+      } catch {
+        // Usage may not be available
+      }
 
-        // 5. Get final usage
-        try {
-          const usage = await streamOutput.usage
-          if (usage?.totalTokens) {
-            totalTokens = usage.totalTokens
-          }
-        } catch {
-          // Usage may not be available
-        }
+      // 6. Print summary
+      console.log('\n━━━ Results ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+      console.log(`Sandbox ID:   ${sandboxId ?? 'NONE'}`)
+      console.log(`Total tokens: ${totalTokens}`)
+      console.log(`Tool calls:   ${toolResults.length}`)
+      console.log(`  Succeeded:  ${toolResults.filter((r) => r.success).length}`)
+      console.log(`  Failed:     ${toolResults.filter((r) => !r.success).length}`)
+      console.log('Tool trace:')
+      for (const r of toolResults) {
+        console.log(`  ${r.success ? '✅' : '❌'} ${r.tool}`)
+      }
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n')
 
-        // 6. Print summary
-        console.log('\n━━━ Results ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-        console.log(`Sandbox ID:   ${sandboxId ?? 'NONE'}`)
-        console.log(`Total tokens: ${totalTokens}`)
-        console.log(`Tool calls:   ${toolResults.length}`)
-        console.log(`  Succeeded:  ${toolResults.filter((r) => r.success).length}`)
-        console.log(`  Failed:     ${toolResults.filter((r) => !r.success).length}`)
-        console.log('Tool trace:')
-        for (const r of toolResults) {
-          console.log(`  ${r.success ? '✅' : '❌'} ${r.tool}`)
-        }
-        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n')
+      // 7. Assertions
+      expect(sandboxId, 'Sandbox should have been created').toBeTruthy()
+      expect(toolResults.length, 'Agent should have used tools').toBeGreaterThan(0)
 
-        // 7. Assertions
-        expect(sandboxId, 'Sandbox should have been created').toBeTruthy()
-        expect(toolResults.length, 'Agent should have used tools').toBeGreaterThan(0)
+      // Check that createSandbox was called
+      const sandboxCall = toolResults.find((r) => r.tool === 'createSandbox')
+      expect(sandboxCall, 'createSandbox tool should have been called').toBeTruthy()
+      expect(sandboxCall?.success, 'createSandbox should succeed').toBe(true)
 
-        // Check that createSandbox was called
-        const sandboxCall = toolResults.find((r) => r.tool === 'createSandbox')
-        expect(sandboxCall, 'createSandbox tool should have been called').toBeTruthy()
-        expect(sandboxCall?.success, 'createSandbox should succeed').toBe(true)
+      // Check that files were written
+      const writeOps = toolResults.filter(
+        (r) => r.tool === 'writeFile' || r.tool === 'writeFiles' || r.tool === 'editFile',
+      )
+      expect(writeOps.length, 'Agent should write at least one file').toBeGreaterThan(0)
 
-        // Check that files were written
-        const writeOps = toolResults.filter(
-          (r) => r.tool === 'writeFile' || r.tool === 'writeFiles' || r.tool === 'editFile',
-        )
-        expect(writeOps.length, 'Agent should write at least one file').toBeGreaterThan(0)
+      // Check that build was attempted
+      const buildCall = toolResults.find((r) => r.tool === 'runBuild')
+      expect(buildCall, 'runBuild should have been called').toBeTruthy()
+      expect(buildCall?.success, 'Build should pass').toBe(true)
 
-        // Check that build was attempted
-        const buildCall = toolResults.find((r) => r.tool === 'runBuild')
-        expect(buildCall, 'runBuild should have been called').toBeTruthy()
-        expect(buildCall?.success, 'Build should pass').toBe(true)
-
-        console.log('✅ All assertions passed!\n')
-      },
-    )
-  },
-)
+      console.log('✅ All assertions passed!\n')
+    },
+  )
+})

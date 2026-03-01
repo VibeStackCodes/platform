@@ -34,25 +34,26 @@ declare const Bun: {
 const app = new Hono().basePath('/api')
 
 // Global middleware — applied in order
-app.use('*', cors({
-  origin: (origin) => {
-    const allowed = [
-      'https://vibestack.com',
-      'https://www.vibestack.com',
-      'https://app.vibestack.com',
-    ]
-    if (process.env.NODE_ENV !== 'production') {
-      allowed.push('http://localhost:3000', 'http://localhost:5173')
-    }
-    // Only allow our own Vercel deployments (vibestack-*.vercel.app)
-    const isAllowedVercel = (origin ?? '').match(/^https:\/\/vibestack-[a-z0-9-]+\.vercel\.app$/)
-    return allowed.includes(origin ?? '') || isAllowedVercel
-      ? origin!
-      : allowed[0]
-  },
-  credentials: true,
-  maxAge: 86400,
-}))
+app.use(
+  '*',
+  cors({
+    origin: (origin) => {
+      const allowed = [
+        'https://vibestack.com',
+        'https://www.vibestack.com',
+        'https://app.vibestack.com',
+      ]
+      if (process.env.NODE_ENV !== 'production') {
+        allowed.push('http://localhost:3000', 'http://localhost:5173')
+      }
+      // Only allow our own Vercel deployments (vibestack-*.vercel.app)
+      const isAllowedVercel = (origin ?? '').match(/^https:\/\/vibestack-[a-z0-9-]+\.vercel\.app$/)
+      return allowed.includes(origin ?? '') || isAllowedVercel ? origin! : allowed[0]
+    },
+    credentials: true,
+    maxAge: 86400,
+  }),
+)
 if (process.env.SENTRY_DSN) {
   app.use('*', sentry({ dsn: process.env.SENTRY_DSN }))
 }
@@ -125,13 +126,12 @@ app.get(
       info: {
         title: 'VibeStack API',
         version: '1.0.0',
-        description: 'AI-powered app builder — users describe an app, the platform generates a full Vite + React project with live preview.',
+        description:
+          'AI-powered app builder — users describe an app, the platform generates a full Vite + React project with live preview.',
         contact: { name: 'VibeStack', url: 'https://vibestack.com' },
         license: { name: 'Proprietary' },
       },
-      servers: [
-        { url: '/api', description: 'Current environment' },
-      ],
+      servers: [{ url: '/api', description: 'Current environment' }],
       tags: [
         { name: 'projects', description: 'Project CRUD operations' },
         { name: 'agent', description: 'AI generation pipeline (SSE stream)' },
@@ -164,63 +164,66 @@ app.get(
 
 // Scalar interactive API reference UI — served at /api/reference
 // Uses a permissive CSP for this route only so the Scalar CDN scripts load
-app.get('/reference', (c, next) => {
-  // Scalar loads assets from its CDN — set a permissive CSP for this route only
-  // connect-src includes localhost and production origins so "Try it" requests work
-  c.res.headers.set(
-    'Content-Security-Policy',
-    "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' http://localhost:* https://vibestack.com https://app.vibestack.com",
-  )
-  return next()
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-}, Scalar({
-  url: '/api/doc',
-  pageTitle: 'VibeStack API Reference',
-  theme: 'deepSpace',
-  layout: 'modern',
-  darkMode: true,
-  _integration: 'hono',
-  defaultHttpClient: { targetKey: 'node', clientKey: 'fetch' },
-  baseServerURL: '/api',
-  persistAuth: true,
-  authentication: {
-    preferredSecurityScheme: 'bearerAuth',
-    http: {
-      bearer: {
-        token: '',
+app.get(
+  '/reference',
+  (c, next) => {
+    // Scalar loads assets from its CDN — set a permissive CSP for this route only
+    // connect-src includes localhost and production origins so "Try it" requests work
+    c.res.headers.set(
+      'Content-Security-Policy',
+      "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' http://localhost:* https://vibestack.com https://app.vibestack.com",
+    )
+    return next()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  },
+  Scalar({
+    url: '/api/doc',
+    pageTitle: 'VibeStack API Reference',
+    theme: 'deepSpace',
+    layout: 'modern',
+    darkMode: true,
+    _integration: 'hono',
+    defaultHttpClient: { targetKey: 'node', clientKey: 'fetch' },
+    baseServerURL: '/api',
+    persistAuth: true,
+    authentication: {
+      preferredSecurityScheme: 'bearerAuth',
+      http: {
+        bearer: {
+          token: '',
+        },
       },
     },
-  },
-  favicon: '/favicon.ico',
-  metaData: {
-    title: 'VibeStack API Reference',
-    description: 'Interactive API docs for the VibeStack app builder platform',
-    ogTitle: 'VibeStack API Reference',
-    ogDescription: 'Explore and test VibeStack API endpoints',
-  },
-  defaultOpenAllTags: true,
-  expandAllModelSections: true,
-  searchHotKey: 'k',
-  hideSearch: false,
-  showSidebar: true,
-  hideDarkModeToggle: false,
-  hideModels: false,
-  hideDownloadButton: false,
-  hideClientButton: false,
-  hideTestRequestButton: false,
-  showOperationId: false,
-  expandAllResponses: false,
-  operationTitleSource: 'summary',
-  operationsSorter: 'method',
-  tagsSorter: 'alpha',
-  orderSchemaPropertiesBy: 'alpha',
-  orderRequiredPropertiesFirst: true,
-  documentDownloadType: 'both',
-  showDeveloperTools: 'localhost',
-  showToolbar: 'localhost',
-  pathRouting: { basePath: '/api/reference' },
-  withDefaultFonts: true,
-  customCss: `
+    favicon: '/favicon.ico',
+    metaData: {
+      title: 'VibeStack API Reference',
+      description: 'Interactive API docs for the VibeStack app builder platform',
+      ogTitle: 'VibeStack API Reference',
+      ogDescription: 'Explore and test VibeStack API endpoints',
+    },
+    defaultOpenAllTags: true,
+    expandAllModelSections: true,
+    searchHotKey: 'k',
+    hideSearch: false,
+    showSidebar: true,
+    hideDarkModeToggle: false,
+    hideModels: false,
+    hideDownloadButton: false,
+    hideClientButton: false,
+    hideTestRequestButton: false,
+    showOperationId: false,
+    expandAllResponses: false,
+    operationTitleSource: 'summary',
+    operationsSorter: 'method',
+    tagsSorter: 'alpha',
+    orderSchemaPropertiesBy: 'alpha',
+    orderRequiredPropertiesFirst: true,
+    documentDownloadType: 'both',
+    showDeveloperTools: 'localhost',
+    showToolbar: 'localhost',
+    pathRouting: { basePath: '/api/reference' },
+    withDefaultFonts: true,
+    customCss: `
     .dark-mode {
       --scalar-color-accent: #e36002;
       --scalar-background-1: #0f0f11;
@@ -229,26 +232,27 @@ app.get('/reference', (c, next) => {
       --scalar-color-accent: #e36002;
     }
   `,
-  hiddenClients: {
-    c: true,
-    clojure: true,
-    csharp: true,
-    dart: true,
-    fsharp: true,
-    go: true,
-    java: true,
-    kotlin: true,
-    objc: true,
-    ocaml: true,
-    php: true,
-    powershell: true,
-    r: true,
-    ruby: true,
-    rust: true,
-    swift: true,
-  },
-  telemetry: false,
-} as any))
+    hiddenClients: {
+      c: true,
+      clojure: true,
+      csharp: true,
+      dart: true,
+      fsharp: true,
+      go: true,
+      java: true,
+      kotlin: true,
+      objc: true,
+      ocaml: true,
+      php: true,
+      powershell: true,
+      r: true,
+      ruby: true,
+      rust: true,
+      swift: true,
+    },
+    telemetry: false,
+  } as any),
+)
 
 // Type-only export consumed by src/lib/api-client.ts via `import type`
 // The client NEVER imports the implementation — only the type shape

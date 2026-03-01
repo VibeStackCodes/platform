@@ -170,13 +170,7 @@ function PanelBody({
       )
     }
     case 'code':
-      return (
-        <EditableCodeBody
-          filename={content.filename}
-          code={content.code}
-          onInput={onInput}
-        />
-      )
+      return <EditableCodeBody filename={content.filename} code={content.code} onInput={onInput} />
     case 'diff':
       return (
         <DiffViewer
@@ -187,9 +181,7 @@ function PanelBody({
         />
       )
     case 'artifact':
-      return (
-        <EditableArtifactBody content={content.content} onInput={onInput} />
-      )
+      return <EditableArtifactBody content={content.content} onInput={onInput} />
   }
 }
 
@@ -249,9 +241,7 @@ export function RightPanel({
       {/* Panel header */}
       <div className="flex shrink-0 items-center gap-2 border-b border-border px-4 py-2.5">
         <div className="flex min-w-0 flex-1 items-center gap-2">
-          <span className="truncate text-sm font-medium text-foreground">
-            {title}
-          </span>
+          <span className="truncate text-sm font-medium text-foreground">{title}</span>
           {badge}
         </div>
 

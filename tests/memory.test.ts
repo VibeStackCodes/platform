@@ -141,9 +141,11 @@ describe('memory module', () => {
     })
 
     it('has working memory enabled with thread scope', () => {
-      const opts = (memory as unknown as {
-        options: { workingMemory: { enabled: boolean; scope: string } }
-      }).options
+      const opts = (
+        memory as unknown as {
+          options: { workingMemory: { enabled: boolean; scope: string } }
+        }
+      ).options
       expect(opts.workingMemory.enabled).toBe(true)
       expect(opts.workingMemory.scope).toBe('thread')
     })
@@ -206,9 +208,9 @@ describe('memory module', () => {
       const result = await memory.recall({ threadId: 't1', resourceId: 'r1' })
 
       const parsed = JSON.parse(result.messages[0].content)
-      expect(
-        parsed.parts.every((p: { type: string }) => p.type !== 'redacted-reasoning'),
-      ).toBe(true)
+      expect(parsed.parts.every((p: { type: string }) => p.type !== 'redacted-reasoning')).toBe(
+        true,
+      )
       expect(parsed.parts).toHaveLength(1)
     })
 

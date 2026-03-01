@@ -4,10 +4,7 @@ const GRAIN_SVG = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/
 
 export function PerspectiveGrid() {
   return (
-    <div
-      aria-hidden="true"
-      className="pointer-events-none absolute inset-0 overflow-hidden"
-    >
+    <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden">
       {/* Base image — slow drift gives depth */}
       <div
         className="absolute inset-0"
@@ -35,7 +32,6 @@ export function PerspectiveGrid() {
           willChange: 'background-position',
         }}
       />
-
     </div>
   )
 }

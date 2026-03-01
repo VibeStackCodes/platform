@@ -5,6 +5,7 @@ import { CheckCircle2, Code2, Download, Eye, FileText, Rocket, X } from 'lucide-
 import { cn } from '@/lib/utils'
 import { useDebouncedSave } from '@/hooks/use-debounced-save'
 import { SaveIndicator } from '@/components/save-indicator'
+import { EditablePreview } from '@/components/editable-preview'
 import { RightPanel } from './right-panel'
 
 const sampleCode = `import { useState } from 'react'
@@ -90,7 +91,6 @@ export const PreviewPanel: Story = {
     },
   },
 }
-
 
 export const CodePanel: Story = {
   args: {
@@ -287,7 +287,10 @@ function StaticProgressPanel({ onClose }: { onClose: () => void }) {
           </div>
           <div className="space-y-2">
             {artifacts.map((a) => (
-              <div key={a.title} className="flex items-center justify-between rounded-lg border px-3 py-2.5">
+              <div
+                key={a.title}
+                className="flex items-center justify-between rounded-lg border px-3 py-2.5"
+              >
                 <div className="flex items-center gap-2.5">
                   <FileText size={14} className="text-muted-foreground" />
                   <span className="text-sm">{a.title}</span>
@@ -355,8 +358,14 @@ function StaticDesignSystemPanel({ onClose }: { onClose: () => void }) {
       <div className="flex items-center justify-between border-b px-4 py-3">
         <span className="text-sm font-medium">Design System</span>
         <div className="flex items-center gap-2">
-          <Download size={16} className="cursor-pointer text-muted-foreground hover:text-foreground" />
-          <CheckCircle2 size={16} className="cursor-pointer text-muted-foreground hover:text-foreground" />
+          <Download
+            size={16}
+            className="cursor-pointer text-muted-foreground hover:text-foreground"
+          />
+          <CheckCircle2
+            size={16}
+            className="cursor-pointer text-muted-foreground hover:text-foreground"
+          />
           <button type="button" onClick={onClose} className="rounded p-1 hover:bg-muted">
             <X size={16} />
           </button>
@@ -367,7 +376,10 @@ function StaticDesignSystemPanel({ onClose }: { onClose: () => void }) {
       <div className="flex-1 overflow-y-auto px-5 py-5">
         {/* Light/Dark toggle */}
         <div className="mb-6 flex w-fit gap-1 rounded-lg bg-muted p-1">
-          <button type="button" className="rounded-md bg-background px-3 py-1 text-sm font-medium shadow-sm">
+          <button
+            type="button"
+            className="rounded-md bg-background px-3 py-1 text-sm font-medium shadow-sm"
+          >
             Light
           </button>
           <button type="button" className="rounded-md px-3 py-1 text-sm text-muted-foreground">
@@ -376,7 +388,9 @@ function StaticDesignSystemPanel({ onClose }: { onClose: () => void }) {
         </div>
 
         {/* Colors section */}
-        <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Colors</p>
+        <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+          Colors
+        </p>
 
         {/* Primary */}
         <p className="mb-2 text-sm font-medium text-muted-foreground">Primary (Indigo)</p>
@@ -395,7 +409,10 @@ function StaticDesignSystemPanel({ onClose }: { onClose: () => void }) {
         <div className="mb-6 flex gap-2">
           {neutralColors.map((c) => (
             <div key={c.shade} className="text-center">
-              <div className="mb-1 size-12 rounded-lg border" style={{ backgroundColor: c.color }} />
+              <div
+                className="mb-1 size-12 rounded-lg border"
+                style={{ backgroundColor: c.color }}
+              />
               <p className="text-[10px] text-muted-foreground">{c.shade}</p>
               <p className="text-[10px] text-muted-foreground/60">{c.hex}</p>
             </div>
@@ -417,7 +434,9 @@ function StaticDesignSystemPanel({ onClose }: { onClose: () => void }) {
         </div>
 
         {/* Typography */}
-        <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Typography</p>
+        <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+          Typography
+        </p>
         <div className="space-y-4">
           <div className="rounded-lg bg-muted/50 px-4 py-3">
             <span className="text-xs text-muted-foreground">Display</span>
@@ -485,7 +504,93 @@ export function KanbanBoard() {
   )
 }`
 
-function StaticPreviewWithTabsPanel({ onClose }: { onClose: () => void }) {
+function KanbanMockup() {
+  return (
+    <div className="flex h-full items-center justify-center bg-white" data-element-id="kanban-root">
+      <div className="w-full max-w-md space-y-4 p-8" data-element-id="kanban-container">
+        <header className="flex items-center gap-2" data-element-id="kanban-header">
+          <CheckCircle2 size={20} className="text-green-600" />
+          <h2 className="text-lg font-semibold" data-element-id="kanban-title">
+            TaskFlow
+          </h2>
+        </header>
+        <nav className="flex gap-2" data-element-id="kanban-tabs">
+          <button
+            type="button"
+            className="rounded-full bg-primary px-3 py-1 text-xs font-medium text-primary-foreground"
+            data-element-id="tab-board"
+          >
+            Board
+          </button>
+          <button
+            type="button"
+            className="rounded-full bg-muted px-3 py-1 text-xs"
+            data-element-id="tab-list"
+          >
+            List
+          </button>
+          <button
+            type="button"
+            className="rounded-full bg-muted px-3 py-1 text-xs"
+            data-element-id="tab-calendar"
+          >
+            Calendar
+          </button>
+        </nav>
+        <div className="grid grid-cols-2 gap-3" data-element-id="kanban-board">
+          <section className="rounded-lg border p-3" data-element-id="column-todo">
+            <p
+              className="text-xs font-medium text-muted-foreground"
+              data-element-id="column-todo-title"
+            >
+              To Do
+            </p>
+            <div className="mt-2 space-y-2">
+              <div className="rounded border p-2 text-xs" data-element-id="card-1">
+                Add notification preferences
+              </div>
+              <div className="rounded border p-2 text-xs" data-element-id="card-2">
+                Dark mode toggle
+              </div>
+            </div>
+          </section>
+          <section className="rounded-lg border p-3" data-element-id="column-progress">
+            <p
+              className="text-xs font-medium text-muted-foreground"
+              data-element-id="column-progress-title"
+            >
+              In Progress
+            </p>
+            <div className="mt-2 space-y-2">
+              <div className="rounded border p-2 text-xs" data-element-id="card-3">
+                Real-time board sync
+              </div>
+              <div className="rounded border p-2 text-xs" data-element-id="card-4">
+                Keyboard shortcuts
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function StaticPreviewWithTabsPanel({
+  onClose,
+  onElementSelect,
+  onElementDeselect,
+  onTextSave,
+  onPropertyChange,
+  onAskAI,
+}: {
+  onClose: () => void
+  onElementSelect?: (ctx: unknown) => void
+  onElementDeselect?: () => void
+  onTextSave?: (elementId: string, text: string) => void
+  onPropertyChange?: (elementId: string, prop: string, value: string) => void
+  onAskAI?: (ctx: unknown) => void
+}) {
   const [activeTab, setActiveTab] = useState<'preview' | 'code'>('preview')
   const codeRef = useRef<HTMLDivElement>(null)
   const { status: saveStatus, trigger: triggerSave } = useDebouncedSave({
@@ -540,44 +645,24 @@ function StaticPreviewWithTabsPanel({ onClose }: { onClose: () => void }) {
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-hidden">
+      <div className="min-h-0 flex-1 overflow-hidden">
         {activeTab === 'preview' ? (
-          <div className="flex h-full items-center justify-center bg-white">
-            <div className="w-full max-w-md space-y-4 p-8">
-              <div className="flex items-center gap-2">
-                <CheckCircle2 size={20} className="text-green-600" />
-                <h2 className="text-lg font-semibold">TaskFlow</h2>
-              </div>
-              <div className="flex gap-2">
-                <span className="rounded-full bg-primary px-3 py-1 text-xs font-medium text-primary-foreground">
-                  Board
-                </span>
-                <span className="rounded-full bg-muted px-3 py-1 text-xs">List</span>
-                <span className="rounded-full bg-muted px-3 py-1 text-xs">Calendar</span>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-lg border p-3">
-                  <p className="text-xs font-medium text-muted-foreground">To Do</p>
-                  <div className="mt-2 space-y-2">
-                    <div className="rounded border p-2 text-xs">Add notification preferences</div>
-                    <div className="rounded border p-2 text-xs">Dark mode toggle</div>
-                  </div>
-                </div>
-                <div className="rounded-lg border p-3">
-                  <p className="text-xs font-medium text-muted-foreground">In Progress</p>
-                  <div className="mt-2 space-y-2">
-                    <div className="rounded border p-2 text-xs">Real-time board sync</div>
-                    <div className="rounded border p-2 text-xs">Keyboard shortcuts</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+          <EditablePreview
+            onElementSelect={onElementSelect as never}
+            onElementDeselect={onElementDeselect}
+            onTextSave={onTextSave}
+            onPropertyChange={onPropertyChange}
+            onAskAI={onAskAI as never}
+          >
+            <KanbanMockup />
+          </EditablePreview>
         ) : (
           <div className="flex h-full">
             {/* File tree */}
             <div className="w-48 border-r bg-muted/30 px-2 py-3">
-              <p className="mb-2 px-2 text-[11px] font-semibold uppercase text-muted-foreground">Files</p>
+              <p className="mb-2 px-2 text-[11px] font-semibold uppercase text-muted-foreground">
+                Files
+              </p>
               <div className="space-y-0.5 text-xs">
                 <div className="rounded bg-muted px-2 py-1 font-medium">App.tsx</div>
                 <div className="px-2 py-1 text-muted-foreground">KanbanBoard.tsx</div>
@@ -611,8 +696,9 @@ function StaticPreviewWithTabsPanel({ onClose }: { onClose: () => void }) {
 
 /**
  * Prototype step 8: right panel with a Preview/Code tab toggle, project name,
- * and a Deploy button in the header. The preview tab shows a static kanban
- * mockup; the code tab shows a file tree and syntax-highlighted editor.
+ * and a Deploy button in the header. The preview tab shows an editable kanban
+ * mockup with 4-layer interaction: hover outlines, click-to-select with
+ * contextual toolbar, double-click inline text editing, and property inspector.
  * Structural stand-in — rendered directly without the RightPanel wrapper.
  */
 export const PreviewWithTabs: Story = {
@@ -625,7 +711,140 @@ export const PreviewWithTabs: Story = {
       <div className="flex-1 bg-muted/20 p-4">
         <p className="text-sm text-muted-foreground">Chat column (left)</p>
       </div>
-      <StaticPreviewWithTabsPanel onClose={fn()} />
+      <StaticPreviewWithTabsPanel
+        onClose={fn()}
+        onElementSelect={fn()}
+        onElementDeselect={fn()}
+        onTextSave={fn()}
+        onPropertyChange={fn()}
+        onAskAI={fn()}
+      />
+    </div>
+  ),
+  parameters: { layout: 'fullscreen' },
+}
+
+// ---------------------------------------------------------------------------
+// Editable Preview — individual layer stories
+// ---------------------------------------------------------------------------
+
+/**
+ * Hover state: move mouse over elements to see blue dashed outline
+ * and tag label anchored at top-left of the element.
+ */
+export const PreviewElementHovered: Story = {
+  args: {
+    isOpen: true,
+    content: null,
+  },
+  render: () => (
+    <div className="flex h-screen w-full">
+      <div className="flex-1 bg-muted/20 p-4">
+        <p className="text-sm text-muted-foreground">
+          Hover over elements in the preview to see blue dashed outlines and tag labels.
+        </p>
+      </div>
+      <div className="flex h-full w-[50%] min-w-[400px] flex-col border-l bg-background">
+        <div className="flex items-center gap-2 border-b px-3 py-2">
+          <Eye size={14} className="text-muted-foreground" />
+          <span className="text-sm font-medium">Preview — Hover Layer</span>
+        </div>
+        <div className="min-h-0 flex-1">
+          <EditablePreview
+            onElementSelect={fn()}
+            onElementDeselect={fn()}
+            onTextSave={fn()}
+            onPropertyChange={fn()}
+            onAskAI={fn()}
+          >
+            <KanbanMockup />
+          </EditablePreview>
+        </div>
+      </div>
+    </div>
+  ),
+  parameters: { layout: 'fullscreen' },
+}
+
+/**
+ * Selected state: click an element to see solid blue outline,
+ * contextual toolbar (element-type-aware), and property inspector sidebar.
+ */
+export const PreviewElementSelected: Story = {
+  args: {
+    isOpen: true,
+    content: null,
+  },
+  render: () => (
+    <div className="flex h-screen w-full">
+      <div className="flex-1 bg-muted/20 p-4">
+        <p className="text-sm text-muted-foreground">
+          Click an element to select it. The contextual toolbar appears above with
+          element-type-aware actions. The property inspector opens on the right.
+        </p>
+      </div>
+      <div className="flex h-full w-[55%] min-w-[500px] flex-col border-l bg-background">
+        <div className="flex items-center gap-2 border-b px-3 py-2">
+          <Eye size={14} className="text-muted-foreground" />
+          <span className="text-sm font-medium">Preview — Select + Inspector</span>
+        </div>
+        <div className="min-h-0 flex-1">
+          <EditablePreview
+            onElementSelect={fn()}
+            onElementDeselect={fn()}
+            onTextSave={fn()}
+            onPropertyChange={fn()}
+            onAskAI={fn()}
+          >
+            <KanbanMockup />
+          </EditablePreview>
+        </div>
+      </div>
+    </div>
+  ),
+  parameters: { layout: 'fullscreen' },
+}
+
+/**
+ * Editing state: double-click a text element to enter inline editing mode.
+ * The format mini-toolbar (Bold, Italic, Link, Color) replaces the contextual toolbar.
+ * Press Escape to exit editing, click away to deselect.
+ */
+export const PreviewTextEditing: Story = {
+  args: {
+    isOpen: true,
+    content: null,
+  },
+  render: () => (
+    <div className="flex h-screen w-full">
+      <div className="flex-1 bg-muted/20 p-4">
+        <div className="space-y-2">
+          <p className="text-sm text-muted-foreground">
+            Double-click a text element (like &quot;TaskFlow&quot; or &quot;To Do&quot;) to enter
+            inline editing mode.
+          </p>
+          <p className="text-sm text-muted-foreground">
+            <strong>Esc</strong> exits editing. <strong>Click away</strong> deselects.
+          </p>
+        </div>
+      </div>
+      <div className="flex h-full w-[55%] min-w-[500px] flex-col border-l bg-background">
+        <div className="flex items-center gap-2 border-b px-3 py-2">
+          <Eye size={14} className="text-muted-foreground" />
+          <span className="text-sm font-medium">Preview — Inline Text Editing</span>
+        </div>
+        <div className="min-h-0 flex-1">
+          <EditablePreview
+            onElementSelect={fn()}
+            onElementDeselect={fn()}
+            onTextSave={fn()}
+            onPropertyChange={fn()}
+            onAskAI={fn()}
+          >
+            <KanbanMockup />
+          </EditablePreview>
+        </div>
+      </div>
     </div>
   ),
   parameters: { layout: 'fullscreen' },

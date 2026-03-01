@@ -24,7 +24,11 @@ vi.mock('@server/lib/db/queries', () => ({
   updateProfileByStripeId: vi.fn(),
 }))
 
-import { getProfileByStripeId, updateProfileByStripeId, updateProfilePlan } from '@server/lib/db/queries'
+import {
+  getProfileByStripeId,
+  updateProfileByStripeId,
+  updateProfilePlan,
+} from '@server/lib/db/queries'
 import { stripeWebhookRoutes } from '@server/routes/stripe-webhook'
 
 describe('Stripe Webhook Routes', () => {

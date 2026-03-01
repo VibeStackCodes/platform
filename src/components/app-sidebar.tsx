@@ -76,9 +76,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       const res = await apiFetch('/api/projects')
       if (!res.ok) return []
       const projects = await res.json()
-      return (
-        projects as Array<{ id: string; name: string; updatedAt: string }>
-      ).slice(0, 5)
+      return (projects as Array<{ id: string; name: string; updatedAt: string }>).slice(0, 5)
     },
   })
 
@@ -107,11 +105,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 ) : (
                   <Link to="/">
                     <div className="flex aspect-square size-8 items-center justify-center">
-                      <img
-                        src="/vibestack-logo.png"
-                        alt="VibeStack"
-                        className="size-8"
-                      />
+                      <img src="/vibestack-logo.png" alt="VibeStack" className="size-8" />
                     </div>
                     <div className="grid flex-1 text-left text-sm leading-tight">
                       <span className="truncate font-semibold">VibeStack</span>
@@ -149,8 +143,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {!isCollapsed && <SidebarSeparator/>}
-
+        {!isCollapsed && <SidebarSeparator />}
 
         {/* Recents with relative timestamps — hidden when sidebar collapsed */}
         {recentProjects && recentProjects.length > 0 && (
@@ -196,8 +189,7 @@ function NavUser() {
   const { theme, setTheme } = useTheme()
 
   const initials = user?.email?.slice(0, 2).toUpperCase() ?? '??'
-  const displayName =
-    user?.user_metadata?.full_name ?? user?.email?.split('@')[0] ?? 'User'
+  const displayName = user?.user_metadata?.full_name ?? user?.email?.split('@')[0] ?? 'User'
   const plan = user?.user_metadata?.plan ?? 'Free Plan'
 
   return (
@@ -215,12 +207,8 @@ function NavUser() {
                 </AvatarFallback>
               </Avatar>
               <div className="grid flex-1 text-left text-sm leading-tight">
-                <span className="truncate text-[13px] font-medium">
-                  {displayName}
-                </span>
-                <span className="truncate text-[11px] text-muted-foreground/60">
-                  {plan}
-                </span>
+                <span className="truncate text-[13px] font-medium">{displayName}</span>
+                <span className="truncate text-[11px] text-muted-foreground/60">{plan}</span>
               </div>
               <ChevronDown className="ml-auto size-4 text-muted-foreground/50" />
             </SidebarMenuButton>
@@ -243,9 +231,7 @@ function NavUser() {
                 <DropdownMenuSubContent className="rounded-xl">
                   <DropdownMenuRadioGroup
                     value={theme}
-                    onValueChange={(v) =>
-                      setTheme(v as 'system' | 'light' | 'dark')
-                    }
+                    onValueChange={(v) => setTheme(v as 'system' | 'light' | 'dark')}
                   >
                     <DropdownMenuRadioItem value="system">
                       <Monitor className="size-4" />

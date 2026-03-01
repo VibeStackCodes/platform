@@ -19,11 +19,22 @@ import type {
 } from '@/lib/types'
 
 /** Maps agentId to ActionCard display config */
-export const AGENT_CARD_CONFIG: Record<string, { icon: string; runningLabel: string; completeLabel?: string }> = {
+export const AGENT_CARD_CONFIG: Record<
+  string,
+  { icon: string; runningLabel: string; completeLabel?: string }
+> = {
   analyst: { icon: 'brain', runningLabel: 'Analyzing...', completeLabel: 'Analyzed requirements' },
-  architect: { icon: 'sparkles', runningLabel: 'Designing architecture...', completeLabel: 'Designed app architecture' },
+  architect: {
+    icon: 'sparkles',
+    runningLabel: 'Designing architecture...',
+    completeLabel: 'Designed app architecture',
+  },
   frontend: { icon: 'code', runningLabel: 'Generating pages...', completeLabel: 'Generated pages' },
-  backend: { icon: 'package', runningLabel: 'Assembling files...', completeLabel: 'Assembled files' },
+  backend: {
+    icon: 'package',
+    runningLabel: 'Assembling files...',
+    completeLabel: 'Assembled files',
+  },
   qa: { icon: 'shield', runningLabel: 'Validating build...', completeLabel: 'Validation complete' },
 }
 
@@ -40,10 +51,10 @@ export interface ToolStep {
   tool: string
   label: string
   status: 'running' | 'complete' | 'error'
-  filePath?: string       // Extracted from args.path
-  oldContent?: string     // Previous file content (for diffs)
-  newContent?: string     // New file content (for diffs)
-  result?: string         // Summary from tool_complete
+  filePath?: string // Extracted from args.path
+  oldContent?: string // Previous file content (for diffs)
+  newContent?: string // New file content (for diffs)
+  result?: string // Summary from tool_complete
   durationMs?: number
   startedAt: number
 }
@@ -69,7 +80,11 @@ export interface UseAgentStreamReturn {
   model: string
   setModel: (model: string) => void
   generationStatus: 'idle' | 'generating' | 'complete' | 'error'
-  generationFiles: Array<{ path: string; status: 'pending' | 'generating' | 'complete' | 'error'; lines?: number }>
+  generationFiles: Array<{
+    path: string
+    status: 'pending' | 'generating' | 'complete' | 'error'
+    lines?: number
+  }>
   buildErrors: BuildError[]
   pageProgress: PageProgressEntry[]
   fileAssembly: FileAssemblyEntry[]
@@ -78,7 +93,12 @@ export interface UseAgentStreamReturn {
   toolSteps: ToolStep[]
   pendingClarification: ClarificationQuestion[] | null
   pendingPlan: PlanReadyEvent['plan'] | null
-  userCredits: { credits_remaining: number; credits_monthly: number; plan: 'free' | 'pro'; credits_reset_at: string | null } | null
+  userCredits: {
+    credits_remaining: number
+    credits_monthly: number
+    plan: 'free' | 'pro'
+    credits_reset_at: string | null
+  } | null
   messages: ChatMessage[]
   chatStatus: 'ready' | 'streaming'
   chatError: Error | null
@@ -192,7 +212,13 @@ export function useAgentStream({
     setGenerationStatus('idle')
   }, [])
 
-  const { persistedMessages, persistedTimeline, persistedValidation, persistedPageProgress, persistedFileAssembly } = useMemo(() => {
+  const {
+    persistedMessages,
+    persistedTimeline,
+    persistedValidation,
+    persistedPageProgress,
+    persistedFileAssembly,
+  } = useMemo(() => {
     if (!conversationEvents?.length) {
       return {
         persistedMessages: [] as ChatMessage[],
@@ -237,7 +263,11 @@ export function useAgentStream({
           )
           if (idx >= 0) {
             const agentEntry = timeline[idx] as Extract<TimelineEntry, { type: 'agent' }>
-            timeline[idx] = { ...agentEntry, status: 'complete' as const, durationMs: data.durationMs as number }
+            timeline[idx] = {
+              ...agentEntry,
+              status: 'complete' as const,
+              durationMs: data.durationMs as number,
+            }
           }
           break
         }
@@ -259,25 +289,37 @@ export function useAgentStream({
         }
         case 'design_tokens': {
           const data = p as Record<string, unknown>
-          const idx = timeline.findLastIndex((e) => e.type === 'agent' && e.agent.agentId === 'architect')
+          const idx = timeline.findLastIndex(
+            (e) => e.type === 'agent' && e.agent.agentId === 'architect',
+          )
           if (idx >= 0) {
             const agentEntry = timeline[idx] as Extract<TimelineEntry, { type: 'agent' }>
-            timeline[idx] = { ...agentEntry, designTokens: data.tokens as DesignTokensEvent['tokens'] }
+            timeline[idx] = {
+              ...agentEntry,
+              designTokens: data.tokens as DesignTokensEvent['tokens'],
+            }
           }
           break
         }
         case 'architecture_ready': {
           const data = p as Record<string, unknown>
-          const idx = timeline.findLastIndex((e) => e.type === 'agent' && e.agent.agentId === 'architect')
+          const idx = timeline.findLastIndex(
+            (e) => e.type === 'agent' && e.agent.agentId === 'architect',
+          )
           if (idx >= 0) {
             const agentEntry = timeline[idx] as Extract<TimelineEntry, { type: 'agent' }>
-            timeline[idx] = { ...agentEntry, architecture: data.spec as ArchitectureReadyEvent['spec'] }
+            timeline[idx] = {
+              ...agentEntry,
+              architecture: data.spec as ArchitectureReadyEvent['spec'],
+            }
           }
           break
         }
         case 'plan_ready': {
           const data = p as Record<string, unknown>
-          const idx = timeline.findLastIndex((e) => e.type === 'agent' && e.agent.agentId === 'analyst')
+          const idx = timeline.findLastIndex(
+            (e) => e.type === 'agent' && e.agent.agentId === 'analyst',
+          )
           if (idx >= 0) {
             const agentEntry = timeline[idx] as Extract<TimelineEntry, { type: 'agent' }>
             timeline[idx] = { ...agentEntry, plan: data.plan as PlanReadyEvent['plan'] }
@@ -287,7 +329,8 @@ export function useAgentStream({
         case 'validation_check': {
           const data = p as Record<string, unknown>
           const existing = validation.findIndex((v) => v.name === data.name)
-          if (existing >= 0) validation[existing] = data as { name: string; status: string; errors?: string[] }
+          if (existing >= 0)
+            validation[existing] = data as { name: string; status: string; errors?: string[] }
           else validation.push(data as { name: string; status: string; errors?: string[] })
           break
         }
@@ -346,7 +389,16 @@ export function useAgentStream({
     } else if (persistedTimeline.some((e) => e.type === 'error')) {
       setGenerationStatus('error')
     }
-  }, [persistedTimeline, persistedValidation, persistedPageProgress, persistedFileAssembly, timelineEvents.length, validationChecks.length, pageProgress.length, fileAssembly.length])
+  }, [
+    persistedTimeline,
+    persistedValidation,
+    persistedPageProgress,
+    persistedFileAssembly,
+    timelineEvents.length,
+    validationChecks.length,
+    pageProgress.length,
+    fileAssembly.length,
+  ])
 
   const [sessionMessages, setSessionMessages] = useState<ChatMessage[]>([])
   const messages = useMemo(() => {
@@ -536,17 +588,25 @@ export function useAgentStream({
           setPageProgress((prev) => {
             const idx = prev.findIndex((p) => p.fileName === event.fileName)
             if (idx === -1) {
-              return [...prev, {
-                fileName: event.fileName,
-                route: event.route,
-                componentName: event.componentName,
-                status: 'complete' as const,
-                lineCount: event.lineCount,
-                code: event.code,
-              }]
+              return [
+                ...prev,
+                {
+                  fileName: event.fileName,
+                  route: event.route,
+                  componentName: event.componentName,
+                  status: 'complete' as const,
+                  lineCount: event.lineCount,
+                  code: event.code,
+                },
+              ]
             }
             const updated = [...prev]
-            updated[idx] = { ...updated[idx], status: 'complete' as const, lineCount: event.lineCount, code: event.code }
+            updated[idx] = {
+              ...updated[idx],
+              status: 'complete' as const,
+              lineCount: event.lineCount,
+              code: event.code,
+            }
             return updated
           })
           break
@@ -611,9 +671,7 @@ export function useAgentStream({
 
           setToolSteps((prev) => {
             // Find the last running step for this tool
-            const idx = prev.findLastIndex(
-              (s) => s.tool === event.tool && s.status === 'running',
-            )
+            const idx = prev.findLastIndex((s) => s.tool === event.tool && s.status === 'running')
             if (idx < 0) return prev
             const updated = [...prev]
             updated[idx] = {
@@ -714,7 +772,10 @@ export function useAgentStream({
       setValidationChecks([])
 
       const assistantId = `assistant-${Date.now()}`
-      setSessionMessages((prev) => [...prev, { id: assistantId, role: 'assistant' as const, content: '' }])
+      setSessionMessages((prev) => [
+        ...prev,
+        { id: assistantId, role: 'assistant' as const, content: '' },
+      ])
 
       let fullText = ''
       abortControllerRef.current?.abort()
@@ -784,15 +845,28 @@ export function useAgentStream({
         if (err instanceof Error && err.name === 'AbortError') return
         console.error('[builder-chat] sendChatMessage error:', err)
         setChatError(err instanceof Error ? err : new Error('Chat failed'))
-        setSessionMessages((prev) => prev.filter((m) => m.id !== assistantId || m.content.length > 0))
+        setSessionMessages((prev) =>
+          prev.filter((m) => m.id !== assistantId || m.content.length > 0),
+        )
       } finally {
         setChatStatus('ready')
       }
     },
-    [projectId, model, chatStatus, parseSSEBuffer, handleGenerationEvent, selectedElement, onEditComplete, queryClient],
+    [
+      projectId,
+      model,
+      chatStatus,
+      parseSSEBuffer,
+      handleGenerationEvent,
+      selectedElement,
+      onEditComplete,
+      queryClient,
+    ],
   )
 
-  useEffect(() => { sendChatMessageRef.current = sendChatMessage }, [sendChatMessage])
+  useEffect(() => {
+    sendChatMessageRef.current = sendChatMessage
+  }, [sendChatMessage])
 
   useEffect(() => {
     if (!initialPrompt) return
@@ -805,10 +879,7 @@ export function useAgentStream({
     return () => clearTimeout(timer)
   }, [initialPrompt])
 
-  const handleSubmit = (
-    message: { text?: string },
-    options: { model: string; mode: string },
-  ) => {
+  const handleSubmit = (message: { text?: string }, options: { model: string; mode: string }) => {
     if (!message.text?.trim()) return
     // mode will be used in Phase 2 (Plan Mode)
     setModel(options.model)
@@ -872,7 +943,9 @@ export function useAgentStream({
       } catch (err) {
         if (err instanceof Error && err.name === 'AbortError') return
         setChatError(err instanceof Error ? err : new Error('Resume failed'))
-        setSessionMessages((prev) => prev.filter((m) => m.id !== assistantId || m.content.length > 0))
+        setSessionMessages((prev) =>
+          prev.filter((m) => m.id !== assistantId || m.content.length > 0),
+        )
       } finally {
         setChatStatus('ready')
         setResumeRunId(null)
@@ -919,7 +992,8 @@ export function useAgentStream({
   }, [planRunId, parseSSEBuffer, handleGenerationEvent])
 
   const hasFiles = generationFiles.length > 0
-  const showTimeline = generationStatus === 'generating' || timelineEvents.length > 0 || toolSteps.length > 0
+  const showTimeline =
+    generationStatus === 'generating' || timelineEvents.length > 0 || toolSteps.length > 0
 
   return {
     // State

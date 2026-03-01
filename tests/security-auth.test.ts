@@ -44,8 +44,12 @@ vi.mock('@server/lib/agents/provider', () => ({
   createDirectProvider: vi.fn(() => vi.fn()),
   createAgentModelResolver: vi.fn(() => () => 'mock-model'),
   PIPELINE_MODELS: {
-    orchestrator: 'gpt-5.2', codegen: 'gpt-5.2-codex', review: 'gpt-5.1',
-    repair: 'gpt-5-mini', edit: 'gpt-5-mini', format: 'gpt-5-nano',
+    orchestrator: 'gpt-5.2',
+    codegen: 'gpt-5.2-codex',
+    review: 'gpt-5.1',
+    repair: 'gpt-5-mini',
+    edit: 'gpt-5-mini',
+    format: 'gpt-5-nano',
   },
 }))
 
@@ -278,8 +282,7 @@ describe('Rate limiting', () => {
   })
 
   it('returns 429 with Retry-After when limit exceeded', async () => {
-    vi.mocked(db.execute)
-      .mockResolvedValueOnce({ rows: [{ cnt: 10 }] } as any) // At limit
+    vi.mocked(db.execute).mockResolvedValueOnce({ rows: [{ cnt: 10 }] } as any) // At limit
 
     const { createRateLimiter } = await import('@server/lib/rate-limit')
 

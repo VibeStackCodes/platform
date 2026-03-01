@@ -4,10 +4,7 @@ import { AppSidebar } from '@/components/app-sidebar'
 import { HeroPrompt } from '@/components/hero-prompt'
 import { LandingNavbar } from '@/components/landing-navbar'
 import { PerspectiveGrid } from '@/components/perspective-grid'
-import {
-  SidebarInset,
-  SidebarProvider,
-} from '@/components/ui/sidebar'
+import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
 import { useAuth } from '@/lib/auth'
 
 export const Route = createFileRoute('/')({

@@ -53,7 +53,8 @@ export const InChatContext: Story = {
     (Story) => (
       <div className="mx-auto w-full max-w-[640px] space-y-4 bg-background p-4">
         <div className="rounded-lg bg-muted px-4 py-3 text-sm">
-          Before I start building, I have a few quick questions to make sure the app fits your needs.
+          Before I start building, I have a few quick questions to make sure the app fits your
+          needs.
         </div>
         <Story />
       </div>

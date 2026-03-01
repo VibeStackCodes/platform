@@ -22,10 +22,7 @@ export function PlanBlock({ title, items, className }: PlanBlockProps) {
       <p className="text-sm font-semibold text-foreground mb-2.5">{title}</p>
       <ol className="list-decimal pl-5 space-y-1.5">
         {items.map((item) => (
-          <li
-            key={item.title}
-            className="text-sm leading-[1.65] text-muted-foreground"
-          >
+          <li key={item.title} className="text-sm leading-[1.65] text-muted-foreground">
             <span className="text-foreground font-semibold">{item.title}</span>
             {' \u2014 '}
             {item.description}

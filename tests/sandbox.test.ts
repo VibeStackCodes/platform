@@ -242,9 +242,9 @@ describe('sandbox', () => {
     it('throws wrapped error when any file upload fails', async () => {
       mockSandboxFs.uploadFile.mockRejectedValue(new Error('Network timeout'))
 
-      await expect(
-        uploadFiles(mockSandbox as any, [{ content: 'x', path: '/x' }]),
-      ).rejects.toThrow('Failed to upload files')
+      await expect(uploadFiles(mockSandbox as any, [{ content: 'x', path: '/x' }])).rejects.toThrow(
+        'Failed to upload files',
+      )
     })
   })
 
@@ -414,7 +414,11 @@ describe('sandbox', () => {
         15,
       )
       // Verifies native git push with x-access-token auth
-      expect(mockSandboxGit.push).toHaveBeenCalledWith('/workspace', 'x-access-token', 'ghp_token123')
+      expect(mockSandboxGit.push).toHaveBeenCalledWith(
+        '/workspace',
+        'x-access-token',
+        'ghp_token123',
+      )
     })
   })
 })

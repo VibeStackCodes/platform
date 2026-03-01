@@ -40,12 +40,7 @@ export function PreviewCard({
   className,
 }: PreviewCardProps) {
   return (
-    <div
-      className={cn(
-        'bg-secondary border border-border rounded-xl overflow-hidden',
-        className,
-      )}
-    >
+    <div className={cn('bg-secondary border border-border rounded-xl overflow-hidden', className)}>
       {/* Header */}
       <div className="flex items-center gap-2 px-4 py-3 text-[13px] font-semibold text-foreground border-b border-border">
         <Globe size={15} className="text-[oklch(0.6118_0.0713_127.12)]" />

@@ -29,8 +29,18 @@ type ChatStatus = 'ready' | 'submitted' | 'streaming' | 'error'
 
 const models = [
   { id: 'gpt-5.2-codex', name: 'GPT-5.2 Codex', provider: 'openai' as const, available: true },
-  { id: 'claude-opus-4-6', name: 'Claude Opus 4.6', provider: 'anthropic' as const, available: true },
-  { id: 'claude-sonnet-4-6', name: 'Claude Sonnet 4.6', provider: 'anthropic' as const, available: true },
+  {
+    id: 'claude-opus-4-6',
+    name: 'Claude Opus 4.6',
+    provider: 'anthropic' as const,
+    available: true,
+  },
+  {
+    id: 'claude-sonnet-4-6',
+    name: 'Claude Sonnet 4.6',
+    provider: 'anthropic' as const,
+    available: true,
+  },
 ]
 
 interface PromptBarProps {

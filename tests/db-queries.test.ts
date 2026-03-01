@@ -69,16 +69,14 @@ vi.mock('@server/lib/db/client', () => {
       // oxlint-ignore no-thenable -- Drizzle chains are thenable by design
       const onConflictBuilder = {
         returning: vi.fn().mockReturnThis(),
-        then: (resolve: (v: unknown) => unknown) =>
-          Promise.resolve(conflictRows).then(resolve),
+        then: (resolve: (v: unknown) => unknown) => Promise.resolve(conflictRows).then(resolve),
       }
       // oxlint-ignore no-thenable -- Drizzle chains are thenable by design
       const insertBuilder = {
         values: vi.fn().mockReturnThis(),
         onConflictDoNothing: vi.fn().mockReturnValue(onConflictBuilder),
         returning: vi.fn().mockReturnThis(),
-        then: (resolve: (v: unknown) => unknown) =>
-          Promise.resolve(rows).then(resolve),
+        then: (resolve: (v: unknown) => unknown) => Promise.resolve(rows).then(resolve),
       }
       db.insert.mockReturnValue(insertBuilder)
       return insertBuilder
@@ -94,18 +92,9 @@ vi.mock('@server/lib/db/client', () => {
 vi.mock('@server/lib/db/schema', () => {
   const col = (name: string) => ({ _col: name })
   return {
-    projects: new Proxy(
-      { $inferInsert: {} },
-      { get: (_t, prop) => col(String(prop)) },
-    ),
-    profiles: new Proxy(
-      {},
-      { get: (_t, prop) => col(String(prop)) },
-    ),
-    chatMessages: new Proxy(
-      {},
-      { get: (_t, prop) => col(String(prop)) },
-    ),
+    projects: new Proxy({ $inferInsert: {} }, { get: (_t, prop) => col(String(prop)) }),
+    profiles: new Proxy({}, { get: (_t, prop) => col(String(prop)) }),
+    chatMessages: new Proxy({}, { get: (_t, prop) => col(String(prop)) }),
   }
 })
 
@@ -114,7 +103,10 @@ const { db } = await import('@server/lib/db/client')
 const dbMock = db as typeof db & {
   _setSelectResult: (rows: unknown[]) => void
   _setUpdateResult: (rows: unknown[]) => void
-  _setInsertResult: (rows: unknown[], onConflict?: unknown[]) => {
+  _setInsertResult: (
+    rows: unknown[],
+    onConflict?: unknown[],
+  ) => {
     values: ReturnType<typeof vi.fn>
     onConflictDoNothing: ReturnType<typeof vi.fn>
   }
@@ -359,7 +351,10 @@ describe('db-queries', () => {
     it('keeps array parts as-is', async () => {
       const insertBuilder = dbMock._setInsertResult([{ id: 'msg-003' }])
 
-      const parts = [{ type: 'text', text: 'part one' }, { type: 'text', text: 'part two' }]
+      const parts = [
+        { type: 'text', text: 'part one' },
+        { type: 'text', text: 'part two' },
+      ]
       await insertChatMessage('msg-003', 'p1', 'user', parts)
 
       const valuesArg = insertBuilder.values.mock.calls[0][0]
@@ -374,9 +369,7 @@ describe('db-queries', () => {
         id: 'p1',
         userId: 'u1',
         name: 'My App',
-        chatMessages: [
-          { id: 'msg-1', role: 'user', parts: [{ type: 'text', text: 'Hi' }] },
-        ],
+        chatMessages: [{ id: 'msg-1', role: 'user', parts: [{ type: 'text', text: 'Hi' }] }],
       }
       db.query.projects.findFirst.mockResolvedValue(fakeProjectWithMessages)
 

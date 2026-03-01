@@ -46,19 +46,23 @@ describe('applyEdit', () => {
       text: async () => 'Internal Server Error',
     })
 
-    await expect(applyEdit({
-      initialCode: 'x',
-      editSnippet: 'y',
-    })).rejects.toThrow('Relace API error 500')
+    await expect(
+      applyEdit({
+        initialCode: 'x',
+        editSnippet: 'y',
+      }),
+    ).rejects.toThrow('Relace API error 500')
   })
 
   it('throws when RELACE_API_KEY is missing', async () => {
     vi.stubEnv('RELACE_API_KEY', '')
 
-    await expect(applyEdit({
-      initialCode: 'x',
-      editSnippet: 'y',
-    })).rejects.toThrow('RELACE_API_KEY')
+    await expect(
+      applyEdit({
+        initialCode: 'x',
+        editSnippet: 'y',
+      }),
+    ).rejects.toThrow('RELACE_API_KEY')
   })
 
   it('passes optional instruction', async () => {

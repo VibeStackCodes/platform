@@ -51,12 +51,17 @@ projectDeployRoutes.post(
   '/',
   describeRoute({
     summary: 'Deploy project to Vercel',
-    description: 'Downloads files from Daytona sandbox and deploys to Vercel. Uses GitHub repo if available.',
+    description:
+      'Downloads files from Daytona sandbox and deploys to Vercel. Uses GitHub repo if available.',
     tags: ['deploy'],
     security: [{ bearerAuth: [] }],
     requestBody: {
       required: true,
-      content: { 'application/json': { schema: resolver(DeployRequestSchema) as unknown as OpenAPIV3_1.SchemaObject } },
+      content: {
+        'application/json': {
+          schema: resolver(DeployRequestSchema) as unknown as OpenAPIV3_1.SchemaObject,
+        },
+      },
     },
     responses: {
       200: {
@@ -82,99 +87,95 @@ projectDeployRoutes.post(
     },
   }),
   async (c) => {
-  try {
-    // Parse request
-    const body: DeployRequest = await c.req.json()
-    const { projectId, vercelTeamId } = body
+    try {
+      // Parse request
+      const body: DeployRequest = await c.req.json()
+      const { projectId, vercelTeamId } = body
 
-    if (!projectId) {
-      return c.json({ error: 'projectId is required' }, 400)
-    }
+      if (!projectId) {
+        return c.json({ error: 'projectId is required' }, 400)
+      }
 
-    // Get authenticated user from middleware
-    const user = c.var.user
+      // Get authenticated user from middleware
+      const user = c.var.user
 
-    // Fetch project from database using Drizzle
-    const project = await getProject(projectId, user.id)
+      // Fetch project from database using Drizzle
+      const project = await getProject(projectId, user.id)
 
-    if (!project) {
-      return c.json({ error: 'Project not found' }, 404)
-    }
+      if (!project) {
+        return c.json({ error: 'Project not found' }, 404)
+      }
 
-    if (!project.sandboxId) {
-      return c.json({ error: 'Project has no sandbox' }, 400)
-    }
+      if (!project.sandboxId) {
+        return c.json({ error: 'Project has no sandbox' }, 400)
+      }
 
-    // Get Daytona sandbox
-    const daytona = getDaytonaClient()
-    const sandbox = await daytona.get(project.sandboxId)
+      // Get Daytona sandbox
+      const daytona = getDaytonaClient()
+      const sandbox = await daytona.get(project.sandboxId)
 
-    if (!sandbox) {
-      return c.json({ error: 'Sandbox not found' }, 404)
-    }
+      if (!sandbox) {
+        return c.json({ error: 'Sandbox not found' }, 404)
+      }
 
-    console.log(`[deploy] Downloading files from sandbox ${sandbox.id}...`)
+      console.log(`[deploy] Downloading files from sandbox ${sandbox.id}...`)
 
-    let deployUrl: string
+      let deployUrl: string
 
-    console.log(
-      `[deploy] Project: ${project.name}, GitHub: ${project.githubRepoUrl || 'none'}, Sandbox: ${project.sandboxId}`,
-    )
-
-    let vercelProjectSlug: string
-
-    if (project.githubRepoUrl) {
-      // Deploy from GitHub repo (required path)
-      const repoFullName = project.githubRepoUrl.replace('https://github.com/', '')
-      console.log(`[deploy] Deploying from GitHub: ${repoFullName}`)
-      const result = await deployFromGitHub(
-        repoFullName,
-        project.name,
-        vercelTeamId,
+      console.log(
+        `[deploy] Project: ${project.name}, GitHub: ${project.githubRepoUrl || 'none'}, Sandbox: ${project.sandboxId}`,
       )
-      deployUrl = result.deployUrl
-      vercelProjectSlug = result.vercelProjectSlug
-    } else {
-      // Fallback: download files and upload to Vercel
-      console.log(`[deploy] No GitHub repo, falling back to file upload...`)
-      const files = await downloadDirectory(sandbox, '/workspace')
-      console.log(`[deploy] Downloaded ${files.length} files, deploying to Vercel...`)
-      deployUrl = await deployToVercel(project.name, files, vercelTeamId)
-      vercelProjectSlug = project.name.toLowerCase().replace(/[^a-z0-9-]/g, '-')
+
+      let vercelProjectSlug: string
+
+      if (project.githubRepoUrl) {
+        // Deploy from GitHub repo (required path)
+        const repoFullName = project.githubRepoUrl.replace('https://github.com/', '')
+        console.log(`[deploy] Deploying from GitHub: ${repoFullName}`)
+        const result = await deployFromGitHub(repoFullName, project.name, vercelTeamId)
+        deployUrl = result.deployUrl
+        vercelProjectSlug = result.vercelProjectSlug
+      } else {
+        // Fallback: download files and upload to Vercel
+        console.log(`[deploy] No GitHub repo, falling back to file upload...`)
+        const files = await downloadDirectory(sandbox, '/workspace')
+        console.log(`[deploy] Downloaded ${files.length} files, deploying to Vercel...`)
+        deployUrl = await deployToVercel(project.name, files, vercelTeamId)
+        vercelProjectSlug = project.name.toLowerCase().replace(/[^a-z0-9-]/g, '-')
+      }
+
+      console.log(`[deploy] Deployment successful: ${deployUrl}`)
+
+      // Assign custom domain alias to the actual deployed project
+      const wildcardDomain = process.env.VERCEL_WILDCARD_DOMAIN // e.g. "vibestack.site"
+      if (wildcardDomain) {
+        const appSlug = buildAppSlug(project.name, projectId)
+        const customDomain = `${appSlug}.${wildcardDomain}`
+        deployUrl = await assignCustomDomain(customDomain, vercelProjectSlug)
+        console.log(`[deploy] Custom domain assigned: ${deployUrl}`)
+      }
+
+      // Update project with deploy URL using Drizzle
+      await updateProject(projectId, {
+        deployUrl,
+        status: 'deployed',
+      })
+
+      return c.json({
+        success: true,
+        deployUrl,
+        projectId,
+      })
+    } catch (error) {
+      console.error('[deploy] Deployment failed:', error)
+      return c.json(
+        {
+          error: 'Deployment failed',
+          message: 'An error occurred during deployment — please try again',
+        },
+        500,
+      )
     }
-
-    console.log(`[deploy] Deployment successful: ${deployUrl}`)
-
-    // Assign custom domain alias to the actual deployed project
-    const wildcardDomain = process.env.VERCEL_WILDCARD_DOMAIN // e.g. "vibestack.site"
-    if (wildcardDomain) {
-      const appSlug = buildAppSlug(project.name, projectId)
-      const customDomain = `${appSlug}.${wildcardDomain}`
-      deployUrl = await assignCustomDomain(customDomain, vercelProjectSlug)
-      console.log(`[deploy] Custom domain assigned: ${deployUrl}`)
-    }
-
-    // Update project with deploy URL using Drizzle
-    await updateProject(projectId, {
-      deployUrl,
-      status: 'deployed',
-    })
-
-    return c.json({
-      success: true,
-      deployUrl,
-      projectId,
-    })
-  } catch (error) {
-    console.error('[deploy] Deployment failed:', error)
-    return c.json(
-      {
-        error: 'Deployment failed',
-        message: 'An error occurred during deployment — please try again',
-      },
-      500,
-    )
-  }
   },
 )
 

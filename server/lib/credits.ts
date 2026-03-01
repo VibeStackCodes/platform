@@ -57,4 +57,3 @@ export async function settleCredits(
     return { creditsRemaining: 0 }
   }
 }
-
