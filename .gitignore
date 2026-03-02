@@ -60,8 +60,8 @@ yarn-error.log*
 # Supabase CLI temp
 supabase/.temp/
 
-# esbuild server bundle (generated during build, placeholder committed via git add -f)
-api/index.js.map
+# Legacy esbuild server bundle (no longer used — zero-config Hono on Vercel)
+api/
 
 # Storybook
 dist/storybook/
