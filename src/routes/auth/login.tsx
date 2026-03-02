@@ -12,6 +12,33 @@ export const Route = createFileRoute('/auth/login')({
 
 const PENDING_PROMPT_KEY = 'vibestack_pending_prompt'
 
+/**
+ * Wait for Supabase to fully persist the session in localStorage.
+ * `signUp`/`signInWithPassword` resolve before `onAuthStateChange` fires,
+ * so `getSession()` may return stale data if called immediately.
+ * This waits for the `SIGNED_IN` event — the official signal that the
+ * session is stored and ready for use by `apiFetch`.
+ * Times out after 5s to prevent the UI from hanging indefinitely.
+ */
+function waitForSession(): Promise<void> {
+  return new Promise((resolve) => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_IN') {
+        subscription.unsubscribe()
+        clearTimeout(timeout)
+        resolve()
+      }
+    })
+
+    const timeout = setTimeout(() => {
+      subscription.unsubscribe()
+      resolve()
+    }, 5_000)
+  })
+}
+
 function LoginPage() {
   const navigate = useNavigate()
   const [email, setEmail] = useState('')
@@ -21,7 +48,7 @@ function LoginPage() {
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
 
-  async function redirectAfterAuth(_userId: string) {
+  async function redirectAfterAuth() {
     const pendingPrompt = sessionStorage.getItem(PENDING_PROMPT_KEY)
     if (pendingPrompt) {
       const res = await apiFetch('/api/projects', {
@@ -63,7 +90,8 @@ function LoginPage() {
         console.error('[signup] Supabase error:', error.message, error.status)
         setError(error.message)
       } else if (data.session && data.user) {
-        await redirectAfterAuth(data.user.id)
+        await waitForSession()
+        await redirectAfterAuth()
       } else {
         setMessage('Check your email for a confirmation link.')
       }
@@ -75,7 +103,8 @@ function LoginPage() {
       if (error) {
         setError('Invalid email or password.')
       } else if (data.user) {
-        await redirectAfterAuth(data.user.id)
+        await waitForSession()
+        await redirectAfterAuth()
       }
     }
 
