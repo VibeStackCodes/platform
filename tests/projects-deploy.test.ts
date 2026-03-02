@@ -27,6 +27,18 @@ vi.mock('@server/lib/slug', () => ({
   buildAppSlug: vi.fn((name: string, id: string) => `${name.toLowerCase()}-${id.slice(0, 8)}`),
 }))
 
+// Mock Mastra memory (imported by deploy route for persisting deploy messages)
+vi.mock('@server/lib/agents/memory', () => ({
+  memory: {
+    saveMessages: vi.fn().mockResolvedValue(undefined),
+  },
+}))
+
+// Mock GitHub App integration (deploy route uses getInstallationToken)
+vi.mock('@server/lib/github', () => ({
+  getInstallationToken: vi.fn().mockResolvedValue('mock-gh-installation-token'),
+}))
+
 // Mock @vercel/client's checkDeploymentStatus so we don't need a real Vercel API
 vi.mock('@vercel/client', () => ({
   checkDeploymentStatus: vi.fn(async function* () {

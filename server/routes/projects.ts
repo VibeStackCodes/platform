@@ -288,7 +288,7 @@ projectRoutes.get(
 
         for (const msg of result.messages) {
           // Skip tool-role messages entirely (these are Mastra's tool result records)
-          if (msg.role === 'tool') continue
+          if ((msg.role as string) === 'tool') continue
 
           // biome-ignore lint/suspicious/noExplicitAny: Mastra content type is opaque
           const content = msg.content as any
