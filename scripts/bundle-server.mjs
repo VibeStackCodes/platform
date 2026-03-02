@@ -19,6 +19,10 @@ await build({
   outfile: 'api/index.js',
   // Use ESM entry points for dual-published packages (fixes jsonc-parser)
   mainFields: ['module', 'main'],
+  // Diagnostic banner — first line of output when Lambda loads the module
+  banner: {
+    js: 'console.log("[vercel] api/index.js module load START", new Date().toISOString());',
+  },
   // Externalize nothing — bundle everything into one file
   external: [],
   // No source map — saves ~50MB in function size

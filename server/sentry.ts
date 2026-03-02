@@ -1,5 +1,8 @@
+console.log('[vercel] sentry.ts import START', new Date().toISOString())
 import * as Sentry from '@sentry/node'
+console.log('[vercel] sentry.ts import DONE', new Date().toISOString())
 
+console.log('[vercel] sentry.ts init check, SENTRY_DSN exists:', !!process.env.SENTRY_DSN)
 if (process.env.SENTRY_DSN) {
   Sentry.init({
     dsn: process.env.SENTRY_DSN,
