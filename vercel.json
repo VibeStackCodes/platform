@@ -3,7 +3,8 @@
   "outputDirectory": "dist/client",
   "functions": {
     "api/index.js": {
-      "maxDuration": 300
+      "maxDuration": 300,
+      "memory": 1024
     }
   },
   "headers": [
