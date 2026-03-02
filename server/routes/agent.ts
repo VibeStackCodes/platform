@@ -172,6 +172,15 @@ async function bridgeStreamToSSE(
             emit({ type: 'sandbox_ready', sandboxId: resolvedSandboxId })
           }
 
+          // Persist GitHub repo URL from commitAndPush result
+          if (toolName === 'commitAndPush' && result?.repoUrl) {
+            await updateProject(
+              meta.projectId,
+              { githubRepoUrl: result.repoUrl as string },
+              meta.userId,
+            ).catch(() => {})
+          }
+
           // Detect package installs
           if (toolName === 'installPackage' && result?.success) {
             emit({ type: 'package_installed', packages: result.output ?? '' })
