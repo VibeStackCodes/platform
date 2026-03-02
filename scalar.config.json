@@ -1,26 +1,26 @@
 {
-  "$schema": "https://scalar.com/schema/scalar.config.json",
+  "$schema": "https://cdn.scalar.com/schema/scalar-config.json",
   "subdomain": "vibestack",
   "guides": [
     {
       "name": "Getting Started",
       "slug": "getting-started",
       "sidebar": [
-        { "path": "docs/introduction.md" },
-        { "path": "docs/backend/architecture.md" },
-        { "path": "docs/backend/mastra-studio.md" }
+        { "path": "docs/introduction.md", "type": "page" },
+        { "path": "docs/backend/architecture.md", "type": "page" },
+        { "path": "docs/backend/mastra-studio.md", "type": "page" }
       ]
     },
     {
       "name": "Backend",
       "slug": "backend",
       "sidebar": [
-        { "path": "docs/backend/architecture.md" },
-        { "path": "docs/backend/agents.md" },
-        { "path": "docs/backend/api-routes.md" },
-        { "path": "docs/backend/data-model.md" },
-        { "path": "docs/backend/infrastructure.md" },
-        { "path": "docs/backend/mastra-studio.md" }
+        { "path": "docs/backend/architecture.md", "type": "page" },
+        { "path": "docs/backend/agents.md", "type": "page" },
+        { "path": "docs/backend/api-routes.md", "type": "page" },
+        { "path": "docs/backend/data-model.md", "type": "page" },
+        { "path": "docs/backend/infrastructure.md", "type": "page" },
+        { "path": "docs/backend/mastra-studio.md", "type": "page" }
       ]
     }
   ],
