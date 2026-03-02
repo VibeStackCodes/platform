@@ -1,7 +1,6 @@
 {
   "buildCommand": "bun run build",
   "outputDirectory": "dist/client",
-  "functionDefaultMaxDuration": 300,
   "headers": [
     {
       "source": "/assets/(.*)",
