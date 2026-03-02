@@ -1,6 +1,11 @@
 {
   "buildCommand": "bun run build",
   "outputDirectory": "dist/client",
+  "functions": {
+    "api/index.js": {
+      "maxDuration": 300
+    }
+  },
   "headers": [
     {
       "source": "/assets/(.*)",
@@ -13,6 +18,7 @@
     }
   ],
   "rewrites": [
+    { "source": "/api/:path*", "destination": "/api/index.js" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

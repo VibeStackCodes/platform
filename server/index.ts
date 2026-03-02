@@ -8,8 +8,7 @@ import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import { cors } from 'hono/cors'
 import { secureHeaders } from 'hono/secure-headers'
-// Note: handle() from 'hono/vercel' is no longer needed — zero-config Hono
-// on Vercel auto-detects the app export from app.ts at the project root.
+import { handle } from 'hono/vercel'
 import { openAPIRouteHandler } from 'hono-openapi'
 import { Scalar } from '@scalar/hono-api-reference'
 
@@ -259,10 +258,13 @@ app.get(
 // The client NEVER imports the implementation — only the type shape
 export type AppType = typeof routes
 
-// Default export: Hono app instance
-// - Vercel zero-config: auto-detected via app.ts at project root
-// - Dev server: used by Bun.serve below
-export default app
+// Named export for type inference (used by app.ts `import type`)
+export { app }
+
+// Default export: Vercel serverless handler
+// - Vercel: api/index.js imports this via esbuild bundle
+// - Dev server: Bun.serve uses app.fetch directly below
+export default handle(app)
 
 // Dev server — Bun runtime (Vite proxies /api → localhost:8787)
 if (typeof Bun !== 'undefined' && !process.env.VERCEL) {
