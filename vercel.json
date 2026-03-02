@@ -1,12 +1,6 @@
 {
   "buildCommand": "bun run build",
   "outputDirectory": "dist/client",
-  "functions": {
-    "server.ts": {
-      "maxDuration": 300,
-      "memory": 1024
-    }
-  },
   "headers": [
     {
       "source": "/assets/(.*)",
