@@ -23,3 +23,5 @@ Includes: React 19, React Router DOM 7, Tailwind v4, shadcn/ui, Radix UI, Rechar
 - Each sandbox ~3 GiB memory; org cap ~10 GiB → max 3-4 concurrent runs
 - `cacheDir: '/tmp/.vite'` in generated vite.config prevents EXDEV cross-device rename errors
 - Tailwind v4 uses `@tailwindcss/vite` plugin — no postcss.config.js needed
+- `scaffold/vite.config.ts` is COPYed into the Docker image — includes `optimizeDeps.include` for pre-bundling to prevent 504s during Vite cold starts
+- Expired/deleted sandboxes are auto-recreated by `sandbox-urls` route: creates from snapshot → `git fetch + reset --hard` from GitHub repo → `bun install`

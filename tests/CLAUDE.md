@@ -1,6 +1,6 @@
 # Tests — Vitest
 
-132 test files across 3 projects. Config in `vitest.config.ts` (Vitest 4 `projects` API).
+~130 test files across 3 projects. Config in `vitest.config.ts` (Vitest 4 `projects` API).
 
 ## Projects
 
@@ -8,7 +8,7 @@
 |---------|-----|-------|------|
 | `unit` | Node.js | 18 `.test.ts` | Server routes, tools, credits, rate-limit |
 | `component` | Chromium (Playwright) | 8 `.test.tsx` | React component tests via `@testing-library/react` |
-| `storybook` | Chromium (Playwright) | 106 `.stories.tsx` | Storybook portable stories (auto-discovered) |
+| `storybook` | Chromium (Playwright) | ~110 `.stories.tsx` | Storybook portable stories (auto-discovered) |
 
 ## Setup
 - `tests/setup.ts` — Unit project: sets API key env stubs
