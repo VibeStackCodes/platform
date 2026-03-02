@@ -276,10 +276,11 @@ function PreviewWithTabs({
         </div>
       </div>
 
-      {/* Content */}
-      <div className="min-h-0 flex-1 overflow-hidden">
-        {activeTab === 'preview' ? (
-          previewUrl ? (
+      {/* Content — both iframes stay mounted; CSS toggles visibility to avoid reload lag */}
+      <div className="relative min-h-0 flex-1 overflow-hidden">
+        {/* Preview layer */}
+        <div className={cn('absolute inset-0', activeTab !== 'preview' && 'invisible')}>
+          {previewUrl ? (
             <iframe
               key={previewUrl}
               src={previewUrl}
@@ -294,20 +295,25 @@ function PreviewWithTabs({
                 ? 'Recreating sandbox — your app will appear shortly...'
                 : 'Waiting for preview...'}
             </div>
-          )
-        ) : codeServerUrl ? (
-          <iframe
-            key={codeServerUrl}
-            src={codeServerUrl}
-            className="h-full w-full border-0"
-            title="Code Editor"
-            sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
-          />
-        ) : (
-          <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-            Code editor not available
-          </div>
-        )}
+          )}
+        </div>
+
+        {/* Code layer */}
+        <div className={cn('absolute inset-0', activeTab !== 'code' && 'invisible')}>
+          {codeServerUrl ? (
+            <iframe
+              key={codeServerUrl}
+              src={codeServerUrl}
+              className="h-full w-full border-0"
+              title="Code Editor"
+              sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+            />
+          ) : (
+            <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+              Code editor not available
+            </div>
+          )}
+        </div>
       </div>
     </>
   )
