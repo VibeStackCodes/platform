@@ -80,6 +80,7 @@ export interface UseAgentStreamReturn {
   model: string
   setModel: (model: string) => void
   generationStatus: 'idle' | 'generating' | 'complete' | 'error'
+  doneSummary?: string
   generationFiles: Array<{
     path: string
     status: 'pending' | 'generating' | 'complete' | 'error'
@@ -126,6 +127,7 @@ export function useAgentStream({
   const [generationStatus, setGenerationStatus] = useState<
     'idle' | 'generating' | 'complete' | 'error'
   >('idle')
+  const [doneSummary, setDoneSummary] = useState<string>()
 
   const [generationFiles, setGenerationFiles] = useState<
     { path: string; status: 'pending' | 'generating' | 'complete' | 'error'; lines?: number }[]
@@ -138,6 +140,7 @@ export function useAgentStream({
 
   const [timelineEvents, setTimelineEvents] = useState<TimelineEntry[]>([])
   const [toolSteps, setToolSteps] = useState<ToolStep[]>([])
+  const toolStepCounter = useRef(0)
 
   const [pendingClarification, setPendingClarification] = useState<ClarificationQuestion[] | null>(
     null,
@@ -218,6 +221,7 @@ export function useAgentStream({
     persistedValidation,
     persistedPageProgress,
     persistedFileAssembly,
+    persistedToolSteps,
   } = useMemo(() => {
     if (!conversationEvents?.length) {
       return {
@@ -226,6 +230,7 @@ export function useAgentStream({
         persistedValidation: [] as Array<{ name: string; status: string; errors?: string[] }>,
         persistedPageProgress: [] as Array<Record<string, unknown>>,
         persistedFileAssembly: [] as Array<{ path: string; category: string }>,
+        persistedToolSteps: [] as ToolStep[],
       }
     }
 
@@ -234,6 +239,7 @@ export function useAgentStream({
     const validation: Array<{ name: string; status: string; errors?: string[] }> = []
     const pageProgressArr: Array<Record<string, unknown>> = []
     const fileAssemblyArr: Array<{ path: string; category: string }> = []
+    const toolStepsArr: ToolStep[] = []
 
     for (const evt of conversationEvents) {
       const p = Array.isArray(evt.parts) ? evt.parts[0] : evt.parts
@@ -356,6 +362,25 @@ export function useAgentStream({
             error: (p as Record<string, unknown>)?.message as string,
           })
           break
+        case 'tool_complete': {
+          const data = evt as unknown as {
+            id: string
+            tool: string
+            label: string
+            filePath?: string
+            args?: Record<string, unknown>
+            createdAt: string
+          }
+          toolStepsArr.push({
+            id: data.id,
+            tool: data.tool,
+            label: data.label,
+            status: 'complete',
+            filePath: data.filePath,
+            startedAt: new Date(data.createdAt).getTime(),
+          })
+          break
+        }
       }
     }
 
@@ -365,6 +390,7 @@ export function useAgentStream({
       persistedValidation: validation,
       persistedPageProgress: pageProgressArr,
       persistedFileAssembly: fileAssemblyArr,
+      persistedToolSteps: toolStepsArr,
     }
   }, [conversationEvents])
 
@@ -384,6 +410,9 @@ export function useAgentStream({
     if (persistedFileAssembly.length > 0 && fileAssembly.length === 0) {
       setFileAssembly(persistedFileAssembly as FileAssemblyEntry[])
     }
+    if (persistedToolSteps.length > 0 && toolSteps.length === 0) {
+      setToolSteps(persistedToolSteps)
+    }
     if (persistedTimeline.some((e) => e.type === 'complete')) {
       setGenerationStatus('complete')
     } else if (persistedTimeline.some((e) => e.type === 'error')) {
@@ -394,10 +423,12 @@ export function useAgentStream({
     persistedValidation,
     persistedPageProgress,
     persistedFileAssembly,
+    persistedToolSteps,
     timelineEvents.length,
     validationChecks.length,
     pageProgress.length,
     fileAssembly.length,
+    toolSteps.length,
   ])
 
   const [sessionMessages, setSessionMessages] = useState<ChatMessage[]>([])
@@ -650,7 +681,7 @@ export function useAgentStream({
           const args = event.args as Record<string, unknown> | undefined
           const filePath = (args?.path as string) ?? (args?.filePath as string) ?? undefined
 
-          const stepId = `${event.tool}-${now}`
+          const stepId = `${event.tool}-${now}-${toolStepCounter.current++}`
           setToolSteps((prev) => [
             ...prev,
             {
@@ -689,11 +720,17 @@ export function useAgentStream({
         }
 
         case 'done':
-          setGenerationStatus('complete')
-          pushTimeline({ type: 'complete', ts: now })
-          onGenerationComplete?.()
-          if (event.sandboxId) {
-            onSandboxReady?.(event.sandboxId)
+          if (event.success) {
+            setGenerationStatus('complete')
+            setDoneSummary(event.summary)
+            pushTimeline({ type: 'complete', ts: now })
+            onGenerationComplete?.()
+            if (event.sandboxId) {
+              onSandboxReady?.(event.sandboxId)
+            }
+          } else {
+            setGenerationStatus('error')
+            pushTimeline({ type: 'error', ts: now, error: event.summary })
           }
           break
 
@@ -788,14 +825,12 @@ export function useAgentStream({
         : { message: text, projectId, model }
 
       try {
-        console.log('[builder-chat] Sending to', endpoint, body)
         const response = await apiFetch(endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
           signal: abortController.signal,
         })
-        console.log('[builder-chat] Response status:', response.status)
 
         if (!response.ok || !response.body) {
           if (response.status === 402) {
@@ -843,7 +878,7 @@ export function useAgentStream({
         queryClient.invalidateQueries({ queryKey: ['project-conversation', projectId] })
       } catch (err) {
         if (err instanceof Error && err.name === 'AbortError') return
-        console.error('[builder-chat] sendChatMessage error:', err)
+        if (import.meta.env.DEV) console.error('[builder-chat] sendChatMessage error:', err)
         setChatError(err instanceof Error ? err : new Error('Chat failed'))
         setSessionMessages((prev) =>
           prev.filter((m) => m.id !== assistantId || m.content.length > 0),
@@ -873,7 +908,6 @@ export function useAgentStream({
     const timer = setTimeout(() => {
       if (hasAutoSubmitted.current) return
       hasAutoSubmitted.current = true
-      console.log('[builder-chat] Auto-submitting initial prompt:', initialPrompt.slice(0, 50))
       sendChatMessageRef.current(initialPrompt)
     }, 100)
     return () => clearTimeout(timer)
@@ -1000,6 +1034,7 @@ export function useAgentStream({
     model,
     setModel,
     generationStatus,
+    doneSummary,
     generationFiles,
     buildErrors,
     pageProgress,
