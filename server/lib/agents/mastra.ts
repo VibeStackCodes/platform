@@ -29,11 +29,16 @@ function createObservability(): Observability | undefined {
       default: {
         serviceName: 'vibestack-agent',
         sampling: { type: SamplingStrategyType.ALWAYS },
+        requestContextKeys: ['userId', 'projectId', 'model', 'provider'],
         exporters: [
           new LangfuseExporter({
             publicKey,
             secretKey,
             baseUrl: process.env.LANGFUSE_BASEURL ?? 'https://cloud.langfuse.com',
+            options: {
+              environment: process.env.NODE_ENV ?? 'development',
+              release: process.env.VERCEL_GIT_COMMIT_SHA ?? 'local',
+            },
           }),
         ],
       },

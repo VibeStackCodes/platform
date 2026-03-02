@@ -25,6 +25,7 @@ import { createSSEStream } from '../lib/sse'
 import type { AgentStreamEvent, CreditsUsedEvent } from '../lib/types'
 import { authMiddleware } from '../middleware/auth'
 import { log } from '../lib/logger'
+import { getLangfuseClient } from '../lib/agents/langfuse-client'
 import { TOOL_LABELS } from '../lib/tool-labels'
 
 // ---------------------------------------------------------------------------
@@ -456,9 +457,13 @@ agentRoutes.post(
 
     const runId = crypto.randomUUID()
 
-    // Set up Mastra request context for model routing
+    // Set up Mastra request context for model routing + observability metadata
     const requestContext = new RequestContext()
     requestContext.set('selectedModel', model)
+    requestContext.set('userId', user.id)
+    requestContext.set('projectId', projectId)
+    requestContext.set('model', model)
+    requestContext.set('provider', MODEL_CONFIGS[model]?.provider ?? 'openai')
 
     return createSSEStream<AgentStreamEvent | CreditsUsedEvent>(async (emit, signal) => {
       let settled = false
@@ -466,7 +471,21 @@ agentRoutes.post(
       try {
         // Create agent with provider-appropriate web search tool
         const provider = MODEL_CONFIGS[model]?.provider ?? 'openai'
-        const agent = createOrchestrator(provider)
+
+        // Fetch managed prompt from Langfuse — no fallback, fail fast if misconfigured
+        let systemPrompt: string | undefined
+        const langfuse = getLangfuseClient()
+        if (langfuse) {
+          const prompt = await langfuse.prompt.get('orchestrator-system-prompt', {
+            type: 'text',
+            label: 'production',
+            cacheTtlSeconds: 300,
+            fetchTimeoutMs: 5000,
+          })
+          systemPrompt = prompt.compile({})
+        }
+
+        const agent = createOrchestrator(provider, systemPrompt)
         agent.__registerMastra(mastra)
 
         // Wrap entire generation in a Sentry AI span for observability
@@ -509,6 +528,28 @@ agentRoutes.post(
         const creditsUsed = Math.ceil(result.totalTokens / 1000)
         const settlement = await settleCredits(user.id, CREDIT_RESERVATION, creditsUsed)
         settled = true
+
+        // Score the trace in Langfuse (fire-and-forget)
+        if (langfuse) {
+          const traceMetadata = { userId: user.id, projectId, model, runId }
+          langfuse.score.create({
+            name: 'build-success',
+            traceId: runId,
+            value: result.sandboxId ? 1 : 0,
+            dataType: 'BOOLEAN',
+            comment: result.sandboxId ? 'Build passed' : 'Generation failed',
+            metadata: traceMetadata,
+          })
+          langfuse.score.create({
+            name: 'token-efficiency',
+            traceId: runId,
+            value: Math.max(0, 1 - result.totalTokens / 500_000),
+            dataType: 'NUMERIC',
+            comment: `${result.totalTokens} tokens used`,
+            metadata: traceMetadata,
+          })
+          langfuse.score.flush().catch(() => {})
+        }
 
         emit({
           type: 'credits_used',

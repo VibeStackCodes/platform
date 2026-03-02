@@ -26,7 +26,8 @@
     "docs:validate": "scalar document validate http://localhost:8787/api/doc",
     "docs:mock": "scalar document mock http://localhost:8787/api/doc --port 8788",
     "docs:preview": "scalar document serve http://localhost:8787/api/doc --port 8789 --watch",
-    "docs:export": "curl -s http://localhost:8787/api/doc | python3 -m json.tool > docs/openapi.json && curl -s http://localhost:4111/api/openapi.json | python3 -m json.tool > docs/mastra-openapi.json && echo 'Exported both specs to docs/'"
+    "docs:export": "curl -s http://localhost:8787/api/doc | python3 -m json.tool > docs/openapi.json && curl -s http://localhost:4111/api/openapi.json | python3 -m json.tool > docs/mastra-openapi.json && echo 'Exported both specs to docs/'",
+    "langfuse:seed-prompt": "bun scripts/seed-langfuse-prompt.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.46",
@@ -36,6 +37,7 @@
     "@hono/sentry": "1.2.2",
     "@hono/standard-validator": "^0.2.2",
     "@hookform/resolvers": "^5.2.2",
+    "@langfuse/client": "^4.6.1",
     "@mastra/core": "1.8.0",
     "@mastra/langfuse": "^1.0.3",
     "@mastra/loggers": "^1.0.1",

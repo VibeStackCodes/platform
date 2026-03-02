@@ -135,7 +135,7 @@ The generation pipeline is a single Mastra `Agent` (`server/lib/agents/orchestra
 - **Quality gate**: `vite build` passing is the only requirement — no type-check gate in generated apps
 - **SSE events**: `AgentStreamEvent` union — `thinking`, `tool_start`, `tool_complete`, `done`, `agent_error`, `sandbox_ready`, `package_installed`, `credits_used`
 - **Credits**: `reserveCredits()` before generation starts, `settleCredits()` after to adjust to actual token usage
-- **Observability**: Langfuse via `@mastra/langfuse` (configured in `mastra.ts`). Traces all LLM calls + tool executions. Gated on `LANGFUSE_PUBLIC_KEY` + `LANGFUSE_SECRET_KEY`.
+- **Observability**: Langfuse via `@mastra/langfuse` + `@langfuse/client`. Traces enriched with userId/projectId/model/provider via `requestContextKeys`. Prompt management (orchestrator system prompt versioned in Langfuse UI, falls back to hardcoded). Post-generation scoring (build-success boolean + token-efficiency numeric). Environment/release tagging on exporter. Gated on `LANGFUSE_PUBLIC_KEY` + `LANGFUSE_SECRET_KEY`.
 
 ### Model Routing
 

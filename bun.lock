@@ -12,6 +12,7 @@
         "@hono/sentry": "1.2.2",
         "@hono/standard-validator": "^0.2.2",
         "@hookform/resolvers": "^5.2.2",
+        "@langfuse/client": "^4.6.1",
         "@mastra/core": "1.8.0",
         "@mastra/langfuse": "^1.0.3",
         "@mastra/loggers": "^1.0.1",
@@ -605,6 +606,12 @@
     "@jsep-plugin/regex": ["@jsep-plugin/regex@1.0.4", "", { "peerDependencies": { "jsep": "^0.4.0||^1.0.0" } }, "sha512-q7qL4Mgjs1vByCaTnDFcBnV9HS7GVPJX5vyVoCgZHNSC9rjwIlmbXG5sUuorR5ndfHAIlJ8pVStxvjXHbNvtUg=="],
 
     "@jsep-plugin/ternary": ["@jsep-plugin/ternary@1.1.4", "", { "peerDependencies": { "jsep": "^0.4.0||^1.0.0" } }, "sha512-ck5wiqIbqdMX6WRQztBL7ASDty9YLgJ3sSAK5ZpBzXeySvFGCzIvM6UiAI4hTZ22fEcYQVV/zhUbNscggW+Ukg=="],
+
+    "@langfuse/client": ["@langfuse/client@4.6.1", "", { "dependencies": { "@langfuse/core": "^4.6.1", "@langfuse/tracing": "^4.6.1", "mustache": "^4.2.0" }, "peerDependencies": { "@opentelemetry/api": "^1.9.0" } }, "sha512-/jR/a/tJx7gZtrPla56IfG2/B9+QabZzdATXPgdUAph4Nc87Kaj9O5jHvm3y1n7JJTqfAvAvYL9lWq8jjSEAMw=="],
+
+    "@langfuse/core": ["@langfuse/core@4.6.1", "", { "peerDependencies": { "@opentelemetry/api": "^1.9.0" } }, "sha512-DtQoKWHQh0I0MsJxcKrBQVKAJ3fea6+raXlISVY3NDMFG/zSKkdkNouQvUXQtSCHBbOFupHMBw8imM30lbhq3g=="],
+
+    "@langfuse/tracing": ["@langfuse/tracing@4.6.1", "", { "dependencies": { "@langfuse/core": "^4.6.1" }, "peerDependencies": { "@opentelemetry/api": "^1.9.0" } }, "sha512-Ld1bPU6RxzifgGEDtN70Og8u2eL906jtnnEnt62BEOcML8UUiMgzwAKZDBbIjF2midnfac7Xnho3s546fcCDtQ=="],
 
     "@lezer/common": ["@lezer/common@1.5.1", "", {}, "sha512-6YRVG9vBkaY7p1IVxL4s44n5nUnaNnGM2/AckNgYOnxTG2kWh1vR8BMxPseWPjRNpb5VtXnMpeYAEAADoRV1Iw=="],
 

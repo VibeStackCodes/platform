@@ -57,8 +57,8 @@ function buildTools(provider: ProviderType = 'openai') {
   return { ...BASE_TOOLS, webSearch: WEB_SEARCH_TOOLS[provider] }
 }
 
-/** System prompt for the orchestrator */
-const ORCHESTRATOR_PROMPT = `You are a world-class app builder. You take a user's description and build a complete, polished web application.
+/** System prompt for the orchestrator (exported for seed script) */
+export const ORCHESTRATOR_PROMPT = `You are a world-class app builder. You take a user's description and build a complete, polished web application.
 
 ## Your Environment
 
@@ -158,14 +158,14 @@ Use the VibeStack image resolver for all photos: \`https://img.vibestack.site/s/
  * (storage, logger, observability). For per-request agents created by the
  * route handler, call `agent.__registerMastra(mastra)` manually.
  */
-export function createOrchestrator(provider: ProviderType = 'openai'): Agent {
+export function createOrchestrator(provider: ProviderType = 'openai', promptOverride?: string): Agent {
   return new Agent({
     id: 'orchestrator',
     name: 'Orchestrator',
     model: orchestratorModel,
     memory,
     description: 'Single orchestrator that builds apps from user descriptions',
-    instructions: ORCHESTRATOR_PROMPT,
+    instructions: promptOverride ?? ORCHESTRATOR_PROMPT,
     tools: buildTools(provider),
     defaultOptions: {
       maxSteps: 50,

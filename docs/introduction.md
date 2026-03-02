@@ -24,7 +24,7 @@ The platform consists of:
 - **Code Editing**: Relace Instant Apply for efficient file modifications
 - **Payments**: Stripe checkout + webhooks for credit-based billing
 - **Deployment**: Vercel (app hosting) + GitHub App (repo creation)
-- **Observability**: Sentry (errors + performance + structured logs + cron monitoring), Langfuse (LLM traces) — all optional
+- **Observability**: Sentry (errors + performance + structured logs + cron monitoring), Langfuse (LLM traces enriched with user/project/model metadata, build-success + token-efficiency scoring, prompt management with versioning) — all optional
 
 ### Model Routing
 

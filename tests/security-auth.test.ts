@@ -43,6 +43,11 @@ vi.mock('@server/lib/agents/provider', () => ({
   isAllowedModel: vi.fn(),
   createDirectProvider: vi.fn(() => vi.fn()),
   createAgentModelResolver: vi.fn(() => () => 'mock-model'),
+  MODEL_CONFIGS: {
+    'gpt-5.2-codex': { provider: 'openai', modelId: 'gpt-5.2-codex' },
+    'claude-opus-4-6': { provider: 'anthropic', modelId: 'claude-opus-4-6' },
+    'claude-sonnet-4-6': { provider: 'anthropic', modelId: 'claude-sonnet-4-6' },
+  },
   PIPELINE_MODELS: {
     orchestrator: 'gpt-5.2',
     codegen: 'gpt-5.2-codex',

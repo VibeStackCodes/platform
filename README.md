@@ -24,7 +24,7 @@ flowchart TD
     AI --> CodeEdit
 
     Sentry["Sentry\nErrors + Performance + Logs"]
-    Langfuse["Langfuse\nLLM Traces + Token Costs"]
+    Langfuse["Langfuse\nLLM Traces + Scoring + Prompt Mgmt"]
 
     API -.->|observability| Sentry
     API -.->|observability| Langfuse
@@ -71,7 +71,7 @@ flowchart TD
 | Service | Purpose | Tier | Dashboard | Env Vars |
 |---------|---------|------|-----------|----------|
 | [Sentry](https://sentry.io) | Errors + performance + structured logs + cron monitoring (client + server + AI) | Free tier | [sentry.io](https://sentry.io) | `VITE_SENTRY_DSN`, `SENTRY_DSN` |
-| [Langfuse](https://langfuse.com) | LLM observability (traces, token costs) | Free tier | [cloud.langfuse.com](https://cloud.langfuse.com) | `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_BASEURL` |
+| [Langfuse](https://langfuse.com) | LLM observability (traces enriched with user/project/model metadata, build-success + token-efficiency scoring, prompt management with versioning) | Free tier | [cloud.langfuse.com](https://cloud.langfuse.com) | `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_BASEURL` |
 
 ### CI/CD & Testing
 

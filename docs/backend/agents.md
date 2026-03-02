@@ -17,7 +17,7 @@ The agent entry point is `POST /api/agent` which streams `AgentStreamEvent` SSE 
 
 **Factory function**:
 ```typescript
-export function createOrchestrator(provider: ProviderType = 'openai'): Agent
+export function createOrchestrator(provider: ProviderType = 'openai', promptOverride?: string): Agent
 ```
 
 The factory creates a fresh `Agent` instance per request (not a singleton). This is required because the provider-specific web search tool (`openai.tools.webSearch()` vs `anthropic.tools.webSearch_20250305()`) must be baked in at construction time.
@@ -29,7 +29,7 @@ new Agent({
   name: 'Orchestrator',
   model: orchestratorModel,          // resolved from RequestContext at call time
   memory,                             // SafeMemory from memory.ts
-  instructions: ORCHESTRATOR_PROMPT,
+  instructions: promptOverride ?? ORCHESTRATOR_PROMPT,
   tools: buildTools(provider),        // 11 tools + web search
   defaultOptions: {
     maxSteps: 50,
@@ -514,7 +514,7 @@ export const mastra = new Mastra({
 })
 ```
 
-Langfuse is gated on both `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY`. When absent, no traces are exported. The exporter uses `@mastra/langfuse` with `SamplingStrategyType.ALWAYS`.
+Langfuse is gated on both `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY`. When absent, no traces are exported. The exporter uses `@mastra/langfuse` with `SamplingStrategyType.ALWAYS`. Traces are enriched with userId, projectId, model, and provider metadata via `requestContextKeys`. The `@langfuse/client` SDK provides prompt management (versioned orchestrator system prompt in Langfuse UI, falls back to hardcoded `ORCHESTRATOR_PROMPT`) and post-generation scoring (build-success boolean + token-efficiency numeric).
 
 Per-request agents (created in the route handler) call `agent.__registerMastra(mastra)` to wire into this shared instance without being permanently registered in the `agents` map.
 
