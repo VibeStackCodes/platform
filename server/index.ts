@@ -42,12 +42,17 @@ app.use(
         'https://vibestack.com',
         'https://www.vibestack.com',
         'https://app.vibestack.com',
+        'https://vibestackhq.com',
+        'https://www.vibestackhq.com',
+        'https://app.vibestackhq.com',
       ]
       if (process.env.NODE_ENV !== 'production') {
         allowed.push('http://localhost:3000', 'http://localhost:5173')
       }
-      // Only allow our own Vercel deployments (vibestack-*.vercel.app)
-      const isAllowedVercel = (origin ?? '').match(/^https:\/\/vibestack-[a-z0-9-]+\.vercel\.app$/)
+      // Allow our own Vercel deployments from both project patterns
+      const isAllowedVercel = (origin ?? '').match(
+        /^https:\/\/(vibestack|platform)-[a-z0-9-]+\.vercel\.app$/,
+      )
       return allowed.includes(origin ?? '') || isAllowedVercel ? origin! : allowed[0]
     },
     credentials: true,
@@ -261,9 +266,8 @@ export type AppType = typeof routes
 // Named export for type inference (used by app.ts `import type`)
 export { app }
 
-// Default export: Vercel serverless handler
-// - Vercel: api/index.js imports this via esbuild bundle
-// - Dev server: Bun.serve uses app.fetch directly below
+// Default export: Vercel serverless handler (zero-config Hono via app.ts)
+// Dev server: Bun.serve uses app.fetch directly below
 export default handle(app)
 
 // Dev server — Bun runtime (Vite proxies /api → localhost:8787)

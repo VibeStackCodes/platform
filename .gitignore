@@ -60,8 +60,6 @@ yarn-error.log*
 # Supabase CLI temp
 supabase/.temp/
 
-# esbuild server bundle build artifacts
-api/index.js.map
 
 # Storybook
 dist/storybook/
