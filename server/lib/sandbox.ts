@@ -306,7 +306,7 @@ async function waitForServerReady(
       const httpCode = result.result.trim()
       // Valid HTTP codes are exactly 3 digits (e.g. "200", "302").
       // curl may return "000" (connection refused) or "000000" (multiple failures).
-      if (/^[1-5]\d{2}$/.test(httpCode)) {
+      if (/^[23]\d{2}$/.test(httpCode)) {
         console.log(`✓ Server ready on port ${port} (HTTP ${httpCode})`)
         return
       }
