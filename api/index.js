@@ -1,3 +1,0 @@
-// Placeholder — overwritten by esbuild during `bun run build`.
-// CJS format (see api/package.json). Committed for Vercel function detection.
-module.exports.default = (req, res) => { res.statusCode = 503; res.end('Build not run'); };
