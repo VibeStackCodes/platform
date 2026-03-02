@@ -15,13 +15,19 @@ import { Hono } from 'hono'
 import { z } from 'zod'
 import {
   buildProxyUrl,
-  findSandboxByProject,
+  createSandbox,
   getPreviewUrl,
+  getSandbox,
+  runCommand,
   waitForCodeServer,
   waitForDevServer,
 } from '../lib/sandbox'
-import { getProject } from '../lib/db/queries'
+import { getProject, updateProject } from '../lib/db/queries'
+import { getInstallationToken } from '../lib/github'
 import { authMiddleware } from '../middleware/auth'
+
+// In-memory guard to prevent duplicate sandbox recreation from rapid polling
+const recreatingProjects = new Set<string>()
 
 // ---------------------------------------------------------------------------
 // Zod schemas for OpenAPI metadata
@@ -33,6 +39,7 @@ const SandboxUrlsResponseSchema = z.object({
   previewToken: z.string().nullable(),
   codeServerUrl: z.string().nullable(),
   expiresAt: z.string().datetime().nullable(),
+  recreating: z.boolean().optional(),
 })
 
 const ErrorSchema = z.object({ error: z.string() })
@@ -91,8 +98,27 @@ sandboxUrlRoutes.get(
       return c.json({ error: 'Project not found' }, 404)
     }
 
-    const sandbox = await findSandboxByProject(id)
-    if (!sandbox) {
+    if (!project.sandboxId) {
+      return c.json({ previewUrl: null, codeServerUrl: null, expiresAt: null })
+    }
+
+    let sandbox
+    try {
+      sandbox = await getSandbox(project.sandboxId)
+    } catch {
+      // Sandbox expired/deleted — attempt recreation if we have a GitHub repo
+      if (project.githubRepoUrl && !recreatingProjects.has(id)) {
+        recreatingProjects.add(id)
+        // Fire-and-forget: create sandbox, clone repo, start dev server
+        recreateSandbox(id, user.id, project.githubRepoUrl).finally(() => {
+          recreatingProjects.delete(id)
+        })
+        return c.json({ previewUrl: null, codeServerUrl: null, expiresAt: null, recreating: true })
+      }
+      // Already recreating — tell client to keep waiting
+      if (recreatingProjects.has(id)) {
+        return c.json({ previewUrl: null, codeServerUrl: null, expiresAt: null, recreating: true })
+      }
       return c.json({ previewUrl: null, codeServerUrl: null, expiresAt: null })
     }
 
@@ -125,3 +151,50 @@ sandboxUrlRoutes.get(
     }
   },
 )
+
+// ---------------------------------------------------------------------------
+// Sandbox Recreation
+// ---------------------------------------------------------------------------
+
+/**
+ * Recreate a sandbox for a completed project whose original sandbox expired.
+ *
+ * 1. Create fresh sandbox from snapshot (entrypoint starts tmux + dev server)
+ * 2. Clone the project's GitHub repo into /workspace
+ * 3. Install dependencies (may differ from snapshot template)
+ * 4. Dev server auto-restarts via Vite file watching
+ * 5. Update project record with new sandboxId
+ */
+async function recreateSandbox(
+  projectId: string,
+  userId: string,
+  githubRepoUrl: string,
+): Promise<void> {
+  console.log(`[sandbox-recreation] Starting for project ${projectId}`)
+
+  const sandbox = await createSandbox({
+    labels: { project: projectId, recreated: 'true' },
+  })
+
+  // Update project's sandboxId immediately so subsequent polls find this sandbox
+  await updateProject(projectId, { sandboxId: sandbox.id }, userId)
+  console.log(`[sandbox-recreation] Sandbox ${sandbox.id} created, DB updated`)
+
+  // Clone the project's GitHub repo over the template scaffold
+  const token = await getInstallationToken()
+  const authedUrl = githubRepoUrl.replace('https://', `https://x-access-token:${token}@`)
+
+  await runCommand(
+    sandbox,
+    `cd /workspace && git remote add github ${authedUrl} && git fetch github main && git reset --hard github/main`,
+    'sandbox-restore',
+    { timeout: 60 },
+  )
+  console.log(`[sandbox-recreation] Repo cloned into sandbox ${sandbox.id}`)
+
+  // Reinstall deps in case the project added packages beyond the snapshot template
+  await runCommand(sandbox, 'cd /workspace && bun install', 'sandbox-restore-install', {
+    timeout: 120,
+  })
+  console.log(`[sandbox-recreation] Dependencies installed, sandbox ${sandbox.id} ready`)
+}

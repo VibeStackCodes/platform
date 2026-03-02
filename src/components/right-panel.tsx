@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
-import { useRef } from 'react'
-import { Code, Eye, FileText, GitCompareArrows, X } from 'lucide-react'
+import { useRef, useState } from 'react'
+import { Code, Code2, Eye, FileText, GitCompareArrows, Loader2, Rocket, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { DiffViewer } from '@/components/ai-elements/diff-viewer'
 import { SaveIndicator } from '@/components/save-indicator'
@@ -20,10 +20,15 @@ interface RightPanelProps {
   content: PanelContent
   previewUrl?: string
   codeServerUrl?: string
+  projectName?: string
+  sandboxRecreating?: boolean
   onDragStart: (e: React.MouseEvent) => void
   onClose: () => void
   onSave?: (content: string) => void
+  onDeploy?: () => void
 }
+
+// ── Helpers for non-preview content types ────────────────────────────
 
 function getContentTitle(content: PanelContent): string {
   if (!content) return ''
@@ -42,13 +47,6 @@ function getContentTitle(content: PanelContent): string {
 function getContentBadge(content: PanelContent): ReactNode {
   if (!content) return null
   switch (content.type) {
-    case 'preview':
-      return (
-        <span className="flex items-center gap-1 rounded-full bg-blue-500/15 px-2 py-0.5 text-xs font-medium text-blue-400">
-          <Eye className="h-3 w-3" />
-          Preview
-        </span>
-      )
     case 'code':
       return (
         <span className="flex items-center gap-1 rounded-full bg-purple-500/15 px-2 py-0.5 text-xs font-medium text-purple-400">
@@ -70,12 +68,16 @@ function getContentBadge(content: PanelContent): ReactNode {
           Artifact
         </span>
       )
+    default:
+      return null
   }
 }
 
 function isEditable(content: PanelContent): boolean {
   return content?.type === 'artifact' || content?.type === 'code'
 }
+
+// ── Editable body components ─────────────────────────────────────────
 
 function EditableArtifactBody({
   content,
@@ -142,33 +144,141 @@ function EditableCodeBody({
   )
 }
 
-function PanelBody({
-  content,
+// ── Preview with tabs (eye/code toggle) ──────────────────────────────
+
+function PreviewWithTabs({
   previewUrl,
-  codeServerUrl: _codeServerUrl,
+  codeServerUrl,
+  projectName,
+  sandboxRecreating,
+  onDeploy,
+  onClose,
+}: {
+  previewUrl?: string
+  codeServerUrl?: string
+  projectName?: string
+  sandboxRecreating?: boolean
+  onDeploy?: () => void
+  onClose: () => void
+}) {
+  const [activeTab, setActiveTab] = useState<'preview' | 'code'>('preview')
+
+  return (
+    <>
+      {/* Header with tab toggle */}
+      <div className="flex shrink-0 items-center justify-between border-b px-3 py-2">
+        <div className="flex items-center gap-3">
+          {/* View toggle */}
+          <div className="flex rounded-lg bg-muted p-0.5">
+            <button
+              type="button"
+              onClick={() => setActiveTab('preview')}
+              className={cn(
+                'rounded-md px-2 py-1 transition-colors',
+                activeTab === 'preview'
+                  ? 'bg-background shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground',
+              )}
+              aria-label="Preview"
+            >
+              <Eye size={14} />
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('code')}
+              className={cn(
+                'rounded-md px-2 py-1 transition-colors',
+                activeTab === 'code'
+                  ? 'bg-background shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground',
+                !codeServerUrl && 'pointer-events-none opacity-40',
+              )}
+              aria-label="Code"
+              disabled={!codeServerUrl}
+            >
+              <Code2 size={14} />
+            </button>
+          </div>
+          {/* Project name */}
+          {projectName && <span className="text-sm font-medium">{projectName}</span>}
+          <span className="text-xs text-muted-foreground">React</span>
+        </div>
+
+        <div className="flex items-center gap-2">
+          {onDeploy && (
+            <button
+              type="button"
+              onClick={onDeploy}
+              className="inline-flex items-center gap-1.5 rounded-full bg-primary px-3 py-1 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+            >
+              <Rocket size={12} />
+              Deploy
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={onClose}
+            className={cn(
+              'flex h-7 w-7 items-center justify-center rounded-md',
+              'text-muted-foreground transition-colors',
+              'hover:bg-muted hover:text-foreground',
+            )}
+            aria-label="Close panel"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      </div>
+
+      {/* Content */}
+      <div className="min-h-0 flex-1 overflow-hidden">
+        {activeTab === 'preview' ? (
+          previewUrl ? (
+            <iframe
+              key={previewUrl}
+              src={previewUrl}
+              className="h-full w-full border-0"
+              title="Preview"
+              sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+            />
+          ) : (
+            <div className="flex h-full flex-col items-center justify-center gap-3 text-sm text-muted-foreground">
+              {sandboxRecreating && <Loader2 className="h-5 w-5 animate-spin" />}
+              {sandboxRecreating
+                ? 'Recreating sandbox — your app will appear shortly...'
+                : 'Waiting for preview...'}
+            </div>
+          )
+        ) : codeServerUrl ? (
+          <iframe
+            key={codeServerUrl}
+            src={codeServerUrl}
+            className="h-full w-full border-0"
+            title="Code Editor"
+            sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+          />
+        ) : (
+          <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+            Code editor not available
+          </div>
+        )}
+      </div>
+    </>
+  )
+}
+
+// ── Non-preview body renderer ────────────────────────────────────────
+
+function NonPreviewBody({
+  content,
   onInput,
 }: {
   content: PanelContent
-  previewUrl?: string
-  codeServerUrl?: string
   onInput: (text: string) => void
 }) {
   if (!content) return null
 
   switch (content.type) {
-    case 'preview': {
-      const src = content.previewUrl || previewUrl
-      if (!src) return null
-      return (
-        <iframe
-          key={src}
-          src={src}
-          className="h-full w-full border-0"
-          title="Preview"
-          sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
-        />
-      )
-    }
     case 'code':
       return <EditableCodeBody filename={content.filename} code={content.code} onInput={onInput} />
     case 'diff':
@@ -182,8 +292,12 @@ function PanelBody({
       )
     case 'artifact':
       return <EditableArtifactBody content={content.content} onInput={onInput} />
+    default:
+      return null
   }
 }
+
+// ── Main RightPanel ──────────────────────────────────────────────────
 
 export function RightPanel({
   isOpen,
@@ -192,9 +306,12 @@ export function RightPanel({
   content,
   previewUrl,
   codeServerUrl,
+  projectName,
+  sandboxRecreating,
   onDragStart,
   onClose,
   onSave,
+  onDeploy,
 }: RightPanelProps) {
   const { status: saveStatus, trigger: triggerSave } = useDebouncedSave({ onSave })
 
@@ -207,9 +324,7 @@ export function RightPanel({
     transition: isDragging ? 'none' : 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
   }
 
-  const title = getContentTitle(content)
-  const badge = getContentBadge(content)
-  const showCodeServerTab = content?.type === 'preview' && !!codeServerUrl
+  const isPreviewMode = content?.type === 'preview'
   const showSaveIndicator = isEditable(content)
 
   return (
@@ -238,55 +353,50 @@ export function RightPanel({
         />
       </div>
 
-      {/* Panel header */}
-      <div className="flex shrink-0 items-center gap-2 border-b border-border px-4 py-2.5">
-        <div className="flex min-w-0 flex-1 items-center gap-2">
-          <span className="truncate text-sm font-medium text-foreground">{title}</span>
-          {badge}
-        </div>
-
-        {showCodeServerTab && codeServerUrl && (
-          <a
-            href={codeServerUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className={cn(
-              'flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium',
-              'bg-muted text-muted-foreground transition-colors',
-              'hover:bg-muted/80 hover:text-foreground',
-            )}
-          >
-            <Code className="h-3 w-3" />
-            Code
-          </a>
-        )}
-
-        {showSaveIndicator && <SaveIndicator status={saveStatus} />}
-
-        <button
-          type="button"
-          onClick={onClose}
-          className={cn(
-            'flex h-7 w-7 items-center justify-center rounded-md',
-            'text-muted-foreground transition-colors',
-            'hover:bg-muted hover:text-foreground',
-            'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring',
-          )}
-          aria-label="Close panel"
-        >
-          <X className="h-4 w-4" />
-        </button>
-      </div>
-
-      {/* Panel body */}
-      <div className="min-h-0 flex-1">
-        <PanelBody
-          content={content}
-          previewUrl={previewUrl}
+      {isPreviewMode ? (
+        /* Preview mode: tab toggle header + iframe body */
+        <PreviewWithTabs
+          previewUrl={content.previewUrl?.trim() || previewUrl}
           codeServerUrl={codeServerUrl}
-          onInput={triggerSave}
+          projectName={projectName}
+          sandboxRecreating={sandboxRecreating}
+          onDeploy={onDeploy}
+          onClose={onClose}
         />
-      </div>
+      ) : (
+        <>
+          {/* Non-preview header */}
+          <div className="flex shrink-0 items-center gap-2 border-b border-border px-4 py-2.5">
+            <div className="flex min-w-0 flex-1 items-center gap-2">
+              <span className="truncate text-sm font-medium text-foreground">
+                {getContentTitle(content)}
+              </span>
+              {getContentBadge(content)}
+            </div>
+
+            {showSaveIndicator && <SaveIndicator status={saveStatus} />}
+
+            <button
+              type="button"
+              onClick={onClose}
+              className={cn(
+                'flex h-7 w-7 items-center justify-center rounded-md',
+                'text-muted-foreground transition-colors',
+                'hover:bg-muted hover:text-foreground',
+                'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring',
+              )}
+              aria-label="Close panel"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+
+          {/* Non-preview body */}
+          <div className="min-h-0 flex-1">
+            <NonPreviewBody content={content} onInput={triggerSave} />
+          </div>
+        </>
+      )}
     </div>
   )
 }

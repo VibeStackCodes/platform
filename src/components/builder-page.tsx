@@ -10,6 +10,7 @@ import type { ElementContext } from '@/lib/types'
 
 interface BuilderPageProps {
   projectId: string
+  projectName?: string
   initialPrompt?: string
   initialSandboxId?: string
 }
@@ -17,12 +18,13 @@ interface BuilderPageProps {
 // Refresh signed URLs 10 min before 1h expiry
 const REFRESH_BEFORE_EXPIRY_MS = 10 * 60 * 1000
 
-export function BuilderPage({ projectId, initialPrompt, initialSandboxId }: BuilderPageProps) {
+export function BuilderPage({ projectId, projectName, initialPrompt, initialSandboxId }: BuilderPageProps) {
   const [panelContent, setPanelContent] = useState<PanelContent>(null)
   const [_sandboxId, setSandboxId] = useState(initialSandboxId)
   const [previewUrl, setPreviewUrl] = useState<string>()
   const [codeServerUrl, setCodeServerUrl] = useState<string>()
   const [expiresAt, setExpiresAt] = useState<string>()
+  const [sandboxRecreating, setSandboxRecreating] = useState(false)
   const [selectedElement, setSelectedElement] = useState<ElementContext | null>(null)
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
   const panel = useResizablePanel()
@@ -38,21 +40,36 @@ export function BuilderPage({ projectId, initialPrompt, initialSandboxId }: Buil
         previewUrl: string
         codeServerUrl: string
         expiresAt: string
+        recreating?: boolean
       } | null>
     },
-    refetchInterval: previewUrl ? false : 2000,
+    refetchInterval: previewUrl ? false : sandboxRecreating ? 3000 : 2000,
     enabled: !previewUrl && !!projectId,
   })
 
-  // Update local state when query data arrives
+  // Update local state when query data arrives + auto-open preview panel
   useEffect(() => {
+    if (sandboxUrls?.recreating) {
+      setSandboxRecreating(true)
+      // Auto-open preview panel so user sees the "recreating" status
+      if (!panelContent) {
+        setPanelContent({ type: 'preview', previewUrl: '' })
+        panel.open()
+      }
+    }
     if (sandboxUrls?.previewUrl) {
+      setSandboxRecreating(false)
       setSandboxId(sandboxUrls.sandboxId)
       setPreviewUrl(sandboxUrls.previewUrl)
       setCodeServerUrl(sandboxUrls.codeServerUrl)
       setExpiresAt(sandboxUrls.expiresAt)
+      // Auto-open preview if panel isn't already showing something
+      if (!panelContent) {
+        setPanelContent({ type: 'preview', previewUrl: '' })
+        panel.open()
+      }
     }
-  }, [sandboxUrls])
+  }, [sandboxUrls, panelContent, panel])
 
   // Fetch sandbox URLs imperatively (for refresh and post-generation)
   const fetchSandboxUrls = useCallback(async (): Promise<boolean> => {
@@ -121,6 +138,14 @@ export function BuilderPage({ projectId, initialPrompt, initialSandboxId }: Buil
     [panel],
   )
 
+  const handleDeploy = useCallback(async () => {
+    await apiFetch('/api/projects/deploy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projectId }),
+    })
+  }, [projectId])
+
   return (
     <div ref={panel.containerRef} className="flex h-screen overflow-hidden">
       <ChatColumn
@@ -139,8 +164,11 @@ export function BuilderPage({ projectId, initialPrompt, initialSandboxId }: Buil
         content={panelContent}
         previewUrl={previewUrl}
         codeServerUrl={codeServerUrl}
+        projectName={projectName}
+        sandboxRecreating={sandboxRecreating}
         onDragStart={panel.handleDragStart}
         onClose={panel.close}
+        onDeploy={handleDeploy}
       />
     </div>
   )
