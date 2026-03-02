@@ -19,9 +19,22 @@ await build({
   outfile: 'api/index.js',
   // Use ESM entry points for dual-published packages (fixes jsonc-parser)
   mainFields: ['module', 'main'],
-  // Keep the default export compatible with Vercel's handler detection
+  // Provide a real require() for CJS packages bundled into ESM output.
+  // esbuild replaces require() with a throwing __require() stub in ESM format —
+  // any CJS package calling require("url"), require("events"), etc. will crash.
+  // createRequire() restores Node.js built-in resolution for these calls.
+  // Docs: https://github.com/evanw/esbuild/issues/1921
+  //       https://github.com/aws/aws-sam-cli/issues/4827
   banner: {
-    js: '// Bundled by esbuild for Vercel serverless',
+    js: [
+      '// Bundled by esbuild for Vercel serverless',
+      "import { createRequire as __createRequire } from 'module';",
+      "import { dirname as __bundleDirname } from 'path';",
+      "import { fileURLToPath as __bundleFileURLToPath } from 'url';",
+      'const require = __createRequire(import.meta.url);',
+      'const __filename = __bundleFileURLToPath(import.meta.url);',
+      'const __dirname = __bundleDirname(__filename);',
+    ].join('\n'),
   },
   // Externalize nothing — bundle everything into one file
   external: [],
