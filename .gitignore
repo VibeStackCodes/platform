@@ -17,7 +17,6 @@
 
 # build output
 /dist/
-api/index.mjs
 
 # misc
 .DS_Store
