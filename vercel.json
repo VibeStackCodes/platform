@@ -1,6 +1,12 @@
 {
   "buildCommand": "bun run build",
   "outputDirectory": "dist/client",
+  "functions": {
+    "api/index.mjs": {
+      "maxDuration": 300,
+      "memory": 1024
+    }
+  },
   "headers": [
     {
       "source": "/assets/(.*)",
@@ -13,7 +19,7 @@
     }
   ],
   "rewrites": [
-    { "source": "/api/:path*", "destination": "/api" },
+    { "source": "/api/:path*", "destination": "/api/index.mjs" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
