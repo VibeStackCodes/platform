@@ -4,6 +4,7 @@ import { Hono } from 'hono'
 import { z } from 'zod'
 import { createProject, getProject, getProjectMessages, getUserProjects } from '../lib/db/queries'
 import { authMiddleware } from '../middleware/auth'
+import { TOOL_LABELS, INTERNAL_TOOLS } from '../lib/tool-labels'
 
 // ---------------------------------------------------------------------------
 // Shared Zod schemas — used in describeRoute() responses and request bodies
@@ -281,23 +282,28 @@ projectRoutes.get(
         resourceId: user.id,
       })
       if (result.messages.length > 0) {
-        // Convert Mastra messages to the format the client expects
-        const converted = result.messages.map((msg) => {
-          // Extract text from Mastra's MastraMessageContentV2
-          // Content can be: string, JSON string, or object { format: 2, parts: [...] }
-          let textContent = ''
+        // Build a flat array of events: messages + tool_complete entries
+        // biome-ignore lint/suspicious/noExplicitAny: Mastra message content type is opaque
+        const events: any[] = []
+
+        for (const msg of result.messages) {
+          // Skip tool-role messages entirely (these are Mastra's tool result records)
+          if (msg.role === 'tool') continue
+
           // biome-ignore lint/suspicious/noExplicitAny: Mastra content type is opaque
           const content = msg.content as any
+          let textContent = ''
+          // biome-ignore lint/suspicious/noExplicitAny: parts shape varies
+          let parts: any[] | null = null
 
+          // Extract parts array from content (string JSON or object)
           if (typeof content === 'string') {
-            // Could be plain text or JSON-encoded format 2
             try {
               const parsed = JSON.parse(content)
               if (parsed?.parts && Array.isArray(parsed.parts)) {
-                textContent = parsed.parts
-                  .filter((p: { type: string }) => p.type === 'text')
-                  .map((p: { text: string }) => p.text ?? '')
-                  .join('')
+                parts = parsed.parts
+              } else if (typeof parsed?.summary === 'string') {
+                textContent = parsed.summary
               } else {
                 textContent = content
               }
@@ -305,30 +311,74 @@ projectRoutes.get(
               textContent = content
             }
           } else if (content && typeof content === 'object') {
-            // Direct object — format 2 with parts array
             if (content.parts && Array.isArray(content.parts)) {
-              textContent = content.parts
-                .filter((p: { type: string }) => p.type === 'text')
-                .map((p: { text: string }) => p.text ?? '')
-                .join('')
+              parts = content.parts
             } else if (Array.isArray(content)) {
-              // Array of content parts (AI SDK CoreMessage format)
-              textContent = content
-                .filter((p: { type: string }) => p.type === 'text')
-                .map((p: { text: string }) => p.text ?? '')
-                .join('')
+              parts = content
             }
           }
 
-          return {
+          // Process parts array: extract text and tool-invocations
+          if (parts) {
+            const textParts: string[] = []
+            for (const part of parts) {
+              if (part.type === 'text' && part.text) {
+                textParts.push(part.text)
+              } else if (part.type === 'tool-invocation' && part.toolInvocation) {
+                const inv = part.toolInvocation
+                const toolName = inv.toolName ?? inv.name ?? 'unknown'
+
+                // Skip internal tools
+                if (INTERNAL_TOOLS.has(toolName)) continue
+
+                // Derive label from TOOL_LABELS
+                const labelFn = TOOL_LABELS[toolName]
+                const args = inv.args ?? {}
+                const label = labelFn ? labelFn(args) : toolName
+
+                // Extract file path from args
+                const filePath = (args.path as string) ?? (args.filePath as string) ?? undefined
+
+                events.push({
+                  id: `tool-${msg.id}-${toolName}-${events.length}`,
+                  role: 'assistant',
+                  type: 'tool_complete',
+                  tool: toolName,
+                  label,
+                  filePath,
+                  args,
+                  createdAt: msg.createdAt,
+                })
+              }
+            }
+            textContent = textParts.join('')
+          }
+
+          // Second pass: extract summary from structured output JSON
+          if (textContent.startsWith('{') && textContent.includes('"summary"')) {
+            try {
+              const parsed = JSON.parse(textContent)
+              if (typeof parsed?.summary === 'string') {
+                textContent = parsed.summary
+              }
+            } catch {
+              // Not valid JSON, keep as-is
+            }
+          }
+
+          // Only add text messages that have actual content
+          if (msg.role === 'assistant' && !textContent.trim()) continue
+
+          events.push({
             id: msg.id,
             role: msg.role,
             type: 'message',
             parts: [{ text: textContent }],
             createdAt: msg.createdAt,
-          }
-        })
-        return c.json(converted)
+          })
+        }
+
+        return c.json(events)
       }
     } catch {
       // Mastra memory unavailable, fall back to chatMessages
