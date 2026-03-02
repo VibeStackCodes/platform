@@ -27,11 +27,16 @@ RUN git clone --depth 1 ${TEMPLATE_REPO} . \
     && git add -A \
     && git commit -m "Initial commit"
 
+# Overlay local scaffold files (vite.config, etc.) on top of template repo
+# scaffold/ is the source of truth — template repo may lag behind
+COPY scaffold/vite.config.ts /workspace/vite.config.ts
+
 # Install dependencies from committed lockfile (deterministic, no resolution needed)
 RUN bun install --frozen-lockfile
 
 # Warm Vite cache by running a dev build
 # Creates .vite/ dep pre-bundle — saves ~5-10s on first dev server start
+# optimizeDeps.include in vite.config.ts ensures ALL deps are pre-bundled here
 RUN timeout 30 bun run dev &>/dev/null & sleep 10 && kill %1 2>/dev/null || true
 
 # Warm TypeScript cache
