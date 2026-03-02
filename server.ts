@@ -1,4 +1,3 @@
-// Vercel zero-config Hono entry point
-// Vercel detects this file and deploys the Hono app with Fluid Compute.
-// See: https://vercel.com/docs/frameworks/backend/hono
+// Vercel zero-config Hono entry point (unused for now — hybrid SPA + API
+// uses api/index.ts instead). Kept for future migration to pure Hono backend.
 export { default } from './server/index'
