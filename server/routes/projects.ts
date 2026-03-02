@@ -28,6 +28,7 @@ const ProjectSchema = z.object({
   prompt: z.string().nullable(),
   status: ProjectStatusSchema,
   previewUrl: z.string().nullable(),
+  deployUrl: z.string().nullable(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 })

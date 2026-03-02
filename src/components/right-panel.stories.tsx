@@ -44,8 +44,10 @@ const sharedArgs = {
   onDragStart: fn(),
   onClose: fn(),
   onSave: fn(),
+  onDeploy: fn(),
   isDragging: false,
   width: 50,
+  deployState: 'idle' as const,
 }
 
 const meta = {
@@ -191,6 +193,42 @@ export const NarrowWidth: Story = {
       type: 'preview',
       previewUrl: 'https://example.com',
     },
+  },
+}
+
+export const DeployingState: Story = {
+  args: {
+    isOpen: true,
+    content: { type: 'preview', previewUrl: 'https://example.com' },
+    previewUrl: 'https://example.com',
+    deployState: 'deploying',
+  },
+}
+
+export const DeployedState: Story = {
+  args: {
+    isOpen: true,
+    content: { type: 'preview', previewUrl: 'https://example.com' },
+    previewUrl: 'https://example.com',
+    deployState: 'deployed',
+    deployUrl: 'https://my-app.vibestack.site',
+  },
+}
+
+export const DeployErrorState: Story = {
+  args: {
+    isOpen: true,
+    content: { type: 'preview', previewUrl: 'https://example.com' },
+    previewUrl: 'https://example.com',
+    deployState: 'error',
+  },
+}
+
+export const SandboxRecreating: Story = {
+  args: {
+    isOpen: true,
+    content: { type: 'preview', previewUrl: '' },
+    sandboxRecreating: true,
   },
 }
 
