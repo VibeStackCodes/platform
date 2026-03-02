@@ -8,7 +8,7 @@ buildSync({
   bundle: true,
   platform: 'node',
   format: 'esm',
-  outfile: 'api/index.mjs',
+  outfile: 'api/index.js',
   minify: true,
   treeShaking: true,
   // Node.js built-in modules can't be bundled — polyfill require() for CJS deps
@@ -17,4 +17,4 @@ buildSync({
   },
 })
 
-console.log('Server bundled to api/index.mjs')
+console.log('Server bundled to api/index.js')
