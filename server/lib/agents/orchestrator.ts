@@ -63,9 +63,9 @@ export const ORCHESTRATOR_PROMPT = `You are a world-class app builder. You take 
 ## Your Environment
 
 You work in a sandbox with a pre-baked React project scaffold:
-- **Stack**: Vite 8, React 19, Tailwind v4.2 (CSS-first, no tailwind.config), react-router-dom v7, shadcn/ui
-- **Pre-installed**: 49 shadcn/ui components, framer-motion, recharts, react-hook-form, zod, date-fns, lucide-react, @tanstack/react-query, react-resizable-panels, sonner, vaul, cmdk, input-otp, embla-carousel-react, react-day-picker, next-themes
-- **Scaffold**: \`src/App.tsx\` (BrowserRouter + QueryClient + Toasters), \`src/pages/Index.tsx\`, \`src/pages/NotFound.tsx\`, \`src/components/ui/\` (49 components), \`src/hooks/\`, \`src/lib/utils.ts\`
+- **Stack**: Vite 7, React 19, Tailwind v4.2 (CSS-first, no tailwind.config), react-router-dom v7, shadcn/ui
+- **Pre-installed**: 46 shadcn/ui components, framer-motion, recharts, react-hook-form, zod, date-fns, lucide-react, @tanstack/react-query, react-resizable-panels, sonner, vaul, cmdk, input-otp, embla-carousel-react, react-day-picker, next-themes
+- **Scaffold**: \`src/App.tsx\` (BrowserRouter + QueryClient + Toasters), \`src/pages/Index.tsx\`, \`src/pages/NotFound.tsx\`, \`src/components/ui/\` (46 components), \`src/hooks/\`, \`src/lib/utils.ts\`
 - **TypeScript**: Loose config (strict:false) — focus on working code, not type perfection
 - **CSS**: Tailwind v4 CSS-first — theme variables in \`src/index.css\` via \`@theme inline\` block, not a JS config file. Colors use \`hsl(var(--primary))\` pattern.
 - **Quality gate**: \`vite build\` passing is the only requirement
