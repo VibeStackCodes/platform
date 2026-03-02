@@ -1,6 +1,7 @@
 // Pre-bundle the Hono server for Vercel's serverless runtime.
-// Uses esbuild (not bun build) because esbuild correctly inlines UMD
-// packages like jsonc-parser that use dynamic require() patterns.
+// esbuild bundles everything into a single file. Packages with UMD
+// dynamic require() patterns (jsonc-parser, @sentry/node) are marked
+// external — Vercel's nft traces them from node_modules at deploy time.
 import { buildSync } from 'esbuild'
 
 buildSync({
@@ -11,6 +12,13 @@ buildSync({
   outfile: 'api/index.js',
   minify: true,
   treeShaking: true,
+  // Packages that use UMD/dynamic require() patterns esbuild can't resolve.
+  // nft will trace these from node_modules and include them in the function.
+  external: [
+    'jsonc-parser',        // UMD factory: t("./impl/format"), t("./impl/edit"), etc.
+    '@sentry/node',        // Heavy CJS with native bindings
+    '@sentry/profiling-node',
+  ],
   // Polyfill CJS globals for ESM: require(), __filename, __dirname
   banner: {
     js: [
