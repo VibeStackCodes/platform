@@ -2,7 +2,6 @@
 
 import { Suspense, useEffect } from 'react'
 import { Bot, CheckCircle2, CircleCheck, Loader2 } from 'lucide-react'
-import { GreetingBanner } from '@/components/greeting-banner'
 import { useAgentStream, AGENT_CARD_CONFIG } from '@/hooks/use-agent-stream'
 import { ToolActivity } from '@/components/ai-elements/tool-activity'
 import {
@@ -148,9 +147,7 @@ export function ChatColumn({
       <Conversation>
         <ConversationContent>
           {messages.length === 0 && !showTimeline ? (
-            <div className="flex h-full flex-col items-center justify-center">
-              <GreetingBanner />
-            </div>
+            <div className="flex h-full flex-col items-center justify-center" />
           ) : (
             <>
               {/* Chat Messages */}

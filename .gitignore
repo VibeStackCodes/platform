@@ -17,6 +17,7 @@
 
 # build output
 /dist/
+/api/index.js
 
 # misc
 .DS_Store

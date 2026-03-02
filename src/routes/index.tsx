@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { motion } from 'motion/react'
 import { AppSidebar } from '@/components/app-sidebar'
+import { GreetingBanner } from '@/components/greeting-banner'
 import { HeroPrompt } from '@/components/hero-prompt'
 import { LandingNavbar } from '@/components/landing-navbar'
 import { PerspectiveGrid } from '@/components/perspective-grid'
@@ -34,8 +35,9 @@ function AuthenticatedHome() {
               initial={{ opacity: 0, y: 20, scale: 0.95 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               transition={{ duration: 0.5 }}
-              className="w-full max-w-3xl"
+              className="flex w-full max-w-3xl flex-col items-center gap-6"
             >
+              <GreetingBanner className="text-center text-3xl font-medium text-white/90 md:text-4xl" />
               <HeroPrompt />
             </motion.div>
           </main>

@@ -48,7 +48,7 @@ function pickGreeting(name: string): string {
   return message.replace('{name}', name)
 }
 
-export function GreetingBanner() {
+export function GreetingBanner({ className }: { className?: string }) {
   const { user } = useAuth()
   const name = user?.user_metadata?.full_name?.split(' ')[0] ?? user?.email?.split('@')[0] ?? ''
 
@@ -56,7 +56,7 @@ export function GreetingBanner() {
   const [greeting] = useState(() => pickGreeting(name))
 
   return (
-    <h1 className="text-center text-3xl font-medium text-muted-foreground md:text-4xl">
+    <h1 className={className ?? 'text-center text-3xl font-medium text-muted-foreground md:text-4xl'}>
       {greeting}
     </h1>
   )
