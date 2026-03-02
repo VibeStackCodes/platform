@@ -19,5 +19,5 @@
     "types": ["vite/client"]
   },
   "include": ["src", "server", "server.ts", "api", "vite.config.ts"],
-  "exclude": ["node_modules", "dist", "src/mastra", "server/lib/skills/catalog/theme-*/index.ts"]
+  "exclude": ["node_modules", "dist", "src/mastra", "server/lib/skills/catalog/theme-*/index.ts", "tests", "scripts", "snapshot", "packages", ".storybook"]
 }
