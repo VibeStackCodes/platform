@@ -14,6 +14,7 @@ import { describeRoute, resolver } from 'hono-openapi'
 import { Hono } from 'hono'
 import * as Sentry from '@sentry/node'
 import { RequestContext } from '@mastra/core/di'
+import { traceAgent } from '../sentry'
 import { createOrchestrator } from '../lib/agents/orchestrator'
 import { mastra } from '../lib/agents/mastra'
 import { isAllowedModel, MODEL_CONFIGS } from '../lib/agents/provider'
@@ -468,28 +469,31 @@ agentRoutes.post(
         const agent = createOrchestrator(provider)
         agent.__registerMastra(mastra)
 
-        const streamOutput = await agent.stream(message, {
-          requestContext,
-          memory: {
-            thread: projectId,
-            resource: user.id,
-          },
-          maxSteps: 50,
-          savePerStep: true,
-          abortSignal: signal,
-          structuredOutput: {
-            schema: z.object({
-              summary: z.string().describe('One-line summary of what was built or changed'),
-            }),
-          },
-        })
+        // Wrap entire generation in a Sentry AI span for observability
+        const result = await traceAgent(`orchestrator:${model}`, async () => {
+          const streamOutput = await agent.stream(message, {
+            requestContext,
+            memory: {
+              thread: projectId,
+              resource: user.id,
+            },
+            maxSteps: 50,
+            savePerStep: true,
+            abortSignal: signal,
+            structuredOutput: {
+              schema: z.object({
+                summary: z.string().describe('One-line summary of what was built or changed'),
+              }),
+            },
+          })
 
-        // Bridge Mastra stream to SSE
-        const result = await bridgeStreamToSSE(streamOutput, emit, signal, {
-          projectId,
-          userId: user.id,
-          runId,
-        })
+          // Bridge Mastra stream to SSE
+          return bridgeStreamToSSE(streamOutput, emit, signal, {
+            projectId,
+            userId: user.id,
+            runId,
+          })
+        }) as { totalTokens: number; sandboxId?: string }
 
         // Update project status based on whether sandbox was created
         updateProject(

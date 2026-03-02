@@ -13,6 +13,7 @@ import { z } from 'zod'
 import { describeRoute, resolver } from 'hono-openapi'
 import { Hono } from 'hono'
 import { sql } from 'drizzle-orm'
+import * as Sentry from '@sentry/node'
 import { db } from '../lib/db/client'
 import { authMiddleware } from '../middleware/auth'
 import { createRateLimiter } from '../lib/rate-limit'
@@ -160,10 +161,18 @@ adminRoutes.get(
       }
     }
 
-    // 4. Rate limit table cleanup (housekeeping)
+    // 4. Rate limit table cleanup (housekeeping) — tracked as Sentry Cron Monitor
     try {
       const { cleanupExpiredRateLimits } = await import('../lib/rate-limit')
-      const cleaned = await cleanupExpiredRateLimits()
+      const cleaned = await Sentry.withMonitor(
+        'rate-limit-cleanup',
+        () => cleanupExpiredRateLimits(),
+        {
+          schedule: { type: 'interval', value: 60, unit: 'minute' },
+          checkinMargin: 5,
+          maxRuntime: 2,
+        },
+      )
       checks.rate_limits = { status: 'ok', details: `${cleaned} expired entries cleaned` }
     } catch {
       checks.rate_limits = { status: 'warning', details: 'Cleanup failed' }

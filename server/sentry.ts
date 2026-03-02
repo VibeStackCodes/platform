@@ -4,6 +4,8 @@ if (process.env.SENTRY_DSN) {
   Sentry.init({
     dsn: process.env.SENTRY_DSN,
     tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0,
+    // Sentry Logs — ships structured logs to Sentry (5 GB / 30-day on free tier)
+    enableLogs: true,
     integrations: [
       // Auto-instrument OpenAI SDK calls (Mastra uses OpenAI under the hood)
       Sentry.openAIIntegration({ recordInputs: false, recordOutputs: false }),

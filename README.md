@@ -23,13 +23,11 @@ flowchart TD
     API --> Deploy
     AI --> CodeEdit
 
-    Sentry["Sentry\nErrors + Performance"]
+    Sentry["Sentry\nErrors + Performance + Logs"]
     Langfuse["Langfuse\nLLM Traces + Token Costs"]
-    Logtail["BetterStack Logtail\nStructured Logs"]
 
     API -.->|observability| Sentry
     API -.->|observability| Langfuse
-    API -.->|observability| Logtail
 ```
 
 ## Services
@@ -72,9 +70,8 @@ flowchart TD
 
 | Service | Purpose | Tier | Dashboard | Env Vars |
 |---------|---------|------|-----------|----------|
-| [Sentry](https://sentry.io) | Error tracking + performance (client + server + AI) | Free tier | [sentry.io](https://sentry.io) | `VITE_SENTRY_DSN`, `SENTRY_DSN` |
+| [Sentry](https://sentry.io) | Errors + performance + structured logs + cron monitoring (client + server + AI) | Free tier | [sentry.io](https://sentry.io) | `VITE_SENTRY_DSN`, `SENTRY_DSN` |
 | [Langfuse](https://langfuse.com) | LLM observability (traces, token costs) | Free tier | [cloud.langfuse.com](https://cloud.langfuse.com) | `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_BASEURL` |
-| [BetterStack Logtail](https://betterstack.com) | Structured log aggregation | Free tier | [logs.betterstack.com](https://logs.betterstack.com) | `LOGTAIL_SOURCE_TOKEN` |
 
 ### CI/CD & Testing
 
@@ -124,7 +121,7 @@ Create accounts in this order (each step may depend on the previous):
 6. **GitHub App** — Create a GitHub App at [github.com/settings/apps](https://github.com/settings/apps). Note the App ID, generate a private key, install it on your org, and note the installation ID.
 7. **Vercel** — Get a token from [vercel.com/account/tokens](https://vercel.com/account/tokens). Create a wildcard project for deployments.
 8. **Relace** — Get an API key from [relace.ai](https://relace.ai).
-9. **Optional**: Set up [Langfuse](https://langfuse.com), [Sentry](https://sentry.io), and [BetterStack Logtail](https://betterstack.com) for observability.
+9. **Optional**: Set up [Langfuse](https://langfuse.com) and [Sentry](https://sentry.io) for observability.
 
 ### 3. Configure environment
 
@@ -175,7 +172,6 @@ SENTRY_DSN=
 LANGFUSE_PUBLIC_KEY=
 LANGFUSE_SECRET_KEY=
 LANGFUSE_BASEURL=https://cloud.langfuse.com
-LOGTAIL_SOURCE_TOKEN=
 ```
 
 </details>

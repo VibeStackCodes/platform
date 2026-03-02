@@ -1,10 +1,11 @@
-import { Logtail } from '@logtail/node'
+import * as Sentry from '@sentry/node'
 
 /**
- * Structured Logger — BetterStack Logtail
+ * Structured Logger — Sentry Logs
  *
- * Wraps @logtail/node with a pino-like API. When LOGTAIL_SOURCE_TOKEN is set,
- * logs are shipped to BetterStack. Always logs to console as well.
+ * Wraps Sentry.logger with a pino-like API. When SENTRY_DSN is set and
+ * enableLogs is true, logs are shipped to Sentry Logs (5 GB / 30-day free tier).
+ * Always logs to console as well.
  *
  * Usage:
  *   import { log } from './logger'
@@ -13,17 +14,6 @@ import { Logtail } from '@logtail/node'
  *   const child = log.child({ projectId: '123' })
  *   child.info('File generated', { path: 'src/App.tsx' })
  */
-
-// Singleton Logtail client (null when token not configured)
-let logtail: Logtail | null = null
-
-function getLogtail(): Logtail | null {
-  if (logtail) return logtail
-  const token = process.env.LOGTAIL_SOURCE_TOKEN
-  if (!token) return null
-  logtail = new Logtail(token)
-  return logtail
-}
 
 type LogContext = Record<string, unknown>
 
@@ -41,7 +31,7 @@ function createLogger(defaultContext: LogContext = {}): Logger {
     return { ...defaultContext, ...context }
   }
 
-  function formatConsole(level: string, message: string, ctx: LogContext): string {
+  function formatConsole(message: string, ctx: LogContext): string {
     const tag = ctx.module ? `[${ctx.module}]` : ''
     const extra =
       Object.keys(ctx).filter((k) => k !== 'module').length > 0
@@ -53,28 +43,28 @@ function createLogger(defaultContext: LogContext = {}): Logger {
   return {
     info(message: string, context?: LogContext) {
       const ctx = mergeContext(context)
-      console.log(formatConsole('info', message, ctx))
-      getLogtail()?.info(message, ctx)
+      console.log(formatConsole(message, ctx))
+      Sentry.logger.info(message, ctx)
     },
 
     warn(message: string, context?: LogContext) {
       const ctx = mergeContext(context)
-      console.warn(formatConsole('warn', message, ctx))
-      getLogtail()?.warn(message, ctx)
+      console.warn(formatConsole(message, ctx))
+      Sentry.logger.warn(message, ctx)
     },
 
     error(message: string, context?: LogContext) {
       const ctx = mergeContext(context)
-      console.error(formatConsole('error', message, ctx))
-      getLogtail()?.error(message, ctx)
+      console.error(formatConsole(message, ctx))
+      Sentry.logger.error(message, ctx)
     },
 
     debug(message: string, context?: LogContext) {
       const ctx = mergeContext(context)
       if (process.env.LOG_LEVEL === 'debug') {
-        console.debug(formatConsole('debug', message, ctx))
+        console.debug(formatConsole(message, ctx))
       }
-      getLogtail()?.debug(message, ctx)
+      Sentry.logger.debug(message, ctx)
     },
 
     child(childContext: LogContext): Logger {
@@ -82,7 +72,7 @@ function createLogger(defaultContext: LogContext = {}): Logger {
     },
 
     async flush(): Promise<void> {
-      await getLogtail()?.flush()
+      await Sentry.flush(2000)
     },
   }
 }
