@@ -33,10 +33,12 @@ function LoginPage() {
           prompt: pendingPrompt,
         }),
       })
-      const project = await res.json()
-      if (project?.id) {
-        navigate({ to: '/project/$id', params: { id: project.id } })
-        return
+      if (res.ok) {
+        const project = await res.json()
+        if (project?.id) {
+          navigate({ to: '/project/$id', params: { id: project.id } })
+          return
+        }
       }
     }
     navigate({ to: '/dashboard' })
