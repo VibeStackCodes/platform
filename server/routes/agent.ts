@@ -24,6 +24,7 @@ import { createSSEStream } from '../lib/sse'
 import type { AgentStreamEvent, CreditsUsedEvent } from '../lib/types'
 import { authMiddleware } from '../middleware/auth'
 import { log } from '../lib/logger'
+import { TOOL_LABELS } from '../lib/tool-labels'
 
 // ---------------------------------------------------------------------------
 // Request / response schemas
@@ -81,6 +82,8 @@ async function bridgeStreamToSSE(
   const fileContents = new Map<string, string>()
   // Track writeFile content from tool-call args (toolCallId → content)
   const pendingWriteContent = new Map<string, { path: string; content: string }>()
+  // Track tool-call args path for readFile/listFiles (toolKey → path)
+  const pendingToolPaths = new Map<string, string>()
 
   const reader = streamOutput.fullStream.getReader()
 
@@ -118,19 +121,10 @@ async function bridgeStreamToSSE(
           const toolCallId = payload.toolCallId ?? chunk.toolCallId ?? ''
           toolStartTimes.set(toolName + '-' + toolCallId, Date.now())
 
-          // Generate human-readable label
-          let label: string | undefined
-          if (toolName === 'writeFile' || toolName === 'editFile') {
-            label = `Editing ${args.path ?? 'file'}`
-          } else if (toolName === 'createSandbox') {
-            label = 'Provisioning sandbox'
-          } else if (toolName === 'runBuild') {
-            label = 'Building app'
-          } else if (toolName === 'installPackage') {
-            label = `Installing ${args.packages ?? 'packages'}`
-          } else if (toolName === 'webSearch' || toolName === 'web_search_tool') {
-            label = `Searching: ${args.query ?? ''}`
-          }
+          // Generate human-readable label for every tool.
+          // File-operation verbs omit the path — the client renders a file badge separately.
+          const labelFn = TOOL_LABELS[toolName]
+          const label = labelFn ? labelFn(args) : toolName
 
           // Cache writeFile content for diff (available at tool-call time)
           if (toolName === 'writeFile' && args.content && args.path) {
@@ -138,6 +132,11 @@ async function bridgeStreamToSSE(
               path: args.path as string,
               content: args.content as string,
             })
+          }
+
+          // Cache file paths from tool args for readFile (tool results don't include path)
+          if (toolName === 'readFile' && args.path) {
+            pendingToolPaths.set(toolName + '-' + toolCallId, args.path as string)
           }
 
           // Don't send full file content to client in args (wasteful)
@@ -165,11 +164,12 @@ async function bridgeStreamToSSE(
           if (toolName === 'createSandbox' && result?.sandboxId) {
             const resolvedSandboxId = result.sandboxId as string
             sandboxId = resolvedSandboxId
-            emit({ type: 'sandbox_ready', sandboxId: resolvedSandboxId })
-            // Update project with sandboxId
-            updateProject(meta.projectId, { sandboxId: resolvedSandboxId }, meta.userId).catch(
+            // Persist sandboxId BEFORE emitting sandbox_ready so the client's
+            // immediate /sandbox-urls fetch can look it up from the project record.
+            await updateProject(meta.projectId, { sandboxId: resolvedSandboxId }, meta.userId).catch(
               () => {},
             )
+            emit({ type: 'sandbox_ready', sandboxId: resolvedSandboxId })
           }
 
           // Detect package installs
@@ -177,7 +177,7 @@ async function bridgeStreamToSSE(
             emit({ type: 'package_installed', packages: result.output ?? '' })
           }
 
-          // Build result summary (lean — file names only, no content)
+          // Build result summary and diff data per tool type
           let filePath: string | undefined
           let oldContent: string | undefined
           let newContent: string | undefined
@@ -220,12 +220,23 @@ async function bridgeStreamToSSE(
               ? `Wrote ${paths.join(', ')}`
               : `Wrote ${result?.filesWritten ?? '?'} files`
           } else if (toolName === 'readFile') {
-            // Track file content from readFile for future diffs
-            const readPath = result?.path as string | undefined
+            // Resolve path from cached tool-call args (readFile result doesn't include path)
+            const readPath = pendingToolPaths.get(toolName + '-' + toolCallId)
+            pendingToolPaths.delete(toolName + '-' + toolCallId)
             const readContent = result?.content as string | undefined
             if (readPath && readContent) {
               fileContents.set(readPath, readContent)
             }
+            // Send file path + content so the client can display it in code view
+            filePath = readPath
+            resultSummary = readContent
+          } else if (toolName === 'listFiles') {
+            const files = result?.files as string[] | undefined
+            resultSummary = files?.length
+              ? `${files.length} files:\n${files.join('\n')}`
+              : `${result?.count ?? 0} files`
+          } else if (toolName === 'runCommand') {
+            resultSummary = result?.stdout as string | undefined
           }
 
           emit({
@@ -294,9 +305,13 @@ async function bridgeStreamToSSE(
     }
   }
 
+  // Generation succeeded if we got a sandbox (core requirement for any build)
+  const success = !!sandboxId
+
   emit({
     type: 'done',
     summary,
+    success,
     sandboxId,
     tokensUsed: totalTokens,
   })
@@ -467,11 +482,11 @@ agentRoutes.post(
           runId,
         })
 
-        // Update project status
+        // Update project status based on whether sandbox was created
         updateProject(
           projectId,
           {
-            status: 'complete',
+            status: result.sandboxId ? 'complete' : 'error',
             sandboxId: result.sandboxId,
           },
           user.id,
