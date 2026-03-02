@@ -8,7 +8,6 @@ import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import { cors } from 'hono/cors'
 import { secureHeaders } from 'hono/secure-headers'
-import { handle } from 'hono/vercel'
 import { openAPIRouteHandler } from 'hono-openapi'
 import { Scalar } from '@scalar/hono-api-reference'
 
@@ -258,8 +257,8 @@ app.get(
 // The client NEVER imports the implementation — only the type shape
 export type AppType = typeof routes
 
-// Vercel adapter for production (serverless)
-export default handle(app)
+// Default export for Vercel zero-config Hono detection
+export default app
 
 // Named export for dev server (used by Vite proxy)
 export { app }

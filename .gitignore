@@ -17,6 +17,7 @@
 
 # build output
 /dist/
+/api/
 
 # misc
 .DS_Store
