@@ -41,6 +41,10 @@ VibeStack's backend is a Hono API server running under the `/api` base path. It 
 │  GET    /api/auth/callback        → auth-callback.ts            │
 │  GET    /api/admin/health         → admin.ts                    │
 │  GET    /api/admin/env-check      → admin.ts                    │
+│                                                                 │
+│  Meta endpoints (documentation):                                │
+│  GET    /api/doc                  → OpenAPI JSON spec            │
+│  GET    /api/reference            → Scalar interactive API UI    │
 └────┬───────────────────────┬────────────────────────────────────┘
      │                       │
      ▼                       ▼
@@ -155,6 +159,15 @@ Route Handler
     ▼
 JSON or SSE Response
 ```
+
+## OpenAPI & Interactive Docs
+
+Two additional endpoints serve auto-generated documentation:
+
+- **`GET /api/doc`** — Returns the OpenAPI 3.1 JSON spec, generated from `describeRoute()` metadata across all mounted routes via `hono-openapi`
+- **`GET /api/reference`** — Serves the [Scalar](https://scalar.com) interactive API reference UI (theme: `deepSpace`, dark mode, with "Try it" request testing)
+
+The `/api/reference` route uses a permissive CSP (allowing Scalar CDN scripts) that differs from the global secure headers. The `connect-src` directive includes localhost origins so the "Try it" feature works in development.
 
 ## Dual-Export Pattern
 

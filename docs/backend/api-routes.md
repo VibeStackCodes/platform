@@ -25,6 +25,13 @@ All routes are mounted under the `/api` base path in `server/index.ts`. Authenti
 | GET | `/api/admin/health` | Yes (admin) | 10/min | — | `{ status, timestamp, checks }` | 401, 403, 503 |
 | GET | `/api/admin/env-check` | Yes (admin) | 10/min | — | `{ status, required[], optional[] }` | 401, 403 |
 
+### Documentation Endpoints
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/api/doc` | No | OpenAPI 3.1 JSON spec (auto-generated from route metadata) |
+| GET | `/api/reference` | No | Scalar interactive API reference UI |
+
 ## Route Details
 
 ### GET /api/health
