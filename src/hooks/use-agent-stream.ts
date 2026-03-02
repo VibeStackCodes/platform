@@ -111,6 +111,7 @@ export interface UseAgentStreamReturn {
 
   // Actions
   sendMessage: (text: string) => void
+  addSystemMessage: (content: string) => void
   handleStop: () => void
   handleClarificationSubmit: (answersText: string) => Promise<void>
   handlePlanApprove: () => Promise<void>
@@ -910,6 +911,15 @@ export function useAgentStream({
     sendChatMessageRef.current = sendChatMessage
   }, [sendChatMessage])
 
+  const addSystemMessage = useCallback((content: string) => {
+    const msg: ChatMessage = {
+      id: `system-${Date.now()}`,
+      role: 'assistant',
+      content,
+    }
+    setSessionMessages((prev) => [...prev, msg])
+  }, [])
+
   useEffect(() => {
     if (!initialPrompt) return
     const timer = setTimeout(() => {
@@ -1060,6 +1070,7 @@ export function useAgentStream({
 
     // Actions
     sendMessage: sendChatMessage,
+    addSystemMessage,
     handleStop,
     handleClarificationSubmit,
     handlePlanApprove,

@@ -1,6 +1,17 @@
 import type { ReactNode } from 'react'
 import { useRef, useState } from 'react'
-import { Code, Code2, Eye, FileText, GitCompareArrows, Loader2, Rocket, X } from 'lucide-react'
+import {
+  Check,
+  Code,
+  Code2,
+  ExternalLink,
+  Eye,
+  FileText,
+  GitCompareArrows,
+  Loader2,
+  Rocket,
+  X,
+} from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { DiffViewer } from '@/components/ai-elements/diff-viewer'
 import { SaveIndicator } from '@/components/save-indicator'
@@ -13,6 +24,8 @@ export type PanelContent =
   | { type: 'artifact'; title: string; content: string }
   | null
 
+type DeployState = 'idle' | 'deploying' | 'deployed' | 'error'
+
 interface RightPanelProps {
   isOpen: boolean
   width: number // percentage
@@ -22,6 +35,8 @@ interface RightPanelProps {
   codeServerUrl?: string
   projectName?: string
   sandboxRecreating?: boolean
+  deployState?: DeployState
+  deployUrl?: string
   onDragStart: (e: React.MouseEvent) => void
   onClose: () => void
   onSave?: (content: string) => void
@@ -151,6 +166,8 @@ function PreviewWithTabs({
   codeServerUrl,
   projectName,
   sandboxRecreating,
+  deployState = 'idle',
+  deployUrl,
   onDeploy,
   onClose,
 }: {
@@ -158,6 +175,8 @@ function PreviewWithTabs({
   codeServerUrl?: string
   projectName?: string
   sandboxRecreating?: boolean
+  deployState?: DeployState
+  deployUrl?: string
   onDeploy?: () => void
   onClose: () => void
 }) {
@@ -205,16 +224,43 @@ function PreviewWithTabs({
         </div>
 
         <div className="flex items-center gap-2">
-          {onDeploy && (
+          {deployState === 'deployed' && deployUrl ? (
+            <a
+              href={deployUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 rounded-full bg-emerald-600 px-3 py-1 text-xs font-medium text-white transition-colors hover:bg-emerald-700"
+            >
+              <Check size={12} />
+              Live
+              <ExternalLink size={10} />
+            </a>
+          ) : onDeploy ? (
             <button
               type="button"
               onClick={onDeploy}
-              className="inline-flex items-center gap-1.5 rounded-full bg-primary px-3 py-1 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+              disabled={deployState === 'deploying'}
+              className={cn(
+                'inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors',
+                deployState === 'deploying'
+                  ? 'bg-primary/70 text-primary-foreground cursor-wait'
+                  : deployState === 'error'
+                    ? 'bg-destructive text-destructive-foreground hover:bg-destructive/90'
+                    : 'bg-primary text-primary-foreground hover:bg-primary/90',
+              )}
             >
-              <Rocket size={12} />
-              Deploy
+              {deployState === 'deploying' ? (
+                <Loader2 size={12} className="animate-spin" />
+              ) : (
+                <Rocket size={12} />
+              )}
+              {deployState === 'deploying'
+                ? 'Deploying...'
+                : deployState === 'error'
+                  ? 'Retry Deploy'
+                  : 'Deploy'}
             </button>
-          )}
+          ) : null}
           <button
             type="button"
             onClick={onClose}
@@ -308,6 +354,8 @@ export function RightPanel({
   codeServerUrl,
   projectName,
   sandboxRecreating,
+  deployState,
+  deployUrl,
   onDragStart,
   onClose,
   onSave,
@@ -360,6 +408,8 @@ export function RightPanel({
           codeServerUrl={codeServerUrl}
           projectName={projectName}
           sandboxRecreating={sandboxRecreating}
+          deployState={deployState}
+          deployUrl={deployUrl}
           onDeploy={onDeploy}
           onClose={onClose}
         />

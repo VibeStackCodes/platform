@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { ChatColumn } from '@/components/chat-column'
+import { ChatColumn, type ChatColumnHandle } from '@/components/chat-column'
 import { RightPanel, type PanelContent } from '@/components/right-panel'
 import { useResizablePanel } from '@/hooks/use-resizable-panel'
 import { apiFetch } from '@/lib/utils'
@@ -27,6 +27,7 @@ export function BuilderPage({ projectId, projectName, initialPrompt, initialSand
   const [sandboxRecreating, setSandboxRecreating] = useState(false)
   const [selectedElement, setSelectedElement] = useState<ElementContext | null>(null)
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const chatHandleRef = useRef<ChatColumnHandle | null>(null)
   const panel = useResizablePanel()
 
   // Fetch sandbox URLs with automatic polling until available
@@ -138,12 +139,33 @@ export function BuilderPage({ projectId, projectName, initialPrompt, initialSand
     [panel],
   )
 
+  const [deployState, setDeployState] = useState<'idle' | 'deploying' | 'deployed' | 'error'>('idle')
+  const [deployUrl, setDeployUrl] = useState<string>()
+
   const handleDeploy = useCallback(async () => {
-    await apiFetch('/api/projects/deploy', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ projectId }),
-    })
+    setDeployState('deploying')
+    chatHandleRef.current?.addSystemMessage('Deploying your app to production...')
+    try {
+      const res = await apiFetch('/api/projects/deploy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId }),
+      })
+      if (!res.ok) {
+        setDeployState('error')
+        chatHandleRef.current?.addSystemMessage('Deployment failed. Please try again.')
+        return
+      }
+      const data = await res.json()
+      setDeployUrl(data.deployUrl)
+      setDeployState('deployed')
+      chatHandleRef.current?.addSystemMessage(
+        `Your app has been deployed! 🚀\n\n${data.deployUrl}`,
+      )
+    } catch {
+      setDeployState('error')
+      chatHandleRef.current?.addSystemMessage('Deployment failed. Please try again.')
+    }
   }, [projectId])
 
   return (
@@ -156,6 +178,7 @@ export function BuilderPage({ projectId, projectName, initialPrompt, initialSand
         onGenerationComplete={fetchSandboxUrls}
         selectedElement={selectedElement}
         onEditComplete={() => setSelectedElement(null)}
+        onReady={(handle) => { chatHandleRef.current = handle }}
       />
       <RightPanel
         isOpen={panel.isOpen}
@@ -166,6 +189,8 @@ export function BuilderPage({ projectId, projectName, initialPrompt, initialSand
         codeServerUrl={codeServerUrl}
         projectName={projectName}
         sandboxRecreating={sandboxRecreating}
+        deployState={deployState}
+        deployUrl={deployUrl}
         onDragStart={panel.handleDragStart}
         onClose={panel.close}
         onDeploy={handleDeploy}

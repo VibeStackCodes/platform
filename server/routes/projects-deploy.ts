@@ -14,6 +14,7 @@ import { getProject, updateProject } from '../lib/db/queries'
 import { fetchWithTimeout } from '../lib/fetch'
 import { getInstallationToken } from '../lib/github'
 import { downloadDirectory, getDaytonaClient } from '../lib/sandbox'
+import { memory } from '../lib/agents/memory'
 import { buildAppSlug } from '../lib/slug'
 import type { DeployRequest } from '../lib/types'
 import { authMiddleware } from '../middleware/auth'
@@ -160,6 +161,27 @@ projectDeployRoutes.post(
       await updateProject(projectId, {
         deployUrl,
         status: 'deployed',
+      })
+
+      // Persist deploy message to Mastra memory so it shows on refresh
+      const deployMsgId = `deploy-${projectId}-${Date.now()}`
+      await memory.saveMessages({
+        messages: [
+          {
+            id: deployMsgId,
+            threadId: projectId,
+            resourceId: user.id,
+            role: 'assistant' as const,
+            content: {
+              format: 2,
+              parts: [{ type: 'text' as const, text: `Your app has been deployed! 🚀\n\n${deployUrl}` }],
+            },
+            createdAt: new Date(),
+            type: 'text',
+          },
+        ],
+      }).catch((err: unknown) => {
+        console.warn('[deploy] Failed to persist deploy message to memory:', err)
       })
 
       return c.json({

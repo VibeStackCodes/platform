@@ -1,7 +1,7 @@
 'use client'
 
-import { Suspense } from 'react'
-import { Bot, CheckCircle2, CircleCheck, Loader2, Rocket } from 'lucide-react'
+import { Suspense, useEffect } from 'react'
+import { Bot, CheckCircle2, CircleCheck, Loader2 } from 'lucide-react'
 import { useAgentStream, AGENT_CARD_CONFIG } from '@/hooks/use-agent-stream'
 import { ToolActivity } from '@/components/ai-elements/tool-activity'
 import {
@@ -28,6 +28,10 @@ import type { ElementContext } from '@/lib/types'
 // Types
 // ============================================================================
 
+export interface ChatColumnHandle {
+  addSystemMessage: (content: string) => void
+}
+
 interface ChatColumnProps {
   projectId: string
   initialPrompt?: string
@@ -36,6 +40,7 @@ interface ChatColumnProps {
   selectedElement?: ElementContext | null
   onEditComplete?: () => void
   onGenerationComplete?: () => void
+  onReady?: (handle: ChatColumnHandle) => void
 }
 
 // ============================================================================
@@ -98,10 +103,12 @@ export function ChatColumn({
   selectedElement,
   onEditComplete,
   onGenerationComplete,
+  onReady,
 }: ChatColumnProps) {
   const {
     model: _model,
-    generationStatus: _generationStatus,
+    generationStatus,
+    doneSummary,
     generationFiles,
     buildErrors,
     pageProgress,
@@ -117,6 +124,7 @@ export function ChatColumn({
     chatError,
     hasFiles,
     showTimeline,
+    addSystemMessage,
     handleStop,
     handleClarificationSubmit,
     handlePlanApprove,
@@ -129,6 +137,11 @@ export function ChatColumn({
     selectedElement,
     onEditComplete,
   })
+
+  // Expose addSystemMessage to parent via onReady callback
+  useEffect(() => {
+    onReady?.({ addSystemMessage })
+  }, [onReady, addSystemMessage])
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
@@ -432,27 +445,8 @@ export function ChatColumn({
                         )
 
                       case 'complete':
-                        return (
-                          <div key={`complete-${entry.ts}`} className="space-y-3">
-                            <div className="flex items-center gap-2 rounded-lg border border-green-500/30 bg-green-500/10 p-3 text-sm text-green-600 dark:text-green-400">
-                              <Rocket className="size-4" />
-                              <span>Your app is ready!</span>
-                            </div>
-                            {onPanelOpen && (
-                              <ArtifactCard
-                                icon={<Rocket className="size-6" />}
-                                title="App Preview"
-                                meta={entry.deploymentUrl ?? 'Live preview available'}
-                                onClick={() =>
-                                  onPanelOpen({
-                                    type: 'preview',
-                                    previewUrl: entry.deploymentUrl ?? '',
-                                  })
-                                }
-                              />
-                            )}
-                          </div>
-                        )
+                        // Rendered after ToolActivity below
+                        return null
 
                       default:
                         return null
@@ -462,6 +456,23 @@ export function ChatColumn({
                   {/* Tool Activity (single orchestrator tool steps) */}
                   {toolSteps.length > 0 && (
                     <ToolActivity steps={toolSteps} onPanelOpen={onPanelOpen} />
+                  )}
+
+                  {/* Done summary + app preview card */}
+                  {generationStatus === 'complete' && onPanelOpen && (
+                    <>
+                      {doneSummary && (
+                        <p className="text-sm leading-relaxed text-foreground">{doneSummary}</p>
+                      )}
+                      <ArtifactCard
+                        title="App Preview"
+                        meta="Live preview available"
+                        variant="code"
+                        actionLabel="Open Preview"
+                        onClick={() => onPanelOpen({ type: 'preview', previewUrl: '' })}
+                        onAction={() => onPanelOpen({ type: 'preview', previewUrl: '' })}
+                      />
+                    </>
                   )}
 
                   {/* Build Errors (outside timeline entries) */}
