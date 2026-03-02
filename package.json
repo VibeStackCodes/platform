@@ -2,6 +2,7 @@
   "name": "platform",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "concurrently -n client,server \"vite\" \"bun --watch server/index.ts\"",
     "build": "vite build && tsc --noEmit",
