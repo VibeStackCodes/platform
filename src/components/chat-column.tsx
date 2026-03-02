@@ -2,12 +2,12 @@
 
 import { Suspense, useEffect } from 'react'
 import { Bot, CheckCircle2, CircleCheck, Loader2 } from 'lucide-react'
+import { GreetingBanner } from '@/components/greeting-banner'
 import { useAgentStream, AGENT_CARD_CONFIG } from '@/hooks/use-agent-stream'
 import { ToolActivity } from '@/components/ai-elements/tool-activity'
 import {
   Conversation,
   ConversationContent,
-  ConversationEmptyState,
   ConversationScrollButton,
 } from '@/components/ai-elements/conversation'
 import { Message, MessageContent, MessageResponse } from '@/components/ai-elements/message'
@@ -148,12 +148,8 @@ export function ChatColumn({
       <Conversation>
         <ConversationContent>
           {messages.length === 0 && !showTimeline ? (
-            <div className="flex h-full flex-col items-center justify-center gap-6">
-              <ConversationEmptyState
-                icon={<Bot className="size-12" />}
-                title="Start building"
-                description="Describe what you want to build and I'll help you refine the idea before generating code"
-              />
+            <div className="flex h-full flex-col items-center justify-center">
+              <GreetingBanner />
             </div>
           ) : (
             <>
