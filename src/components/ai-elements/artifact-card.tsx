@@ -12,6 +12,8 @@ export interface ArtifactCardProps {
   size?: 'default' | 'lg'
   onClick?: () => void
   onDownload?: () => void
+  actionLabel?: string
+  onAction?: () => void
   className?: string
 }
 
@@ -44,6 +46,8 @@ export function ArtifactCard({
   size = 'default',
   onClick,
   onDownload,
+  actionLabel,
+  onAction,
   className,
 }: ArtifactCardProps) {
   const isLarge = size === 'lg'
@@ -124,8 +128,21 @@ export function ArtifactCard({
         <p className="text-[11.5px] text-muted-foreground/50 mt-0.5">{meta}</p>
       </div>
 
-      {/* Right arrow */}
-      <ChevronRight size={14} className="text-muted-foreground/50 shrink-0" />
+      {/* Action button or right arrow */}
+      {actionLabel && onAction ? (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation()
+            onAction()
+          }}
+          className="shrink-0 rounded-full bg-primary px-4 py-1.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+        >
+          {actionLabel}
+        </button>
+      ) : (
+        <ChevronRight size={14} className="text-muted-foreground/50 shrink-0" />
+      )}
     </div>
   )
 }

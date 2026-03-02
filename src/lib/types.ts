@@ -555,6 +555,7 @@ export interface ToolCompleteEvent {
 export interface DoneEvent {
   type: 'done'
   summary: string
+  success: boolean
   sandboxId?: string
   tokensUsed?: number
 }

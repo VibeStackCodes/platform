@@ -2,8 +2,10 @@ import { useState } from 'react'
 import {
   CheckCircle2,
   ChevronDown,
+  Eye,
   FileEdit,
   FolderOpen,
+  GitCommitHorizontal,
   Loader2,
   Package,
   Play,
@@ -33,10 +35,15 @@ function getToolIcon(tool: string) {
     case 'installPackage':
       return Package
     case 'webSearch':
+    case 'web_search':
     case 'web_search_tool':
       return Search
     case 'createSandbox':
       return Play
+    case 'getPreviewUrl':
+      return Eye
+    case 'commitAndPush':
+      return GitCommitHorizontal
     default:
       return Wrench
   }
@@ -47,17 +54,28 @@ function basename(path: string): string {
   return path.split('/').pop() ?? path
 }
 
-/** Count lines from actual content, or estimate from byte count in result */
+/** Count added/removed lines by diffing old vs new content line-by-line */
 function getLineCount(step: ToolStep): string | null {
-  // If we have actual new content, count real lines
   if (step.newContent) {
-    const newLines = step.newContent.split('\n').length
     if (step.oldContent) {
-      const oldLines = step.oldContent.split('\n').length
-      const delta = newLines - oldLines
-      return delta >= 0 ? `+${delta}` : `${delta}`
+      // Count actual additions and deletions via simple line set diff
+      const oldLines = new Set(step.oldContent.split('\n'))
+      const newLines = new Set(step.newContent.split('\n'))
+      let added = 0
+      let removed = 0
+      for (const line of newLines) {
+        if (!oldLines.has(line)) added++
+      }
+      for (const line of oldLines) {
+        if (!newLines.has(line)) removed++
+      }
+      if (added === 0 && removed === 0) return null
+      const parts: string[] = []
+      if (added > 0) parts.push(`+${added}`)
+      if (removed > 0) parts.push(`-${removed}`)
+      return parts.join(' ')
     }
-    return `+${newLines}`
+    return `+${step.newContent.split('\n').length}`
   }
   // Fall back to byte estimate from result summary
   if (!step.result) return null
@@ -185,8 +203,15 @@ export function ToolActivity({ steps, onPanelOpen, className }: ToolActivityProp
 
                     {/* Line count diff */}
                     {lineInfo && (
-                      <span className="font-mono text-xs font-medium text-green-500">
-                        {lineInfo}
+                      <span className="flex gap-1.5 font-mono text-xs font-medium">
+                        {lineInfo.split(' ').map((part) => (
+                          <span
+                            key={part}
+                            className={part.startsWith('+') ? 'text-green-500' : 'text-red-500'}
+                          >
+                            {part}
+                          </span>
+                        ))}
                       </span>
                     )}
 
@@ -203,17 +228,6 @@ export function ToolActivity({ steps, onPanelOpen, className }: ToolActivityProp
               )
             })}
 
-            {/* Done marker */}
-            {allDone && (
-              <div className="flex items-center gap-2.5 py-1.5">
-                <div className="flex size-6 shrink-0 items-center justify-center">
-                  <CheckCircle2 className="size-4 text-green-500" />
-                </div>
-                <span className="text-[13px] font-medium text-green-600 dark:text-green-400">
-                  Done
-                </span>
-              </div>
-            )}
           </div>
         </div>
       )}

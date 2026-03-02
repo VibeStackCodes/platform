@@ -408,21 +408,33 @@ export const commitAndPushTool = createTool({
       )
 
       let repoUrl: string
+      const existingRemote = remoteResult.result?.trim() ?? ''
+      // Template remote must be replaced with a fresh app-specific repo
+      const isTemplateRemote = existingRemote.includes('vibestack-template')
+      const needsNewRepo = remoteResult.exitCode !== 0 || !existingRemote || isTemplateRemote
 
-      if (remoteResult.exitCode !== 0 || !remoteResult.result?.trim()) {
-        // No remote — create repo and set origin
-        // Use sandboxId as project identifier for repo naming
+      if (needsNewRepo) {
+        // No remote or template remote — create repo and set origin
         const repoName = buildRepoName('app', sandboxId)
         const repo = await createRepo(repoName)
         repoUrl = repo.cloneUrl
         const token = await getInstallationToken()
         const authedUrl = repoUrl.replace('https://', `https://x-access-token:${token}@`)
-        await sandbox.process.executeCommand(
-          `cd /workspace && git remote add origin ${authedUrl}`,
-          '/workspace',
-          undefined,
-          15,
-        )
+        if (isTemplateRemote) {
+          await sandbox.process.executeCommand(
+            `cd /workspace && git remote set-url origin ${authedUrl}`,
+            '/workspace',
+            undefined,
+            15,
+          )
+        } else {
+          await sandbox.process.executeCommand(
+            `cd /workspace && git remote add origin ${authedUrl}`,
+            '/workspace',
+            undefined,
+            15,
+          )
+        }
       } else {
         repoUrl = remoteResult.result.trim()
         // Refresh token for push
@@ -437,9 +449,12 @@ export const commitAndPushTool = createTool({
         )
       }
 
-      // 3. Push
+      // 3. Push (force for new repos since local history diverges from template)
+      const pushCmd = needsNewRepo
+        ? 'cd /workspace && git push --force -u origin main'
+        : 'cd /workspace && git push -u origin main'
       const pushResult = await sandbox.process.executeCommand(
-        'cd /workspace && git push -u origin main',
+        pushCmd,
         '/workspace',
         undefined,
         60,
