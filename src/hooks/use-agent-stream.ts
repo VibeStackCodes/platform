@@ -420,6 +420,13 @@ export function useAgentStream({
       setGenerationStatus('complete')
     } else if (persistedTimeline.some((e) => e.type === 'error')) {
       setGenerationStatus('error')
+    } else if (persistedToolSteps.length > 0) {
+      // Single orchestrator: no timeline events, but tool steps + assistant message = complete
+      const lastAssistant = persistedMessages.findLast((m) => m.role === 'assistant')
+      if (lastAssistant?.content) {
+        setGenerationStatus('complete')
+        setDoneSummary(lastAssistant.content)
+      }
     }
   }, [
     persistedTimeline,
