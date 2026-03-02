@@ -10,9 +10,9 @@ buildSync({
   bundle: true,
   platform: 'node',
   format: 'cjs',
-  outfile: 'api/index.cjs',
+  outfile: 'api/index.js',
   minify: true,
   treeShaking: true,
 })
 
-console.log('Server bundled to api/index.cjs')
+console.log('Server bundled to api/index.js')
