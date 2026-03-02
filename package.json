@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "concurrently -n client,server \"vite\" \"bun --watch server/index.ts\"",
-    "build": "vite build && tsc --noEmit",
+    "build": "vite build && tsc --noEmit && node scripts/bundle-server.mjs",
     "preview": "vite preview",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
