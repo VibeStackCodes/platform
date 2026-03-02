@@ -45,6 +45,9 @@ export const SUGGESTIONS = [
   'A real-time chat application',
 ]
 
+/** Tools internal to Mastra that should not surface in the UI */
+const INTERNAL_TOOLS = new Set(['updateWorkingMemory', 'readWorkingMemory'])
+
 // Tool step for compact tool activity display
 export interface ToolStep {
   id: string
@@ -673,8 +676,6 @@ export function useAgentStream({
           break
 
         case 'tool_start': {
-          // Skip internal Mastra tools that aren't user-facing
-          const INTERNAL_TOOLS = new Set(['updateWorkingMemory', 'readWorkingMemory'])
           if (INTERNAL_TOOLS.has(event.tool)) break
 
           // Extract file path from tool args
@@ -697,7 +698,6 @@ export function useAgentStream({
         }
 
         case 'tool_complete': {
-          const INTERNAL_TOOLS = new Set(['updateWorkingMemory', 'readWorkingMemory'])
           if (INTERNAL_TOOLS.has(event.tool)) break
 
           setToolSteps((prev) => {

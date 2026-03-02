@@ -339,6 +339,12 @@ projectRoutes.get(
                 // Extract file path from args
                 const filePath = (args.path as string) ?? (args.filePath as string) ?? undefined
 
+                // Strip large content fields (writeFile/editFile args contain full file content)
+                const leanArgs =
+                  toolName === 'writeFile' || toolName === 'editFile'
+                    ? { path: args.path }
+                    : args
+
                 events.push({
                   id: `tool-${msg.id}-${toolName}-${events.length}`,
                   role: 'assistant',
@@ -346,7 +352,7 @@ projectRoutes.get(
                   tool: toolName,
                   label,
                   filePath,
-                  args,
+                  args: leanArgs,
                   createdAt: msg.createdAt,
                 })
               }
