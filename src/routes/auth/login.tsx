@@ -24,7 +24,6 @@ function LoginPage() {
   async function redirectAfterAuth(_userId: string) {
     const pendingPrompt = sessionStorage.getItem(PENDING_PROMPT_KEY)
     if (pendingPrompt) {
-      sessionStorage.removeItem(PENDING_PROMPT_KEY)
       const res = await apiFetch('/api/projects', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -34,12 +33,14 @@ function LoginPage() {
         }),
       })
       if (res.ok) {
+        sessionStorage.removeItem(PENDING_PROMPT_KEY)
         const project = await res.json()
         if (project?.id) {
           navigate({ to: '/project/$id', params: { id: project.id } })
           return
         }
       }
+      // API failed — keep prompt in sessionStorage so next login attempt retries
     }
     navigate({ to: '/dashboard' })
   }
