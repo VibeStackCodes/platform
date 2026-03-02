@@ -13,12 +13,13 @@ interface BuilderPageProps {
   projectName?: string
   initialPrompt?: string
   initialSandboxId?: string
+  initialDeployUrl?: string
 }
 
 // Refresh signed URLs 10 min before 1h expiry
 const REFRESH_BEFORE_EXPIRY_MS = 10 * 60 * 1000
 
-export function BuilderPage({ projectId, projectName, initialPrompt, initialSandboxId }: BuilderPageProps) {
+export function BuilderPage({ projectId, projectName, initialPrompt, initialSandboxId, initialDeployUrl }: BuilderPageProps) {
   const [panelContent, setPanelContent] = useState<PanelContent>(null)
   const [_sandboxId, setSandboxId] = useState(initialSandboxId)
   const [previewUrl, setPreviewUrl] = useState<string>()
@@ -139,8 +140,8 @@ export function BuilderPage({ projectId, projectName, initialPrompt, initialSand
     [panel],
   )
 
-  const [deployState, setDeployState] = useState<'idle' | 'deploying' | 'deployed' | 'error'>('idle')
-  const [deployUrl, setDeployUrl] = useState<string>()
+  const [deployState, setDeployState] = useState<'idle' | 'deploying' | 'deployed' | 'error'>(initialDeployUrl ? 'deployed' : 'idle')
+  const [deployUrl, setDeployUrl] = useState<string | undefined>(initialDeployUrl)
 
   const handleDeploy = useCallback(async () => {
     setDeployState('deploying')

@@ -21,6 +21,7 @@ function ProjectPage() {
         prompt: string | null
         status: string
         sandboxId: string | null
+        deployUrl: string | null
       }>
     },
   })
@@ -44,8 +45,10 @@ function ProjectPage() {
   return (
     <BuilderPage
       projectId={id}
+      projectName={project.name}
       initialPrompt={project.status === 'pending' ? (project.prompt ?? undefined) : undefined}
       initialSandboxId={project.sandboxId ?? undefined}
+      initialDeployUrl={project.deployUrl ?? undefined}
     />
   )
 }
