@@ -12,6 +12,7 @@ import { Hono } from 'hono'
 import { z } from 'zod'
 import { getProject, updateProject } from '../lib/db/queries'
 import { fetchWithTimeout } from '../lib/fetch'
+import { getInstallationToken } from '../lib/github'
 import { downloadDirectory, getDaytonaClient } from '../lib/sandbox'
 import { buildAppSlug } from '../lib/slug'
 import type { DeployRequest } from '../lib/types'
@@ -284,11 +285,11 @@ async function deployFromGitHub(
   const slug = projectName.toLowerCase().replace(/[^a-z0-9-]/g, '-')
 
   // Step 1: Get numeric GitHub repo ID (required by Vercel v13 API)
-  const ghToken = process.env.GITHUB_TOKEN
+  const ghToken = await getInstallationToken()
   const ghRes = await fetchWithTimeout(`https://api.github.com/repos/${repoFullName}`, {
     headers: {
       Accept: 'application/vnd.github+json',
-      ...(ghToken ? { Authorization: `Bearer ${ghToken}` } : {}),
+      Authorization: `Bearer ${ghToken}`,
     },
   })
   if (!ghRes.ok) {
