@@ -749,20 +749,19 @@ export function useAgentStream({
           if (event.success) {
             setGenerationStatus('complete')
             setDoneSummary(event.summary)
-            pushTimeline({ type: 'complete', ts: now })
             onGenerationComplete?.()
             if (event.sandboxId) {
               onSandboxReady?.(event.sandboxId)
             }
           } else {
             setGenerationStatus('error')
-            pushTimeline({ type: 'error', ts: now, error: event.summary })
+            setDoneSummary(event.summary)
           }
           break
 
         case 'agent_error':
           setGenerationStatus('error')
-          pushTimeline({ type: 'error', ts: now, error: event.message })
+          setDoneSummary(event.message)
           break
 
         case 'package_installed':

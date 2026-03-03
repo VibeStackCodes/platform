@@ -221,6 +221,11 @@ function ChatMessages({
                     />
                   </>
                 )}
+                {isLastAssistant && generationStatus === 'error' && doneSummary && (
+                  <div className="rounded-md bg-red-900/50 p-3 text-sm text-red-300">
+                    {doneSummary}
+                  </div>
+                )}
               </div>
             )
           })()}
@@ -261,7 +266,14 @@ function ChatMessages({
       {/* Legacy timeline events (agent cards from old pipeline) */}
       {showTimeline && timelineEvents.length > 0 && (
         <div className="space-y-3 px-4 py-3">
-          {timelineEvents.map((entry) => {
+          {timelineEvents.filter((entry) => {
+            // In single orchestrator mode (tool steps present), skip stale error/complete
+            // timeline entries — generationStatus already handles these.
+            if (toolSteps.length > 0 && (entry.type === 'error' || entry.type === 'complete')) {
+              return false
+            }
+            return true
+          }).map((entry) => {
             switch (entry.type) {
               case 'agent': {
                 const isComplete = entry.status === 'complete'
