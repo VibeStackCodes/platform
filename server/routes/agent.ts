@@ -374,34 +374,19 @@ async function runAnalystPhase(
     structuredOutput: { schema: AnalystPlanSchema },
   })
 
-  // Collect thinking text
+  // Stream thinking text via textStream (separate from fullStream).
+  // Using textStream keeps fullStream available for the SDK to populate
+  // the structured output `.object` promise internally.
   let thinkingText = ''
-  const reader = streamOutput.fullStream.getReader()
-
-  try {
-    while (true) {
-      if (signal.aborted) break
-      const { done, value: chunk } = await reader.read()
-      if (done) break
-      if (!chunk?.type) continue
-
-      // biome-ignore lint/suspicious/noExplicitAny: envelope shape varies per chunk type
-      const payload = (chunk as any).payload ?? chunk
-
-      if (chunk.type === 'text-delta') {
-        // biome-ignore lint/suspicious/noExplicitAny: envelope shape varies per chunk type
-        const text = payload.text ?? payload.textDelta ?? (chunk as any).textDelta ?? ''
-        if (text) {
-          thinkingText += text
-          if (thinkingText.length > 100) {
-            emit({ type: 'thinking', content: thinkingText })
-            thinkingText = ''
-          }
-        }
+  for await (const text of streamOutput.textStream) {
+    if (signal.aborted) break
+    if (text) {
+      thinkingText += text
+      if (thinkingText.length > 100) {
+        emit({ type: 'thinking', content: thinkingText })
+        thinkingText = ''
       }
     }
-  } finally {
-    reader.releaseLock()
   }
 
   // Flush remaining thinking
@@ -409,13 +394,14 @@ async function runAnalystPhase(
     emit({ type: 'thinking', content: thinkingText })
   }
 
-  // Extract structured plan
+  // Extract structured plan — .object resolves after stream completes
   let plan: { projectName: string; features: Array<{ name: string; description: string }> }
   try {
     const output = await streamOutput.object
     plan = AnalystPlanSchema.parse(output)
-  } catch {
-    // Fallback: try to parse from text
+  } catch (err) {
+    // Fallback: construct a minimal plan from text
+    log.child({ module: 'analyst' }).warn(`Structured output parse failed, using fallback: ${err}`)
     const text = await streamOutput.text
     plan = { projectName: 'App', features: [{ name: 'Core Features', description: text.slice(0, 200) }] }
   }
