@@ -116,6 +116,7 @@ export interface UseAgentStreamReturn {
   handleStop: () => void
   handleClarificationSubmit: (answersText: string) => Promise<void>
   handlePlanApprove: () => Promise<void>
+  handleRequestChanges: () => void
   handleSubmit: (message: { text?: string }, options: { model: string; mode: string }) => void
   handleSuggestionClick: (suggestion: string) => void
 }
@@ -154,6 +155,9 @@ export function useAgentStream({
   const [resumeRunId, setResumeRunId] = useState<string | null>(null)
   const [pendingPlan, setPendingPlan] = useState<PlanReadyEvent['plan'] | null>(null)
   const [planRunId, setPlanRunId] = useState<string | null>(null)
+  const [planApproved, setPlanApproved] = useState(false)
+  const needsReplan = useRef(false)
+  const hasUsedAnalyst = useRef(false)
   const [userCredits, setUserCredits] = useState<{
     credits_remaining: number
     credits_monthly: number
@@ -418,6 +422,9 @@ export function useAgentStream({
   const hasHydratedFromEvents = useRef(false)
   useEffect(() => {
     if (hasHydratedFromEvents.current) return
+    if (persistedMessages.length > 0) {
+      hasUsedAnalyst.current = true
+    }
     if (persistedTimeline.length > 0 && timelineEvents.length === 0) {
       hasHydratedFromEvents.current = true
       setTimelineEvents(persistedTimeline)
@@ -845,9 +852,18 @@ export function useAgentStream({
       abortControllerRef.current = abortController
 
       const endpoint = selectedElement ? '/api/agent/edit' : '/api/agent'
+
+      // Determine phase: analyst for first prompt (no prior messages), build otherwise
+      const phase =
+        (!hasUsedAnalyst.current || needsReplan.current) && !planApproved ? 'analyst' : 'build'
+      if (phase === 'analyst') {
+        hasUsedAnalyst.current = true
+        if (needsReplan.current) needsReplan.current = false
+      }
+
       const body = selectedElement
         ? { message: text, projectId, targetElement: selectedElement, model }
-        : { message: text, projectId, model }
+        : { message: text, projectId, model, phase }
 
       try {
         const response = await apiFetch(endpoint, {
@@ -916,6 +932,7 @@ export function useAgentStream({
       projectId,
       model,
       chatStatus,
+      planApproved,
       parseSSEBuffer,
       handleGenerationEvent,
       selectedElement,
@@ -1024,41 +1041,19 @@ export function useAgentStream({
   )
 
   const handlePlanApprove = useCallback(async () => {
-    if (!planRunId) return
     setPendingPlan(null)
+    setPlanApproved(true)
 
-    const abortController = new AbortController()
-    abortControllerRef.current = abortController
+    // Send a build-phase message — orchestrator reads the approved plan from memory
+    sendChatMessage('Plan approved. Proceed with building the app.')
+  }, [sendChatMessage])
 
-    try {
-      const response = await apiFetch('/api/agent/approve-plan', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ runId: planRunId }),
-        signal: abortController.signal,
-      })
-
-      if (!response.ok) throw new Error(`Plan approval failed: ${response.status}`)
-      if (!response.body) throw new Error('No response body')
-
-      const reader = response.body.getReader()
-      const decoder = new TextDecoder()
-      let sseBuffer = ''
-
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        sseBuffer += decoder.decode(value, { stream: true })
-        sseBuffer = parseSSEBuffer(sseBuffer, null, handleGenerationEvent)
-      }
-    } catch (err) {
-      if ((err as Error).name !== 'AbortError') {
-        console.error('Plan approval error:', err)
-      }
-    } finally {
-      setPlanRunId(null)
-    }
-  }, [planRunId, parseSSEBuffer, handleGenerationEvent])
+  const handleRequestChanges = useCallback(() => {
+    setPendingPlan(null)
+    needsReplan.current = true
+    // Input bar is now ready for user to type feedback
+    // Next sendChatMessage will detect needsReplan and send phase: 'analyst'
+  }, [])
 
   // Merge persisted + session tool steps.
   // Session steps have richer data (oldContent/newContent for diffs) so they take priority.
@@ -1112,6 +1107,7 @@ export function useAgentStream({
     handleStop,
     handleClarificationSubmit,
     handlePlanApprove,
+    handleRequestChanges,
     handleSubmit,
     handleSuggestionClick,
   }
