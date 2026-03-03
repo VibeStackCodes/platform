@@ -1,7 +1,7 @@
 'use client'
 
 import { Fragment, Suspense, useEffect, useMemo } from 'react'
-import { Bot, CheckCircle2, CircleCheck, Loader2 } from 'lucide-react'
+import { Bot, CheckCircle2, CircleCheck, Loader2, Search } from 'lucide-react'
 import {
   useAgentStream,
   AGENT_CARD_CONFIG,
@@ -261,18 +261,27 @@ function ChatMessages({
 
       {/* Analyst plan + HITL approve/reject */}
       {pendingPlan && (
-        <div className="flex flex-col gap-3 px-4 py-3">
-          <PlanBlock
-            title={`Project Plan — ${pendingPlan.projectName}`}
-            items={pendingPlan.features.map((f) => ({
-              title: f.name,
-              description: f.description,
-            }))}
-          />
-          <HitlActions
-            onApprove={handlePlanApprove}
-            onRequestChanges={handleRequestChanges}
-          />
+        <div className="space-y-3 px-4 py-3">
+          <AgentHeader
+            agentType="analyst"
+            name="Analyst Agent"
+            icon={<Search className="size-4" />}
+            working={false}
+          >
+            <div className="flex flex-col gap-3">
+              <PlanBlock
+                title={`Project Plan — ${pendingPlan.projectName}`}
+                items={pendingPlan.features.map((f) => ({
+                  title: f.name,
+                  description: f.description,
+                }))}
+              />
+              <HitlActions
+                onApprove={handlePlanApprove}
+                onRequestChanges={handleRequestChanges}
+              />
+            </div>
+          </AgentHeader>
         </div>
       )}
 

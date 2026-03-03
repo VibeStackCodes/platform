@@ -113,7 +113,7 @@ async function bridgeStreamToSSE(
 
       switch (chunk.type) {
         case 'text-delta': {
-          const text = payload.textDelta ?? chunk.textDelta ?? ''
+          const text = payload.text ?? payload.textDelta ?? chunk.textDelta ?? ''
           if (text) {
             lastTextChunk += text
             // Emit thinking in batches (every ~100 chars) to reduce event frequency
@@ -390,7 +390,7 @@ async function runAnalystPhase(
 
       if (chunk.type === 'text-delta') {
         // biome-ignore lint/suspicious/noExplicitAny: envelope shape varies per chunk type
-        const text = payload.textDelta ?? (chunk as any).textDelta ?? ''
+        const text = payload.text ?? payload.textDelta ?? (chunk as any).textDelta ?? ''
         if (text) {
           thinkingText += text
           if (thinkingText.length > 100) {
