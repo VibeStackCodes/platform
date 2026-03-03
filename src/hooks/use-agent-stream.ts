@@ -470,7 +470,19 @@ export function useAgentStream({
   const messages = useMemo(() => {
     if (sessionMessages.length === 0) return persistedMessages
     const historyIds = new Set(persistedMessages.map((m) => m.id))
-    return [...persistedMessages, ...sessionMessages.filter((m) => !historyIds.has(m.id))]
+    // Also deduplicate user messages by content — Mastra memory persists the
+    // same user message with a different ID than the optimistic session message.
+    const persistedUserContent = new Set(
+      persistedMessages.filter((m) => m.role === 'user').map((m) => m.content),
+    )
+    return [
+      ...persistedMessages,
+      ...sessionMessages.filter((m) => {
+        if (historyIds.has(m.id)) return false
+        if (m.role === 'user' && persistedUserContent.has(m.content)) return false
+        return true
+      }),
+    ]
   }, [persistedMessages, sessionMessages])
 
   const [chatStatus, setChatStatus] = useState<'ready' | 'streaming'>('ready')

@@ -345,7 +345,9 @@ async function bridgeStreamToSSE(
 
 /**
  * Run the Analyst agent and emit a plan_ready event.
- * The analyst is a pure reasoning agent — no tools, just structured output.
+ * The analyst is a pure reasoning agent — no tools, no streaming needed.
+ * Uses agent.generate() (not stream()) so the SDK can reliably parse
+ * structured output without stream-contention issues.
  */
 async function runAnalystPhase(
   emit: (event: AgentStreamEvent | CreditsUsedEvent) => void,
@@ -361,9 +363,9 @@ async function runAnalystPhase(
   const agent = createAnalyst()
   agent.__registerMastra(mastra)
 
-  emit({ type: 'thinking', content: '' })
+  emit({ type: 'thinking', content: 'Analyzing your requirements…' })
 
-  const streamOutput = await agent.stream(meta.message, {
+  const result = await agent.generate(meta.message, {
     requestContext: meta.requestContext,
     memory: {
       thread: meta.projectId,
@@ -374,50 +376,21 @@ async function runAnalystPhase(
     structuredOutput: { schema: AnalystPlanSchema },
   })
 
-  // Stream thinking text via textStream (separate from fullStream).
-  // Using textStream keeps fullStream available for the SDK to populate
-  // the structured output `.object` promise internally.
-  let thinkingText = ''
-  for await (const text of streamOutput.textStream) {
-    if (signal.aborted) break
-    if (text) {
-      thinkingText += text
-      if (thinkingText.length > 100) {
-        emit({ type: 'thinking', content: thinkingText })
-        thinkingText = ''
-      }
+  // Extract structured plan from generate() result
+  let plan: { projectName: string; features: Array<{ name: string; description: string }> }
+  try {
+    plan = AnalystPlanSchema.parse(result.object)
+  } catch (err) {
+    log.child({ module: 'analyst' }).warn(`Structured output parse failed: ${err}`)
+    plan = {
+      projectName: 'App',
+      features: [{ name: 'Core Features', description: (result.text ?? '').slice(0, 200) }],
     }
   }
 
-  // Flush remaining thinking
-  if (thinkingText) {
-    emit({ type: 'thinking', content: thinkingText })
-  }
-
-  // Extract structured plan — .object resolves after stream completes
-  let plan: { projectName: string; features: Array<{ name: string; description: string }> }
-  try {
-    const output = await streamOutput.object
-    plan = AnalystPlanSchema.parse(output)
-  } catch (err) {
-    // Fallback: construct a minimal plan from text
-    log.child({ module: 'analyst' }).warn(`Structured output parse failed, using fallback: ${err}`)
-    const text = await streamOutput.text
-    plan = { projectName: 'App', features: [{ name: 'Core Features', description: text.slice(0, 200) }] }
-  }
-
-  // Emit plan_ready
   emit({ type: 'plan_ready', plan })
 
-  // Get token usage
-  let totalTokens = 0
-  try {
-    const usage = await streamOutput.usage
-    if (usage?.totalTokens) totalTokens = usage.totalTokens
-  } catch {
-    // Usage may not be available
-  }
-
+  const totalTokens = result.usage?.totalTokens ?? 0
   return { totalTokens }
 }
 
