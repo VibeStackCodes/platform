@@ -27,10 +27,6 @@ RUN git clone --depth 1 ${TEMPLATE_REPO} . \
     && git add -A \
     && git commit -m "Initial commit"
 
-# Overlay local scaffold files (vite.config, etc.) on top of template repo
-# scaffold/ is the source of truth — template repo may lag behind
-COPY scaffold/vite.config.ts /workspace/vite.config.ts
-
 # Install dependencies from committed lockfile (deterministic, no resolution needed)
 RUN bun install --frozen-lockfile
 

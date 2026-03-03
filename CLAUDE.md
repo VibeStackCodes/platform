@@ -107,7 +107,7 @@ server/                  # Hono API server
     slug.ts              # Slug generation
     types.ts             # StreamEvent types (AgentStreamEvent union)
 supabase/migrations/     # Platform DB migrations
-snapshot/                # Daytona sandbox Docker image (scaffold + tooling)
+snapshot/                # Daytona sandbox Docker image (Dockerfile + entrypoint only, NO local scaffold)
 .prototypes/             # Interactive HTML design prototypes (agentic flow UI)
 docs/plans/              # Design documents and implementation plans
 ```
@@ -249,7 +249,7 @@ git commit
 
 ## Snapshot (Daytona Sandbox Image)
 
-The `snapshot/` directory defines the Docker image used as the Daytona sandbox base (`vibestack-workspace`):
+The `snapshot/` directory contains ONLY the Dockerfile, entrypoint, and bashrc — NO local scaffold. The template repo `VibeStackCodes/vibestack-template` is the SINGLE source of truth for all scaffold code. All scaffold changes MUST be pushed to the template repo first, then rebuild the snapshot with `bun snapshot/rebuild.ts`.
 
 - **Base**: `oven/bun:1-debian` (Bun runtime, not Node)
 - **Template repo**: Cloned from `VibeStackCodes/vibestack-template` (not `git init`) — React 19, react-router-dom v7, Tailwind v4, 46 shadcn/ui components pre-installed. Agent edits files in-place.

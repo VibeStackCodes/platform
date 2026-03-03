@@ -13,8 +13,9 @@ Lovable-style Docker image (`vibestack-workspace`) used as base for generated ap
 - **Entrypoint**: tmux (dev server with auto-restart) + OpenVSCode Server (foreground)
 
 ## Template Repo (`VibeStackCodes/vibestack-template`)
-Full Lovable-style app template — NOT a throwaway warmup. The agent edits files in-place.
-Source of truth is `scaffold/` in this repo. Sync to template with: push scaffold → rebuild snapshot.
+Single source of truth for the app scaffold. There is NO local scaffold directory — all scaffold code lives in the template repo. The agent edits files in-place.
+
+All scaffold changes MUST be pushed to the template repo first, then rebuild the snapshot with `bun snapshot/rebuild.ts`.
 
 Includes: React 19, React Router DOM 7, Tailwind v4, shadcn/ui, Radix UI, Recharts, Framer Motion, React Hook Form + Zod, TanStack Query, and all common utility libraries.
 
@@ -23,5 +24,4 @@ Includes: React 19, React Router DOM 7, Tailwind v4, shadcn/ui, Radix UI, Rechar
 - Each sandbox ~3 GiB memory; org cap ~10 GiB → max 3-4 concurrent runs
 - `cacheDir: '/tmp/.vite'` in generated vite.config prevents EXDEV cross-device rename errors
 - Tailwind v4 uses `@tailwindcss/vite` plugin — no postcss.config.js needed
-- `scaffold/vite.config.ts` is COPYed into the Docker image — includes `optimizeDeps.include` for pre-bundling to prevent 504s during Vite cold starts
 - Expired/deleted sandboxes are auto-recreated by `sandbox-urls` route: creates from snapshot → `git fetch + reset --hard` from GitHub repo → `bun install`
