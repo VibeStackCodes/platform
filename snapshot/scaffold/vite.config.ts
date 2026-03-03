@@ -2,9 +2,10 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import path from 'node:path'
+import { vibestackEditor } from './vite-plugin-vibestack-editor'
 
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [react(), tailwindcss(), vibestackEditor()],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),

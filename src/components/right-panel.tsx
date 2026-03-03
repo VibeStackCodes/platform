@@ -9,6 +9,7 @@ import {
   FileText,
   GitCompareArrows,
   Loader2,
+  Pencil,
   Rocket,
   X,
 } from 'lucide-react'
@@ -16,6 +17,10 @@ import { cn } from '@/lib/utils'
 import { DiffViewer } from '@/components/ai-elements/diff-viewer'
 import { SaveIndicator } from '@/components/save-indicator'
 import { useDebouncedSave } from '@/hooks/use-debounced-save'
+import { useEditorBridge } from '@/hooks/use-editor-bridge'
+import { useEditorStore } from '@/lib/editor-store'
+import { GestureScreen } from '@/components/editor/gesture-screen'
+import { EditorOverlay } from '@/components/editor/editor-overlay'
 
 export type PanelContent =
   | { type: 'preview'; previewUrl: string }
@@ -181,6 +186,14 @@ function PreviewWithTabs({
   onClose: () => void
 }) {
   const [activeTab, setActiveTab] = useState<'preview' | 'code'>('preview')
+  const previewIframeRef = useRef<HTMLIFrameElement>(null)
+  const editorMode = useEditorStore((s) => s.mode)
+  const toggleEditMode = useEditorStore((s) => s.toggleEditMode)
+
+  const { child, isConnected } = useEditorBridge({
+    iframeRef: previewIframeRef,
+    editMode: editorMode !== 'off',
+  })
 
   return (
     <>
@@ -224,6 +237,23 @@ function PreviewWithTabs({
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Edit mode toggle */}
+          {activeTab === 'preview' && previewUrl && (
+            <button
+              type="button"
+              onClick={toggleEditMode}
+              className={cn(
+                'inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors',
+                editorMode !== 'off'
+                  ? 'bg-blue-500 text-white hover:bg-blue-600'
+                  : 'bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground',
+              )}
+              title={editorMode !== 'off' ? 'Exit edit mode' : 'Enter edit mode'}
+            >
+              <Pencil size={12} />
+              {editorMode !== 'off' ? 'Editing' : 'Edit'}
+            </button>
+          )}
           {deployState === 'deployed' && deployUrl ? (
             <a
               href={deployUrl}
@@ -281,13 +311,22 @@ function PreviewWithTabs({
         {/* Preview layer */}
         <div className={cn('absolute inset-0', activeTab !== 'preview' && 'invisible')}>
           {previewUrl ? (
-            <iframe
-              key={previewUrl}
-              src={previewUrl}
-              className="h-full w-full border-0"
-              title="Preview"
-              sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
-            />
+            <>
+              <iframe
+                ref={previewIframeRef}
+                key={previewUrl}
+                src={previewUrl}
+                className="h-full w-full border-0"
+                title="Preview"
+                sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+              />
+              <GestureScreen
+                iframeRef={previewIframeRef}
+                child={child}
+                isConnected={isConnected}
+              />
+              <EditorOverlay iframeRef={previewIframeRef} />
+            </>
           ) : (
             <div className="flex h-full flex-col items-center justify-center gap-3 text-sm text-muted-foreground">
               {sandboxRecreating && <Loader2 className="h-5 w-5 animate-spin" />}

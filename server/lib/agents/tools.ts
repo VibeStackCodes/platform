@@ -9,6 +9,7 @@ import {
   getSandbox,
 } from '../sandbox'
 import { applyEdit } from '../relace'
+import { injectOids } from '../editor/oid-injector'
 /**
  * Standalone Mastra tools for 9-agent architecture
  *
@@ -67,11 +68,13 @@ export const writeFileTool = createTool({
 
       const sandbox = await getSandbox(inputData.sandboxId)
       const fullPath = sanitizeSandboxPath(inputData.path)
-      await sandbox.fs.uploadFile(Buffer.from(inputData.content), fullPath)
+      // Inject data-oid attributes for visual editor (JSX/TSX files only)
+      const content = injectOids(inputData.content, inputData.path)
+      await sandbox.fs.uploadFile(Buffer.from(content), fullPath)
       return {
         success: true,
         path: inputData.path,
-        bytesWritten: inputData.content.length,
+        bytesWritten: content.length,
       }
     } catch (e) {
       return {
@@ -522,13 +525,16 @@ This is faster and cheaper than rewriting the entire file.`,
         instruction: inputData.instruction,
       })
 
+      // Inject data-oid attributes for visual editor (JSX/TSX files only)
+      const mergedWithOids = injectOids(result.mergedCode, inputData.path)
+
       // Write merged result back
-      await sandbox.fs.uploadFile(Buffer.from(result.mergedCode), fullPath)
+      await sandbox.fs.uploadFile(Buffer.from(mergedWithOids), fullPath)
 
       return {
         success: true,
         path: inputData.path,
-        bytesWritten: result.mergedCode.length,
+        bytesWritten: mergedWithOids.length,
       }
     } catch (e) {
       return {
