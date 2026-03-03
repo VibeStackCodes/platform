@@ -462,17 +462,16 @@ export const commitAndPushTool = createTool({
 
       if (pushResult.exitCode !== 0) {
         return {
-          success: true,
+          success: false,
           commitHash,
-          error: `Push failed: ${pushResult.result}`,
+          error: `Push failed (exit ${pushResult.exitCode}): ${pushResult.result}`,
         }
       }
 
       return { success: true, commitHash, repoUrl }
     } catch (error) {
-      // Push failed but commit succeeded — still report success
       return {
-        success: true,
+        success: false,
         commitHash,
         error: `Push failed: ${error instanceof Error ? error.message : 'unknown'}`,
       }
