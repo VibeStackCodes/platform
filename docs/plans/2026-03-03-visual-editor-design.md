@@ -311,10 +311,67 @@ For Tier 2 edits, the frontend sends a chat message via the existing `/api/agent
 | Chat + visual edit conflicts | Medium | Lock visual edit during AI generation |
 | Sibling index for .map() elements | Medium | Runtime sibling counting in Babel transform; DOM walk fallback |
 
+## Industry Landscape (March 2026)
+
+Three architectural models exist for visual editing of web apps:
+
+### Model A: JSON Document (Webflow, Wix, Puck, Builder.io, json-render)
+Visual edits modify a JSON tree. A renderer converts JSON → React at runtime. Simple to implement visual editing but constrains output to a pre-defined component catalog.
+
+### Model B: Source Code + AST (Lovable, Onlook, v0.dev)
+Visual edits patch actual source code via AST manipulation. Full expressiveness but complex implementation.
+
+### Model C: AI-First with Visual Refinement (Bolt.new)
+AI generates code; visual mode provides token-free style tweaks on top.
+
+**VibeStack uses Model B** — same as Lovable and Onlook. Rationale: the AI agent generates arbitrary React code (no catalog constraint), source code is the single truth, and the output is developer-friendly .tsx files that users can eject and modify in their own IDE.
+
+### Key Prior Art
+
+**Lovable** ([lovable.dev/blog/visual-edits](https://lovable.dev/blog/visual-edits)):
+- Custom Vite plugin assigns stable IDs to JSX elements at build time
+- Client-side AST using Babel parser (SWC alternative)
+- DOM click → trace back to JSX node via stable IDs → AST mutation → code generation
+- Optimistic preview with custom client-side Tailwind generator
+- 4,000+ fly.io dev server instances
+
+**Onlook** ([github.com/onlook-dev/onlook](https://github.com/onlook-dev/onlook), 10K GitHub stars):
+- Compiler plugin injects `data-oid` attributes into DOM elements (sourcemap-like)
+- Visual selection → `data-oid` → locate exact JSX node in source
+- AST patching → write file → HMR reload
+- Actions-based system (serializable edits, undo, AI-generated modifications)
+- Stack: Next.js, Tailwind, Supabase, Drizzle, shadcn — nearly identical to VibeStack
+
+**v0.dev** ([v0.app/docs/design-mode](https://v0.app/docs/design-mode)):
+- Design Mode (Option+D) provides zero-token visual tweaks
+- Reads tailwind.config.js design tokens for the style panel
+- Composite model family: base LLM + quick edit model + autofix model
+
+**Vercel json-render** ([github.com/vercel-labs/json-render](https://github.com/vercel-labs/json-render)):
+- Considered but rejected for VibeStack — constrains AI to component catalog
+- Interesting for future: Zod-validated catalogs, streaming JSONL patches, export to standalone React
+
+**WordPress Gutenberg**:
+- Blocks stored as HTML with JSON in comments: `<!-- wp:heading {"level":2} -->`
+- Each block has `edit` (React editor component) and `save` (static HTML output)
+- Redux-based undo with entity-level snapshots
+- Iframe-isolated canvas since ~2023
+
+**Webflow**:
+- Proprietary JSON document model (not HTML files)
+- XscpData clipboard format with nodes, styles, variants
+- CSS class system with breakpoint cascade
+- Exports static HTML/CSS/JS (no React)
+
 ## References
 
+- [Lovable Visual Edits Blog](https://lovable.dev/blog/visual-edits) — AST-based source code editing architecture
+- [Onlook GitHub](https://github.com/onlook-dev/onlook) — data-oid compiler plugin + visual overlay + AST patching
+- [v0 Design Mode](https://v0.app/docs/design-mode) — zero-token visual style tweaks
+- [Vercel json-render](https://github.com/vercel-labs/json-render) — AI-generated JSON → React rendering
 - [Wix Harmony Architecture](https://www.wix.com/harmony) — iframe + overlay + JSON document model
-- [Codux Elements Tree Panel](https://medium.com/wix-engineering/codux-by-wix-case-study-how-we-built-the-elements-tree-panel-d1952ff8808e) — TypeScript AST + FiberNode correlation for source mapping
-- [React Dev Inspector](https://react-dev-inspector.zthxxx.me/docs/compiler-plugin) — Babel plugin pattern for `data-inspector-*` attributes
-- [Wix Architecture (High Scalability)](https://highscalability.com/nifty-architecture-tricks-from-wix-building-a-publishing-pla/) — JSON storage model, active/archive DB split
+- [Codux Elements Tree Panel](https://medium.com/wix-engineering/codux-by-wix-case-study-how-we-built-the-elements-tree-panel-d1952ff8808e) — TypeScript AST + FiberNode correlation
+- [React Dev Inspector](https://react-dev-inspector.zthxxx.me/docs/compiler-plugin) — Babel plugin pattern for data-inspector-* attributes
+- [WordPress Block Editor Handbook](https://developer.wordpress.org/block-editor/) — Gutenberg architecture
+- [Webflow Designer API](https://developers.webflow.com/designer/reference/introduction) — Webflow's element model
 - [Strongly-typed iframe messaging](https://www.nickwhite.cc/blog/strongly-typed-iframe-messaging/) — TypeScript discriminated union postMessage protocol
