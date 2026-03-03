@@ -8,7 +8,7 @@ import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import { cors } from 'hono/cors'
 import { secureHeaders } from 'hono/secure-headers'
-import { handle } from 'hono/vercel'
+
 import { openAPIRouteHandler } from 'hono-openapi'
 import { Scalar } from '@scalar/hono-api-reference'
 
@@ -263,15 +263,11 @@ app.get(
 // The client NEVER imports the implementation — only the type shape
 export type AppType = typeof routes
 
-// Named export for type inference (used by app.ts `import type`)
+// Named export for type inference
 export { app }
 
-// Default export: Vercel serverless handler (zero-config Hono via app.ts)
-// Dev server: Bun.serve uses app.fetch directly below
-export default handle(app)
-
-// Dev server — Bun runtime (Vite proxies /api → localhost:8787)
-if (typeof Bun !== 'undefined' && !process.env.VERCEL) {
+// Bun runtime — dev (Vite proxies /api → localhost:8787) and Railway production
+if (typeof Bun !== 'undefined') {
   const port = Number(process.env.PORT) || 8787
   Bun.serve({ port, fetch: app.fetch, idleTimeout: 255 })
   log.info(`API running on http://localhost:${port}`, { module: 'server', port })
