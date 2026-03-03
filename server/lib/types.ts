@@ -395,8 +395,10 @@ export interface PhaseCompleteEvent {
 
 export interface PlanReadyEvent {
   type: 'plan_ready'
-  runId?: string
-  plan: Record<string, unknown>
+  plan: {
+    projectName: string
+    features: Array<{ name: string; description: string }>
+  }
 }
 
 export interface ClarificationQuestion {
@@ -564,3 +566,4 @@ export type AgentStreamEvent =
   | SandboxCreatedEvent
   | PackageInstalledEvent
   | CreditsUsedEvent
+  | PlanReadyEvent

@@ -391,13 +391,9 @@ export interface PhaseCompleteEvent {
 
 export interface PlanReadyEvent {
   type: 'plan_ready'
-  runId?: string
   plan: {
-    appName?: string
-    appDescription?: string
-    tables?: string[]
-    prd?: string
-    [key: string]: unknown
+    projectName: string
+    features: Array<{ name: string; description: string }>
   }
 }
 
