@@ -13,6 +13,7 @@
 import { describeRoute, resolver } from 'hono-openapi'
 import { Hono } from 'hono'
 import { z } from 'zod'
+import type { Sandbox } from '@daytonaio/sdk'
 import {
   buildProxyUrl,
   createSandbox,
@@ -102,6 +103,11 @@ sandboxUrlRoutes.get(
       return c.json({ previewUrl: null, codeServerUrl: null, expiresAt: null })
     }
 
+    // Already recreating from a previous poll — tell client to keep waiting
+    if (recreatingProjects.has(id)) {
+      return c.json({ previewUrl: null, codeServerUrl: null, expiresAt: null, recreating: true })
+    }
+
     let sandbox
     try {
       sandbox = await getSandbox(project.sandboxId)
@@ -109,14 +115,22 @@ sandboxUrlRoutes.get(
       // Sandbox expired/deleted — attempt recreation if we have a GitHub repo
       if (project.githubRepoUrl && !recreatingProjects.has(id)) {
         recreatingProjects.add(id)
-        // Fire-and-forget: create sandbox, clone repo, start dev server
         recreateSandbox(id, user.id, project.githubRepoUrl).finally(() => {
           recreatingProjects.delete(id)
         })
         return c.json({ previewUrl: null, codeServerUrl: null, expiresAt: null, recreating: true })
       }
-      // Already recreating — tell client to keep waiting
-      if (recreatingProjects.has(id)) {
+      return c.json({ previewUrl: null, codeServerUrl: null, expiresAt: null })
+    }
+
+    // Sandbox exists but is stopped/archived — recreate from GitHub repo
+    if (sandbox.state !== 'started') {
+      console.log(`[sandbox-urls] Sandbox ${sandbox.id} is ${sandbox.state}, triggering recreation`)
+      if (project.githubRepoUrl) {
+        recreatingProjects.add(id)
+        recreateSandbox(id, user.id, project.githubRepoUrl).finally(() => {
+          recreatingProjects.delete(id)
+        })
         return c.json({ previewUrl: null, codeServerUrl: null, expiresAt: null, recreating: true })
       }
       return c.json({ previewUrl: null, codeServerUrl: null, expiresAt: null })
@@ -142,15 +156,51 @@ sandboxUrlRoutes.get(
         expiresAt: new Date(Date.now() + expiresInSeconds * 1000).toISOString(),
       })
     } catch {
+      // Sandbox exists but dev server is dead — attempt restart.
+      // This happens when the sandbox was idle too long and tmux/Vite exited.
+      // Fire-and-forget: restart dev server, let the next poll pick up the URL.
+      if (!recreatingProjects.has(id)) {
+        recreatingProjects.add(id)
+        restartDevServer(sandbox)
+          .catch((err) => console.error(`[sandbox-restart] Failed for ${id}:`, err))
+          .finally(() => recreatingProjects.delete(id))
+      }
       return c.json({
         sandboxId: sandbox.id,
         previewUrl: null,
         codeServerUrl: null,
         expiresAt: null,
+        recreating: true,
       })
     }
   },
 )
+
+// ---------------------------------------------------------------------------
+// Dev Server Restart (sandbox exists but dev server died)
+// ---------------------------------------------------------------------------
+
+/**
+ * Restart the dev server in an existing sandbox whose tmux session died.
+ * Much faster than full recreation — no clone/install needed.
+ */
+async function restartDevServer(sandbox: Sandbox): Promise<void> {
+  console.log(`[sandbox-restart] Restarting dev server in sandbox ${sandbox.id}`)
+
+  // Kill any zombie tmux session
+  await runCommand(sandbox, 'tmux kill-session -t dev 2>/dev/null || true', 'sandbox-restart-kill', {
+    timeout: 10,
+  })
+
+  // Restart dev server in tmux (same command as snapshot entrypoint)
+  await runCommand(
+    sandbox,
+    `tmux new-session -d -s dev -c /workspace 'while true; do bun run dev --host 0.0.0.0 2>&1 | tee /tmp/dev.log; echo "[entrypoint] dev server exited, restarting in 2s..."; sleep 2; done'`,
+    'sandbox-restart-devserver',
+    { timeout: 10 },
+  )
+  console.log(`[sandbox-restart] Dev server restarted in sandbox ${sandbox.id}`)
+}
 
 // ---------------------------------------------------------------------------
 // Sandbox Recreation

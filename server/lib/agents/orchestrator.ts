@@ -11,6 +11,8 @@
 import { anthropic } from '@ai-sdk/anthropic'
 import { openai } from '@ai-sdk/openai'
 import { Agent } from '@mastra/core/agent'
+import type { MastraDBMessage } from '@mastra/core/agent/message-list'
+import type { InputProcessor, ProcessInputStepArgs } from '@mastra/core/processors'
 import { memory } from './memory'
 import { createAgentModelResolver, type ProviderType } from './provider'
 import {
@@ -152,6 +154,41 @@ Use the VibeStack image resolver for all photos: \`https://img.vibestack.site/s/
 7. **No TODO/FIXME/placeholder comments** — ship complete code.`
 
 /**
+ * Processor: strip providerMetadata from recalled messages.
+ *
+ * OpenAI Responses API uses providerMetadata.openai.itemId to create
+ * item_reference entries. When reasoning items are stored without their
+ * paired function_call items, OpenAI rejects the request. Stripping
+ * providerMetadata forces the AI SDK to send full message content instead
+ * of broken item_reference entries.
+ *
+ * Runs at every step of the agentic loop (processInputStep).
+ */
+const stripProviderMetadata: InputProcessor = {
+  id: 'strip-provider-metadata',
+  processInputStep({ messages }: ProcessInputStepArgs): { messages: MastraDBMessage[] } {
+    const cleaned = messages.map((msg) => {
+      if (!msg.content || typeof msg.content !== 'object' || !('parts' in msg.content)) return msg
+      const content = msg.content as { format: number; parts: Array<Record<string, unknown>>; providerMetadata?: unknown }
+      if (!content.parts?.length && !content.providerMetadata) return msg
+      return {
+        ...msg,
+        content: {
+          ...content,
+          providerMetadata: undefined,
+          parts: content.parts.map((part) => {
+            if (!part.providerMetadata) return part
+            const { providerMetadata: _, ...rest } = part
+            return rest
+          }),
+        },
+      } as MastraDBMessage
+    })
+    return { messages: cleaned }
+  },
+}
+
+/**
  * Create a fresh orchestrator agent instance.
  *
  * When passed to Mastra's `agents` config, Mastra auto-registers the agent
@@ -167,6 +204,8 @@ export function createOrchestrator(provider: ProviderType = 'openai', promptOver
     description: 'Single orchestrator that builds apps from user descriptions',
     instructions: promptOverride ?? ORCHESTRATOR_PROMPT,
     tools: buildTools(provider),
+    // Strip providerMetadata to prevent broken OpenAI item_reference entries
+    inputProcessors: [stripProviderMetadata],
     defaultOptions: {
       maxSteps: 50,
       modelSettings: { temperature: 0.3 },

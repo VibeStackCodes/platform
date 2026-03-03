@@ -19,6 +19,7 @@ import { createOrchestrator } from '../lib/agents/orchestrator'
 import { mastra } from '../lib/agents/mastra'
 import { isAllowedModel, MODEL_CONFIGS } from '../lib/agents/provider'
 import { getProject, getUserCredits, updateProject } from '../lib/db/queries'
+import { projects } from '../lib/db/schema'
 import { reserveCredits, settleCredits } from '../lib/credits'
 import { getSandbox } from '../lib/sandbox'
 import { createSSEStream } from '../lib/sse'
@@ -75,9 +76,10 @@ async function bridgeStreamToSSE(
   emit: (event: AgentStreamEvent | CreditsUsedEvent) => void,
   signal: AbortSignal,
   meta: { projectId: string; userId: string; runId: string },
-): Promise<{ totalTokens: number; sandboxId?: string }> {
+): Promise<{ totalTokens: number; sandboxId?: string; openaiResponseId?: string }> {
   let totalTokens = 0
   let sandboxId: string | undefined
+  let openaiResponseId: string | undefined
   let lastTextChunk = ''
   const toolStartTimes = new Map<string, number>()
   // Track file contents for diff computation (path → last known content)
@@ -269,6 +271,11 @@ async function bridgeStreamToSSE(
           if (usage) {
             totalTokens += usage.totalTokens ?? 0
           }
+          // Capture OpenAI response ID for previous_response_id on follow-ups
+          const stepResponse = payload.response ?? chunk.response
+          if (stepResponse?.id) {
+            openaiResponseId = stepResponse.id as string
+          }
           break
         }
 
@@ -327,7 +334,7 @@ async function bridgeStreamToSSE(
     tokensUsed: totalTokens,
   })
 
-  return { totalTokens, sandboxId }
+  return { totalTokens, sandboxId, openaiResponseId }
 }
 
 /**
@@ -488,6 +495,14 @@ agentRoutes.post(
         const agent = createOrchestrator(provider, systemPrompt)
         agent.__registerMastra(mastra)
 
+        // For OpenAI: read last response ID for server-side conversation state
+        const previousResponseId =
+          provider === 'openai'
+            ? ((project.generationState as Record<string, unknown>)?.lastOpenaiResponseId as
+                | string
+                | undefined)
+            : undefined
+
         // Wrap entire generation in a Sentry AI span for observability
         const result = await traceAgent(`orchestrator:${model}`, async () => {
           const streamOutput = await agent.stream(message, {
@@ -499,6 +514,12 @@ agentRoutes.post(
             maxSteps: 50,
             savePerStep: true,
             abortSignal: signal,
+            // Pass OpenAI previous_response_id for server-side conversation state
+            ...(previousResponseId && {
+              providerOptions: {
+                openai: { previousResponseId },
+              },
+            }),
             structuredOutput: {
               schema: z.object({
                 summary: z.string().describe('One-line summary of what was built or changed'),
@@ -512,15 +533,23 @@ agentRoutes.post(
             userId: user.id,
             runId,
           })
-        }) as { totalTokens: number; sandboxId?: string }
+        }) as { totalTokens: number; sandboxId?: string; openaiResponseId?: string }
 
-        // Update project status based on whether sandbox was created
+        // Update project status + persist OpenAI response ID for next turn
+        const projectUpdate: Record<string, unknown> = {
+          status: result.sandboxId ? 'complete' : 'error',
+          sandboxId: result.sandboxId,
+        }
+        if (result.openaiResponseId) {
+          const existingState = (project.generationState as Record<string, unknown>) || {}
+          projectUpdate.generationState = {
+            ...existingState,
+            lastOpenaiResponseId: result.openaiResponseId,
+          }
+        }
         updateProject(
           projectId,
-          {
-            status: result.sandboxId ? 'complete' : 'error',
-            sandboxId: result.sandboxId,
-          },
+          projectUpdate as Partial<typeof projects.$inferInsert>,
           user.id,
         ).catch(() => {})
 
