@@ -5,8 +5,11 @@ import { z } from 'zod'
 const envSchema = z.object({
   // Required
   DATABASE_URL: z.string().min(1),
-  VITE_SUPABASE_URL: z.string().url(),
-  VITE_SUPABASE_ANON_KEY: z.string().min(1),
+  // Supabase — server uses SUPABASE_URL/SUPABASE_ANON_KEY, falls back to VITE_ variants for local dev
+  SUPABASE_URL: z.string().url().optional(),
+  SUPABASE_ANON_KEY: z.string().min(1).optional(),
+  VITE_SUPABASE_URL: z.string().url().optional(),
+  VITE_SUPABASE_ANON_KEY: z.string().min(1).optional(),
   OPENAI_API_KEY: z.string().min(1),
   DAYTONA_API_KEY: z.string().min(1),
   DAYTONA_SNAPSHOT_ID: z.string().min(1),
@@ -43,6 +46,17 @@ function validateEnv() {
     console.error(`[env] Missing or invalid environment variables:\n${missing.join('\n')}`)
     if (process.env.NODE_ENV === 'production') {
       throw new Error('Server startup aborted — invalid environment configuration')
+    }
+  }
+
+  // Ensure at least one Supabase URL+key pair is set
+  const hasSupabase =
+    (process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY) ||
+    (process.env.VITE_SUPABASE_URL && process.env.VITE_SUPABASE_ANON_KEY)
+  if (!hasSupabase) {
+    console.error('[env] Missing Supabase credentials: set SUPABASE_URL + SUPABASE_ANON_KEY (or VITE_ variants)')
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('Server startup aborted — missing Supabase credentials')
     }
   }
 }

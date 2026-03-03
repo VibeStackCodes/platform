@@ -181,8 +181,8 @@ adminRoutes.get(
     // 5. Required env vars
     const requiredVars = [
       'DATABASE_URL',
-      'VITE_SUPABASE_URL',
-      'VITE_SUPABASE_ANON_KEY',
+      'SUPABASE_URL',
+      'SUPABASE_ANON_KEY',
       'SUPABASE_ACCESS_TOKEN',
       'OPENAI_API_KEY',
       'DAYTONA_API_KEY',
@@ -251,8 +251,8 @@ adminRoutes.get(
   async (c) => {
     const required = [
       { name: 'DATABASE_URL', purpose: 'PostgreSQL connection' },
-      { name: 'VITE_SUPABASE_URL', purpose: 'Platform Supabase' },
-      { name: 'VITE_SUPABASE_ANON_KEY', purpose: 'Platform Supabase auth' },
+      { name: 'SUPABASE_URL', purpose: 'Platform Supabase' },
+      { name: 'SUPABASE_ANON_KEY', purpose: 'Platform Supabase auth' },
       { name: 'SUPABASE_ACCESS_TOKEN', purpose: 'Supabase Management API' },
       { name: 'SUPABASE_ORG_ID', purpose: 'Generated Supabase projects org' },
       { name: 'OPENAI_API_KEY', purpose: 'OpenAI / GPT models' },
