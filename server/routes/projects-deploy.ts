@@ -132,7 +132,7 @@ projectDeployRoutes.post(
 
       if (project.githubRepoUrl) {
         // Deploy from GitHub repo (required path)
-        const repoFullName = project.githubRepoUrl.replace('https://github.com/', '')
+        const repoFullName = project.githubRepoUrl.replace('https://github.com/', '').replace(/\.git$/, '')
         console.log(`[deploy] Deploying from GitHub: ${repoFullName}`)
         const result = await deployFromGitHub(repoFullName, project.name, vercelTeamId)
         deployUrl = result.deployUrl
