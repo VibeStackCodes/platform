@@ -28,6 +28,16 @@ Add a visual editor overlay to the builder preview that lets users directly edit
 
 ## Architecture
 
+> **Inspired by Onlook** ([github.com/onlook-dev/onlook](https://github.com/onlook-dev/onlook)). We study their patterns but implement our own versions tailored to VibeStack's browser-based SPA + Daytona sandbox architecture. Onlook is an Electron desktop app — its packages are coupled to Electron's `webview` tag and local filesystem, neither of which apply here.
+
+### Key Patterns Borrowed from Onlook
+
+1. **Two ID systems**: `data-oid` (source-stable, in JSX) for AST mapping + `data-odid` (runtime, assigned by preload) for CSS targeting
+2. **Two-phase style application**: instant CSS `<style>` injection via `[data-odid]` selectors for 16ms visual feedback, async Babel AST patch for source-of-truth
+3. **Penpal RPC**: typed promise-based RPC over postMessage (replaces raw postMessage protocol)
+4. **GestureScreen**: transparent div over iframe captures mouse events, calls Penpal methods to find elements at coordinates
+5. **OID injection at setup/save time**: `@babel/standalone` parses and injects `data-oid` attributes (NOT a Vite compile-time plugin)
+
 ### System Diagram
 
 ```
@@ -35,12 +45,22 @@ Add a visual editor overlay to the builder preview that lets users directly edit
 │                                                                       │
 │  RightPanel Header: [Preview] [Code]  ........  [✏️ Edit] [Deploy]   │
 │                                                                       │
-│  ┌─── iframe (Daytona sandbox preview) ──────────────────────────┐   │
+│  ┌─── GestureScreen (transparent div, captures mouse events) ────┐   │
+│  │  pointer-events: auto when edit mode on, none when off         │   │
+│  │  mousemove → Penpal getElementAtPoint(x,y) → HoverRect        │   │
+│  │  click → Penpal getElementAtPoint(x,y) → SelectRect           │   │
+│  └────────────────────────────────────────────────────────────────┘   │
+│                                                                       │
+│  ┌─── iframe (Daytona sandbox preview, cross-origin) ────────────┐   │
 │  │                                                                │   │
-│  │  Vite plugin (vite-plugin-vibestack-editor):                   │   │
-│  │  ├─ Babel transform: data-vs-id="<file>:<line>:<col>:<sibling>"│   │
-│  │  ├─ bridge.js (~3KB, injected via transformIndexHtml)          │   │
-│  │  └─ Dev-only (stripped from production builds)                 │   │
+│  │  Preload script (injected via Vite plugin):                    │   │
+│  │  ├─ Exposes ~20 Penpal child methods to parent                 │   │
+│  │  ├─ Assigns runtime data-odid to all DOM elements              │   │
+│  │  ├─ CSS Manager: injects <style> with [data-odid] selectors    │   │
+│  │  └─ Dev-only (stripped from production builds)                  │   │
+│  │                                                                │   │
+│  │  Source files have data-oid="<7-char-nanoid>" on JSX elements  │   │
+│  │  (injected by @babel/standalone at file write time)             │   │
 │  └────────────────────────────────────────────────────────────────┘   │
 │                                                                       │
 │  ┌─── EditorOverlay (position:absolute over iframe) ─────────────┐   │
@@ -50,81 +70,121 @@ Add a visual editor overlay to the builder preview that lets users directly edit
 │  └────────────────────────────────────────────────────────────────┘   │
 │                                                                       │
 │  ┌─── PropertyInspector (sidebar, 240px) ────────────────────────┐   │
-│  ┌─── useEditorBridge (hook) ────────────────────────────────────┐   │
-│  ┌─── Edit Executor (tiered) ────────────────────────────────────┐   │
+│  ┌─── useEditorBridge (Penpal connection hook) ──────────────────┐   │
+│  ┌─── Edit Executor (two-phase: instant CSS + async AST) ────────┐   │
 │  ┌─── UndoStack (command pattern) ───────────────────────────────┐   │
 └───────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Component Breakdown
 
-#### 1. Vite Plugin — `vite-plugin-vibestack-editor`
+#### 1. OID Injection — `@babel/standalone` at File Write Time
 
-Lives in the sandbox scaffold (`snapshot/template/`). Two responsibilities:
+**NOT a Vite compile-time plugin.** Following Onlook's pattern, OIDs are injected into source files when they are written to the sandbox. This means `data-oid` attributes exist in the actual `.tsx` source code, making source mapping trivial (grep for the OID).
 
-**Babel JSX Transform** — Injects `data-vs-id` attribute on every JSX element at compile time via `@vitejs/plugin-react`'s `babel.plugins` array. Custom plugin (~50 lines, zero deps).
+The orchestrator agent's `writeFile` and `editFile` tools run a post-write pass:
 
 ```jsx
+// After agent writes file, OID injector runs:
 // Input
 <h1 className="text-xl">Hello</h1>
 
-// Output (dev only)
-<h1 className="text-xl" data-vs-id="src/App.tsx:14:6:0">Hello</h1>
+// Output (written to disk)
+<h1 data-oid="a7x3kf2" className="text-xl">Hello</h1>
 ```
 
-ID format: `<relative-file>:<line>:<column>:<sibling-index>`. The sibling index disambiguates `.map()` elements that share the same source location. Computed at runtime by the Babel transform counting sibling JSX elements at the same parent level.
+- **OID format**: 7-character nanoid (stable, unique per element)
+- **Implementation**: `@babel/standalone` → `traverse` JSX elements → insert `data-oid` attribute if missing
+- **~30 lines of code** — runs on individual files, not the whole project
+- **OIDs survive edits**: existing `data-oid` attributes are preserved; only new elements get new OIDs
 
-**Script Injection** — Injects `bridge.js` into `index.html` via Vite's `transformIndexHtml` hook. Dev-only; not included in production builds.
+#### 2. Preload Script (~200 lines, injected via Vite plugin)
 
-#### 2. bridge.js (~3KB)
+Replaces the original `bridge.js` design. Runs inside the iframe, exposes Penpal child methods.
 
-Lightweight vanilla JS script running inside the iframe. No React dependencies.
+**Vite plugin** (`vite-plugin-vibestack-editor`): injects the preload script into `index.html` via `transformIndexHtml`. Dev-only; stripped from production builds.
 
-**Responsibilities:**
-- Listen for `SET_EDIT_MODE` from parent to activate/deactivate
-- On mousemove: find nearest ancestor with `data-vs-id`, send `ELEMENT_HOVERED` with element rect, tag name, computed styles
-- On click: send `ELEMENT_SELECTED` with full element info (rect, styles, Tailwind classes, text content)
-- On dblclick (text elements): enable `contentEditable`, send `TEXT_EDIT_START`
-- On blur/Enter (text edit): send `TEXT_EDIT_COMMIT` with new text
-- On scroll: send `VIEWPORT_SCROLL` with scrollX/scrollY (rAF-throttled)
-- Listen for `APPLY_STYLE_PREVIEW`: temporarily apply CSS to element for live preview before source edit
-- Listen for `DESELECT`: clear selection state
+**Preload responsibilities:**
+- **Penpal child connection**: exposes ~20 typed methods callable from parent
+- **Runtime `data-odid` assignment**: on DOM mutation (MutationObserver), assigns unique runtime IDs to all elements for CSS targeting
+- **CSS Manager**: maintains a `<style>` element with `[data-odid]` selectors for instant style preview
+- **Element resolution**: `getElementAtPoint(x, y)` → `document.elementFromPoint()` → walk up to nearest `[data-oid]` → return element info
+- **Text editing**: `startTextEditing(oid)` → enable `contentEditable`, focus, select all
 
-**Element resolution strategy:** On any mouse event, walk up DOM from `event.target` using `element.closest('[data-vs-id]')` to find the nearest annotated ancestor. Report both the `data-vs-id` and the path from the annotated ancestor to the actual event target (for disambiguating children of annotated elements).
+**Key Penpal child methods:**
+```typescript
+// Exposed by preload script, callable from parent
+{
+  getElementAtPoint(x: number, y: number): ElementInfo | null
+  getElementByOid(oid: string): ElementInfo | null
+  getAllElements(): ElementInfo[]
+  startTextEditing(oid: string): void
+  stopTextEditing(): { oid: string; newText: string }
+  applyStylePreview(odid: string, styles: Record<string, string>): void
+  clearStylePreviews(): void
+  getComputedStyles(oid: string): Record<string, string>
+  getTailwindClasses(oid: string): string[]
+  scrollToElement(oid: string): void
+  getViewportScroll(): { x: number; y: number }
+}
+```
 
-#### 3. postMessage Protocol
+#### 3. Penpal RPC (replaces raw postMessage)
 
-TypeScript discriminated union — shared type definitions in a protocol file.
+**Library**: `penpal` v7 — typed promise-based RPC over postMessage. ~3KB. Handles connection lifecycle, error propagation, and origin validation.
+
+**Why Penpal over raw postMessage:**
+- Type-safe method calls (no string-based message discrimination)
+- Promise-based (no manual request/response correlation)
+- Built-in connection timeout and error handling
+- Origin validation built-in
+- Used by Onlook in production
 
 ```typescript
-// Parent → Iframe
-type ParentToIframe =
-  | { type: 'SET_EDIT_MODE'; enabled: boolean }
-  | { type: 'DESELECT' }
-  | { type: 'APPLY_STYLE_PREVIEW'; elementId: string; property: string; value: string }
-  | { type: 'SECTION_MOVE'; elementId: string; direction: 'up' | 'down' }
+// Parent side (in useEditorBridge hook)
+import { connectToChild } from 'penpal'
 
-// Iframe → Parent
-type IframeToParent =
-  | { type: 'IFRAME_READY' }
-  | { type: 'ELEMENT_HOVERED'; id: string; rect: SerializedRect; tagName: string }
-  | { type: 'ELEMENT_SELECTED'; id: string; rect: SerializedRect; tagName: string;
-      textContent: string; tailwindClasses: string[]; computedStyles: Record<string, string> }
-  | { type: 'ELEMENT_DESELECTED' }
-  | { type: 'TEXT_EDIT_START'; id: string; currentText: string }
-  | { type: 'TEXT_EDIT_COMMIT'; id: string; newText: string }
-  | { type: 'VIEWPORT_SCROLL'; scrollX: number; scrollY: number }
-  | { type: 'ELEMENT_RESIZED'; id: string; width: number; height: number }
-  | { type: 'SECTION_MOVED'; id: string; direction: 'up' | 'down'; success: boolean }
+const connection = connectToChild({
+  iframe: iframeRef.current,
+  methods: {
+    // Parent methods the iframe can call
+    onElementHovered(info: ElementInfo) { /* update overlay */ },
+    onTextEditCommit(oid: string, newText: string) { /* trigger AST patch */ },
+  }
+})
+const child = await connection.promise // typed proxy to iframe's methods
+
+// Now call iframe methods directly:
+const element = await child.getElementAtPoint(x, y)
 ```
 
-**Handshake:** Parent waits for `IFRAME_READY` (max 10s). Iframe sends it on DOMContentLoaded. Parent responds with `SET_EDIT_MODE { enabled: false }` (edit mode starts off).
+#### 4. GestureScreen — Mouse Event Capture
 
-**Origin validation:** In dev, accept same-origin. In production, validate against the sandbox's known origin.
+Transparent `<div>` positioned over the iframe. Captures all mouse events in the parent coordinate space, then uses Penpal RPC to resolve what's under the cursor in the iframe.
 
-#### 4. useEditorBridge Hook
+```
+┌─ GestureScreen (pointer-events: auto in edit mode) ──────┐
+│  mousemove → child.getElementAtPoint(x, y) → HoverRect   │
+│  click → child.getElementAtPoint(x, y) → SelectRect      │
+│  dblclick → child.startTextEditing(oid) → TextEditor      │
+│                                                            │
+│  ┌─ iframe (pointer-events: none in edit mode) ─────────┐ │
+│  │  (preload script handles getElementAtPoint calls)      │ │
+│  └────────────────────────────────────────────────────────┘ │
+└────────────────────────────────────────────────────────────┘
+```
 
-Parent-side React hook managing the bridge lifecycle.
+**Why GestureScreen (from Onlook) instead of iframe event forwarding:**
+- No cross-origin event access issues
+- Parent has full control over mouse state machine
+- Can implement drag-to-select, resize handles, etc. in parent coordinates
+- Penpal RPC latency (~1-2ms) is imperceptible for hover/click
+
+**Coordinate translation:** `iframeCoord = mouseEvent.clientXY - iframeBoundingRect.topLeft + iframeScrollOffset`. The scroll offset comes from periodic Penpal calls.
+
+#### 5. useEditorBridge Hook
+
+Parent-side React hook managing the Penpal connection lifecycle.
 
 ```typescript
 function useEditorBridge(iframeRef: RefObject<HTMLIFrameElement>, editMode: boolean) {
@@ -132,18 +192,15 @@ function useEditorBridge(iframeRef: RefObject<HTMLIFrameElement>, editMode: bool
   hoveredElement: ElementInfo | null
   selectedElement: ElementInfo | null
   isEditing: boolean
-  scrollOffset: { x: number; y: number }
   iframeReady: boolean
+  child: PenpalChild | null  // typed proxy to iframe methods
 
   // Methods:
-  sendToIframe(message: ParentToIframe): void
   deselect(): void
-  applyStylePreview(elementId: string, prop: string, value: string): void
-  moveSection(elementId: string, direction: 'up' | 'down'): void
+  applyStylePreview(oid: string, styles: Record<string, string>): void
+  moveSection(oid: string, direction: 'up' | 'down'): void
 }
 ```
-
-**Coordinate translation:** `overlayRect = iframeBoundingRect + elementRect - scrollOffset`. Updated on every `VIEWPORT_SCROLL` message (rAF-throttled from bridge.js) and on iframe resize (ResizeObserver).
 
 #### 5. EditorOverlay
 
@@ -170,31 +227,37 @@ Property changes fire an edit command to the Edit Executor:
 - Width/height → swap Tailwind w-/h- class
 - Background → swap Tailwind bg- class
 
-#### 7. Edit Executor — Tiered Strategy
+#### 7. Edit Executor — Two-Phase (Instant CSS + Async AST)
 
-All edits flow through a single executor that chooses the fastest viable strategy.
+Following Onlook's two-phase pattern, all visual edits have instant visual feedback followed by durable source patching.
 
-**Tier 1 — Instant AST Patch (~50-200ms):**
+**Phase 1 — Instant CSS Preview (~16ms):**
+Via Penpal → preload script's CSS Manager → inject `<style>` rule targeting `[data-odid="xxx"]`. User sees the change immediately. No file I/O.
+
+**Phase 2 — Async AST Source Patch (~50-200ms for Tier 1, ~3-5s for Tier 2):**
+After CSS preview is applied, the source patch runs in background.
+
+**Tier 1 — Deterministic AST Patch (~50-200ms):**
 - Text literal: `<h1>Hello</h1>` → `<h1>Welcome</h1>`
-- Simple className swap: `bg-blue-500` → `bg-red-600`
+- Simple className swap: `bg-blue-500` → `bg-red-600` (via `tailwind-merge`)
 - Attribute change: `src="/old.jpg"` → `src="/new.jpg"`
-- Section reorder: swap sibling JSX nodes by line position
-- Implementation: Read file from sandbox → `@babel/parser` + `traverse` + `generator` → patch AST node at line:col → write file back → Vite HMR
+- Section reorder: swap sibling JSX nodes by OID
+- Implementation: Read file from sandbox → `@babel/parser` + `traverse` (find node by `data-oid`) + `generator` (`retainLines: true`) → write file back → Vite HMR → CSS preview auto-cleared
 
 **Tier 2 — AI Agent (~3-5s):**
 - Dynamic text: `{title}`, `t('hero.title')`, `.map()` items
 - Complex className: `cn('bg-blue', isActive && 'bg-green')`
 - Layout restructuring
-- Implementation: Send structured prompt to orchestrator agent with file path, element ID, and desired change → agent calls editFile/writeFile → Vite HMR
+- Implementation: Send structured prompt to orchestrator agent with file path, OID, and desired change → agent calls editFile/writeFile → Vite HMR
 
 **Tier 3 — User Clarification:**
 - Multiple elements at same source location (ambiguous `.map()`)
 - Unknown edit intent
 - Show inline dialog in EditorOverlay asking user to specify
 
-**Tier detection logic:** Parse the source file at the given line:col. If the JSX text/attribute is a string literal → Tier 1. If it's a JSX expression (`{...}`) → Tier 2. If multiple elements share the same source ID → Tier 3.
+**Tier detection logic:** Find source file by grepping for `data-oid="<oid>"`. Parse the file. If the JSX text/attribute is a string literal → Tier 1. If it's a JSX expression (`{...}`) → Tier 2.
 
-**Optimistic updates for text editing:** The contentEditable change in the iframe is the immediate visual state. The source patch runs in background. If Vite HMR result matches the contentEditable state (expected), smooth. If it differs (agent changed more), accept the HMR version (source is truth).
+**Class manipulation**: Use `tailwind-merge` (already in deps via shadcn) for Tailwind class deduplication. Use `CssToTailwindTranslator` if user edits raw CSS values in PropertyInspector → convert to Tailwind classes before AST patch.
 
 #### 8. UndoStack — Command Pattern
 
@@ -236,12 +299,14 @@ Session-local only (matches Wix Harmony's approach).
 
 | Tool | Version | Size | Rationale |
 |------|---------|------|-----------|
-| Custom Babel plugin | N/A | ~50 lines | Same pattern as `@react-dev-inspector/babel-plugin` and Wix Codux's transpiler hints. Custom = full control over ID format, zero runtime. [Source](https://react-dev-inspector.zthxxx.me/docs/compiler-plugin) |
-| @dnd-kit — **REMOVED** | — | — | Originally planned for iframe section reorder. Dropped because dnd-kit uses pointer events (not HTML5 DnD) which don't cross iframe boundaries, and injecting React context into the generated app's component tree is infeasible. Replaced with move-up/move-down buttons. |
-| @floating-ui/react | 0.27.18 | Already installed | De facto positioning standard. 4.4M downloads/week. Used by Radix/shadcn (already in our deps). [Source](https://www.npmjs.com/package/@floating-ui/react) |
-| re-resizable | 6.11.2 | ~4.5KB | React-native resize handles. 639 npm dependents. Works in parent overlay without iframe-specific config. [Source](https://www.npmjs.com/package/re-resizable) |
-| @babel/parser + traverse + generator | Current | Server-only | Required for AST-based source patching. OXC is 50x faster but its userspace plugin API is Rust-only (no JS/TS custom transforms as of March 2026). Since this runs on individual file edits (not hot-path), Babel speed is sufficient. [Source](https://oxc.rs/blog/2024-09-29-transformer-alpha) |
-| Custom bridge.js | N/A | ~3KB | Too simple for a library — just addEventListener + postMessage + getBoundingClientRect. [Source](https://www.nickwhite.cc/blog/strongly-typed-iframe-messaging/) |
+| penpal | v7 | ~3KB | Typed promise-based RPC over postMessage. Used by Onlook in production. Handles connection lifecycle, error propagation, origin validation. Replaces raw postMessage protocol. [Source](https://github.com/nicknisi/penpal) |
+| @babel/standalone | Current | Sandbox-side | OID injection at file write time (not compile-time). Same pattern as Onlook's `addOidsToAst()`. Runs on individual files when agent writes them. [Source](https://github.com/onlook-dev/onlook/blob/main/packages/parser/src/ids.ts) |
+| @babel/parser + traverse + generator | Current | Server-only | AST-based source patching (Tier 1 edits). `retainLines: true` preserves formatting. OXC lacks JS plugin API as of March 2026. [Source](https://oxc.rs/blog/2024-09-29-transformer-alpha) |
+| nanoid | Already installed | ~1KB | 7-character OID generation. Already in deps. [Source](https://www.npmjs.com/package/nanoid) |
+| tailwind-merge | Already installed | — | Tailwind class deduplication for className swaps. Already in deps via shadcn. Same approach as Onlook's `customTwMerge`. [Source](https://github.com/dcastil/tailwind-merge) |
+| @floating-ui/react | Already installed | — | De facto positioning standard. 4.4M downloads/week. Used by Radix/shadcn (already in our deps). [Source](https://www.npmjs.com/package/@floating-ui/react) |
+| re-resizable | 6.11.2 | ~4.5KB | React resize handles. Works in parent overlay without iframe-specific config. [Source](https://www.npmjs.com/package/re-resizable) |
+| css-tree | 3.x | ~50KB | CSS AST parsing for the preload script's CSS Manager (inject/remove style rules). Same as Onlook's approach. [Source](https://www.npmjs.com/package/css-tree) |
 
 ### Discarded (with rationale)
 
@@ -261,10 +326,11 @@ Session-local only (matches Wix Harmony's approach).
 
 The `snapshot/template/` directory (vibestack-template repo) needs:
 
-1. **New Vite plugin file:** `vite-plugin-vibestack-editor.ts` (Babel transform + bridge injection)
-2. **New bridge script:** `public/__vibestack-bridge.js` (or served via Vite middleware)
-3. **Dev dependency:** None new — `@vitejs/plugin-react` already supports `babel.plugins`
-4. **vite.config.ts update:** Add the plugin to the plugins array (dev-only)
+1. **New Vite plugin file:** `vite-plugin-vibestack-editor.ts` (preload script injection via `transformIndexHtml`)
+2. **New preload script:** `src/__vibestack-preload.ts` (~200 lines — Penpal child, CSS Manager, element resolution, runtime ODID assignment)
+3. **New dev dependencies:** `penpal` (RPC), `css-tree` (CSS AST for style injection), `nanoid` (OID generation)
+4. **vite.config.ts update:** Add the editor plugin to the plugins array (dev-only)
+5. **OID injector**: Runs as a post-write hook in the orchestrator agent's `writeFile`/`editFile` tools — adds `data-oid` attributes to JSX elements using `@babel/standalone`
 
 ## API Changes
 
