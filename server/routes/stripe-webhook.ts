@@ -9,6 +9,9 @@ import { Hono } from 'hono'
 import { Stripe } from 'stripe'
 import { z } from 'zod'
 import { getProfileByStripeId, updateProfileByStripeId, updateProfilePlan } from '../lib/db/queries'
+import { log } from '../lib/logger'
+
+const slog = log.child({ module: 'stripe-webhook' })
 
 // ---------------------------------------------------------------------------
 // Zod schemas
@@ -90,7 +93,7 @@ stripeWebhookRoutes.post(
       try {
         event = getStripe().webhooks.constructEvent(body, signature, getWebhookSecret())
       } catch (err) {
-        console.error('Webhook signature verification failed:', err)
+        slog.error('Webhook signature verification failed', { error: err })
         return c.json({ error: 'Invalid signature' }, 400)
       }
 
@@ -102,13 +105,13 @@ stripeWebhookRoutes.post(
           const userId = session.metadata?.supabase_user_id
 
           if (!userId) {
-            console.error('No supabase_user_id in session metadata')
+            slog.error('No supabase_user_id in session metadata', { eventType: event.type })
             break
           }
 
           // Update user plan to 'pro'
           await updateProfilePlan(userId, 'pro', 2000, 2000)
-          console.log(`User ${userId} upgraded to Pro plan`)
+          slog.info('User upgraded to Pro plan', { userId })
           break
         }
 
@@ -120,7 +123,7 @@ stripeWebhookRoutes.post(
           const profile = await getProfileByStripeId(customerId)
 
           if (!profile) {
-            console.error('Failed to find user by customer ID')
+            slog.error('User not found by customer ID', { customerId, eventType: event.type })
             break
           }
 
@@ -131,7 +134,7 @@ stripeWebhookRoutes.post(
             creditsRemaining: 200,
             creditsResetAt: null,
           })
-          console.log(`User ${profile.id} downgraded to Free plan`)
+          slog.info('User downgraded to Free plan', { userId: profile.id, customerId })
           break
         }
 
@@ -151,7 +154,7 @@ stripeWebhookRoutes.post(
             creditsRemaining: profile.creditsMonthly,
             creditsResetAt: new Date((invoice.lines.data[0]?.period?.end ?? 0) * 1000),
           })
-          console.log(`User ${profile.id} credits reset to ${profile.creditsMonthly}`)
+          slog.info('User credits reset', { userId: profile.id, creditsMonthly: profile.creditsMonthly })
           break
         }
 
@@ -164,25 +167,25 @@ stripeWebhookRoutes.post(
           const profile = await getProfileByStripeId(customerId)
 
           if (!profile) {
-            console.error('Failed to find user by customer ID')
+            slog.error('User not found by customer ID', { customerId, eventType: event.type })
             break
           }
 
           // Update plan based on subscription status
           const plan = subscription.status === 'active' ? 'pro' : 'free'
           await updateProfileByStripeId(customerId, { plan })
-          console.log(`User ${profile.id} plan updated to ${plan}`)
+          slog.info('User plan updated', { userId: profile.id, plan, customerId })
           break
         }
 
         default:
-          console.log(`Unhandled event type: ${event.type}`)
+          slog.debug('Unhandled event type', { eventType: event.type })
       }
 
       // Return 200 to acknowledge receipt
       return c.json({ received: true })
     } catch (error) {
-      console.error('Webhook processing error:', error)
+      slog.error('Webhook processing error', { error })
       return c.json(
         {
           error: error instanceof Error ? error.message : 'Webhook processing failed',

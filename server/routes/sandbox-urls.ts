@@ -25,7 +25,10 @@ import {
 } from '../lib/sandbox'
 import { getProject, updateProject } from '../lib/db/queries'
 import { getInstallationToken } from '../lib/github'
+import { log } from '../lib/logger'
 import { authMiddleware } from '../middleware/auth'
+
+const slog = log.child({ module: 'sandbox-urls' })
 
 // In-memory guard to prevent duplicate sandbox recreation from rapid polling
 const recreatingProjects = new Set<string>()
@@ -125,7 +128,7 @@ sandboxUrlRoutes.get(
 
     // Sandbox exists but is stopped/archived — recreate from GitHub repo
     if (sandbox.state !== 'started') {
-      console.log(`[sandbox-urls] Sandbox ${sandbox.id} is ${sandbox.state}, triggering recreation`)
+      slog.info('Sandbox not started, triggering recreation', { sandboxId: sandbox.id, state: sandbox.state, projectId: id })
       if (project.githubRepoUrl) {
         recreatingProjects.add(id)
         recreateSandbox(id, user.id, project.githubRepoUrl).finally(() => {
@@ -162,7 +165,7 @@ sandboxUrlRoutes.get(
       if (!recreatingProjects.has(id)) {
         recreatingProjects.add(id)
         restartDevServer(sandbox)
-          .catch((err) => console.error(`[sandbox-restart] Failed for ${id}:`, err))
+          .catch((err) => slog.error('Dev server restart failed', { projectId: id, error: err }))
           .finally(() => recreatingProjects.delete(id))
       }
       return c.json({
@@ -185,7 +188,7 @@ sandboxUrlRoutes.get(
  * Much faster than full recreation — no clone/install needed.
  */
 async function restartDevServer(sandbox: Sandbox): Promise<void> {
-  console.log(`[sandbox-restart] Restarting dev server in sandbox ${sandbox.id}`)
+  slog.info('Restarting dev server', { sandboxId: sandbox.id })
 
   // Kill any zombie tmux session
   await runCommand(sandbox, 'tmux kill-session -t dev 2>/dev/null || true', 'sandbox-restart-kill', {
@@ -199,7 +202,7 @@ async function restartDevServer(sandbox: Sandbox): Promise<void> {
     'sandbox-restart-devserver',
     { timeout: 10 },
   )
-  console.log(`[sandbox-restart] Dev server restarted in sandbox ${sandbox.id}`)
+  slog.info('Dev server restarted', { sandboxId: sandbox.id })
 }
 
 // ---------------------------------------------------------------------------
@@ -220,7 +223,7 @@ async function recreateSandbox(
   userId: string,
   githubRepoUrl: string,
 ): Promise<void> {
-  console.log(`[sandbox-recreation] Starting for project ${projectId}`)
+  slog.info('Sandbox recreation starting', { projectId })
 
   const sandbox = await createSandbox({
     labels: { project: projectId, recreated: 'true' },
@@ -228,7 +231,7 @@ async function recreateSandbox(
 
   // Update project's sandboxId immediately so subsequent polls find this sandbox
   await updateProject(projectId, { sandboxId: sandbox.id }, userId)
-  console.log(`[sandbox-recreation] Sandbox ${sandbox.id} created, DB updated`)
+  slog.info('Sandbox created, DB updated', { sandboxId: sandbox.id, projectId })
 
   // Clone the project's GitHub repo, replacing the template scaffold entirely.
   // The snapshot ships a template repo at /workspace with a dev server running in tmux.
@@ -251,13 +254,10 @@ async function recreateSandbox(
     { timeout: 120 },
   )
   if (cloneResult.exitCode !== 0) {
-    console.error(
-      `[sandbox-recreation] Git clone failed for project ${projectId}:`,
-      cloneResult.stderr || cloneResult.stdout,
-    )
+    slog.error('Git clone failed', { projectId, output: cloneResult.stderr || cloneResult.stdout })
     return
   }
-  console.log(`[sandbox-recreation] Repo cloned into sandbox ${sandbox.id}`)
+  slog.info('Repo cloned into sandbox', { sandboxId: sandbox.id, projectId })
 
   // 3. Install deps (project may have added packages beyond the snapshot template)
   const installResult = await runCommand(
@@ -267,10 +267,7 @@ async function recreateSandbox(
     { timeout: 120 },
   )
   if (installResult.exitCode !== 0) {
-    console.error(
-      `[sandbox-recreation] bun install failed for project ${projectId}:`,
-      installResult.stderr || installResult.stdout,
-    )
+    slog.error('bun install failed', { projectId, output: installResult.stderr || installResult.stdout })
   }
 
   // 4. Restart the dev server in tmux (same command as snapshot entrypoint)
@@ -280,5 +277,5 @@ async function recreateSandbox(
     'sandbox-restore-devserver',
     { timeout: 10 },
   )
-  console.log(`[sandbox-recreation] Dev server restarted, sandbox ${sandbox.id} ready`)
+  slog.info('Sandbox recreation complete', { sandboxId: sandbox.id, projectId })
 }

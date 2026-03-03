@@ -17,7 +17,10 @@ import { downloadDirectory, getDaytonaClient } from '../lib/sandbox'
 import { memory } from '../lib/agents/memory'
 import { buildAppSlug } from '../lib/slug'
 import type { DeployRequest } from '../lib/types'
+import { log } from '../lib/logger'
 import { authMiddleware } from '../middleware/auth'
+
+const slog = log.child({ module: 'deploy' })
 
 // ---------------------------------------------------------------------------
 // Zod schemas
@@ -120,33 +123,31 @@ projectDeployRoutes.post(
         return c.json({ error: 'Sandbox not found' }, 404)
       }
 
-      console.log(`[deploy] Downloading files from sandbox ${sandbox.id}...`)
+      slog.info('Downloading files from sandbox', { sandboxId: sandbox.id, projectId })
 
       let deployUrl: string
 
-      console.log(
-        `[deploy] Project: ${project.name}, GitHub: ${project.githubRepoUrl || 'none'}, Sandbox: ${project.sandboxId}`,
-      )
+      slog.info('Deploy started', { projectName: project.name, githubRepoUrl: project.githubRepoUrl ?? 'none', sandboxId: project.sandboxId })
 
       let vercelProjectSlug: string
 
       if (project.githubRepoUrl) {
         // Deploy from GitHub repo (required path)
         const repoFullName = project.githubRepoUrl.replace('https://github.com/', '').replace(/\.git$/, '')
-        console.log(`[deploy] Deploying from GitHub: ${repoFullName}`)
+        slog.info('Deploying from GitHub', { repoFullName })
         const result = await deployFromGitHub(repoFullName, project.name, vercelTeamId)
         deployUrl = result.deployUrl
         vercelProjectSlug = result.vercelProjectSlug
       } else {
         // Fallback: download files and upload to Vercel
-        console.log(`[deploy] No GitHub repo, falling back to file upload...`)
+        slog.info('No GitHub repo, falling back to file upload', { projectId })
         const files = await downloadDirectory(sandbox, '/workspace')
-        console.log(`[deploy] Downloaded ${files.length} files, deploying to Vercel...`)
+        slog.info('Files downloaded, deploying to Vercel', { fileCount: files.length })
         deployUrl = await deployToVercel(project.name, files, vercelTeamId)
         vercelProjectSlug = project.name.toLowerCase().replace(/[^a-z0-9-]/g, '-')
       }
 
-      console.log(`[deploy] Deployment successful: ${deployUrl}`)
+      slog.info('Deployment successful', { deployUrl, projectId })
 
       // Assign custom domain alias to the actual deployed project
       const wildcardDomain = process.env.VERCEL_WILDCARD_DOMAIN // e.g. "vibestack.site"
@@ -154,7 +155,7 @@ projectDeployRoutes.post(
         const appSlug = buildAppSlug(project.name, projectId)
         const customDomain = `${appSlug}.${wildcardDomain}`
         deployUrl = await assignCustomDomain(customDomain, vercelProjectSlug)
-        console.log(`[deploy] Custom domain assigned: ${deployUrl}`)
+        slog.info('Custom domain assigned', { deployUrl, projectId })
       }
 
       // Update project with deploy URL using Drizzle
@@ -181,7 +182,7 @@ projectDeployRoutes.post(
           },
         ],
       }).catch((err: unknown) => {
-        console.warn('[deploy] Failed to persist deploy message to memory:', err)
+        slog.warn('Failed to persist deploy message to memory', { projectId, error: err })
       })
 
       return c.json({
@@ -190,7 +191,7 @@ projectDeployRoutes.post(
         projectId,
       })
     } catch (error) {
-      console.error('[deploy] Deployment failed:', error)
+      slog.error('Deployment failed', { error })
       return c.json(
         {
           error: 'Deployment failed',
@@ -274,7 +275,7 @@ async function deployToVercel(
 
   // Poll deployment until ready
   const deployUrl = `https://${deployment.url}`
-  console.log(`[deploy] Deployment created: ${deployUrl} (${deployment.id})`)
+  slog.info('Deployment created', { deployUrl, deploymentId: deployment.id })
 
   // Convert to Deployment type expected by @vercel/client
   const vercelDeployment: Deployment = {
@@ -319,7 +320,7 @@ async function deployFromGitHub(
   }
   const ghRepo = (await ghRes.json()) as { id: number; default_branch: string }
   const repoId = ghRepo.id
-  console.log(`[deploy] GitHub repo ${repoFullName}: id=${repoId}, branch=${ghRepo.default_branch}`)
+  slog.info('GitHub repo info fetched', { repoFullName, repoId, branch: ghRepo.default_branch })
 
   // Step 2: Create Vercel project linked to GitHub repo
   const projectResponse = await fetchWithTimeout(
@@ -346,9 +347,9 @@ async function deployFromGitHub(
 
   if (projectResponse.ok) {
     const project = (await projectResponse.json()) as { id: string }
-    console.log(`[deploy] Vercel project created: ${project.id}`)
+    slog.info('Vercel project created', { vercelProjectId: project.id, slug })
   } else if (projectResponse.status === 409) {
-    console.log(`[deploy] Vercel project "${slug}" already exists, continuing...`)
+    slog.info('Vercel project already exists, continuing', { slug })
   } else {
     const errorBody = await projectResponse.text()
     throw new Error(`Vercel project creation failed: ${errorBody}`)
@@ -382,7 +383,7 @@ async function deployFromGitHub(
 
   const deployment = (await deployResponse.json()) as VercelDeployment
   const deployUrl = `https://${deployment.url}`
-  console.log(`[deploy] Deployment created: ${deployUrl} (${deployment.id})`)
+  slog.info('Deployment created', { deployUrl, deploymentId: deployment.id })
 
   // Convert to Deployment type expected by @vercel/client
   const vercelDeployment: Deployment = {
@@ -420,19 +421,17 @@ async function waitForDeploymentReady(
       throw new Error('Deployment timed out waiting for READY state')
     }
 
-    console.log(
-      `[deploy] Deployment status event: ${event.type} (attempt ${attempt}/${maxAttempts})`,
-    )
+    slog.debug('Deployment status event', { eventType: event.type, attempt, maxAttempts })
 
     if (event.type === 'ready') {
-      console.log(`[deploy] Deployment ready!`)
+      slog.info('Deployment ready')
       return
     }
 
     if (event.type === 'error') {
       const errorPayload = event.payload as { message?: string } | undefined
       const errorMessage = errorPayload?.message ?? JSON.stringify(errorPayload)
-      console.error('[deploy] Deployment error:', errorMessage)
+      slog.error('Deployment error', { error: errorMessage })
       throw new Error(`Deployment failed: ${errorMessage}`)
     }
 

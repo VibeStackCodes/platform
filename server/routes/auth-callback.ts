@@ -7,6 +7,9 @@ import { describeRoute, resolver } from 'hono-openapi'
 import { createClient } from '@supabase/supabase-js'
 import { Hono } from 'hono'
 import { z } from 'zod'
+import { log } from '../lib/logger'
+
+const slog = log.child({ module: 'auth-callback' })
 
 // ---------------------------------------------------------------------------
 // Zod schemas
@@ -77,12 +80,12 @@ authCallbackRoutes.get(
       try {
         const { error } = await supabase.auth.exchangeCodeForSession(code)
         if (error) {
-          console.error('Auth callback error:', error)
+          slog.error('Auth callback error', { error })
           // Never reflect raw error.message in redirect URL — use a fixed error code
           return c.redirect(`${origin}/?error=authentication_failed`)
         }
       } catch (error) {
-        console.error('Unexpected auth error:', error)
+        slog.error('Unexpected auth error', { error })
         return c.redirect(`${origin}/?error=authentication_failed`)
       }
     }
