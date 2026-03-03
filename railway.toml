@@ -1,6 +1,5 @@
 [build]
-builder = "nixpacks"
-buildCommand = "bun install --frozen-lockfile"
+builder = "railpack"
 
 [deploy]
 startCommand = "bun run server/index.ts"

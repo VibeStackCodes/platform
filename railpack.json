@@ -1,0 +1,15 @@
+{
+  "$schema": "https://schema.railpack.com",
+  "provider": "node",
+  "packages": {
+    "bun": "*"
+  },
+  "steps": {
+    "install": {
+      "commands": ["bun install --frozen-lockfile"]
+    }
+  },
+  "deploy": {
+    "startCommand": "bun run server/index.ts"
+  }
+}
