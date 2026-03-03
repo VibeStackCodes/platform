@@ -1,5 +1,6 @@
 [build]
 builder = "nixpacks"
+buildCommand = "bun install --frozen-lockfile"
 
 [deploy]
 startCommand = "bun run server/index.ts"
