@@ -3,14 +3,14 @@
 Hono REST API serving the VibeStack platform. All routes under `/api` basePath.
 
 ## Files
-- `index.ts` — Hono app entry: CORS, Sentry, CSP headers, body limit (10MB), rate limiting, route mounting, Vercel adapter + `Bun.serve({ idleTimeout: 255 })`
+- `index.ts` — Hono app entry: CORS, Sentry, CSP headers, body limit (10MB), rate limiting, route mounting, `Bun.serve({ idleTimeout: 255 })`
 - `sentry.ts` — Conditional Sentry init + `traceAgent()`/`traceTool()` span helpers for AI observability
 
 ## Key Patterns
 - Server code uses **relative imports** (never `@/` alias — that's client-only)
 - Env vars via `process.env.*` (never `import.meta.env`)
-- Rate limiting: 5 req/min for `/agent`, 60 req/min global — DB-backed (PostgreSQL sliding window), survives Vercel cold starts
-- Dual export: `handle(app)` for Vercel serverless, `Bun.serve()` for dev
+- Rate limiting: 5 req/min for `/agent`, 60 req/min global — DB-backed (PostgreSQL sliding window)
+- Deployed on Railway (always-on Bun process), NOT Vercel serverless. Client SPA on Vercel, API on Railway.
 - Health check: `GET /api/health` verifies DB connectivity
 
 ## Gotchas
