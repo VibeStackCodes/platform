@@ -16,6 +16,7 @@ import * as Sentry from '@sentry/node'
 import { RequestContext } from '@mastra/core/di'
 import { traceAgent } from '../sentry'
 import { createOrchestrator } from '../lib/agents/orchestrator'
+import { createAnalyst, AnalystPlanSchema } from '../lib/agents/analyst'
 import { mastra } from '../lib/agents/mastra'
 import { isAllowedModel, MODEL_CONFIGS } from '../lib/agents/provider'
 import { getProject, getUserCredits, updateProject } from '../lib/db/queries'
@@ -41,6 +42,11 @@ const AgentRequest = z.object({
     .optional()
     .default('gpt-5.2-codex')
     .describe('Model identifier — gpt-5.2-codex | claude-opus-4-6 | claude-sonnet-4-6'),
+  phase: z
+    .enum(['analyst', 'build'])
+    .optional()
+    .default('build')
+    .describe('Pipeline phase — analyst produces a plan, build runs the orchestrator'),
 })
 
 const ErrorResponse = z.object({
@@ -338,6 +344,98 @@ async function bridgeStreamToSSE(
 }
 
 /**
+ * Run the Analyst agent and emit a plan_ready event.
+ * The analyst is a pure reasoning agent — no tools, just structured output.
+ */
+async function runAnalystPhase(
+  emit: (event: AgentStreamEvent | CreditsUsedEvent) => void,
+  signal: AbortSignal,
+  meta: {
+    message: string
+    projectId: string
+    userId: string
+    model: string
+    requestContext: RequestContext
+  },
+): Promise<{ totalTokens: number }> {
+  const agent = createAnalyst()
+  agent.__registerMastra(mastra)
+
+  emit({ type: 'thinking', content: '' })
+
+  const streamOutput = await agent.stream(meta.message, {
+    requestContext: meta.requestContext,
+    memory: {
+      thread: meta.projectId,
+      resource: meta.userId,
+    },
+    maxSteps: 1,
+    abortSignal: signal,
+    structuredOutput: { schema: AnalystPlanSchema },
+  })
+
+  // Collect thinking text
+  let thinkingText = ''
+  const reader = streamOutput.fullStream.getReader()
+
+  try {
+    while (true) {
+      if (signal.aborted) break
+      const { done, value: chunk } = await reader.read()
+      if (done) break
+      if (!chunk?.type) continue
+
+      // biome-ignore lint/suspicious/noExplicitAny: envelope shape varies per chunk type
+      const payload = (chunk as any).payload ?? chunk
+
+      if (chunk.type === 'text-delta') {
+        // biome-ignore lint/suspicious/noExplicitAny: envelope shape varies per chunk type
+        const text = payload.textDelta ?? (chunk as any).textDelta ?? ''
+        if (text) {
+          thinkingText += text
+          if (thinkingText.length > 100) {
+            emit({ type: 'thinking', content: thinkingText })
+            thinkingText = ''
+          }
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock()
+  }
+
+  // Flush remaining thinking
+  if (thinkingText) {
+    emit({ type: 'thinking', content: thinkingText })
+  }
+
+  // Extract structured plan
+  let plan: { projectName: string; features: Array<{ name: string; description: string }> }
+  try {
+    const output = await streamOutput.object
+    plan = AnalystPlanSchema.parse(output)
+  } catch {
+    // Fallback: try to parse from text
+    const text = await streamOutput.text
+    plan = { projectName: 'App', features: [{ name: 'Core Features', description: text.slice(0, 200) }] }
+  }
+
+  // Emit plan_ready
+  emit({ type: 'plan_ready', plan })
+
+  // Get token usage
+  let totalTokens = 0
+  try {
+    const usage = await streamOutput.usage
+    if (usage?.totalTokens) totalTokens = usage.totalTokens
+  } catch {
+    // Usage may not be available
+  }
+
+  return { totalTokens }
+}
+
+/**
  * POST /api/agent
  * Stream orchestrator execution via SSE
  */
@@ -372,6 +470,13 @@ agentRoutes.post(
                 default: 'gpt-5.2-codex',
                 description:
                   'Model identifier — gpt-5.2-codex | claude-opus-4-6 | claude-sonnet-4-6',
+              },
+              phase: {
+                type: 'string',
+                enum: ['analyst', 'build'],
+                default: 'build',
+                description:
+                  'Pipeline phase — analyst produces a plan, build runs the orchestrator',
               },
             },
           },
@@ -421,6 +526,7 @@ agentRoutes.post(
       message?: string
       projectId?: string
       model?: string
+      phase?: string
     }
     try {
       body = await c.req.json()
@@ -429,7 +535,8 @@ agentRoutes.post(
     }
 
     const { message, projectId, model = 'gpt-5.2-codex' } = body
-    agentLog.info(`Generation: project=${projectId} model=${model}`, { projectId, model })
+    const phase = body.phase ?? 'build'
+    agentLog.info(`Generation: project=${projectId} model=${model} phase=${phase}`, { projectId, model, phase })
 
     if (!message || !projectId) {
       return c.json({ error: 'Missing message or projectId' }, 400)
@@ -476,6 +583,33 @@ agentRoutes.post(
       let settled = false
 
       try {
+        // ── Analyst phase ────────────────────────────────────────────────────
+        if (phase === 'analyst') {
+          const result = await traceAgent(`analyst:${model}`, async () => {
+            return runAnalystPhase(emit, signal, {
+              message,
+              projectId,
+              userId: user.id,
+              model,
+              requestContext,
+            })
+          }) as { totalTokens: number }
+
+          // Settle credits (analyst is cheap)
+          const creditsUsed = Math.ceil(result.totalTokens / 1000)
+          const settlement = await settleCredits(user.id, CREDIT_RESERVATION, creditsUsed)
+          settled = true
+
+          emit({
+            type: 'credits_used',
+            creditsUsed,
+            creditsRemaining: settlement.creditsRemaining,
+            tokensTotal: result.totalTokens,
+          })
+          return
+        }
+
+        // ── Build phase (orchestrator) ────────────────────────────────────────
         // Create agent with provider-appropriate web search tool
         const provider = MODEL_CONFIGS[model]?.provider ?? 'openai'
 
