@@ -7,6 +7,9 @@
   "steps": {
     "install": {
       "commands": ["bun install --frozen-lockfile"]
+    },
+    "build": {
+      "commands": ["echo 'Skipping client build — Railway runs server only'"]
     }
   },
   "deploy": {
