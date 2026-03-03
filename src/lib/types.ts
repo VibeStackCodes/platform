@@ -145,6 +145,7 @@ export interface GenerationState {
   creativeSpec?: unknown
   generationStatus?: string
   lastEditedAt?: string
+  workflowRunId?: string
 }
 
 // ============================================================================
@@ -566,6 +567,15 @@ export interface PackageInstalledEvent {
   packages: string
 }
 
+export interface WorkflowSuspendedEvent {
+  type: 'workflow_suspended'
+  runId: string
+  plan: {
+    projectName: string
+    features: Array<{ name: string; description: string }>
+  }
+}
+
 export type AgentStreamEvent =
   | ThinkingEvent
   | ToolStartEvent
@@ -575,6 +585,8 @@ export type AgentStreamEvent =
   | SandboxReadyEvent
   | PackageInstalledEvent
   | CreditsUsedEvent
+  | PlanReadyEvent
+  | WorkflowSuspendedEvent
 
 // ============================================================================
 // Timeline Entries (unified chat + pipeline event stream)

@@ -154,10 +154,7 @@ export function useAgentStream({
   )
   const [resumeRunId, setResumeRunId] = useState<string | null>(null)
   const [pendingPlan, setPendingPlan] = useState<PlanReadyEvent['plan'] | null>(null)
-  const [planRunId, setPlanRunId] = useState<string | null>(null)
-  const [planApproved, setPlanApproved] = useState(false)
-  const needsReplan = useRef(false)
-  const hasUsedAnalyst = useRef(false)
+  const [workflowRunId, setWorkflowRunId] = useState<string | null>(null)
   const [userCredits, setUserCredits] = useState<{
     credits_remaining: number
     credits_monthly: number
@@ -422,9 +419,6 @@ export function useAgentStream({
   const hasHydratedFromEvents = useRef(false)
   useEffect(() => {
     if (hasHydratedFromEvents.current) return
-    if (persistedMessages.length > 0) {
-      hasUsedAnalyst.current = true
-    }
     if (persistedTimeline.length > 0 && timelineEvents.length === 0) {
       hasHydratedFromEvents.current = true
       setTimelineEvents(persistedTimeline)
@@ -784,6 +778,11 @@ export function useAgentStream({
 
         case 'package_installed':
           break
+
+        case 'workflow_suspended':
+          setPendingPlan(event.plan)
+          setWorkflowRunId(event.runId)
+          break
       }
     },
     [onGenerationComplete, onSandboxReady, pushTimeline, updateTimeline],
@@ -865,17 +864,9 @@ export function useAgentStream({
 
       const endpoint = selectedElement ? '/api/agent/edit' : '/api/agent'
 
-      // Determine phase: analyst for first prompt (no prior messages), build otherwise
-      const phase =
-        (!hasUsedAnalyst.current || needsReplan.current) && !planApproved ? 'analyst' : 'build'
-      if (phase === 'analyst') {
-        hasUsedAnalyst.current = true
-        if (needsReplan.current) needsReplan.current = false
-      }
-
       const body = selectedElement
         ? { message: text, projectId, targetElement: selectedElement, model }
-        : { message: text, projectId, model, phase }
+        : { message: text, projectId, model }
 
       try {
         const response = await apiFetch(endpoint, {
@@ -944,7 +935,6 @@ export function useAgentStream({
       projectId,
       model,
       chatStatus,
-      planApproved,
       parseSSEBuffer,
       handleGenerationEvent,
       selectedElement,
@@ -1054,18 +1044,119 @@ export function useAgentStream({
 
   const handlePlanApprove = useCallback(async () => {
     setPendingPlan(null)
-    setPlanApproved(true)
 
-    // Send a build-phase message — orchestrator reads the approved plan from memory
-    sendChatMessage('Plan approved. Proceed with building the app.')
-  }, [sendChatMessage])
+    if (!workflowRunId) return
+
+    // Optimistic user message
+    const userMessage: ChatMessage = {
+      id: `user-${Date.now()}`,
+      role: 'user',
+      content: 'Plan approved. Proceed with building the app.',
+    }
+    setSessionMessages((prev) => [...prev, userMessage])
+    setChatStatus('streaming')
+    setGenerationStatus('generating')
+    setDoneSummary(undefined)
+
+    const assistantId = `assistant-${Date.now()}`
+    currentTurnId.current = assistantId
+    setSessionMessages((prev) => [
+      ...prev,
+      { id: assistantId, role: 'assistant' as const, content: '' },
+    ])
+
+    let fullText = ''
+    abortControllerRef.current?.abort()
+    const abortController = new AbortController()
+    abortControllerRef.current = abortController
+
+    try {
+      const response = await apiFetch('/api/agent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          runId: workflowRunId,
+          approved: true,
+          projectId,
+          model,
+        }),
+        signal: abortController.signal,
+      })
+
+      if (!response.ok || !response.body) {
+        if (response.status === 402) {
+          const errorData = await response.json()
+          setChatError(
+            new Error(`Out of credits. ${errorData.credits_remaining ?? 0} remaining.`),
+          )
+          setSessionMessages((prev) => prev.filter((m) => m.id !== assistantId))
+          setChatStatus('ready')
+          setGenerationStatus('error')
+          return
+        }
+        throw new Error(`Resume failed: ${response.status}`)
+      }
+
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+
+          buffer += decoder.decode(value, { stream: true })
+          buffer = parseSSEBuffer(
+            buffer,
+            (delta: string) => {
+              fullText += delta
+              const snapshot = fullText
+              setSessionMessages((prev) =>
+                prev.map((m) => (m.id === assistantId ? { ...m, content: snapshot } : m)),
+              )
+            },
+            handleGenerationEvent,
+          )
+        }
+      } finally {
+        reader.releaseLock()
+      }
+
+      queryClient.invalidateQueries({ queryKey: ['project-conversation', projectId] })
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') return
+      if (import.meta.env.DEV) console.error('[builder-chat] handlePlanApprove error:', err)
+      setChatError(err instanceof Error ? err : new Error('Resume failed'))
+      setSessionMessages((prev) =>
+        prev.filter((m) => m.id !== assistantId || m.content.length > 0),
+      )
+    } finally {
+      setChatStatus('ready')
+      setWorkflowRunId(null)
+    }
+  }, [workflowRunId, projectId, model, parseSSEBuffer, handleGenerationEvent, queryClient])
 
   const handleRequestChanges = useCallback(() => {
     setPendingPlan(null)
-    needsReplan.current = true
-    // Input bar is now ready for user to type feedback
-    // Next sendChatMessage will detect needsReplan and send phase: 'analyst'
-  }, [])
+
+    // Fire-and-forget bail
+    if (workflowRunId) {
+      apiFetch('/api/agent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          runId: workflowRunId,
+          approved: false,
+          projectId,
+          model,
+        }),
+      }).catch(() => {})
+    }
+
+    setWorkflowRunId(null)
+    // Input bar is now ready — user types feedback → next sendChatMessage starts a fresh workflow
+  }, [workflowRunId, projectId, model])
 
   // Merge persisted + session tool steps.
   // Session steps have richer data (oldContent/newContent for diffs) so they take priority.

@@ -13,7 +13,7 @@
         "@hono/standard-validator": "^0.2.2",
         "@hookform/resolvers": "^5.2.2",
         "@langfuse/client": "^4.6.1",
-        "@mastra/core": "^1.8.0",
+        "@mastra/core": "1.8.0",
         "@mastra/langfuse": "^1.0.3",
         "@mastra/loggers": "^1.0.1",
         "@mastra/memory": "^1.5.2",

@@ -150,6 +150,7 @@ export interface GenerationState {
   creativeSpec?: unknown
   generationStatus?: string
   lastEditedAt?: string
+  workflowRunId?: string
 }
 
 // ============================================================================
@@ -401,6 +402,15 @@ export interface PlanReadyEvent {
   }
 }
 
+export interface WorkflowSuspendedEvent {
+  type: 'workflow_suspended'
+  runId: string
+  plan: {
+    projectName: string
+    features: Array<{ name: string; description: string }>
+  }
+}
+
 export interface ClarificationQuestion {
   question: string
   selectionMode: 'single' | 'multiple'
@@ -567,3 +577,4 @@ export type AgentStreamEvent =
   | PackageInstalledEvent
   | CreditsUsedEvent
   | PlanReadyEvent
+  | WorkflowSuspendedEvent

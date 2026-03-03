@@ -14,6 +14,7 @@ import { Observability, SamplingStrategyType } from '@mastra/observability'
 import { LangfuseExporter } from '@mastra/langfuse'
 import { createAnalyst } from './analyst'
 import { createOrchestrator } from './orchestrator'
+import { generationWorkflow } from './workflow'
 import { memory, storage } from './memory'
 
 // Re-export for consumers that imported from this module
@@ -56,6 +57,9 @@ export const mastra = new Mastra({
   agents: {
     orchestrator: createOrchestrator(),
     analyst: createAnalyst(),
+  },
+  workflows: {
+    generation: generationWorkflow,
   },
   memory: {
     default: memory,
