@@ -284,9 +284,10 @@ function ChatMessages({
                 if (agentId === 'analyst') {
                   const planText = entry.plan
                     ? [
-                        entry.plan.appName && `**${entry.plan.appName as string}**`,
-                        entry.plan.appDescription as string | undefined,
-                        entry.plan.prd as string | undefined,
+                        entry.plan.projectName && `**${entry.plan.projectName}**`,
+                        entry.plan.features
+                          ?.map((f) => `- **${f.name}**: ${f.description}`)
+                          .join('\n'),
                       ]
                         .filter(Boolean)
                         .join('\n\n')

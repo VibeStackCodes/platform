@@ -537,7 +537,6 @@ export function useAgentStream({
 
         case 'plan_ready':
           setPendingPlan(event.plan)
-          if (event.runId) setPlanRunId(event.runId)
           updateTimeline(
             (e) => e.type === 'agent' && e.agent.agentId === 'architect',
             (e) => ({ ...e, plan: event.plan }),

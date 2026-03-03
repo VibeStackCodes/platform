@@ -12,6 +12,7 @@ import { Mastra } from '@mastra/core/mastra'
 import { PinoLogger } from '@mastra/loggers'
 import { Observability, SamplingStrategyType } from '@mastra/observability'
 import { LangfuseExporter } from '@mastra/langfuse'
+import { createAnalyst } from './analyst'
 import { createOrchestrator } from './orchestrator'
 import { memory, storage } from './memory'
 
@@ -54,6 +55,7 @@ const logger = new PinoLogger({ level: 'info' })
 export const mastra = new Mastra({
   agents: {
     orchestrator: createOrchestrator(),
+    analyst: createAnalyst(),
   },
   memory: {
     default: memory,
