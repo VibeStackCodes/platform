@@ -20,6 +20,7 @@ import { ThemeTokensCard } from '@/components/ai-elements/theme-tokens-card'
 import type { ThemeTokens as ThemeTokensCardTokens } from '@/components/ai-elements/theme-tokens-card'
 import { AgentHeader, type AgentType } from '@/components/ai-elements/agent-header'
 import { HitlActions } from '@/components/ai-elements/hitl-actions'
+import { PlanBlock } from '@/components/ai-elements/plan-block'
 import { ScriptBlock } from '@/components/ai-elements/script-block'
 import { ClarificationQuestions } from '@/components/clarification-questions'
 import { CreditDisplay } from '@/components/credit-display'
@@ -133,6 +134,7 @@ interface ChatMessagesProps {
   onPanelOpen?: (content: PanelContent) => void
   handleClarificationSubmit: (answersText: string) => Promise<void>
   handlePlanApprove: () => Promise<void>
+  handleRequestChanges: () => void
 }
 
 function ChatMessages({
@@ -156,6 +158,7 @@ function ChatMessages({
   onPanelOpen,
   handleClarificationSubmit,
   handlePlanApprove,
+  handleRequestChanges,
 }: ChatMessagesProps) {
   // Group tool steps by turnId
   const { toolStepsByTurn, unassignedSteps } = useMemo(() => {
@@ -253,6 +256,23 @@ function ChatMessages({
           data-testid="chat-error"
         >
           Chat error: {chatError.message}
+        </div>
+      )}
+
+      {/* Analyst plan + HITL approve/reject */}
+      {pendingPlan && (
+        <div className="flex flex-col gap-3 px-4 py-3">
+          <PlanBlock
+            title={`Project Plan — ${pendingPlan.projectName}`}
+            items={pendingPlan.features.map((f) => ({
+              title: f.name,
+              description: f.description,
+            }))}
+          />
+          <HitlActions
+            onApprove={handlePlanApprove}
+            onRequestChanges={handleRequestChanges}
+          />
         </div>
       )}
 
@@ -571,6 +591,7 @@ export function ChatColumn({
     handleStop,
     handleClarificationSubmit,
     handlePlanApprove,
+    handleRequestChanges,
     handleSubmit,
   } = useAgentStream({
     projectId,
@@ -614,6 +635,7 @@ export function ChatColumn({
               onPanelOpen={onPanelOpen}
               handleClarificationSubmit={handleClarificationSubmit}
               handlePlanApprove={handlePlanApprove}
+              handleRequestChanges={handleRequestChanges}
             />
           )}
         </ConversationContent>
