@@ -60,6 +60,7 @@ export interface ToolStep {
   result?: string // Summary from tool_complete
   durationMs?: number
   startedAt: number
+  turnId?: string // Associates step with the assistant message that triggered it
 }
 
 // Custom message type
@@ -145,6 +146,7 @@ export function useAgentStream({
   const [timelineEvents, setTimelineEvents] = useState<TimelineEntry[]>([])
   const [toolSteps, setToolSteps] = useState<ToolStep[]>([])
   const toolStepCounter = useRef(0)
+  const currentTurnId = useRef<string | undefined>(undefined)
 
   const [pendingClarification, setPendingClarification] = useState<ClarificationQuestion[] | null>(
     null,
@@ -244,20 +246,32 @@ export function useAgentStream({
     const pageProgressArr: Array<Record<string, unknown>> = []
     const fileAssemblyArr: Array<{ path: string; category: string }> = []
     const toolStepsArr: ToolStep[] = []
+    // Buffer tool steps until the next assistant message arrives, then tag them
+    let pendingPersistedTools: ToolStep[] = []
 
     for (const evt of conversationEvents) {
       const p = Array.isArray(evt.parts) ? evt.parts[0] : evt.parts
       switch (evt.type) {
-        case 'message':
+        case 'message': {
+          const role = (evt.role === 'system' ? 'assistant' : evt.role) as 'user' | 'assistant'
+          if (role === 'assistant') {
+            // Flush buffered tool steps — they belong to this assistant turn
+            for (const step of pendingPersistedTools) {
+              step.turnId = evt.id
+            }
+            toolStepsArr.push(...pendingPersistedTools)
+            pendingPersistedTools = []
+          }
           messages.push({
             id: evt.id,
-            role: (evt.role === 'system' ? 'assistant' : evt.role) as 'user' | 'assistant',
+            role,
             content: (Array.isArray(evt.parts) ? evt.parts : [])
               .map((part: Record<string, unknown>) => (part.text as string) || '')
               .filter(Boolean)
               .join(''),
           })
           break
+        }
         case 'agent_start':
           timeline.push({
             type: 'agent',
@@ -375,7 +389,7 @@ export function useAgentStream({
             args?: Record<string, unknown>
             createdAt: string
           }
-          toolStepsArr.push({
+          pendingPersistedTools.push({
             id: data.id,
             tool: data.tool,
             label: data.label,
@@ -387,6 +401,9 @@ export function useAgentStream({
         }
       }
     }
+
+    // Flush any remaining buffered tools (generation still in progress, no final assistant msg yet)
+    toolStepsArr.push(...pendingPersistedTools)
 
     return {
       persistedMessages: messages,
@@ -700,6 +717,7 @@ export function useAgentStream({
               status: 'running',
               filePath,
               startedAt: now,
+              turnId: currentTurnId.current,
             },
           ])
           break
@@ -808,15 +826,16 @@ export function useAgentStream({
       setChatStatus('streaming')
       setChatError(null)
       setGenerationStatus('generating')
+      setDoneSummary(undefined)
       setGenerationFiles([])
       setTimelineEvents([])
-      setToolSteps([])
       setBuildErrors([])
       setPageProgress([])
       setFileAssembly([])
       setValidationChecks([])
 
       const assistantId = `assistant-${Date.now()}`
+      currentTurnId.current = assistantId
       setSessionMessages((prev) => [
         ...prev,
         { id: assistantId, role: 'assistant' as const, content: '' },
@@ -959,6 +978,7 @@ export function useAgentStream({
       setChatStatus('streaming')
 
       const assistantId = `assistant-${Date.now()}`
+      currentTurnId.current = assistantId
       setSessionMessages((prev) => [...prev, { id: assistantId, role: 'assistant', content: '' }])
 
       abortControllerRef.current?.abort()
@@ -1042,9 +1062,29 @@ export function useAgentStream({
     }
   }, [planRunId, parseSSEBuffer, handleGenerationEvent])
 
+  // Merge persisted + session tool steps.
+  // Session steps have richer data (oldContent/newContent for diffs) so they take priority.
+  // Deduplicate by semantic identity: tool + filePath + turnId.
+  const allToolSteps = useMemo(() => {
+    if (toolSteps.length === 0) return persistedToolSteps
+    if (persistedToolSteps.length === 0) return toolSteps
+
+    // Build a set of session step signatures to detect overlapping persisted steps
+    const sessionKeys = new Set(
+      toolSteps.map((s) => `${s.turnId ?? ''}:${s.tool}:${s.filePath ?? ''}:${s.label}`),
+    )
+
+    // Keep persisted steps that DON'T overlap with session steps (i.e. from older turns)
+    const uniquePersisted = persistedToolSteps.filter(
+      (s) => !sessionKeys.has(`${s.turnId ?? ''}:${s.tool}:${s.filePath ?? ''}:${s.label}`),
+    )
+
+    return [...uniquePersisted, ...toolSteps]
+  }, [persistedToolSteps, toolSteps])
+
   const hasFiles = generationFiles.length > 0
   const showTimeline =
-    generationStatus === 'generating' || timelineEvents.length > 0 || toolSteps.length > 0
+    generationStatus === 'generating' || timelineEvents.length > 0 || allToolSteps.length > 0
 
   return {
     // State
@@ -1058,7 +1098,7 @@ export function useAgentStream({
     fileAssembly,
     validationChecks,
     timelineEvents,
-    toolSteps,
+    toolSteps: allToolSteps,
     pendingClarification,
     pendingPlan,
     userCredits,

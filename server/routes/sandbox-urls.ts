@@ -180,21 +180,55 @@ async function recreateSandbox(
   await updateProject(projectId, { sandboxId: sandbox.id }, userId)
   console.log(`[sandbox-recreation] Sandbox ${sandbox.id} created, DB updated`)
 
-  // Clone the project's GitHub repo over the template scaffold
+  // Clone the project's GitHub repo, replacing the template scaffold entirely.
+  // The snapshot ships a template repo at /workspace with a dev server running in tmux.
+  // We must: stop dev server → wipe → clone → install → restart dev server.
   const token = await getInstallationToken()
-  const authedUrl = githubRepoUrl.replace('https://', `https://x-access-token:${token}@`)
+  // Strip any existing embedded credentials from the stored URL before adding fresh token
+  const cleanUrl = githubRepoUrl.replace(/https:\/\/[^@]+@/, 'https://')
+  const authedUrl = cleanUrl.replace('https://', `https://x-access-token:${token}@`)
 
-  await runCommand(
+  // 1. Kill the tmux dev session so it doesn't auto-restart on a half-cloned workspace
+  await runCommand(sandbox, 'tmux kill-session -t dev 2>/dev/null || true', 'sandbox-restore-stop', {
+    timeout: 10,
+  })
+
+  // 2. Wipe workspace and clone the user's repo
+  const cloneResult = await runCommand(
     sandbox,
-    `cd /workspace && git remote add github ${authedUrl} && git fetch github main && git reset --hard github/main`,
-    'sandbox-restore',
-    { timeout: 60 },
+    `rm -rf /workspace/.git /workspace/* /workspace/.[!.]* 2>/dev/null; git clone ${authedUrl} /workspace`,
+    'sandbox-restore-clone',
+    { timeout: 120 },
   )
+  if (cloneResult.exitCode !== 0) {
+    console.error(
+      `[sandbox-recreation] Git clone failed for project ${projectId}:`,
+      cloneResult.stderr || cloneResult.stdout,
+    )
+    return
+  }
   console.log(`[sandbox-recreation] Repo cloned into sandbox ${sandbox.id}`)
 
-  // Reinstall deps in case the project added packages beyond the snapshot template
-  await runCommand(sandbox, 'cd /workspace && bun install', 'sandbox-restore-install', {
-    timeout: 120,
-  })
-  console.log(`[sandbox-recreation] Dependencies installed, sandbox ${sandbox.id} ready`)
+  // 3. Install deps (project may have added packages beyond the snapshot template)
+  const installResult = await runCommand(
+    sandbox,
+    'cd /workspace && bun install',
+    'sandbox-restore-install',
+    { timeout: 120 },
+  )
+  if (installResult.exitCode !== 0) {
+    console.error(
+      `[sandbox-recreation] bun install failed for project ${projectId}:`,
+      installResult.stderr || installResult.stdout,
+    )
+  }
+
+  // 4. Restart the dev server in tmux (same command as snapshot entrypoint)
+  await runCommand(
+    sandbox,
+    `tmux new-session -d -s dev -c /workspace 'while true; do bun run dev --host 0.0.0.0 2>&1 | tee /tmp/dev.log; echo "[entrypoint] dev server exited, restarting in 2s..."; sleep 2; done'`,
+    'sandbox-restore-devserver',
+    { timeout: 10 },
+  )
+  console.log(`[sandbox-recreation] Dev server restarted, sandbox ${sandbox.id} ready`)
 }
