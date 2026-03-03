@@ -7,6 +7,10 @@
       "dependencies": {
         "@ai-sdk/anthropic": "^3.0.46",
         "@ai-sdk/openai": "^3.0.27",
+        "@babel/generator": "^7.29.1",
+        "@babel/parser": "^7.29.0",
+        "@babel/traverse": "^7.29.0",
+        "@babel/types": "^7.29.0",
         "@daytonaio/sdk": "^0.141.0",
         "@floating-ui/react": "^0.27.18",
         "@hono/sentry": "^1.2.2",

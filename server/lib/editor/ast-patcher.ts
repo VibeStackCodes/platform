@@ -18,8 +18,9 @@ const generate = (
 
 export interface PatchOperation {
   oid: string
-  type: 'text' | 'className' | 'attribute' | 'reorder'
+  type: 'text' | 'className' | 'attribute' | 'reorder' | 'delete' | 'style'
   value: string
+  prop?: string  // CSS property name for 'style' type
 }
 
 /**
@@ -175,6 +176,69 @@ export function patchSource(source: string, operation: PatchOperation): string {
         }
         // If already at boundary, treat as a no-op (still mark patched — element was found)
         if (!patched) patched = true
+      }
+
+      if (operation.type === 'delete') {
+        const jsxElement = path.parentPath
+        if (!jsxElement || !t.isJSXElement(jsxElement.node)) return
+        // Remove the entire element from its parent
+        jsxElement.remove()
+        patched = true
+      }
+
+      if (operation.type === 'style') {
+        if (!operation.prop) throw new Error('style patch requires a "prop" field')
+
+        // Convert CSS prop to camelCase (e.g. 'font-size' → 'fontSize')
+        const camelProp = operation.prop.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase())
+
+        // Find existing style attribute
+        const styleAttr = path.node.attributes.find(
+          (attr) =>
+            t.isJSXAttribute(attr) &&
+            t.isJSXIdentifier(attr.name) &&
+            attr.name.name === 'style',
+        )
+
+        if (
+          styleAttr &&
+          t.isJSXAttribute(styleAttr) &&
+          t.isJSXExpressionContainer(styleAttr.value)
+        ) {
+          const expr = styleAttr.value.expression
+          if (t.isObjectExpression(expr)) {
+            // Find and update or add the property
+            const existingProp = expr.properties.find(
+              (p) =>
+                t.isObjectProperty(p) && t.isIdentifier(p.key) && p.key.name === camelProp,
+            )
+            if (existingProp && t.isObjectProperty(existingProp)) {
+              existingProp.value = t.stringLiteral(operation.value)
+            } else {
+              expr.properties.push(
+                t.objectProperty(t.identifier(camelProp), t.stringLiteral(operation.value)),
+              )
+            }
+          }
+        } else {
+          // Create new style attribute: style={{ [camelProp]: value }}
+          const styleObj = t.objectExpression([
+            t.objectProperty(t.identifier(camelProp), t.stringLiteral(operation.value)),
+          ])
+          // Remove old style attr if it existed but wasn't an expression container
+          path.node.attributes = path.node.attributes.filter(
+            (attr) =>
+              !(
+                t.isJSXAttribute(attr) &&
+                t.isJSXIdentifier(attr.name) &&
+                attr.name.name === 'style'
+              ),
+          )
+          path.node.attributes.push(
+            t.jsxAttribute(t.jsxIdentifier('style'), t.jsxExpressionContainer(styleObj)),
+          )
+        }
+        patched = true
       }
     },
   })

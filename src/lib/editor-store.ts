@@ -45,6 +45,7 @@ interface EditorStore {
   undoStack: EditCommand[]
   redoStack: EditCommand[]
   isPatchInFlight: boolean
+  isLocked: boolean
 
   // Actions
   setMode: (mode: EditorMode) => void
@@ -60,6 +61,8 @@ interface EditorStore {
   redo: () => EditCommand | undefined
   clearHistory: () => void
   reset: () => void
+  lock: () => void
+  unlock: () => void
 }
 
 const MAX_UNDO = 50
@@ -72,13 +75,15 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
   undoStack: [],
   redoStack: [],
   isPatchInFlight: false,
+  isLocked: false,
 
   setMode: (mode) => set({ mode, hoveredElement: null, selectedElement: null, isTextEditing: false }),
 
   toggleEditMode: () => {
-    const current = get().mode
+    const { mode, isLocked } = get()
+    if (isLocked) return
     set({
-      mode: current === 'off' ? 'select' : 'off',
+      mode: mode === 'off' ? 'select' : 'off',
       hoveredElement: null,
       selectedElement: null,
       isTextEditing: false,
@@ -145,5 +150,10 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
     undoStack: [],
     redoStack: [],
     isPatchInFlight: false,
+    isLocked: false,
   }),
+
+  lock: () => set({ isLocked: true, mode: 'off', hoveredElement: null, selectedElement: null, isTextEditing: false }),
+
+  unlock: () => set({ isLocked: false }),
 }))

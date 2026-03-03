@@ -43,16 +43,19 @@ import type {
 
 export interface ChatColumnHandle {
   addSystemMessage: (content: string) => void
+  submitPrompt: (text: string, displayText?: string) => void
 }
 
 interface ChatColumnProps {
   projectId: string
   initialPrompt?: string
+  hasPreview?: boolean
   onSandboxReady?: (sandboxId: string) => void
   onPanelOpen?: (content: PanelContent) => void
   selectedElement?: ElementContext | null
   onEditComplete?: () => void
   onGenerationComplete?: () => void
+  onGenerationStart?: () => void
   onReady?: (handle: ChatColumnHandle) => void
 }
 
@@ -114,6 +117,7 @@ interface ChatMessagesProps {
   timelineEvents: TimelineEntry[]
   generationStatus: 'idle' | 'generating' | 'complete' | 'error'
   doneSummary?: string
+  hasPreview?: boolean
   chatStatus: 'ready' | 'streaming'
   chatError: Error | null
   selectedElement?: ElementContext | null
@@ -141,6 +145,7 @@ function ChatMessages({
   timelineEvents,
   generationStatus,
   doneSummary,
+  hasPreview,
   chatStatus,
   chatError,
   selectedElement,
@@ -203,24 +208,10 @@ function ChatMessages({
             const turnSteps = toolStepsByTurn.get(message.id) ?? []
             if (turnSteps.length === 0) return null
             const isLastAssistant = message.id === lastAssistantId
+
             return (
               <div className="space-y-3 px-4 py-3">
                 <ToolActivity steps={turnSteps} onPanelOpen={onPanelOpen} />
-                {isLastAssistant && generationStatus === 'complete' && onPanelOpen && (
-                  <>
-                    {doneSummary && (
-                      <p className="text-sm leading-relaxed text-foreground">{doneSummary}</p>
-                    )}
-                    <ArtifactCard
-                      title="App Preview"
-                      meta="Live preview available"
-                      variant="code"
-                      actionLabel="Open Preview"
-                      onClick={() => onPanelOpen({ type: 'preview', previewUrl: '' })}
-                      onAction={() => onPanelOpen({ type: 'preview', previewUrl: '' })}
-                    />
-                  </>
-                )}
                 {isLastAssistant && generationStatus === 'error' && doneSummary && (
                   <div className="rounded-md bg-red-900/50 p-3 text-sm text-red-300">
                     {doneSummary}
@@ -231,6 +222,23 @@ function ChatMessages({
           })()}
         </Fragment>
       ))}
+
+      {/* Preview card — shown whenever a preview exists (survives page refresh) */}
+      {hasPreview && onPanelOpen && generationStatus !== 'generating' && messages.length > 0 && (
+        <div className="space-y-3 px-4 py-3">
+          {doneSummary && generationStatus === 'complete' && (
+            <p className="text-sm leading-relaxed text-foreground">{doneSummary}</p>
+          )}
+          <ArtifactCard
+            title="App Preview"
+            meta="Live preview available"
+            variant="code"
+            actionLabel="Open Preview"
+            onClick={() => onPanelOpen({ type: 'preview', previewUrl: '' })}
+            onAction={() => onPanelOpen({ type: 'preview', previewUrl: '' })}
+          />
+        </div>
+      )}
 
       {/* Streaming indicator */}
       {(() => {
@@ -540,15 +548,17 @@ function ChatMessages({
 export function ChatColumn({
   projectId,
   initialPrompt,
+  hasPreview,
   onSandboxReady,
   onPanelOpen,
   selectedElement,
   onEditComplete,
   onGenerationComplete,
+  onGenerationStart,
   onReady,
 }: ChatColumnProps) {
   const {
-    model: _model,
+    model,
     generationStatus,
     doneSummary,
     generationFiles,
@@ -580,10 +590,20 @@ export function ChatColumn({
     onEditComplete,
   })
 
-  // Expose addSystemMessage to parent via onReady callback
+  // Expose handle methods to parent via onReady callback
   useEffect(() => {
-    onReady?.({ addSystemMessage })
-  }, [onReady, addSystemMessage])
+    const submitPrompt = (text: string, displayText?: string) => {
+      handleSubmit({ text, displayText }, { model, mode: 'edit' })
+    }
+    onReady?.({ addSystemMessage, submitPrompt })
+  }, [onReady, addSystemMessage, handleSubmit, model])
+
+  // Lock editor when generation starts, unlock when it ends
+  useEffect(() => {
+    if (generationStatus === 'generating') {
+      onGenerationStart?.()
+    }
+  }, [generationStatus, onGenerationStart])
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
@@ -598,6 +618,7 @@ export function ChatColumn({
               timelineEvents={timelineEvents}
               generationStatus={generationStatus}
               doneSummary={doneSummary}
+              hasPreview={hasPreview}
               chatStatus={chatStatus}
               chatError={chatError}
               selectedElement={selectedElement}

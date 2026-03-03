@@ -4,8 +4,10 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { ChatColumn, type ChatColumnHandle } from '@/components/chat-column'
 import { RightPanel, type PanelContent } from '@/components/right-panel'
+import { EditorSidebar } from '@/components/editor/editor-sidebar'
 import { useResizablePanel } from '@/hooks/use-resizable-panel'
-import { apiFetch } from '@/lib/utils'
+import { apiFetch, cn } from '@/lib/utils'
+import { useEditorStore } from '@/lib/editor-store'
 import type { ElementContext } from '@/lib/types'
 
 interface BuilderPageProps {
@@ -21,15 +23,19 @@ const REFRESH_BEFORE_EXPIRY_MS = 10 * 60 * 1000
 
 export function BuilderPage({ projectId, projectName, initialPrompt, initialSandboxId, initialDeployUrl }: BuilderPageProps) {
   const [panelContent, setPanelContent] = useState<PanelContent>(null)
-  const [_sandboxId, setSandboxId] = useState(initialSandboxId)
+  const [sandboxId, setSandboxId] = useState(initialSandboxId)
   const [previewUrl, setPreviewUrl] = useState<string>()
   const [codeServerUrl, setCodeServerUrl] = useState<string>()
   const [expiresAt, setExpiresAt] = useState<string>()
   const [sandboxRecreating, setSandboxRecreating] = useState(false)
   const [selectedElement, setSelectedElement] = useState<ElementContext | null>(null)
+  const [editorChild, setEditorChild] = useState<unknown>(null)
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
   const chatHandleRef = useRef<ChatColumnHandle | null>(null)
   const panel = useResizablePanel()
+
+  const editorMode = useEditorStore((s) => s.mode)
+  const isEditing = editorMode !== 'off'
 
   // Fetch sandbox URLs with automatic polling until available
   const { data: sandboxUrls } = useQuery({
@@ -169,18 +175,50 @@ export function BuilderPage({ projectId, projectName, initialPrompt, initialSand
     }
   }, [projectId])
 
+  const handleAskAI = useCallback((oid: string, prompt: string) => {
+    const contextualPrompt = `[Editing element (oid: ${oid})]\n\n${prompt}`
+    chatHandleRef.current?.submitPrompt(contextualPrompt, prompt)
+  }, [])
+
+  const handleGenerationStart = useCallback(() => {
+    useEditorStore.getState().lock()
+  }, [])
+
+  const handleGenerationCompleteWithUnlock = useCallback(async () => {
+    useEditorStore.getState().unlock()
+    useEditorStore.getState().clearHistory()
+    return fetchSandboxUrls()
+  }, [fetchSandboxUrls])
+
   return (
     <div ref={panel.containerRef} className="flex h-screen overflow-hidden">
-      <ChatColumn
-        projectId={projectId}
-        initialPrompt={initialPrompt}
-        onSandboxReady={handleSandboxReady}
-        onPanelOpen={handlePanelOpen}
-        onGenerationComplete={fetchSandboxUrls}
-        selectedElement={selectedElement}
-        onEditComplete={() => setSelectedElement(null)}
-        onReady={(handle) => { chatHandleRef.current = handle }}
-      />
+      {/* Chat column — hidden when editing, stays mounted to preserve state */}
+      <div className={cn('flex min-w-0 flex-1 flex-col', isEditing && 'hidden')}>
+        <ChatColumn
+          projectId={projectId}
+          initialPrompt={initialPrompt}
+          hasPreview={!!previewUrl}
+          onSandboxReady={handleSandboxReady}
+          onPanelOpen={handlePanelOpen}
+          onGenerationStart={handleGenerationStart}
+          onGenerationComplete={handleGenerationCompleteWithUnlock}
+          selectedElement={selectedElement}
+          onEditComplete={() => setSelectedElement(null)}
+          onReady={(handle) => { chatHandleRef.current = handle }}
+        />
+      </div>
+
+      {/* Editor sidebar — shown only when editing */}
+      {isEditing && (
+        <EditorSidebar
+          projectId={projectId}
+          sandboxId={sandboxId}
+          child={editorChild}
+          onBackToChat={() => useEditorStore.getState().toggleEditMode()}
+          onSubmitPrompt={(text, displayText) => chatHandleRef.current?.submitPrompt(text, displayText)}
+        />
+      )}
+
       <RightPanel
         isOpen={panel.isOpen}
         width={panel.width}
@@ -192,9 +230,14 @@ export function BuilderPage({ projectId, projectName, initialPrompt, initialSand
         sandboxRecreating={sandboxRecreating}
         deployState={deployState}
         deployUrl={deployUrl}
+        projectId={projectId}
+        sandboxId={sandboxId}
+        isEditing={isEditing}
+        onEditorChildReady={setEditorChild}
         onDragStart={panel.handleDragStart}
         onClose={panel.close}
         onDeploy={handleDeploy}
+        onAskAI={handleAskAI}
       />
     </div>
   )

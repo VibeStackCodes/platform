@@ -1,36 +1,51 @@
-import { useMemo, type RefObject } from 'react'
+import type { RefObject } from 'react'
 import { cn } from '@/lib/utils'
 import { useEditorStore } from '@/lib/editor-store'
-import { ChevronUp, ChevronDown, MousePointer, Type } from 'lucide-react'
+import { MousePointer, Type, Upload } from 'lucide-react'
+import { FloatingToolbar } from '@/components/editor/floating-toolbar'
 
 interface EditorOverlayProps {
   iframeRef: RefObject<HTMLIFrameElement | null>
+  onImageReplace?: (oid: string) => void
+  onTextEdit?: () => void
+  onCodeView?: (oid: string) => void
+  onDelete?: (oid: string) => void
+  onAskAI?: (oid: string, prompt: string) => void
   className?: string
 }
 
-function useOverlayRect(
-  iframeRef: RefObject<HTMLIFrameElement | null>,
+// The overlay is `absolute inset-0` inside the same container as the iframe.
+// Element rects from getBoundingClientRect() inside the iframe are relative to
+// the iframe's viewport (top-left = 0,0). Since the iframe fills the container
+// completely, these coords map directly to the overlay's coordinate space.
+function getOverlayRect(
+  _iframeRef: RefObject<HTMLIFrameElement | null>,
   elementRect: { x: number; y: number; width: number; height: number } | null,
 ) {
-  return useMemo(() => {
-    if (!elementRect || !iframeRef.current) return null
-    const iframeRect = iframeRef.current.getBoundingClientRect()
-    return {
-      left: iframeRect.left + elementRect.x,
-      top: iframeRect.top + elementRect.y,
-      width: elementRect.width,
-      height: elementRect.height,
-    }
-  }, [elementRect, iframeRef])
+  if (!elementRect) return null
+  return {
+    left: elementRect.x,
+    top: elementRect.y,
+    width: elementRect.width,
+    height: elementRect.height,
+  }
 }
 
-export function EditorOverlay({ iframeRef, className }: EditorOverlayProps) {
+export function EditorOverlay({
+  iframeRef,
+  onImageReplace: _onImageReplace,
+  onTextEdit,
+  onCodeView,
+  onDelete,
+  onAskAI,
+  className,
+}: EditorOverlayProps) {
   const mode = useEditorStore((s) => s.mode)
   const hoveredElement = useEditorStore((s) => s.hoveredElement)
   const selectedElement = useEditorStore((s) => s.selectedElement)
 
-  const hoverRect = useOverlayRect(iframeRef, hoveredElement?.rect ?? null)
-  const selectRect = useOverlayRect(iframeRef, selectedElement?.rect ?? null)
+  const hoverRect = getOverlayRect(iframeRef, hoveredElement?.rect ?? null)
+  const selectRect = getOverlayRect(iframeRef, selectedElement?.rect ?? null)
 
   if (mode === 'off') return null
 
@@ -77,28 +92,9 @@ export function EditorOverlay({ iframeRef, className }: EditorOverlayProps) {
           <span className="absolute -top-6 right-0 flex items-center gap-1 rounded bg-blue-500 px-1.5 py-0.5 text-[10px] font-medium text-white">
             {selectedElement.elementType === 'text' && <Type className="h-3 w-3" />}
             {selectedElement.elementType === 'container' && <MousePointer className="h-3 w-3" />}
+            {selectedElement.elementType === 'image' && <Upload className="h-3 w-3" />}
             {selectedElement.elementType}
           </span>
-
-          {/* Section move buttons */}
-          {selectedElement.elementType === 'container' && (
-            <div className="pointer-events-auto absolute -right-8 top-0 flex flex-col gap-1">
-              <button
-                type="button"
-                className="flex h-6 w-6 items-center justify-center rounded bg-blue-500 text-white hover:bg-blue-600"
-                title="Move up"
-              >
-                <ChevronUp className="h-4 w-4" />
-              </button>
-              <button
-                type="button"
-                className="flex h-6 w-6 items-center justify-center rounded bg-blue-500 text-white hover:bg-blue-600"
-                title="Move down"
-              >
-                <ChevronDown className="h-4 w-4" />
-              </button>
-            </div>
-          )}
 
           {/* Resize handles (corners) */}
           {(['top-left', 'top-right', 'bottom-left', 'bottom-right'] as const).map((pos) => (
@@ -114,6 +110,19 @@ export function EditorOverlay({ iframeRef, className }: EditorOverlayProps) {
             />
           ))}
         </div>
+      )}
+
+      {/* Floating toolbar — positioned above selected element */}
+      {selectRect && selectedElement && (
+        <FloatingToolbar
+          rect={selectRect}
+          elementType={selectedElement.elementType}
+          oid={selectedElement.oid}
+          onAskAI={(prompt) => onAskAI?.(selectedElement.oid, prompt)}
+          onTextEdit={onTextEdit}
+          onCodeView={() => onCodeView?.(selectedElement.oid)}
+          onDelete={() => onDelete?.(selectedElement.oid)}
+        />
       )}
     </div>
   )

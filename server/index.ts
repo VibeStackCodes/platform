@@ -23,6 +23,7 @@ import { stripeWebhookRoutes } from './routes/stripe-webhook'
 import { adminRoutes } from './routes/admin'
 import { agentRoutes } from './routes/agent'
 import { editorPatchRoutes } from './routes/editor-patch'
+import { editorWriteRoutes } from './routes/editor-write'
 
 declare const Bun: {
   serve: (options: {
@@ -124,6 +125,7 @@ const routes = app
   .route('/admin', adminRoutes)
   .route('/agent', agentRoutes)
   .route('/editor/patch', editorPatchRoutes)
+  .route('/editor/write', editorWriteRoutes)
 
 // OpenAPI JSON spec — generated from describeRoute() metadata across all mounted routes
 app.get(

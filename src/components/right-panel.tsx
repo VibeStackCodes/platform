@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   Check,
   Code,
@@ -13,11 +13,12 @@ import {
   Rocket,
   X,
 } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { apiFetch, cn } from '@/lib/utils'
 import { DiffViewer } from '@/components/ai-elements/diff-viewer'
 import { SaveIndicator } from '@/components/save-indicator'
 import { useDebouncedSave } from '@/hooks/use-debounced-save'
 import { useEditorBridge } from '@/hooks/use-editor-bridge'
+import { useEditorKeyboard } from '@/hooks/use-editor-keyboard'
 import { useEditorStore } from '@/lib/editor-store'
 import { GestureScreen } from '@/components/editor/gesture-screen'
 import { EditorOverlay } from '@/components/editor/editor-overlay'
@@ -39,13 +40,18 @@ interface RightPanelProps {
   previewUrl?: string
   codeServerUrl?: string
   projectName?: string
+  projectId?: string
+  sandboxId?: string
   sandboxRecreating?: boolean
   deployState?: DeployState
   deployUrl?: string
+  isEditing?: boolean
+  onEditorChildReady?: (child: unknown) => void
   onDragStart: (e: React.MouseEvent) => void
   onClose: () => void
   onSave?: (content: string) => void
   onDeploy?: () => void
+  onAskAI?: (oid: string, prompt: string) => void
 }
 
 // ── Helpers for non-preview content types ────────────────────────────
@@ -170,30 +176,110 @@ function PreviewWithTabs({
   previewUrl,
   codeServerUrl,
   projectName,
+  projectId,
+  sandboxId,
   sandboxRecreating,
   deployState = 'idle',
   deployUrl,
   onDeploy,
   onClose,
+  onEditorChildReady,
+  onAskAI,
 }: {
   previewUrl?: string
   codeServerUrl?: string
   projectName?: string
+  projectId?: string
+  sandboxId?: string
   sandboxRecreating?: boolean
   deployState?: DeployState
   deployUrl?: string
   onDeploy?: () => void
   onClose: () => void
+  onEditorChildReady?: (child: unknown) => void
+  onAskAI?: (oid: string, prompt: string) => void
 }) {
   const [activeTab, setActiveTab] = useState<'preview' | 'code'>('preview')
   const previewIframeRef = useRef<HTMLIFrameElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [replacingOid, setReplacingOid] = useState<string | null>(null)
   const editorMode = useEditorStore((s) => s.mode)
   const toggleEditMode = useEditorStore((s) => s.toggleEditMode)
+  const isLocked = useEditorStore((s) => s.isLocked)
 
   const { child, isConnected } = useEditorBridge({
     iframeRef: previewIframeRef,
     editMode: editorMode !== 'off',
   })
+
+  // Report penpal child to parent (BuilderPage) for EditorSidebar
+  useEffect(() => {
+    onEditorChildReady?.(child)
+  }, [child, onEditorChildReady])
+
+  useEditorKeyboard({
+    projectId: projectId ?? '',
+    sandboxId,
+    enabled: editorMode !== 'off',
+  })
+
+  const handleImageReplace = useCallback((oid: string) => {
+    setReplacingOid(oid)
+    fileInputRef.current?.click()
+  }, [])
+
+  const handleFileSelected = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0]
+      if (!file || !replacingOid || !sandboxId || !projectId) return
+
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('projectId', projectId)
+      formData.append('sandboxId', sandboxId)
+      formData.append('oid', replacingOid)
+
+      await apiFetch('/api/editor/patch/image', { method: 'POST', body: formData })
+      setReplacingOid(null)
+      e.target.value = '' // reset input so same file can be re-selected
+    },
+    [replacingOid, sandboxId, projectId],
+  )
+
+  const handleTextEditCommit = useCallback(
+    async (oid: string, newText: string) => {
+      if (!sandboxId || !projectId) return
+
+      try {
+        const res = await apiFetch('/api/editor/patch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            projectId,
+            sandboxId,
+            edits: [{ file: '', oid, type: 'text', value: newText }],
+          }),
+        })
+
+        if (res.ok) {
+          const data = await res.json()
+          for (const result of data.results) {
+            if (!result.error) {
+              useEditorStore.getState().pushEdit({
+                file: result.file,
+                previousContent: result.previousContent,
+                newContent: result.newContent,
+                description: `Edit text of ${oid}`,
+              })
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Text edit patch failed:', err)
+      }
+    },
+    [sandboxId, projectId],
+  )
 
   return (
     <>
@@ -237,21 +323,30 @@ function PreviewWithTabs({
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Edit mode toggle */}
+          {/* Edit mode toggle — disabled while AI generation is active */}
           {activeTab === 'preview' && previewUrl && (
             <button
               type="button"
               onClick={toggleEditMode}
+              disabled={isLocked}
               className={cn(
                 'inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors',
-                editorMode !== 'off'
-                  ? 'bg-blue-500 text-white hover:bg-blue-600'
-                  : 'bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground',
+                isLocked
+                  ? 'cursor-not-allowed bg-muted text-muted-foreground opacity-50'
+                  : editorMode !== 'off'
+                    ? 'bg-blue-500 text-white hover:bg-blue-600'
+                    : 'bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground',
               )}
-              title={editorMode !== 'off' ? 'Exit edit mode' : 'Enter edit mode'}
+              title={
+                isLocked
+                  ? 'Visual editing is disabled while AI is generating'
+                  : editorMode !== 'off'
+                    ? 'Exit edit mode'
+                    : 'Enter edit mode'
+              }
             >
               <Pencil size={12} />
-              {editorMode !== 'off' ? 'Editing' : 'Edit'}
+              {isLocked ? 'Locked' : editorMode !== 'off' ? 'Editing' : 'Edit'}
             </button>
           )}
           {deployState === 'deployed' && deployUrl ? (
@@ -324,8 +419,34 @@ function PreviewWithTabs({
                 iframeRef={previewIframeRef}
                 child={child}
                 isConnected={isConnected}
+                onTextEditCommit={handleTextEditCommit}
               />
-              <EditorOverlay iframeRef={previewIframeRef} />
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleFileSelected}
+              />
+              <EditorOverlay
+                iframeRef={previewIframeRef}
+                onImageReplace={handleImageReplace}
+                onAskAI={onAskAI}
+                onDelete={async (oid) => {
+                  if (!sandboxId || !projectId) return
+                  await apiFetch('/api/editor/patch', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      projectId,
+                      sandboxId,
+                      edits: [{ file: '', oid, type: 'delete', value: '' }],
+                    }),
+                  })
+                  useEditorStore.getState().setSelectedElement(null)
+                }}
+                onCodeView={() => setActiveTab('code')}
+              />
             </>
           ) : (
             <div className="flex h-full flex-col items-center justify-center gap-3 text-sm text-muted-foreground">
@@ -398,18 +519,24 @@ export function RightPanel({
   previewUrl,
   codeServerUrl,
   projectName,
+  projectId,
+  sandboxId,
   sandboxRecreating,
   deployState,
   deployUrl,
+  isEditing,
+  onEditorChildReady,
   onDragStart,
   onClose,
   onSave,
   onDeploy,
+  onAskAI,
 }: RightPanelProps) {
   const { status: saveStatus, trigger: triggerSave } = useDebouncedSave({ onSave })
 
   const panelStyle: React.CSSProperties = {
-    width: isOpen ? `${width}%` : '0',
+    width: isOpen && !isEditing ? `${width}%` : undefined,
+    flex: isEditing ? '1 1 auto' : undefined,
     minWidth: isOpen ? '340px' : '0',
     borderLeft: isOpen ? '1px solid var(--border)' : '0',
     opacity: isOpen ? 1 : 0,
@@ -452,11 +579,15 @@ export function RightPanel({
           previewUrl={content.previewUrl?.trim() || previewUrl}
           codeServerUrl={codeServerUrl}
           projectName={projectName}
+          projectId={projectId}
+          sandboxId={sandboxId}
           sandboxRecreating={sandboxRecreating}
           deployState={deployState}
           deployUrl={deployUrl}
           onDeploy={onDeploy}
           onClose={onClose}
+          onEditorChildReady={onEditorChildReady}
+          onAskAI={onAskAI}
         />
       ) : (
         <>

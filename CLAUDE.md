@@ -107,7 +107,7 @@ server/                  # Hono API server
     slug.ts              # Slug generation
     types.ts             # StreamEvent types (AgentStreamEvent union)
 supabase/migrations/     # Platform DB migrations
-snapshot/                # Daytona sandbox Docker image (scaffold + tooling)
+snapshot/                # Daytona sandbox Docker image (Dockerfile + entrypoint only, NO local scaffold)
 .prototypes/             # Interactive HTML design prototypes (agentic flow UI)
 docs/plans/              # Design documents and implementation plans
 ```
@@ -249,10 +249,10 @@ git commit
 
 ## Snapshot (Daytona Sandbox Image)
 
-The `snapshot/` directory defines the Docker image used as the Daytona sandbox base (`vibestack-workspace`):
+The `snapshot/` directory contains ONLY the Dockerfile and entrypoint scripts. **There is NO local scaffold directory.** The app scaffold lives exclusively in the template repo.
 
 - **Base**: `oven/bun:1-debian` (Bun runtime, not Node)
-- **Template repo**: Cloned from `VibeStackCodes/vibestack-template` (not `git init`) — React 19, react-router-dom v7, Tailwind v4, 46 shadcn/ui components pre-installed. Agent edits files in-place.
+- **Template repo**: `VibeStackCodes/vibestack-template` is the **single source of truth** for the scaffold. Dockerfile clones it directly. All scaffold changes (preload script, vite config, components) MUST be pushed to the template repo first, then snapshot rebuilt via `bun snapshot/rebuild.ts`.
 - **Tooling**: OpenVSCode Server + tmux + OxLint included in the image
 - **Generated apps use Vite** (not Next.js) — `bun run build` = `tsc -b && vite build`
 - **TypeScript**: Loose config (`strict: false`) in scaffold — agent focuses on working code, not type perfection

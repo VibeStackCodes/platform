@@ -116,7 +116,7 @@ export interface UseAgentStreamReturn {
   handleStop: () => void
   handleClarificationSubmit: (answersText: string) => Promise<void>
   handlePlanApprove: () => Promise<void>
-  handleSubmit: (message: { text?: string }, options: { model: string; mode: string }) => void
+  handleSubmit: (message: { text?: string; displayText?: string }, options: { model: string; mode: string }) => void
   handleSuggestionClick: (suggestion: string) => void
 }
 
@@ -813,13 +813,13 @@ export function useAgentStream({
   )
 
   const sendChatMessage = useCallback(
-    async (text: string) => {
+    async (text: string, displayText?: string) => {
       if (chatStatus === 'streaming') return
 
       const userMessage: ChatMessage = {
         id: `user-${Date.now()}`,
         role: 'user',
-        content: text,
+        content: displayText ?? text,
       }
       setSessionMessages((prev) => [...prev, userMessage])
       setChatStatus('streaming')
@@ -948,11 +948,11 @@ export function useAgentStream({
     return () => clearTimeout(timer)
   }, [initialPrompt])
 
-  const handleSubmit = (message: { text?: string }, options: { model: string; mode: string }) => {
+  const handleSubmit = (message: { text?: string; displayText?: string }, options: { model: string; mode: string }) => {
     if (!message.text?.trim()) return
     // mode will be used in Phase 2 (Plan Mode)
     setModel(options.model)
-    sendChatMessage(message.text)
+    sendChatMessage(message.text, message.displayText)
   }
 
   const handleSuggestionClick = (suggestion: string) => {

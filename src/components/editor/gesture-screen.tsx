@@ -1,4 +1,4 @@
-import { useCallback, useRef, type RefObject } from 'react'
+import { useCallback, useEffect, useRef, type RefObject } from 'react'
 import { cn } from '@/lib/utils'
 import { useEditorStore } from '@/lib/editor-store'
 
@@ -26,17 +26,18 @@ interface EditorElementInfo {
 interface PreloadChildMethods {
   getElementAtPoint(x: number, y: number): EditorElementInfo | null
   startTextEditing(oid: string): void
-  getViewportScroll(): { x: number; y: number }
+  stopTextEditing(): { oid: string; newText: string } | null
 }
 
 interface GestureScreenProps {
   iframeRef: RefObject<HTMLIFrameElement | null>
   child: PreloadChildMethods | null
   isConnected: boolean
+  onTextEditCommit?: (oid: string, newText: string) => void
   className?: string
 }
 
-export function GestureScreen({ iframeRef, child, isConnected, className }: GestureScreenProps) {
+export function GestureScreen({ iframeRef, child, isConnected, onTextEditCommit, className }: GestureScreenProps) {
   const mode = useEditorStore((s) => s.mode)
   const setHoveredElement = useEditorStore((s) => s.setHoveredElement)
   const setSelectedElement = useEditorStore((s) => s.setSelectedElement)
@@ -44,17 +45,18 @@ export function GestureScreen({ iframeRef, child, isConnected, className }: Gest
   const lastHoverRef = useRef<string | null>(null)
   const isActive = mode !== 'off' && isConnected && child !== null
 
+  // Translate parent viewport coords to iframe viewport coords.
+  // elementFromPoint() uses viewport coordinates (no scroll offset needed).
   const translateCoords = useCallback(
-    async (clientX: number, clientY: number) => {
+    (clientX: number, clientY: number) => {
       const iframe = iframeRef.current
-      if (!iframe || !child) return null
+      if (!iframe) return null
       const iframeRect = iframe.getBoundingClientRect()
-      const scroll = await child.getViewportScroll()
-      const x = clientX - iframeRect.left + scroll.x
-      const y = clientY - iframeRect.top + scroll.y
+      const x = clientX - iframeRect.left
+      const y = clientY - iframeRect.top
       return { x, y }
     },
-    [iframeRef, child],
+    [iframeRef],
   )
 
   const handleMouseMove = useCallback(
@@ -71,18 +73,44 @@ export function GestureScreen({ iframeRef, child, isConnected, className }: Gest
     [isActive, child, translateCoords, setHoveredElement],
   )
 
+  const commitTextEdit = useCallback(async () => {
+    if (!child) return
+    const result = await child.stopTextEditing()
+    if (result) {
+      onTextEditCommit?.(result.oid, result.newText)
+    }
+    useEditorStore.getState().stopTextEditing()
+  }, [child, onTextEditCommit])
+
   const handleClick = useCallback(
     async (e: React.MouseEvent) => {
       if (!isActive || !child) return
       e.preventDefault()
       e.stopPropagation()
+
+      // If text editing is active, stop it first and commit the change
+      const store = useEditorStore.getState()
+      if (store.isTextEditing) {
+        await commitTextEdit()
+      }
+
       const coords = await translateCoords(e.clientX, e.clientY)
       if (!coords) return
       const el = await child.getElementAtPoint(coords.x, coords.y)
       setSelectedElement(el)
     },
-    [isActive, child, translateCoords, setSelectedElement],
+    [isActive, child, translateCoords, setSelectedElement, commitTextEdit],
   )
+
+  useEffect(() => {
+    const handler = async (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && useEditorStore.getState().isTextEditing) {
+        await commitTextEdit()
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [commitTextEdit])
 
   const handleDoubleClick = useCallback(
     async (e: React.MouseEvent) => {
