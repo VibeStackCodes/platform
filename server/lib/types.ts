@@ -57,7 +57,7 @@ export interface PageSection {
 
 export interface DesignAgentTokens {
   colors: {
-    primary: string      // oklch
+    primary: string // oklch
     secondary: string
     accent: string
     background: string

@@ -22,7 +22,8 @@ export const TEMPLATE_PRESETS: TemplatePreset[] = [
       fonts: {
         display: 'Inter',
         body: 'Inter',
-        googleFontsUrl: 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap',
+        googleFontsUrl:
+          'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap',
       },
       style: {
         borderRadius: '0.5rem',
@@ -66,7 +67,8 @@ export const TEMPLATE_PRESETS: TemplatePreset[] = [
       fonts: {
         display: 'Space Grotesk',
         body: 'Inter',
-        googleFontsUrl: 'https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500&display=swap',
+        googleFontsUrl:
+          'https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500&display=swap',
       },
       style: {
         borderRadius: '0.75rem',
@@ -110,7 +112,8 @@ export const TEMPLATE_PRESETS: TemplatePreset[] = [
       fonts: {
         display: 'Playfair Display',
         body: 'Source Sans 3',
-        googleFontsUrl: 'https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;700&family=Source+Sans+3:wght@400;600&display=swap',
+        googleFontsUrl:
+          'https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;700&family=Source+Sans+3:wght@400;600&display=swap',
       },
       style: {
         borderRadius: '0.25rem',
@@ -153,7 +156,8 @@ export const TEMPLATE_PRESETS: TemplatePreset[] = [
       fonts: {
         display: 'JetBrains Mono',
         body: 'Inter',
-        googleFontsUrl: 'https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700&family=Inter:wght@400;500&display=swap',
+        googleFontsUrl:
+          'https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700&family=Inter:wght@400;500&display=swap',
       },
       style: {
         borderRadius: '0.5rem',
@@ -197,7 +201,8 @@ export const TEMPLATE_PRESETS: TemplatePreset[] = [
       fonts: {
         display: 'DM Sans',
         body: 'DM Sans',
-        googleFontsUrl: 'https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&display=swap',
+        googleFontsUrl:
+          'https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&display=swap',
       },
       style: {
         borderRadius: '0.75rem',
@@ -241,7 +246,8 @@ export const TEMPLATE_PRESETS: TemplatePreset[] = [
       fonts: {
         display: 'Cormorant Garamond',
         body: 'Lato',
-        googleFontsUrl: 'https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Lato:wght@400;700&display=swap',
+        googleFontsUrl:
+          'https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Lato:wght@400;700&display=swap',
       },
       style: {
         borderRadius: '0rem',
@@ -284,7 +290,8 @@ export const TEMPLATE_PRESETS: TemplatePreset[] = [
       fonts: {
         display: 'Merriweather',
         body: 'Source Sans 3',
-        googleFontsUrl: 'https://fonts.googleapis.com/css2?family=Merriweather:wght@700;900&family=Source+Sans+3:wght@400;600&display=swap',
+        googleFontsUrl:
+          'https://fonts.googleapis.com/css2?family=Merriweather:wght@700;900&family=Source+Sans+3:wght@400;600&display=swap',
       },
       style: {
         borderRadius: '0.25rem',
@@ -327,7 +334,8 @@ export const TEMPLATE_PRESETS: TemplatePreset[] = [
       fonts: {
         display: 'Nunito',
         body: 'Nunito',
-        googleFontsUrl: 'https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap',
+        googleFontsUrl:
+          'https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap',
       },
       style: {
         borderRadius: '1rem',
@@ -369,7 +377,8 @@ export const TEMPLATE_PRESETS: TemplatePreset[] = [
       fonts: {
         display: 'Inter',
         body: 'Inter',
-        googleFontsUrl: 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap',
+        googleFontsUrl:
+          'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap',
       },
       style: {
         borderRadius: '0.75rem',
@@ -411,7 +420,8 @@ export const TEMPLATE_PRESETS: TemplatePreset[] = [
       fonts: {
         display: 'Inter',
         body: 'Inter',
-        googleFontsUrl: 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap',
+        googleFontsUrl:
+          'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap',
       },
       style: {
         borderRadius: '0.5rem',
@@ -452,7 +462,8 @@ export const TEMPLATE_PRESETS: TemplatePreset[] = [
       fonts: {
         display: 'Plus Jakarta Sans',
         body: 'Inter',
-        googleFontsUrl: 'https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@600;700;800&family=Inter:wght@400;500&display=swap',
+        googleFontsUrl:
+          'https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@600;700;800&family=Inter:wght@400;500&display=swap',
       },
       style: {
         borderRadius: '0.75rem',
@@ -498,7 +509,8 @@ export const TEMPLATE_PRESETS: TemplatePreset[] = [
       fonts: {
         display: 'Outfit',
         body: 'Inter',
-        googleFontsUrl: 'https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700&family=Inter:wght@400;500&display=swap',
+        googleFontsUrl:
+          'https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700&family=Inter:wght@400;500&display=swap',
       },
       style: {
         borderRadius: '0.5rem',

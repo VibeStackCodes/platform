@@ -46,11 +46,7 @@ export const DesignTokensSchema = z.object({
       .describe(
         'Visual style: illustrations | photography | gradients | icons | data-viz | code-blocks',
       ),
-    sections: z
-      .array(PageSectionSchema)
-      .min(3)
-      .max(10)
-      .describe('Page sections in display order'),
+    sections: z.array(PageSectionSchema).min(3).max(10).describe('Page sections in display order'),
     contentWidth: z.enum(['narrow', 'standard', 'wide']).describe('Maximum content width'),
   }),
   category: z

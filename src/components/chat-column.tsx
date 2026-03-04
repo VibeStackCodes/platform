@@ -1,7 +1,16 @@
 'use client'
 
-import { Fragment, Suspense, useEffect, useMemo } from 'react'
-import { Bot, CheckCircle2, CircleCheck, GlobeIcon, Loader2, Search, SparklesIcon } from 'lucide-react'
+import { Fragment, Suspense, useEffect, useMemo, useState } from 'react'
+import {
+  Bot,
+  CheckCircle2,
+  CircleCheck,
+  GlobeIcon,
+  Loader2,
+  Palette,
+  Search,
+  SparklesIcon,
+} from 'lucide-react'
 import {
   useAgentStream,
   AGENT_CARD_CONFIG,
@@ -32,6 +41,7 @@ import {
   ChainOfThoughtHeader,
   ChainOfThoughtStep,
 } from '@/components/ai-elements/chain-of-thought'
+import { TemplateGallery } from '@/components/ai-elements/template-gallery'
 import type { PanelContent } from '@/components/right-panel'
 import type {
   ElementContext,
@@ -42,6 +52,8 @@ import type {
   TimelineEntry,
   ClarificationQuestion,
   PlanReadyEvent,
+  DesignAgentTokens,
+  TemplatePreset,
 } from '@/lib/types'
 
 // ============================================================================
@@ -60,6 +72,10 @@ interface ChatColumnProps {
     pendingPlan?: {
       projectName: string
       features: Array<{ name: string; description: string }>
+    } | null
+    pendingDesign?: {
+      tokens: DesignAgentTokens
+      recommendedTemplates: TemplatePreset[]
     } | null
   } | null
   onSandboxReady?: (sandboxId: string) => void
@@ -119,6 +135,39 @@ function ClarificationAnswersOrText({ content }: { content: string }) {
 }
 
 // ============================================================================
+// DesignApprovalSection — Tokens + Template Gallery + HITL
+// ============================================================================
+
+function DesignApprovalSection({
+  tokens,
+  templates,
+  onApprove,
+  onReject,
+}: {
+  tokens: DesignAgentTokens
+  templates: TemplatePreset[]
+  onApprove: (selectedTemplateId?: string) => Promise<void>
+  onReject: () => void
+}) {
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null)
+
+  return (
+    <>
+      <ThemeTokensCard tokens={tokens as unknown as ThemeTokensCardTokens} />
+      <TemplateGallery
+        templates={templates}
+        selectedId={selectedTemplateId ?? undefined}
+        onSelect={(id) => setSelectedTemplateId(id)}
+      />
+      <HitlActions
+        onApprove={() => onApprove(selectedTemplateId ?? undefined)}
+        onRequestChanges={onReject}
+      />
+    </>
+  )
+}
+
+// ============================================================================
 // ChatMessages — Per-turn interleaved rendering
 // ============================================================================
 
@@ -144,11 +193,18 @@ interface ChatMessagesProps {
   pendingClarification: ClarificationQuestion[] | null
   pendingPlan: PlanReadyEvent['plan'] | null
   analystToolSteps: ToolStep[]
+  pendingDesign: {
+    tokens: DesignAgentTokens
+    recommendedTemplates: TemplatePreset[]
+  } | null
+  designerToolSteps: ToolStep[]
   showTimeline: boolean
   onPanelOpen?: (content: PanelContent) => void
   handleClarificationSubmit: (answersText: string) => Promise<void>
   handlePlanApprove: () => Promise<void>
   handleRequestChanges: () => void
+  handleDesignApprove: (selectedTemplateId?: string) => Promise<void>
+  handleDesignReject: () => void
 }
 
 function ChatMessages({
@@ -169,22 +225,31 @@ function ChatMessages({
   pendingClarification,
   pendingPlan,
   analystToolSteps,
+  pendingDesign,
+  designerToolSteps,
   showTimeline,
   onPanelOpen,
   handleClarificationSubmit,
   handlePlanApprove,
   handleRequestChanges,
+  handleDesignApprove,
+  handleDesignReject,
 }: ChatMessagesProps) {
-  // Group tool steps by turnId — exclude analyst steps (rendered separately via ChainOfThought)
+  // Group tool steps by turnId — exclude analyst and designer steps (rendered separately via ChainOfThought)
   const analystStepIds = useMemo(
     () => new Set(analystToolSteps.map((s) => s.id)),
     [analystToolSteps],
+  )
+  const designerStepIds = useMemo(
+    () => new Set(designerToolSteps.map((s) => s.id)),
+    [designerToolSteps],
   )
   const { toolStepsByTurn, unassignedSteps } = useMemo(() => {
     const byTurn = new Map<string, ToolStep[]>()
     const unassigned: ToolStep[] = []
     for (const step of toolSteps) {
       if (analystStepIds.has(step.id)) continue
+      if (designerStepIds.has(step.id)) continue
       if (step.turnId) {
         const arr = byTurn.get(step.turnId) ?? []
         arr.push(step)
@@ -194,7 +259,7 @@ function ChatMessages({
       }
     }
     return { toolStepsByTurn: byTurn, unassignedSteps: unassigned }
-  }, [toolSteps, analystStepIds])
+  }, [toolSteps, analystStepIds, designerStepIds])
 
   const lastAssistantId = messages.findLast((m) => m.role === 'assistant')?.id
 
@@ -331,8 +396,68 @@ function ChatMessages({
                       description: f.description,
                     }))}
                   />
-                  <HitlActions onApprove={handlePlanApprove} onRequestChanges={handleRequestChanges} />
+                  <HitlActions
+                    onApprove={handlePlanApprove}
+                    onRequestChanges={handleRequestChanges}
+                  />
                 </>
+              )}
+            </div>
+          </AgentHeader>
+        </div>
+      )}
+
+      {/* Designer: chain-of-thought + tokens + template gallery + HITL */}
+      {(designerToolSteps.length > 0 || pendingDesign) && (
+        <div className="space-y-3 px-4 py-3">
+          <AgentHeader
+            agentType="architect"
+            name="Design Agent"
+            icon={<Palette className="size-4" />}
+            working={!pendingDesign && designerToolSteps.some((s) => s.status === 'running')}
+          >
+            <div className="flex flex-col gap-3">
+              {designerToolSteps.length > 0 && (
+                <ChainOfThought defaultOpen>
+                  <ChainOfThoughtHeader>
+                    {designerToolSteps.every((s) => s.status === 'complete')
+                      ? `Researched ${designerToolSteps.length} source${designerToolSteps.length !== 1 ? 's' : ''}`
+                      : 'Researching design trends...'}
+                  </ChainOfThoughtHeader>
+                  <ChainOfThoughtContent>
+                    {designerToolSteps.map((step) => (
+                      <ChainOfThoughtStep
+                        key={step.id}
+                        icon={step.tool === 'webSearch' ? GlobeIcon : SparklesIcon}
+                        label={
+                          <span>
+                            {step.label}
+                            {step.durationMs != null && (
+                              <span className="ml-2 text-xs text-muted-foreground/60">
+                                {(step.durationMs / 1000).toFixed(1)}s
+                              </span>
+                            )}
+                          </span>
+                        }
+                        status={
+                          step.status === 'running'
+                            ? 'active'
+                            : step.status === 'complete'
+                              ? 'complete'
+                              : 'pending'
+                        }
+                      />
+                    ))}
+                  </ChainOfThoughtContent>
+                </ChainOfThought>
+              )}
+              {pendingDesign && (
+                <DesignApprovalSection
+                  tokens={pendingDesign.tokens}
+                  templates={pendingDesign.recommendedTemplates}
+                  onApprove={handleDesignApprove}
+                  onReject={handleDesignReject}
+                />
               )}
             </div>
           </AgentHeader>
@@ -642,8 +767,10 @@ export function ChatColumn({
     timelineEvents,
     toolSteps,
     analystToolSteps,
+    designerToolSteps,
     pendingClarification,
     pendingPlan,
+    pendingDesign,
     userCredits,
     messages,
     chatStatus,
@@ -655,6 +782,8 @@ export function ChatColumn({
     handleClarificationSubmit,
     handlePlanApprove,
     handleRequestChanges,
+    handleDesignApprove,
+    handleDesignReject,
     handleSubmit,
   } = useAgentStream({
     projectId,
@@ -696,11 +825,15 @@ export function ChatColumn({
               pendingClarification={pendingClarification}
               pendingPlan={pendingPlan}
               analystToolSteps={analystToolSteps}
+              pendingDesign={pendingDesign}
+              designerToolSteps={designerToolSteps}
               showTimeline={showTimeline}
               onPanelOpen={onPanelOpen}
               handleClarificationSubmit={handleClarificationSubmit}
               handlePlanApprove={handlePlanApprove}
               handleRequestChanges={handleRequestChanges}
+              handleDesignApprove={handleDesignApprove}
+              handleDesignReject={handleDesignReject}
             />
           )}
         </ConversationContent>

@@ -13,6 +13,7 @@ import { PinoLogger } from '@mastra/loggers'
 import { Observability, SamplingStrategyType } from '@mastra/observability'
 import { LangfuseExporter } from '@mastra/langfuse'
 import { createAnalyst } from './analyst'
+import { createDesigner } from './designer'
 import { createOrchestrator } from './orchestrator'
 import { generationWorkflow } from './workflow'
 import { memory, storage } from './memory'
@@ -57,6 +58,7 @@ export const mastra = new Mastra({
   agents: {
     orchestrator: createOrchestrator(),
     analyst: createAnalyst(),
+    designer: createDesigner(),
   },
   workflows: {
     generation: generationWorkflow,

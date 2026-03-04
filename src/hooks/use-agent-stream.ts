@@ -8,12 +8,15 @@ import type {
   ArchitectureReadyEvent,
   BuildError,
   ClarificationQuestion,
+  DesignAgentTokens,
+  DesignSuspendedEvent,
   DesignTokensEvent,
   ElementContext,
   FileAssemblyEntry,
   PageProgressEntry,
   PlanReadyEvent,
   StreamEvent,
+  TemplatePreset,
   TimelineEntry,
   ValidationCheckEntry,
 } from '@/lib/types'
@@ -104,8 +107,13 @@ export interface UseAgentStreamReturn {
   timelineEvents: TimelineEntry[]
   toolSteps: ToolStep[]
   analystToolSteps: ToolStep[]
+  designerToolSteps: ToolStep[]
   pendingClarification: ClarificationQuestion[] | null
   pendingPlan: PlanReadyEvent['plan'] | null
+  pendingDesign: {
+    tokens: DesignAgentTokens
+    recommendedTemplates: TemplatePreset[]
+  } | null
   userCredits: {
     credits_remaining: number
     credits_monthly: number
@@ -125,6 +133,8 @@ export interface UseAgentStreamReturn {
   handleClarificationSubmit: (answersText: string) => Promise<void>
   handlePlanApprove: () => Promise<void>
   handleRequestChanges: () => void
+  handleDesignApprove: (selectedTemplateId?: string) => Promise<void>
+  handleDesignReject: () => void
   handleSubmit: (message: { text?: string }, options: { model: string; mode: string }) => void
   handleSuggestionClick: (suggestion: string) => void
 }
@@ -157,6 +167,8 @@ export function useAgentStream({
   const [toolSteps, setToolSteps] = useState<ToolStep[]>([])
   const [analystToolSteps, setAnalystToolSteps] = useState<ToolStep[]>([])
   const isAnalystPhase = useRef(false)
+  const [designerToolSteps, setDesignerToolSteps] = useState<ToolStep[]>([])
+  const isDesignerPhase = useRef(false)
   const toolStepCounter = useRef(0)
   const currentTurnId = useRef<string | undefined>(undefined)
 
@@ -167,6 +179,10 @@ export function useAgentStream({
   const [pendingPlan, setPendingPlan] = useState<PlanReadyEvent['plan'] | null>(
     initialGenerationState?.pendingPlan ?? null,
   )
+  const [pendingDesign, setPendingDesign] = useState<{
+    tokens: DesignAgentTokens
+    recommendedTemplates: TemplatePreset[]
+  } | null>(null)
   const [workflowRunId, setWorkflowRunId] = useState<string | null>(
     initialGenerationState?.workflowRunId ?? null,
   )
@@ -748,6 +764,9 @@ export function useAgentStream({
           if (isAnalystPhase.current) {
             setAnalystToolSteps((prev) => [...prev, step])
           }
+          if (isDesignerPhase.current) {
+            setDesignerToolSteps((prev) => [...prev, step])
+          }
           break
         }
 
@@ -772,6 +791,9 @@ export function useAgentStream({
           setToolSteps(updateStep)
           if (isAnalystPhase.current) {
             setAnalystToolSteps(updateStep)
+          }
+          if (isDesignerPhase.current) {
+            setDesignerToolSteps(updateStep)
           }
           break
         }
@@ -800,8 +822,28 @@ export function useAgentStream({
 
         case 'workflow_suspended':
           isAnalystPhase.current = false
-          setPendingPlan(event.plan)
-          setWorkflowRunId(event.runId)
+          // If this is a plan suspension (has plan field), handle as plan HITL
+          if ('plan' in event && event.plan) {
+            setPendingPlan(event.plan)
+            setWorkflowRunId(event.runId)
+          }
+          break
+
+        case 'design_suspended':
+          isDesignerPhase.current = false
+          setPendingDesign({
+            tokens: (event as DesignSuspendedEvent).tokens,
+            recommendedTemplates: (event as DesignSuspendedEvent).recommendedTemplates,
+          })
+          setWorkflowRunId((event as DesignSuspendedEvent).runId)
+          break
+
+        case 'design_ready':
+          // Design tokens generated but not yet suspended — intermediate event
+          break
+
+        case 'design_approved':
+          setPendingDesign(null)
           break
       }
     },
@@ -1080,6 +1122,9 @@ export function useAgentStream({
     setChatStatus('streaming')
     setGenerationStatus('generating')
     setDoneSummary(undefined)
+    // Mark designer phase — tool steps during this phase are tracked separately
+    isDesignerPhase.current = true
+    setDesignerToolSteps([])
 
     const assistantId = `assistant-${Date.now()}`
     currentTurnId.current = assistantId
@@ -1100,6 +1145,7 @@ export function useAgentStream({
         body: JSON.stringify({
           runId: workflowRunId,
           approved: true,
+          step: 'approve-plan',
           projectId,
           model,
         }),
@@ -1152,7 +1198,7 @@ export function useAgentStream({
       setSessionMessages((prev) => prev.filter((m) => m.id !== assistantId || m.content.length > 0))
     } finally {
       setChatStatus('ready')
-      setWorkflowRunId(null)
+      // Don't clear workflowRunId here — design_suspended may have set a new one
     }
   }, [workflowRunId, projectId, model, parseSSEBuffer, handleGenerationEvent, queryClient])
 
@@ -1167,6 +1213,7 @@ export function useAgentStream({
         body: JSON.stringify({
           runId: workflowRunId,
           approved: false,
+          step: 'approve-plan',
           projectId,
           model,
         }),
@@ -1175,6 +1222,129 @@ export function useAgentStream({
 
     setWorkflowRunId(null)
     // Input bar is now ready — user types feedback → next sendChatMessage starts a fresh workflow
+  }, [workflowRunId, projectId, model])
+
+  const handleDesignApprove = useCallback(
+    async (selectedTemplateId?: string) => {
+      setPendingDesign(null)
+
+      if (!workflowRunId) return
+
+      // Optimistic user message
+      const userMessage: ChatMessage = {
+        id: `user-${Date.now()}`,
+        role: 'user',
+        content: selectedTemplateId
+          ? `Design approved. Using template: ${selectedTemplateId}`
+          : 'Design approved. Building with custom design.',
+      }
+      setSessionMessages((prev) => [...prev, userMessage])
+      setChatStatus('streaming')
+      setGenerationStatus('generating')
+      setDoneSummary(undefined)
+
+      const assistantId = `assistant-${Date.now()}`
+      currentTurnId.current = assistantId
+      setSessionMessages((prev) => [
+        ...prev,
+        { id: assistantId, role: 'assistant' as const, content: '' },
+      ])
+
+      let fullText = ''
+      abortControllerRef.current?.abort()
+      const abortController = new AbortController()
+      abortControllerRef.current = abortController
+
+      try {
+        const response = await apiFetch('/api/agent', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            runId: workflowRunId,
+            approved: true,
+            step: 'approve-design',
+            selectedTemplateId,
+            projectId,
+            model,
+          }),
+          signal: abortController.signal,
+        })
+
+        if (!response.ok || !response.body) {
+          if (response.status === 402) {
+            const errorData = await response.json()
+            setChatError(
+              new Error(`Out of credits. ${errorData.credits_remaining ?? 0} remaining.`),
+            )
+            setSessionMessages((prev) => prev.filter((m) => m.id !== assistantId))
+            setChatStatus('ready')
+            setGenerationStatus('error')
+            return
+          }
+          throw new Error(`Resume failed: ${response.status}`)
+        }
+
+        const reader = response.body.getReader()
+        const decoder = new TextDecoder()
+        let buffer = ''
+
+        try {
+          while (true) {
+            const { done, value } = await reader.read()
+            if (done) break
+
+            buffer += decoder.decode(value, { stream: true })
+            buffer = parseSSEBuffer(
+              buffer,
+              (delta: string) => {
+                fullText += delta
+                const snapshot = fullText
+                setSessionMessages((prev) =>
+                  prev.map((m) => (m.id === assistantId ? { ...m, content: snapshot } : m)),
+                )
+              },
+              handleGenerationEvent,
+            )
+          }
+        } finally {
+          reader.releaseLock()
+        }
+
+        queryClient.invalidateQueries({ queryKey: ['project-conversation', projectId] })
+      } catch (err) {
+        if (err instanceof Error && err.name === 'AbortError') return
+        if (import.meta.env.DEV) console.error('[builder-chat] handleDesignApprove error:', err)
+        setChatError(err instanceof Error ? err : new Error('Resume failed'))
+        setSessionMessages((prev) =>
+          prev.filter((m) => m.id !== assistantId || m.content.length > 0),
+        )
+      } finally {
+        setChatStatus('ready')
+        setWorkflowRunId(null)
+      }
+    },
+    [workflowRunId, projectId, model, parseSSEBuffer, handleGenerationEvent, queryClient],
+  )
+
+  const handleDesignReject = useCallback(() => {
+    setPendingDesign(null)
+
+    // Fire-and-forget bail
+    if (workflowRunId) {
+      apiFetch('/api/agent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          runId: workflowRunId,
+          approved: false,
+          step: 'approve-design',
+          projectId,
+          model,
+        }),
+      }).catch(() => {})
+    }
+
+    setWorkflowRunId(null)
   }, [workflowRunId, projectId, model])
 
   // Merge persisted + session tool steps.
@@ -1215,8 +1385,10 @@ export function useAgentStream({
     timelineEvents,
     toolSteps: allToolSteps,
     analystToolSteps,
+    designerToolSteps,
     pendingClarification,
     pendingPlan,
+    pendingDesign,
     userCredits,
     messages,
     chatStatus,
@@ -1231,6 +1403,8 @@ export function useAgentStream({
     handleClarificationSubmit,
     handlePlanApprove,
     handleRequestChanges,
+    handleDesignApprove,
+    handleDesignReject,
     handleSubmit,
     handleSuggestionClick,
   }

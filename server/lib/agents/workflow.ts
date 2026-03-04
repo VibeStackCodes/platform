@@ -1,8 +1,11 @@
 import { createWorkflow, createStep } from '@mastra/core/workflows'
 import { z } from 'zod'
 import { AnalystPlanSchema, createAnalyst } from './analyst'
+import { createDesigner, DesignTokensSchema } from './designer'
+import { rankTemplates } from './templates'
 import { createOrchestrator } from './orchestrator'
 import { MODEL_CONFIGS, type ProviderType } from './provider'
+import type { AgentStreamEvent, DesignAgentTokens } from '../types'
 
 // Lazy import to break circular dependency: workflow.ts ↔ mastra.ts
 // (mastra.ts imports generationWorkflow, workflow.ts needs mastra for __registerMastra)
@@ -11,7 +14,54 @@ async function getMastra() {
   return mastra
 }
 import { getLangfuseClient } from './langfuse-client'
-import type { AgentStreamEvent } from '../types'
+
+// ---------------------------------------------------------------------------
+// Inline Zod schemas for step I/O (Mastra steps require Zod objects)
+// ---------------------------------------------------------------------------
+
+const PageSectionSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+})
+
+const DesignAgentTokensSchema = z.object({
+  colors: z.object({
+    primary: z.string(),
+    secondary: z.string(),
+    accent: z.string(),
+    background: z.string(),
+    foreground: z.string(),
+    muted: z.string(),
+    card: z.string(),
+    destructive: z.string(),
+  }),
+  fonts: z.object({
+    display: z.string(),
+    body: z.string(),
+    googleFontsUrl: z.string(),
+  }),
+  style: z.object({
+    borderRadius: z.string(),
+    cardStyle: z.string(),
+    navStyle: z.string(),
+    heroLayout: z.string(),
+    spacing: z.string(),
+    motion: z.string(),
+    imagery: z.string(),
+    sections: z.array(PageSectionSchema),
+    contentWidth: z.enum(['narrow', 'standard', 'wide']),
+  }),
+})
+
+const TemplatePresetSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  category: z.enum(['saas', 'portfolio', 'ecommerce', 'blog', 'dashboard', 'landing']),
+  description: z.string(),
+  screenshotUrl: z.string(),
+  repoPath: z.string(),
+  tokens: DesignAgentTokensSchema,
+})
 
 // ---------------------------------------------------------------------------
 // Step 1: Analyst — produce a structured plan from the user message
@@ -118,14 +168,130 @@ export const approvePlanStep = createStep({
 })
 
 // ---------------------------------------------------------------------------
-// Step 3: Build — orchestrator builds the app according to the approved plan
+// Step 3: Design — generate a visual design token system for the app
+// ---------------------------------------------------------------------------
+
+export const designStep = createStep({
+  id: 'design',
+  inputSchema: z.object({
+    approved: z.boolean(),
+    plan: AnalystPlanSchema,
+  }),
+  outputSchema: z.object({
+    plan: AnalystPlanSchema,
+    tokens: DesignAgentTokensSchema,
+    recommendedTemplates: z.array(TemplatePresetSchema),
+  }),
+  execute: async ({ inputData, requestContext, abortSignal, outputWriter }) => {
+    const agent = createDesigner()
+    agent.__registerMastra(await getMastra())
+
+    // Format plan as prompt for designer
+    const planPrompt = `Design a visual system for this app:\n\nApp: ${inputData.plan.projectName}\nFeatures:\n${inputData.plan.features.map((f) => '- ' + f.name + ': ' + f.description).join('\n')}`
+
+    // biome-ignore lint/suspicious/noExplicitAny: Mastra stream return type is complex
+    const streamOutput: any = await agent.stream(planPrompt, {
+      requestContext,
+      maxSteps: 3,
+      abortSignal,
+      structuredOutput: { schema: DesignTokensSchema },
+    })
+
+    // Pipe fullStream chunks through outputWriter (same pattern as analystStep)
+    const reader = streamOutput.fullStream.getReader()
+    try {
+      while (true) {
+        const { done, value: chunk } = await reader.read()
+        if (done) break
+        if (abortSignal.aborted) break
+        if (chunk && outputWriter) {
+          await outputWriter(chunk as AgentStreamEvent)
+        }
+      }
+    } finally {
+      reader.releaseLock()
+    }
+
+    // biome-ignore lint/suspicious/noExplicitAny: Mastra stream result generics
+    const obj = await streamOutput.object
+    const tokens = DesignTokensSchema.parse(obj)
+
+    // Convert DesignTokensOutput to DesignAgentTokens (strip category)
+    const designTokens: DesignAgentTokens = {
+      colors: tokens.colors,
+      fonts: tokens.fonts,
+      style: tokens.style,
+    }
+
+    // Rank templates against generated tokens
+    const recommended = rankTemplates(designTokens, tokens.category)
+
+    return {
+      plan: inputData.plan,
+      tokens: designTokens,
+      recommendedTemplates: recommended,
+    }
+  },
+})
+
+// ---------------------------------------------------------------------------
+// Step 4: Approve Design — suspend for HITL design approval
+// ---------------------------------------------------------------------------
+
+export const approveDesignStep = createStep({
+  id: 'approve-design',
+  inputSchema: z.object({
+    plan: AnalystPlanSchema,
+    tokens: DesignAgentTokensSchema,
+    recommendedTemplates: z.array(TemplatePresetSchema),
+  }),
+  outputSchema: z.object({
+    plan: AnalystPlanSchema,
+    tokens: DesignAgentTokensSchema,
+    selectedTemplateId: z.string().optional(),
+  }),
+  resumeSchema: z.object({
+    approved: z.boolean(),
+    selectedTemplateId: z.string().optional(),
+    customTokens: DesignAgentTokensSchema.optional(),
+  }),
+  suspendSchema: z.object({
+    tokens: DesignAgentTokensSchema,
+    recommendedTemplates: z.array(TemplatePresetSchema),
+  }),
+  execute: async ({ inputData, resumeData, suspend, bail }) => {
+    if (resumeData?.approved === false) {
+      return bail({
+        plan: inputData.plan,
+        tokens: inputData.tokens,
+      })
+    }
+
+    if (resumeData?.approved === true) {
+      return {
+        plan: inputData.plan,
+        tokens: resumeData.customTokens ?? inputData.tokens,
+        selectedTemplateId: resumeData.selectedTemplateId,
+      }
+    }
+
+    return await suspend({
+      tokens: inputData.tokens,
+      recommendedTemplates: inputData.recommendedTemplates,
+    })
+  },
+})
+
+// ---------------------------------------------------------------------------
+// Step 5: Build — orchestrator builds the app according to the approved plan
 // ---------------------------------------------------------------------------
 
 export const buildStep = createStep({
   id: 'build',
   inputSchema: z.object({
-    approved: z.boolean(),
     plan: AnalystPlanSchema,
+    tokens: DesignAgentTokensSchema,
+    selectedTemplateId: z.string().optional(),
   }),
   outputSchema: z.object({
     summary: z.string(),
@@ -157,9 +323,20 @@ export const buildStep = createStep({
     const agent = createOrchestrator(provider, systemPrompt)
     agent.__registerMastra(await getMastra())
 
+    const tokens = inputData.tokens
     const planPrompt =
       'Build the app according to this plan:\n' +
-      inputData.plan.features.map((f) => '- ' + f.name + ': ' + f.description).join('\n')
+      inputData.plan.features.map((f) => '- ' + f.name + ': ' + f.description).join('\n') +
+      '\n\n## Design System\n' +
+      `Colors (oklch): primary: ${tokens.colors.primary}, secondary: ${tokens.colors.secondary}, accent: ${tokens.colors.accent}, background: ${tokens.colors.background}, foreground: ${tokens.colors.foreground}, muted: ${tokens.colors.muted}, card: ${tokens.colors.card}, destructive: ${tokens.colors.destructive}\n` +
+      `Fonts: Display: "${tokens.fonts.display}", Body: "${tokens.fonts.body}"\n` +
+      `Google Fonts URL: ${tokens.fonts.googleFontsUrl}\n` +
+      `Style: border-radius: ${tokens.style.borderRadius}, card: ${tokens.style.cardStyle}, nav: ${tokens.style.navStyle}, hero: ${tokens.style.heroLayout}, spacing: ${tokens.style.spacing}, motion: ${tokens.style.motion}\n` +
+      `Page Sections: ${tokens.style.sections.map((s) => s.id).join(', ')}\n` +
+      `Content Width: ${tokens.style.contentWidth}` +
+      (inputData.selectedTemplateId
+        ? `\n\nThis app was started from the "${inputData.selectedTemplateId}" template. Customize it based on the user's plan. Modify content, add features, and apply the approved design tokens.`
+        : '')
 
     const projectId = requestContext?.get('projectId') as string | undefined
     const userId = requestContext?.get('userId') as string | undefined
@@ -257,6 +434,10 @@ export const generationWorkflow = createWorkflow({
   .then(analystStep)
   // eslint-disable-next-line unicorn/no-thenable -- Mastra workflow chaining API
   .then(approvePlanStep)
+  // eslint-disable-next-line unicorn/no-thenable -- Mastra workflow chaining API
+  .then(designStep)
+  // eslint-disable-next-line unicorn/no-thenable -- Mastra workflow chaining API
+  .then(approveDesignStep)
   // eslint-disable-next-line unicorn/no-thenable -- Mastra workflow chaining API
   .then(buildStep)
 

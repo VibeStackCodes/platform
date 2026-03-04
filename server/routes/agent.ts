@@ -7,9 +7,18 @@
  *   → Analyst step runs, workflow suspends at approve-plan
  *   → Emits plan_ready + workflow_suspended with runId
  *
- * Resume after approval (runId present):
- *   POST { runId, approved: true }  → Build step runs, emits done
- *   POST { runId, approved: false, feedback? } → Workflow bailed, no build
+ * Resume after plan approval (runId + step: 'approve-plan'):
+ *   POST { runId, approved: true, step: 'approve-plan' }
+ *   → Design step runs, workflow suspends at approve-design
+ *   → Emits design_ready + design_suspended with runId
+ *   POST { runId, approved: false, step: 'approve-plan', feedback? }
+ *   → Workflow bailed, no design/build
+ *
+ * Resume after design approval (runId + step: 'approve-design'):
+ *   POST { runId, approved: true, step: 'approve-design', selectedTemplateId? }
+ *   → Build step runs, emits tool events + done
+ *   POST { runId, approved: false, step: 'approve-design', feedback? }
+ *   → Workflow bailed, no build
  *
  * Response: SSE stream with AgentStreamEvent SSE events
  */
@@ -28,7 +37,12 @@ import { projects } from '../lib/db/schema'
 import { reserveCredits, settleCredits } from '../lib/credits'
 import { getSandbox } from '../lib/sandbox'
 import { createSSEStream } from '../lib/sse'
-import type { AgentStreamEvent, CreditsUsedEvent } from '../lib/types'
+import type {
+  AgentStreamEvent,
+  CreditsUsedEvent,
+  DesignReadyEvent,
+  DesignSuspendedEvent,
+} from '../lib/types'
 import { authMiddleware } from '../middleware/auth'
 import { log } from '../lib/logger'
 import { getLangfuseClient } from '../lib/agents/langfuse-client'
@@ -51,8 +65,16 @@ const AgentRequest = z.object({
     .default('gpt-5.2-codex')
     .describe('Model identifier — gpt-5.2-codex | claude-opus-4-6 | claude-sonnet-4-6'),
   runId: z.string().uuid().optional().describe('Workflow run ID for resume'),
-  approved: z.boolean().optional().describe('Plan approval (only with runId)'),
+  approved: z.boolean().optional().describe('Plan/design approval (only with runId)'),
   feedback: z.string().optional().describe('User feedback on rejection'),
+  step: z
+    .enum(['approve-plan', 'approve-design'])
+    .optional()
+    .describe('Which suspend point to resume (required with runId)'),
+  selectedTemplateId: z
+    .string()
+    .optional()
+    .describe('Template ID chosen by user (only with step=approve-design)'),
 })
 
 const ErrorResponse = z.object({
@@ -385,7 +407,7 @@ agentRoutes.post(
   describeRoute({
     summary: 'Stream AI agent generation via SSE (workflow suspend/resume)',
     description:
-      'Credit-gated SSE endpoint. New generation: POST { message, projectId, model? } — analyst runs, workflow suspends, emits workflow_suspended with runId. Resume: POST { runId, approved, feedback? } — build runs or bails. Returns text/event-stream.',
+      'Credit-gated SSE endpoint. New generation: POST { message, projectId, model? } — analyst runs, workflow suspends at approve-plan, emits plan_ready + workflow_suspended. Resume plan: POST { runId, approved, step: "approve-plan", feedback? } — design runs, suspends at approve-design, emits design_ready + design_suspended. Resume design: POST { runId, approved, step: "approve-design", selectedTemplateId? } — build runs, emits tool events + done. Returns text/event-stream.',
     tags: ['agent'],
     security: [{ bearerAuth: [] }],
     requestBody: {
@@ -425,6 +447,15 @@ agentRoutes.post(
               feedback: {
                 type: 'string',
                 description: 'User feedback on rejection (only with runId + approved: false)',
+              },
+              step: {
+                type: 'string',
+                enum: ['approve-plan', 'approve-design'],
+                description: 'Which suspend point to resume (required with runId)',
+              },
+              selectedTemplateId: {
+                type: 'string',
+                description: 'Template ID chosen by user (only with step=approve-design)',
               },
             },
           },
@@ -477,18 +508,30 @@ agentRoutes.post(
       return c.json({ error: 'Invalid request body' }, 400)
     }
 
-    const { message, projectId, model = 'gpt-5.2-codex', runId, approved, feedback } = body
+    const {
+      message,
+      projectId,
+      model = 'gpt-5.2-codex',
+      runId,
+      approved,
+      feedback,
+      step: resumeStep,
+      selectedTemplateId,
+    } = body
 
     if (!projectId) {
       return c.json({ error: 'Missing projectId' }, 400)
     }
 
-    // New generation requires a message; resume requires a runId + approved
+    // New generation requires a message; resume requires a runId + approved + step
     if (!runId && !message) {
       return c.json({ error: 'Missing message' }, 400)
     }
     if (runId && approved === undefined) {
       return c.json({ error: 'approved is required when resuming a workflow' }, 400)
+    }
+    if (runId && !resumeStep) {
+      return c.json({ error: 'step is required when resuming a workflow' }, 400)
     }
 
     agentLog.info(
@@ -544,83 +587,197 @@ agentRoutes.post(
           const run = await (workflow as any).createRun({ runId })
 
           if (approved) {
-            // Resume build step — stream orchestrator events to client
-            const result = (await traceAgent(`orchestrator:${model}`, async () => {
-              // biome-ignore lint/suspicious/noExplicitAny: Mastra resumeStream return type
-              const resumeOutput: any = run.resumeStream({
-                step: 'approve-plan',
-                resumeData: { approved: true },
-                requestContext,
-              })
-
-              return bridgeWorkflowStreamToSSE(resumeOutput.fullStream, emit, signal, {
+            if (resumeStep === 'approve-plan') {
+              // ── approve-plan resume: design step runs → suspends at approve-design ──
+              const designBridgeState: StreamBridgeState = {
+                totalTokens: 0,
+                lastTextChunk: '',
+                toolStartTimes: new Map(),
+                fileContents: new Map(),
+                pendingWriteContent: new Map(),
+                pendingToolPaths: new Map(),
                 projectId,
                 userId: user.id,
                 runId,
+              }
+
+              // biome-ignore lint/suspicious/noExplicitAny: Mastra run.stream return type
+              const resumeOutput: any = run.stream({
+                step: 'approve-plan',
+                resumeData: { approved: true },
+                requestContext,
+                closeOnSuspend: true,
               })
-            })) as { totalTokens: number; sandboxId?: string; openaiResponseId?: string }
 
-            // Update project status + persist OpenAI response ID
-            const projectUpdate: Record<string, unknown> = {
-              status: result.sandboxId ? 'complete' : 'error',
-              sandboxId: result.sandboxId,
-            }
-            // Clear workflow state + persist OpenAI response ID
-            const existingState = (project.generationState as Record<string, unknown>) || {}
-            projectUpdate.generationState = {
-              ...existingState,
-              workflowRunId: null,
-              pendingPlan: null,
-              ...(result.openaiResponseId ? { lastOpenaiResponseId: result.openaiResponseId } : {}),
-            }
-            updateProject(
-              projectId,
-              projectUpdate as Partial<typeof projects.$inferInsert>,
-              user.id,
-            ).catch(() => {})
+              let designTokens: DesignReadyEvent['tokens'] | null = null
+              let recommendedTemplates: DesignReadyEvent['recommendedTemplates'] = []
 
-            // Settle credits
-            const creditsUsed = Math.ceil(result.totalTokens / 1000)
-            const settlement = await settleCredits(user.id, CREDIT_RESERVATION, creditsUsed)
-            settled = true
+              for await (const event of resumeOutput.fullStream) {
+                if (signal.aborted) break
+                // biome-ignore lint/suspicious/noExplicitAny: workflow event payload shapes vary
+                const e = event as any
 
-            // Score the trace in Langfuse (fire-and-forget)
-            const langfuse = getLangfuseClient()
-            if (langfuse) {
-              const traceMetadata = { userId: user.id, projectId, model, runId }
-              langfuse.score.create({
-                name: 'build-success',
-                traceId: runId,
-                value: result.sandboxId ? 1 : 0,
-                dataType: 'BOOLEAN',
-                comment: result.sandboxId ? 'Build passed' : 'Generation failed',
-                metadata: traceMetadata,
+                // Forward designer tool events (web search etc.) to client
+                const agentChunkTypes = new Set([
+                  'tool-call',
+                  'tool-result',
+                  'step-finish',
+                  'finish',
+                  'tool-call-input-streaming-start',
+                  'tool-call-input-streaming-end',
+                ])
+                if (agentChunkTypes.has(e.type)) {
+                  await processStreamChunk(e, emit, designBridgeState)
+                }
+
+                // Capture design step structured output
+                if (e.type === 'workflow-step-result' && e.payload?.id === 'design') {
+                  // biome-ignore lint/suspicious/noExplicitAny: step output shape depends on outputSchema
+                  const stepOutput = e.payload?.output as any
+                  if (stepOutput?.tokens)
+                    designTokens = stepOutput.tokens as DesignReadyEvent['tokens']
+                  if (stepOutput?.recommendedTemplates) {
+                    recommendedTemplates =
+                      stepOutput.recommendedTemplates as DesignReadyEvent['recommendedTemplates']
+                  }
+                }
+              }
+
+              // Workflow suspended at approve-design — emit design events
+              const newRunId = String((run as any).runId ?? runId)
+
+              if (designTokens) {
+                const designReadyEvent: DesignReadyEvent = {
+                  type: 'design_ready',
+                  tokens: designTokens,
+                  recommendedTemplates,
+                }
+                emit(designReadyEvent)
+
+                const designSuspendedEvent: DesignSuspendedEvent = {
+                  type: 'design_suspended',
+                  runId: newRunId,
+                  tokens: designTokens,
+                  recommendedTemplates,
+                }
+                emit(designSuspendedEvent)
+              }
+
+              // Settle credits for design step
+              const designCreditsUsed = Math.ceil(designBridgeState.totalTokens / 1000)
+              const designSettlement = await settleCredits(
+                user.id,
+                CREDIT_RESERVATION,
+                designCreditsUsed,
+              )
+              settled = true
+
+              // Persist workflow state (runId + pending design) in project
+              const existingDesignState = (project.generationState as Record<string, unknown>) || {}
+              updateProject(
+                projectId,
+                {
+                  generationState: {
+                    ...existingDesignState,
+                    workflowRunId: newRunId,
+                    pendingDesign: designTokens
+                      ? { tokens: designTokens, recommendedTemplates }
+                      : null,
+                  },
+                } as Partial<typeof projects.$inferInsert>,
+                user.id,
+              ).catch(() => {})
+
+              emit({
+                type: 'credits_used',
+                creditsUsed: designCreditsUsed,
+                creditsRemaining: designSettlement.creditsRemaining,
+                tokensTotal: designBridgeState.totalTokens,
               })
-              langfuse.score.create({
-                name: 'token-efficiency',
-                traceId: runId,
-                value: Math.max(0, 1 - result.totalTokens / 500_000),
-                dataType: 'NUMERIC',
-                comment: `${result.totalTokens} tokens used`,
-                metadata: traceMetadata,
-              })
-              langfuse.score.flush().catch(() => {})
-            }
+            } else if (resumeStep === 'approve-design') {
+              // ── approve-design resume: build step runs to completion ──
+              const result = (await traceAgent(`orchestrator:${model}`, async () => {
+                // biome-ignore lint/suspicious/noExplicitAny: Mastra resumeStream return type
+                const resumeOutput: any = run.resumeStream({
+                  step: 'approve-design',
+                  resumeData: {
+                    approved: true,
+                    selectedTemplateId,
+                  },
+                  requestContext,
+                })
 
-            emit({
-              type: 'credits_used',
-              creditsUsed,
-              creditsRemaining: settlement.creditsRemaining,
-              tokensTotal: result.totalTokens,
-            })
+                return bridgeWorkflowStreamToSSE(resumeOutput.fullStream, emit, signal, {
+                  projectId,
+                  userId: user.id,
+                  runId,
+                })
+              })) as { totalTokens: number; sandboxId?: string; openaiResponseId?: string }
+
+              // Update project status + clear all workflow state
+              const projectUpdate: Record<string, unknown> = {
+                status: result.sandboxId ? 'complete' : 'error',
+                sandboxId: result.sandboxId,
+              }
+              const existingState = (project.generationState as Record<string, unknown>) || {}
+              projectUpdate.generationState = {
+                ...existingState,
+                workflowRunId: null,
+                pendingPlan: null,
+                pendingDesign: null,
+                ...(result.openaiResponseId
+                  ? { lastOpenaiResponseId: result.openaiResponseId }
+                  : {}),
+              }
+              updateProject(
+                projectId,
+                projectUpdate as Partial<typeof projects.$inferInsert>,
+                user.id,
+              ).catch(() => {})
+
+              // Settle credits for build step
+              const creditsUsed = Math.ceil(result.totalTokens / 1000)
+              const settlement = await settleCredits(user.id, CREDIT_RESERVATION, creditsUsed)
+              settled = true
+
+              // Score the trace in Langfuse (fire-and-forget)
+              const langfuse = getLangfuseClient()
+              if (langfuse) {
+                const traceMetadata = { userId: user.id, projectId, model, runId }
+                langfuse.score.create({
+                  name: 'build-success',
+                  traceId: runId,
+                  value: result.sandboxId ? 1 : 0,
+                  dataType: 'BOOLEAN',
+                  comment: result.sandboxId ? 'Build passed' : 'Generation failed',
+                  metadata: traceMetadata,
+                })
+                langfuse.score.create({
+                  name: 'token-efficiency',
+                  traceId: runId,
+                  value: Math.max(0, 1 - result.totalTokens / 500_000),
+                  dataType: 'NUMERIC',
+                  comment: `${result.totalTokens} tokens used`,
+                  metadata: traceMetadata,
+                })
+                langfuse.score.flush().catch(() => {})
+              }
+
+              emit({
+                type: 'credits_used',
+                creditsUsed,
+                creditsRemaining: settlement.creditsRemaining,
+                tokensTotal: result.totalTokens,
+              })
+            }
           } else {
-            // Rejection — bail the workflow (no build happens)
+            // Rejection — bail the workflow at whichever step was pending
             await run.resume({
-              step: 'approve-plan',
+              step: resumeStep,
               resumeData: { approved: false, feedback },
             })
 
-            // Clear workflow state from project
+            // Clear all workflow state from project
             const existingRejectState = (project.generationState as Record<string, unknown>) || {}
             updateProject(
               projectId,
@@ -629,6 +786,7 @@ agentRoutes.post(
                   ...existingRejectState,
                   workflowRunId: null,
                   pendingPlan: null,
+                  pendingDesign: null,
                 },
               } as Partial<typeof projects.$inferInsert>,
               user.id,
