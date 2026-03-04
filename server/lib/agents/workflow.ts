@@ -57,9 +57,19 @@ export const analystStep = createStep({
       reader.releaseLock()
     }
 
+    // After fullStream is consumed, await the structured object
     // biome-ignore lint/suspicious/noExplicitAny: Mastra stream result generics
     const obj = await streamOutput.object
     const plan = AnalystPlanSchema.parse(obj)
+
+    // Strip any source citations the LLM embedded (e.g. "([todoist.com](https://...))")
+    const stripCitations = (s: string) =>
+      s.replace(/\s*\(\[.*?\]\(https?:\/\/[^)]*\)\)/g, '').trim()
+    plan.projectName = stripCitations(plan.projectName)
+    for (const feature of plan.features) {
+      feature.description = stripCitations(feature.description)
+      feature.name = stripCitations(feature.name)
+    }
 
     let totalTokens = 0
     try {

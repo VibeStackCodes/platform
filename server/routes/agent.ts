@@ -675,12 +675,15 @@ agentRoutes.post(
           // biome-ignore lint/suspicious/noExplicitAny: workflow event payload shapes vary
           const e = event as any
 
-          if (e.type === 'workflow-step-output') {
-            // Analyst step pipes fullStream chunks — forward all events
-            // (text-delta, tool-call, tool-result, etc.) to the client
-            // StepOutputPayload wraps chunks in { output: chunk }
-            const chunk = e.payload?.output ?? e.payload
-            if (chunk) await processStreamChunk(chunk, emit, analystBridgeState)
+          // Mastra workflow fullStream passes agent chunks directly (tool-call,
+          // tool-result, text-delta, etc.) — NOT wrapped in workflow-step-output.
+          // Route all agent stream chunk types through processStreamChunk.
+          const agentChunkTypes = new Set([
+            'text-delta', 'tool-call', 'tool-result', 'step-finish', 'finish',
+            'tool-call-input-streaming-start', 'tool-call-input-streaming-end',
+          ])
+          if (agentChunkTypes.has(e.type)) {
+            await processStreamChunk(e, emit, analystBridgeState)
           }
 
           if (
