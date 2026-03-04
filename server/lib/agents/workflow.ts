@@ -40,29 +40,14 @@ export const analystStep = createStep({
 
     const result = await agent.generate(inputData.message, {
       requestContext,
-      memory: {
-        thread: inputData.projectId,
-        resource: inputData.userId,
-      },
       maxSteps: 1,
       abortSignal,
       structuredOutput: { schema: AnalystPlanSchema },
     })
 
-    let plan: z.infer<typeof AnalystPlanSchema>
-    try {
-      // biome-ignore lint/suspicious/noExplicitAny: Mastra generate result generics
-      plan = AnalystPlanSchema.parse((result as any).object)
-    } catch {
-      plan = {
-        projectName: 'My App',
-        features: [
-          { name: 'Core UI', description: 'Main application interface and layout' },
-          { name: 'Data Management', description: 'Create, read, update, and delete records' },
-          { name: 'User Experience', description: 'Responsive design, accessibility, and polish' },
-        ],
-      }
-    }
+    // biome-ignore lint/suspicious/noExplicitAny: Mastra generate result generics
+    const obj = (result as any).object
+    const plan = AnalystPlanSchema.parse(obj)
 
     // biome-ignore lint/suspicious/noExplicitAny: Mastra usage shape varies by provider
     const totalTokens = (result as any).usage?.totalTokens ?? 0

@@ -335,17 +335,18 @@ async function bridgeWorkflowStreamToSSE(
 
     if (e.type === 'workflow-step-output') {
       // Build step pipes fullStream chunks through outputWriter — delegate to processStreamChunk
-      const chunk = e.payload ?? e.output
-      await processStreamChunk(chunk, emit, state)
+      // StepOutputPayload wraps chunks in { output: chunk }
+      const chunk = e.payload?.output ?? e.payload
+      if (chunk) await processStreamChunk(chunk, emit, state)
     }
 
-    if (e.type === 'workflow-step-result' && (e.payload?.stepId === 'build' || e.stepId === 'build')) {
-      // Extract final metrics from the build step's structured result
-      // biome-ignore lint/suspicious/noExplicitAny: step result shape depends on workflow output schema
-      const stepResult = (e.payload?.result ?? e.result) as any
-      if (stepResult?.totalTokens) state.totalTokens = stepResult.totalTokens
-      if (stepResult?.sandboxId) state.sandboxId = stepResult.sandboxId
-      if (stepResult?.openaiResponseId) state.openaiResponseId = stepResult.openaiResponseId
+    if (e.type === 'workflow-step-result' && e.payload?.id === 'build') {
+      // Extract final metrics from the build step's structured output
+      // biome-ignore lint/suspicious/noExplicitAny: step output shape depends on workflow output schema
+      const stepOutput = e.payload?.output as any
+      if (stepOutput?.totalTokens) state.totalTokens = stepOutput.totalTokens
+      if (stepOutput?.sandboxId) state.sandboxId = stepOutput.sandboxId
+      if (stepOutput?.openaiResponseId) state.openaiResponseId = stepOutput.openaiResponseId
     }
 
     if (e.type === 'workflow-finish') {
@@ -355,12 +356,8 @@ async function bridgeWorkflowStreamToSSE(
         state.lastTextChunk = ''
       }
 
-      // biome-ignore lint/suspicious/noExplicitAny: workflow finish result shape varies
-      const finishResult = (e.payload?.result ?? e.result) as any
       const success = !!state.sandboxId
-      const summary =
-        finishResult?.summary ??
-        (success ? 'App built successfully.' : 'Generation failed.')
+      const summary = success ? 'App built successfully.' : 'Generation failed.'
 
       emit({
         type: 'done',
@@ -550,13 +547,13 @@ agentRoutes.post(
             // Resume build step — stream orchestrator events to client
             const result = await traceAgent(`orchestrator:${model}`, async () => {
               // biome-ignore lint/suspicious/noExplicitAny: Mastra resumeStream return type
-              const workflowStream: AsyncIterable<any> = run.resumeStream({
+              const resumeOutput: any = run.resumeStream({
                 step: 'approve-plan',
                 resumeData: { approved: true },
                 requestContext,
               })
 
-              return bridgeWorkflowStreamToSSE(workflowStream, emit, signal, {
+              return bridgeWorkflowStreamToSSE(resumeOutput.fullStream, emit, signal, {
                 projectId,
                 userId: user.id,
                 runId,
@@ -647,7 +644,7 @@ agentRoutes.post(
         }
 
         // biome-ignore lint/suspicious/noExplicitAny: Mastra workflow stream return type
-        const workflowStream: AsyncIterable<any> = run.stream({
+        const workflowOutput: any = run.stream({
           inputData: { message: message ?? '', projectId, userId: user.id, model },
           requestContext,
           closeOnSuspend: true,
@@ -660,7 +657,7 @@ agentRoutes.post(
           features: Array<{ name: string; description: string }>
         } = { projectName: 'App', features: [] }
 
-        for await (const event of workflowStream) {
+        for await (const event of workflowOutput.fullStream) {
           if (signal.aborted) break
 
           // biome-ignore lint/suspicious/noExplicitAny: workflow event payload shapes vary
@@ -668,7 +665,8 @@ agentRoutes.post(
 
           if (e.type === 'workflow-step-output') {
             // Analyst step emits thinking chunks via outputWriter
-            const chunk = e.payload ?? e.output
+            // StepOutputPayload wraps chunks in { output: chunk }
+            const chunk = e.payload?.output ?? e.payload
             if (chunk?.type === 'thinking') {
               emit(chunk)
             }
@@ -676,14 +674,14 @@ agentRoutes.post(
 
           if (
             e.type === 'workflow-step-result' &&
-            (e.payload?.stepId === 'analyst' || e.stepId === 'analyst')
+            e.payload?.id === 'analyst'
           ) {
             // biome-ignore lint/suspicious/noExplicitAny: step result shape depends on outputSchema
-            const stepResult = (e.payload?.result ?? e.result) as any
-            if (stepResult?.plan) {
-              capturedPlan = stepResult.plan
-              emit({ type: 'plan_ready', plan: stepResult.plan })
-              analystTokens = stepResult.totalTokens ?? 0
+            const stepOutput = e.payload?.output as any
+            if (stepOutput?.plan) {
+              capturedPlan = stepOutput.plan
+              emit({ type: 'plan_ready', plan: stepOutput.plan })
+              analystTokens = stepOutput.totalTokens ?? 0
             }
           }
         }

@@ -7,7 +7,6 @@
 
 import { Agent } from '@mastra/core/agent'
 import { z } from 'zod'
-import { memory } from './memory'
 import { createAgentModelResolver } from './provider'
 
 const analystModel = createAgentModelResolver('analyst')
@@ -57,7 +56,8 @@ export function createAnalyst(): Agent {
     id: 'analyst',
     name: 'Analyst Agent',
     model: analystModel,
-    memory,
+    // No memory — analyst only needs the current message, not conversation history.
+    // This also avoids memory tool calls consuming the single maxStep.
     description: 'Analyzes user requirements and produces a structured project plan',
     instructions: ANALYST_PROMPT,
     tools: {},

@@ -11,9 +11,8 @@
 import { anthropic } from '@ai-sdk/anthropic'
 import { openai } from '@ai-sdk/openai'
 import { Agent } from '@mastra/core/agent'
-import type { MastraDBMessage } from '@mastra/core/agent/message-list'
-import type { InputProcessor, ProcessInputStepArgs } from '@mastra/core/processors'
 import { memory } from './memory'
+import { stripProviderMetadata } from './processors'
 import { createAgentModelResolver, type ProviderType } from './provider'
 import {
   commitAndPushTool,
@@ -152,41 +151,6 @@ Use the VibeStack image resolver for all photos: \`https://img.vibestack.site/s/
 5. **Build loop**: write code → runBuild → if errors, read them, fix, rebuild. Max 3 repair attempts.
 6. **File size limit**: Keep individual files under 500 lines. Split into components.
 7. **No TODO/FIXME/placeholder comments** — ship complete code.`
-
-/**
- * Processor: strip providerMetadata from recalled messages.
- *
- * OpenAI Responses API uses providerMetadata.openai.itemId to create
- * item_reference entries. When reasoning items are stored without their
- * paired function_call items, OpenAI rejects the request. Stripping
- * providerMetadata forces the AI SDK to send full message content instead
- * of broken item_reference entries.
- *
- * Runs at every step of the agentic loop (processInputStep).
- */
-const stripProviderMetadata: InputProcessor = {
-  id: 'strip-provider-metadata',
-  processInputStep({ messages }: ProcessInputStepArgs): { messages: MastraDBMessage[] } {
-    const cleaned = messages.map((msg) => {
-      if (!msg.content || typeof msg.content !== 'object' || !('parts' in msg.content)) return msg
-      const content = msg.content as { format: number; parts: Array<Record<string, unknown>>; providerMetadata?: unknown }
-      if (!content.parts?.length && !content.providerMetadata) return msg
-      return {
-        ...msg,
-        content: {
-          ...content,
-          providerMetadata: undefined,
-          parts: content.parts.map((part) => {
-            if (!part.providerMetadata) return part
-            const { providerMetadata: _, ...rest } = part
-            return rest
-          }),
-        },
-      } as MastraDBMessage
-    })
-    return { messages: cleaned }
-  },
-}
 
 /**
  * Create a fresh orchestrator agent instance.
