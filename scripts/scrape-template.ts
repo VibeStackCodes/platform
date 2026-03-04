@@ -61,7 +61,7 @@ async function dismissPopups(page: Page): Promise<void> {
     '[aria-label="Close"], [class*="close-button"], button:has-text("×")',
   )
   if (await closeBtn.first().isVisible({ timeout: 2000 }).catch(() => false)) {
-    await closeBtn.first().click()
+    await closeBtn.first().click({ force: true, timeout: 5000 }).catch(() => {})
     await page.waitForTimeout(500)
   }
 }
@@ -258,8 +258,28 @@ async function extractCss(page: Page): Promise<string> {
 // ---------------------------------------------------------------------------
 
 async function captureSinglePage(page: Page, targetUrl: string): Promise<CapturedPage> {
-  await page.goto(targetUrl, { waitUntil: 'networkidle' })
+  await page.goto(targetUrl, { waitUntil: 'load', timeout: 90_000 })
   await page.waitForTimeout(2000)
+
+  // Wait for Cloudflare challenge to resolve (up to 15s)
+  const isCloudflare = await page.evaluate(
+    () =>
+      document.title.includes('Checking your browser') ||
+      !!document.querySelector('#challenge-form, .challenge-running'),
+  )
+  if (isCloudflare) {
+    console.error('[capture] Cloudflare challenge detected, waiting up to 15s...')
+    await page
+      .waitForFunction(
+        () =>
+          !document.title.includes('Checking your browser') &&
+          !document.querySelector('#challenge-form, .challenge-running'),
+        { timeout: 15_000 },
+      )
+      .catch(() => console.error('[capture] Cloudflare challenge did not resolve'))
+    await page.waitForTimeout(2000)
+  }
+
   await dismissPopups(page)
 
   // WordPress iframe detection
@@ -306,10 +326,12 @@ async function captureSinglePage(page: Page, targetUrl: string): Promise<Capture
 // ---------------------------------------------------------------------------
 
 async function capture(url: string, multiPage: boolean): Promise<void> {
-  const browser = await chromium.launch({ headless: true })
+  // Use headed mode to bypass Cloudflare bot detection
+  const headless = !args.includes('--headed')
+  const browser = await chromium.launch({ headless, args: ['--disable-blink-features=AutomationControlled'] })
   const context = await browser.newContext({
     userAgent:
-      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
     viewport: { width: 1440, height: 900 },
   })
 

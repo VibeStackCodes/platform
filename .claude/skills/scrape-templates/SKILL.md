@@ -1,22 +1,25 @@
 ---
 name: scrape-templates
-description: "Convert a template URL to a scaffold-based React+Vite+Tailwind template. Usage: /scrape-templates <url>"
+description: "Convert template URL(s) to scaffold-based React+Vite+Tailwind templates. Usage: /scrape-templates <url> [url2] [url3] ..."
 ---
 
 # Template Scraper
 
-Convert a live website URL into a production-ready VibeStack template with centralized content, real images, and oklch design tokens.
+Convert live website URLs into production-ready VibeStack templates with centralized content, real images, and oklch design tokens.
 
 ## Usage
 
+**Single URL:**
 ```
 /scrape-templates <url>
 ```
 
-Example:
+**Multiple URLs (parallel):**
 ```
-/scrape-templates https://developer-developer.developer.blog/developer/developer/developer/developer
+/scrape-templates <url1> <url2> <url3>
 ```
+
+When multiple URLs are provided, each template is built in parallel by a dedicated sub-agent (see [Parallel Execution](#parallel-execution) below).
 
 ## Reference Implementation
 
@@ -72,6 +75,8 @@ This gives you the full scaffold: shadcn/ui components, `vite-plugin-vibestack-e
 ### Step 3: Convert to React+Tailwind
 
 You ARE the converter. Read the captured HTML+CSS and write the template files on top of the scaffold.
+
+**THE #1 RULE: VISUAL FIDELITY.** The converted template must be **visually indistinguishable** from the original site. Same layout, same spacing, same font sizes, same colors, same border radii, same shadows, same hover effects, same responsive breakpoints. The only differences should be the text (Lorem Ipsum) and images (Unsplash). Open the original URL side-by-side with your output and verify every section matches. If you can tell which is the clone, it's not done yet.
 
 #### 3a. Extract Design Tokens
 
@@ -310,9 +315,92 @@ When deciding whether text belongs in `content.ts` or stays in the component:
 
 ---
 
+## Parallel Execution
+
+When given **multiple URLs**, you are the **coordinator**. Do NOT process templates yourself — dispatch sub-agents that each handle the **full pipeline** (Steps 1-5) independently.
+
+### Why Fully Independent Agents?
+
+Each template writes to a **completely separate directory** in the `vibestack-templates` repo (e.g., `castellum/`, `aurora/`, `ember/`). There are zero file overlaps between agents, so each agent can clone the repo, add its folder, and push — no coordinator-managed publish step needed.
+
+The only race condition is two agents pushing to `main` at the same instant. Since their changes never touch the same files, `git pull --rebase && git push` always resolves cleanly.
+
+### Coordinator Flow
+
+1. **Parse URLs** from the arguments (space-separated or newline-separated).
+
+2. **Dispatch one sub-agent per URL** in a single message with multiple `Agent()` calls, all running in the background:
+
+```
+Agent(
+  subagent_type="voltagent-lang:react-specialist",
+  model="sonnet",
+  name="template-<slug>",
+  prompt="You are converting a website into a VibeStack template. Follow these instructions exactly: [paste full Steps 1-5 from this skill]. URL: <url>. Work in /tmp/<slug>/. When done, report: slug, build status, file count, slot count, color count, page count.",
+  run_in_background=true
+)
+```
+
+Each sub-agent's prompt MUST include:
+- The **full pipeline instructions (Steps 1-5)** from this skill file — each agent publishes independently
+- The specific URL to convert
+- The working directory (`/tmp/<slug>/`)
+- The reference implementation pointer (Meridian template)
+- The **push retry instructions** (see below)
+- Instructions to report results when done
+
+3. **Wait for all agents to complete.** You will be notified as each finishes.
+
+4. **Report all results** in a summary table:
+
+```
+| Template   | Build | Published | Files | Slots | Colors | Pages |
+|------------|-------|-----------|-------|-------|--------|-------|
+| <slug1>    | PASS  | YES       | 76    | 10    | 8      | 4     |
+| <slug2>    | PASS  | YES       | 82    | 14    | 12     | 3     |
+| <slug3>    | FAIL  | NO        | —     | —     | —      | —     |
+
+Repo: VibeStackCodes/vibestack-templates
+Published: 2/3 templates
+```
+
+### Sub-Agent Publish (Step 5)
+
+Each sub-agent handles its own publish. The agent clones the repo into its own directory, copies the template, commits, and pushes with a retry loop for race conditions:
+
+```bash
+cd /tmp
+git clone https://github.com/VibeStackCodes/vibestack-templates.git vibestack-templates-<slug>
+cd vibestack-templates-<slug>
+
+cp -R /tmp/<slug>/ ./<slug>/
+rm -rf ./<slug>/node_modules ./<slug>/dist ./<slug>/.vite ./<slug>/bun.lock ./<slug>/.git
+git add <slug>/
+git commit -m "feat: add <slug> template — <one-line description>"
+
+# Push with retry — handles race condition when another agent pushed first
+git push origin main || (git pull --rebase origin main && git push origin main)
+```
+
+**Why this works:** Each agent writes to a unique directory (`<slug>/`). Even if another agent pushed first, `git pull --rebase` always succeeds because there are no file conflicts — just a fast-forward plus the new directory.
+
+### Failure Handling
+
+- If a sub-agent's build fails after 3 retries, it reports FAIL and does NOT publish.
+- If a sub-agent's push fails after the retry, it reports the error.
+- Successful agents are never blocked by failed ones — each operates independently.
+
+### Single URL Fallback
+
+When only **one URL** is provided, skip the coordinator pattern. Execute Steps 1-5 directly in the main conversation (no sub-agent needed).
+
+---
+
 ## Quality Checklist
 
 Before publishing, verify:
+
+- [ ] **Visual fidelity** — side-by-side with original URL, the layout/spacing/fonts/colors are 1:1 (only text and images differ)
 
 - [ ] `bun run build` passes with zero errors
 - [ ] `content.ts` exists with ALL replaceable content (no hardcoded text in components)
