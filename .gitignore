@@ -64,3 +64,6 @@ supabase/.temp/
 # Storybook
 dist/storybook/
 storybook-static/
+
+# scraped template output
+output/
