@@ -40,7 +40,7 @@ export const analystStep = createStep({
 
     const result = await agent.generate(inputData.message, {
       requestContext,
-      maxSteps: 1,
+      maxSteps: 3,
       abortSignal,
       structuredOutput: { schema: AnalystPlanSchema },
     })
