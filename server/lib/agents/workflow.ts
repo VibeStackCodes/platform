@@ -33,24 +33,41 @@ export const analystStep = createStep({
     const agent = createAnalyst()
     agent.__registerMastra(await getMastra())
 
-    if (outputWriter) {
-      // biome-ignore lint/suspicious/noExplicitAny: AgentStreamEvent chunk shape
-      await outputWriter({ type: 'thinking', content: 'Analyzing your requirements\u2026' } as any)
-    }
-
-    const result = await agent.generate(inputData.message, {
+    // biome-ignore lint/suspicious/noExplicitAny: Mastra stream return type is complex
+    const streamOutput: any = await agent.stream(inputData.message, {
       requestContext,
       maxSteps: 3,
       abortSignal,
       structuredOutput: { schema: AnalystPlanSchema },
     })
 
-    // biome-ignore lint/suspicious/noExplicitAny: Mastra generate result generics
-    const obj = (result as any).object
+    // Pipe fullStream chunks through outputWriter so the route handler
+    // can bridge them to SSE (tool_start, tool_complete, text-delta, etc.)
+    const reader = streamOutput.fullStream.getReader()
+    try {
+      while (true) {
+        const { done, value: chunk } = await reader.read()
+        if (done) break
+        if (abortSignal.aborted) break
+        if (chunk && outputWriter) {
+          await outputWriter(chunk as AgentStreamEvent)
+        }
+      }
+    } finally {
+      reader.releaseLock()
+    }
+
+    // biome-ignore lint/suspicious/noExplicitAny: Mastra stream result generics
+    const obj = await streamOutput.object
     const plan = AnalystPlanSchema.parse(obj)
 
-    // biome-ignore lint/suspicious/noExplicitAny: Mastra usage shape varies by provider
-    const totalTokens = (result as any).usage?.totalTokens ?? 0
+    let totalTokens = 0
+    try {
+      const usage = await streamOutput.usage
+      if (usage?.totalTokens) totalTokens = usage.totalTokens
+    } catch {
+      // usage not available
+    }
 
     return { plan, totalTokens }
   },

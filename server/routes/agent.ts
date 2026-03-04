@@ -657,6 +657,18 @@ agentRoutes.post(
           features: Array<{ name: string; description: string }>
         } = { projectName: 'App', features: [] }
 
+        const analystBridgeState: StreamBridgeState = {
+          totalTokens: 0,
+          lastTextChunk: '',
+          toolStartTimes: new Map(),
+          fileContents: new Map(),
+          pendingWriteContent: new Map(),
+          pendingToolPaths: new Map(),
+          projectId,
+          userId: user.id,
+          runId: '',
+        }
+
         for await (const event of workflowOutput.fullStream) {
           if (signal.aborted) break
 
@@ -664,12 +676,11 @@ agentRoutes.post(
           const e = event as any
 
           if (e.type === 'workflow-step-output') {
-            // Analyst step emits thinking chunks via outputWriter
+            // Analyst step pipes fullStream chunks — forward all events
+            // (text-delta, tool-call, tool-result, etc.) to the client
             // StepOutputPayload wraps chunks in { output: chunk }
             const chunk = e.payload?.output ?? e.payload
-            if (chunk?.type === 'thinking') {
-              emit(chunk)
-            }
+            if (chunk) await processStreamChunk(chunk, emit, analystBridgeState)
           }
 
           if (
