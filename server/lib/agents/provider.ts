@@ -47,6 +47,7 @@ export function createDirectProvider(providerType: ProviderType) {
 export const PIPELINE_MODELS = {
   orchestrator: 'gpt-5.2-codex',
   analyst: 'gpt-5.2-codex',
+  designer: 'gpt-5.2-codex',
   codegen: 'gpt-5.2-codex',
   review: 'gpt-5.2-codex',
   repair: 'gpt-5.2-codex',
