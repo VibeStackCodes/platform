@@ -14,7 +14,9 @@ const analystModel = createAgentModelResolver('analyst')
 
 /** Structured output schema for the project plan */
 export const AnalystPlanSchema = z.object({
-  projectName: z.string().describe('Short catchy name for the project (e.g. "TaskFlow", "BiteBoard")'),
+  projectName: z
+    .string()
+    .describe('Short catchy name for the project (e.g. "TaskFlow", "BiteBoard")'),
   features: z
     .array(
       z.object({

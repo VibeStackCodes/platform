@@ -27,12 +27,7 @@ vi.mock('@server/lib/db/queries', () => ({
   getProject: vi.fn(),
 }))
 
-import {
-  getSandbox,
-  getPreviewUrl,
-  waitForCodeServer,
-  waitForDevServer,
-} from '@server/lib/sandbox'
+import { getSandbox, getPreviewUrl, waitForCodeServer, waitForDevServer } from '@server/lib/sandbox'
 import { getProject } from '@server/lib/db/queries'
 import { sandboxUrlRoutes } from '@server/routes/sandbox-urls'
 

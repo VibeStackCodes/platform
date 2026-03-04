@@ -227,7 +227,6 @@ export function ToolActivity({ steps, onPanelOpen, className }: ToolActivityProp
                 </div>
               )
             })}
-
           </div>
         </div>
       )}

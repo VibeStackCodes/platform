@@ -453,12 +453,7 @@ export const commitAndPushTool = createTool({
       const pushCmd = needsNewRepo
         ? 'cd /workspace && git push --force -u origin main'
         : 'cd /workspace && git push -u origin main'
-      const pushResult = await sandbox.process.executeCommand(
-        pushCmd,
-        '/workspace',
-        undefined,
-        60,
-      )
+      const pushResult = await sandbox.process.executeCommand(pushCmd, '/workspace', undefined, 60)
 
       if (pushResult.exitCode !== 0) {
         return {

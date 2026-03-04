@@ -159,7 +159,10 @@ Use the VibeStack image resolver for all photos: \`https://img.vibestack.site/s/
  * (storage, logger, observability). For per-request agents created by the
  * route handler, call `agent.__registerMastra(mastra)` manually.
  */
-export function createOrchestrator(provider: ProviderType = 'openai', promptOverride?: string): Agent {
+export function createOrchestrator(
+  provider: ProviderType = 'openai',
+  promptOverride?: string,
+): Agent {
   return new Agent({
     id: 'orchestrator',
     name: 'Orchestrator',

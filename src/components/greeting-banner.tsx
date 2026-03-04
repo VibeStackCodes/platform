@@ -56,7 +56,9 @@ export function GreetingBanner({ className }: { className?: string }) {
   const [greeting] = useState(() => pickGreeting(name))
 
   return (
-    <h1 className={className ?? 'text-center text-3xl font-medium text-muted-foreground md:text-4xl'}>
+    <h1
+      className={className ?? 'text-center text-3xl font-medium text-muted-foreground md:text-4xl'}
+    >
       {greeting}
     </h1>
   )

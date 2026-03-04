@@ -154,7 +154,10 @@ stripeWebhookRoutes.post(
             creditsRemaining: profile.creditsMonthly,
             creditsResetAt: new Date((invoice.lines.data[0]?.period?.end ?? 0) * 1000),
           })
-          slog.info('User credits reset', { userId: profile.id, creditsMonthly: profile.creditsMonthly })
+          slog.info('User credits reset', {
+            userId: profile.id,
+            creditsMonthly: profile.creditsMonthly,
+          })
           break
         }
 

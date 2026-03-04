@@ -128,7 +128,11 @@ sandboxUrlRoutes.get(
 
     // Sandbox exists but is stopped/archived — recreate from GitHub repo
     if (sandbox.state !== 'started') {
-      slog.info('Sandbox not started, triggering recreation', { sandboxId: sandbox.id, state: sandbox.state, projectId: id })
+      slog.info('Sandbox not started, triggering recreation', {
+        sandboxId: sandbox.id,
+        state: sandbox.state,
+        projectId: id,
+      })
       if (project.githubRepoUrl) {
         recreatingProjects.add(id)
         recreateSandbox(id, user.id, project.githubRepoUrl).finally(() => {
@@ -191,9 +195,14 @@ async function restartDevServer(sandbox: Sandbox): Promise<void> {
   slog.info('Restarting dev server', { sandboxId: sandbox.id })
 
   // Kill any zombie tmux session
-  await runCommand(sandbox, 'tmux kill-session -t dev 2>/dev/null || true', 'sandbox-restart-kill', {
-    timeout: 10,
-  })
+  await runCommand(
+    sandbox,
+    'tmux kill-session -t dev 2>/dev/null || true',
+    'sandbox-restart-kill',
+    {
+      timeout: 10,
+    },
+  )
 
   // Restart dev server in tmux (same command as snapshot entrypoint)
   await runCommand(
@@ -242,9 +251,14 @@ async function recreateSandbox(
   const authedUrl = cleanUrl.replace('https://', `https://x-access-token:${token}@`)
 
   // 1. Kill the tmux dev session so it doesn't auto-restart on a half-cloned workspace
-  await runCommand(sandbox, 'tmux kill-session -t dev 2>/dev/null || true', 'sandbox-restore-stop', {
-    timeout: 10,
-  })
+  await runCommand(
+    sandbox,
+    'tmux kill-session -t dev 2>/dev/null || true',
+    'sandbox-restore-stop',
+    {
+      timeout: 10,
+    },
+  )
 
   // 2. Wipe workspace and clone the user's repo
   const cloneResult = await runCommand(
@@ -267,7 +281,10 @@ async function recreateSandbox(
     { timeout: 120 },
   )
   if (installResult.exitCode !== 0) {
-    slog.error('bun install failed', { projectId, output: installResult.stderr || installResult.stdout })
+    slog.error('bun install failed', {
+      projectId,
+      output: installResult.stderr || installResult.stdout,
+    })
   }
 
   // 4. Restart the dev server in tmux (same command as snapshot entrypoint)

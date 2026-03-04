@@ -22,7 +22,11 @@ export const stripProviderMetadata: InputProcessor = {
   processInputStep({ messages }: ProcessInputStepArgs): { messages: MastraDBMessage[] } {
     const cleaned = messages.map((msg) => {
       if (!msg.content || typeof msg.content !== 'object' || !('parts' in msg.content)) return msg
-      const content = msg.content as { format: number; parts: Array<Record<string, unknown>>; providerMetadata?: unknown }
+      const content = msg.content as {
+        format: number
+        parts: Array<Record<string, unknown>>
+        providerMetadata?: unknown
+      }
       if (!content.parts?.length && !content.providerMetadata) return msg
       return {
         ...msg,

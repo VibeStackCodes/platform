@@ -47,6 +47,8 @@ const result = await langfuse.prompt.create({
 })
 
 console.log(`Created version ${result.version} of "${PROMPT_NAME}"`)
-console.log(`View at: ${process.env.LANGFUSE_BASEURL ?? 'https://cloud.langfuse.com'}/prompts/${PROMPT_NAME}`)
+console.log(
+  `View at: ${process.env.LANGFUSE_BASEURL ?? 'https://cloud.langfuse.com'}/prompts/${PROMPT_NAME}`,
+)
 
 await langfuse.shutdown()

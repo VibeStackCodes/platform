@@ -54,7 +54,9 @@ function validateEnv() {
     (process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY) ||
     (process.env.VITE_SUPABASE_URL && process.env.VITE_SUPABASE_ANON_KEY)
   if (!hasSupabase) {
-    console.error('[env] Missing Supabase credentials: set SUPABASE_URL + SUPABASE_ANON_KEY (or VITE_ variants)')
+    console.error(
+      '[env] Missing Supabase credentials: set SUPABASE_URL + SUPABASE_ANON_KEY (or VITE_ variants)',
+    )
     if (process.env.NODE_ENV === 'production') {
       throw new Error('Server startup aborted — missing Supabase credentials')
     }
