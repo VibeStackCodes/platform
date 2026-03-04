@@ -15,15 +15,17 @@ vi.mock('@server/lib/db/queries', () => ({
   getUserProjects: vi.fn(),
   createProject: vi.fn(),
   getProject: vi.fn(),
-  getProjectMessages: vi.fn(),
 }))
 
-import {
-  createProject,
-  getProject,
-  getProjectMessages,
-  getUserProjects,
-} from '@server/lib/db/queries'
+// Mock conversation store
+const { mockGetMessages } = vi.hoisted(() => ({
+  mockGetMessages: vi.fn(),
+}))
+vi.mock('@server/lib/conversation-store', () => ({
+  conversationStore: { getMessages: mockGetMessages },
+}))
+
+import { createProject, getProject, getUserProjects } from '@server/lib/db/queries'
 import { projectRoutes } from '@server/routes/projects'
 
 describe('Project Routes', () => {
@@ -303,26 +305,28 @@ describe('Project Routes', () => {
         {
           id: 'msg-1',
           role: 'user',
-          parts: [{ type: 'text', text: 'Hello' }],
+          type: 'message',
+          parts: [{ text: 'Hello' }],
           createdAt: new Date('2026-02-16T10:01:00Z'),
         },
         {
           id: 'msg-2',
           role: 'assistant',
-          parts: [{ type: 'text', text: 'Hi there!' }],
+          type: 'message',
+          parts: [{ text: 'Hi there!' }],
           createdAt: new Date('2026-02-16T10:02:00Z'),
         },
       ]
 
       vi.mocked(getProject).mockResolvedValue(mockProject)
-      vi.mocked(getProjectMessages).mockResolvedValue(mockMessages)
+      mockGetMessages.mockResolvedValue({ messages: mockMessages, queryLatencyMs: 1 })
 
       const res = await app.request('/api/projects/proj-1/messages', { method: 'GET' })
       const data = await res.json()
 
       expect(res.status).toBe(200)
       expect(getProject).toHaveBeenCalledWith('proj-1', 'user-123')
-      expect(getProjectMessages).toHaveBeenCalledWith('proj-1')
+      expect(mockGetMessages).toHaveBeenCalledWith('proj-1', 'user-123')
       expect(data).toHaveLength(2)
       expect(data[0].role).toBe('user')
       expect(data[1].role).toBe('assistant')
@@ -330,7 +334,6 @@ describe('Project Routes', () => {
 
     it('returns 404 when project not found for messages endpoint', async () => {
       vi.mocked(getProject).mockResolvedValue(null)
-      vi.mocked(getProjectMessages).mockResolvedValue([])
 
       const res = await app.request('/api/projects/nonexistent/messages', { method: 'GET' })
       const data = await res.json()
@@ -338,18 +341,17 @@ describe('Project Routes', () => {
       expect(res.status).toBe(404)
       expect(data).toEqual({ error: 'Project not found' })
       // Ownership check fails first — messages should NOT be fetched (IDOR prevention)
-      expect(getProjectMessages).not.toHaveBeenCalled()
+      expect(mockGetMessages).not.toHaveBeenCalled()
     })
 
     it('returns 404 when user is not project owner for messages endpoint', async () => {
       vi.mocked(getProject).mockResolvedValue(null)
-      vi.mocked(getProjectMessages).mockResolvedValue([])
 
       const res = await app.request('/api/projects/other-user-project/messages', { method: 'GET' })
 
       expect(res.status).toBe(404)
       // Ownership check fails first — messages should NOT be fetched (IDOR prevention)
-      expect(getProjectMessages).not.toHaveBeenCalled()
+      expect(mockGetMessages).not.toHaveBeenCalled()
     })
 
     it('returns empty array when project has no messages', async () => {
@@ -371,7 +373,7 @@ describe('Project Routes', () => {
       }
 
       vi.mocked(getProject).mockResolvedValue(mockProject)
-      vi.mocked(getProjectMessages).mockResolvedValue([])
+      mockGetMessages.mockResolvedValue({ messages: [], queryLatencyMs: 1 })
 
       const res = await app.request('/api/projects/proj-1/messages', { method: 'GET' })
       const data = await res.json()

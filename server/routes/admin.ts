@@ -5,8 +5,9 @@
  * All routes require authentication + admin role.
  *
  * Endpoints:
- * - GET  /api/admin/health     — System health check (DB, Daytona, env vars)
- * - GET  /api/admin/env-check  — Verify required environment variables
+ * - GET  /api/admin/health                 — System health check (DB, Daytona, env vars)
+ * - GET  /api/admin/env-check              — Verify required environment variables
+ * - GET  /api/admin/conversation-metrics   — Mastra conversation store size and latency metrics
  */
 
 import { z } from 'zod'
@@ -17,6 +18,7 @@ import * as Sentry from '@sentry/node'
 import { db } from '../lib/db/client'
 import { authMiddleware } from '../middleware/auth'
 import { createRateLimiter } from '../lib/rate-limit'
+import { conversationStore } from '../lib/conversation-store'
 
 // ---------------------------------------------------------------------------
 // Response schemas
@@ -279,17 +281,23 @@ adminRoutes.get(
       { name: 'ADMIN_USER_IDS', purpose: 'Admin user UUIDs (comma-separated)' },
     ]
 
-    const requiredStatus = required.map((v) => ({
-      ...v,
-      set: !!process.env[v.name],
-      preview: process.env[v.name] ? 'SET' : 'NOT SET',
-    }))
+    const requiredStatus = required.map((v) => {
+      return {
+        name: v.name,
+        purpose: v.purpose,
+        set: !!process.env[v.name],
+        preview: process.env[v.name] ? 'SET' : 'NOT SET',
+      }
+    })
 
-    const optionalStatus = optional.map((v) => ({
-      ...v,
-      set: !!process.env[v.name],
-      value: v.name === 'WARM_POOL_SIZE' ? process.env[v.name] || '5 (default)' : undefined,
-    }))
+    const optionalStatus = optional.map((v) => {
+      return {
+        name: v.name,
+        purpose: v.purpose,
+        set: !!process.env[v.name],
+        value: v.name === 'WARM_POOL_SIZE' ? process.env[v.name] || '5 (default)' : undefined,
+      }
+    })
 
     const missingRequired = requiredStatus.filter((v) => !v.set)
 
@@ -301,3 +309,20 @@ adminRoutes.get(
     })
   },
 )
+
+/**
+ * GET /api/admin/conversation-metrics
+ * Mastra conversation store size and latency metrics.
+ * Used to decide when to migrate storage backends (e.g., to MongoDB).
+ */
+adminRoutes.get('/conversation-metrics', async (c) => {
+  const metrics = await conversationStore.getGlobalMetrics()
+  return c.json({
+    ...metrics,
+    // Human-readable derived fields
+    tableSizeMB: Math.round((metrics.tableSizeBytes / 1024 / 1024) * 100) / 100,
+    contentSizeMB: Math.round((metrics.contentSizeBytes / 1024 / 1024) * 100) / 100,
+    avgContentSizeKB: Math.round((metrics.avgContentSizeBytes / 1024) * 100) / 100,
+    p95ContentSizeKB: Math.round((metrics.p95ContentSizeBytes / 1024) * 100) / 100,
+  })
+})

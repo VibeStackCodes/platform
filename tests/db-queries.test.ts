@@ -87,14 +87,13 @@ vi.mock('@server/lib/db/client', () => {
 })
 
 // ── Schema stub ───────────────────────────────────────────────────────────────
-// queries.ts uses column references like `projects.userId`, `chatMessages.id`.
+// queries.ts uses column references like `projects.userId`, `profiles.id`.
 // We provide token objects so Drizzle's column reference syntax resolves.
 vi.mock('@server/lib/db/schema', () => {
   const col = (name: string) => ({ _col: name })
   return {
     projects: new Proxy({ $inferInsert: {} }, { get: (_t, prop) => col(String(prop)) }),
     profiles: new Proxy({}, { get: (_t, prop) => col(String(prop)) }),
-    chatMessages: new Proxy({}, { get: (_t, prop) => col(String(prop)) }),
   }
 })
 
@@ -120,8 +119,6 @@ const {
   getUserCredits,
   getProfileForCheckout,
   getProfileByStripeId,
-  insertChatMessage,
-  getProjectWithMessages,
 } = await import('@server/lib/db/queries')
 
 describe('db-queries', () => {
@@ -300,94 +297,6 @@ describe('db-queries', () => {
       const result = await getProfileByStripeId('cus_nonexistent')
 
       expect(result).toBeNull()
-    })
-  })
-
-  // ── insertChatMessage ────────────────────────────────────────────────────
-  describe('insertChatMessage', () => {
-    it('inserts a new message and returns the inserted row', async () => {
-      const parts = [{ type: 'text', text: 'Hello!' }]
-      const fakeMessage = {
-        id: 'msg-001',
-        projectId: 'p1',
-        role: 'user',
-        type: 'message',
-        parts,
-        createdAt: new Date(),
-      }
-      const insertBuilder = dbMock._setInsertResult([fakeMessage])
-
-      const result = await insertChatMessage('msg-001', 'p1', 'user', parts)
-
-      expect(db.insert).toHaveBeenCalledOnce()
-      expect(insertBuilder.values).toHaveBeenCalledWith(
-        expect.objectContaining({ id: 'msg-001', projectId: 'p1', role: 'user', type: 'message' }),
-      )
-      expect(insertBuilder.onConflictDoNothing).toHaveBeenCalledWith(
-        expect.objectContaining({ target: expect.anything() }),
-      )
-      expect(result).toEqual(fakeMessage)
-    })
-
-    it('returns null on duplicate ID (ON CONFLICT DO NOTHING)', async () => {
-      // Set up insert to return empty from onConflictDoNothing path
-      dbMock._setInsertResult([], [])
-
-      const result = await insertChatMessage('msg-dup', 'p1', 'user', 'text')
-
-      expect(result).toBeNull()
-    })
-
-    it('wraps a non-array parts value in an array', async () => {
-      const insertBuilder = dbMock._setInsertResult([{ id: 'msg-002' }])
-
-      await insertChatMessage('msg-002', 'p1', 'assistant', 'scalar-part')
-
-      const valuesArg = insertBuilder.values.mock.calls[0][0]
-      expect(Array.isArray(valuesArg.parts)).toBe(true)
-      expect(valuesArg.parts).toEqual(['scalar-part'])
-    })
-
-    it('keeps array parts as-is', async () => {
-      const insertBuilder = dbMock._setInsertResult([{ id: 'msg-003' }])
-
-      const parts = [
-        { type: 'text', text: 'part one' },
-        { type: 'text', text: 'part two' },
-      ]
-      await insertChatMessage('msg-003', 'p1', 'user', parts)
-
-      const valuesArg = insertBuilder.values.mock.calls[0][0]
-      expect(valuesArg.parts).toEqual(parts)
-    })
-  })
-
-  // ── getProjectWithMessages ───────────────────────────────────────────────
-  describe('getProjectWithMessages', () => {
-    it('calls db.query.projects.findFirst with chatMessages relation', async () => {
-      const fakeProjectWithMessages = {
-        id: 'p1',
-        userId: 'u1',
-        name: 'My App',
-        chatMessages: [{ id: 'msg-1', role: 'user', parts: [{ type: 'text', text: 'Hi' }] }],
-      }
-      db.query.projects.findFirst.mockResolvedValue(fakeProjectWithMessages)
-
-      const result = await getProjectWithMessages('p1', 'u1')
-
-      expect(db.query.projects.findFirst).toHaveBeenCalledOnce()
-      const findFirstArg = db.query.projects.findFirst.mock.calls[0][0]
-      // The `with` option must include chatMessages
-      expect(findFirstArg.with).toHaveProperty('chatMessages', true)
-      expect(result).toEqual(fakeProjectWithMessages)
-    })
-
-    it('returns undefined when project not found', async () => {
-      db.query.projects.findFirst.mockResolvedValue(undefined)
-
-      const result = await getProjectWithMessages('p-missing', 'u1')
-
-      expect(result).toBeUndefined()
     })
   })
 })

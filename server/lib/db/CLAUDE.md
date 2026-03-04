@@ -1,17 +1,16 @@
 # Database — Drizzle ORM + Supabase
 
-Platform database layer. 5 tables, type-safe queries via Drizzle.
+Platform database layer. 4 tables, type-safe queries via Drizzle.
 
 ## Files
-- `schema.ts` — Drizzle schema: profiles, projects, chatMessages, usageEvents, warmSupabaseProjects
-- `relations.ts` — profiles→projects (1:many), projects→chatMessages (1:many), profiles→usageEvents (1:many)
+- `schema.ts` — Drizzle schema: profiles, projects, usageEvents, warmSupabaseProjects
+- `relations.ts` — profiles→projects (1:many), profiles→usageEvents (1:many)
 - `client.ts` — pg Pool (max 1 conn, 30s idle, 5s connect timeout) + `drizzle(pool, { schema, relations })`
-- `queries.ts` — ~30 type-safe query functions: project CRUD, credits, Stripe webhooks, chat persistence
+- `queries.ts` — ~25 type-safe query functions: project CRUD, credits, Stripe webhooks
 
 ## Key Patterns
-- `db.query.*` for eager relations (`findFirst` with `with: { chatMessages }`)
+- `db.query.*` for eager relations (`findFirst` with `with:`)
 - `db.select().from().where()` for filtered queries (e.g., `getProject(id, userId)` for ownership)
-- `insertChatMessage()` with `ON CONFLICT DO NOTHING` for idempotent event persistence; `type` column distinguishes message kinds
 - `warmSupabaseProjects` table: pre-provisioned instances (status: 'available'|'claimed'|'creating')
 
 ## Gotchas

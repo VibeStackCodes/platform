@@ -1,8 +1,8 @@
 // server/lib/db/queries.ts
 
-import { and, asc, desc, eq } from 'drizzle-orm'
+import { and, desc, eq } from 'drizzle-orm'
 import { db } from './client'
-import { chatMessages, profiles, projects } from './schema'
+import { profiles, projects } from './schema'
 
 // ── Project Queries ──────────────────────────────────────────────
 
@@ -128,47 +128,4 @@ export async function getStripeCustomerId(userId: string) {
     .from(profiles)
     .where(eq(profiles.id, userId))
     .then((rows) => rows[0]?.stripeCustomerId ?? null)
-}
-
-// ── Chat Message Queries ──────────────────────────────────────────
-
-/** Get all conversation events for a project, ordered by created_at asc */
-export async function getProjectMessages(projectId: string) {
-  return db
-    .select({
-      id: chatMessages.id,
-      role: chatMessages.role,
-      type: chatMessages.type,
-      parts: chatMessages.parts,
-      createdAt: chatMessages.createdAt,
-    })
-    .from(chatMessages)
-    .where(eq(chatMessages.projectId, projectId))
-    .orderBy(asc(chatMessages.createdAt))
-}
-
-/** Insert a chat message/event for a project. Uses ON CONFLICT DO NOTHING for dedup safety. */
-export async function insertChatMessage(
-  id: string,
-  projectId: string,
-  role: string,
-  parts: unknown,
-  type = 'message',
-) {
-  return db
-    .insert(chatMessages)
-    .values({ id, projectId, role, type, parts: Array.isArray(parts) ? parts : [parts] })
-    .onConflictDoNothing({ target: chatMessages.id })
-    .returning()
-    .then((rows) => rows[0] ?? null)
-}
-
-// ── Relational Queries (using db.query) ──────────────────────────
-
-/** Get project with its chat messages (relational) */
-export async function getProjectWithMessages(projectId: string, userId: string) {
-  return db.query.projects.findFirst({
-    where: (p, { and, eq }) => and(eq(p.id, projectId), eq(p.userId, userId)),
-    with: { chatMessages: true },
-  })
 }

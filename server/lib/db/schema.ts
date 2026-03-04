@@ -33,17 +33,6 @@ export const projects = pgTable('projects', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 })
 
-export const chatMessages = pgTable('chat_messages', {
-  id: text('id').primaryKey(),
-  projectId: uuid('project_id')
-    .notNull()
-    .references(() => projects.id, { onDelete: 'cascade' }),
-  role: text('role').notNull(),
-  type: text('type').notNull().default('message'),
-  parts: jsonb('parts').notNull().default([]),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-})
-
 export const usageEvents = pgTable('usage_events', {
   id: uuid('id').primaryKey().defaultRandom(),
   userId: uuid('user_id')
@@ -65,5 +54,4 @@ export type Profile = typeof profiles.$inferSelect
 export type NewProfile = typeof profiles.$inferInsert
 export type Project = typeof projects.$inferSelect
 export type NewProject = typeof projects.$inferInsert
-export type ChatMessage = typeof chatMessages.$inferSelect
 export type UsageEvent = typeof usageEvents.$inferSelect

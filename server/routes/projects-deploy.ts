@@ -14,7 +14,7 @@ import { getProject, updateProject } from '../lib/db/queries'
 import { fetchWithTimeout } from '../lib/fetch'
 import { getInstallationToken } from '../lib/github'
 import { downloadDirectory, getDaytonaClient } from '../lib/sandbox'
-import { memory } from '../lib/agents/memory'
+import { conversationStore } from '../lib/conversation-store'
 import { buildAppSlug } from '../lib/slug'
 import type { DeployRequest } from '../lib/types'
 import { log } from '../lib/logger'
@@ -127,13 +127,19 @@ projectDeployRoutes.post(
 
       let deployUrl: string
 
-      slog.info('Deploy started', { projectName: project.name, githubRepoUrl: project.githubRepoUrl ?? 'none', sandboxId: project.sandboxId })
+      slog.info('Deploy started', {
+        projectName: project.name,
+        githubRepoUrl: project.githubRepoUrl ?? 'none',
+        sandboxId: project.sandboxId,
+      })
 
       let vercelProjectSlug: string
 
       if (project.githubRepoUrl) {
         // Deploy from GitHub repo (required path)
-        const repoFullName = project.githubRepoUrl.replace('https://github.com/', '').replace(/\.git$/, '')
+        const repoFullName = project.githubRepoUrl
+          .replace('https://github.com/', '')
+          .replace(/\.git$/, '')
         slog.info('Deploying from GitHub', { repoFullName })
         const result = await deployFromGitHub(repoFullName, project.name, vercelTeamId)
         deployUrl = result.deployUrl
@@ -164,25 +170,12 @@ projectDeployRoutes.post(
         status: 'deployed',
       })
 
-      // Persist deploy message to Mastra memory so it shows on refresh
-      const deployMsgId = `deploy-${projectId}-${Date.now()}`
-      await memory.saveMessages({
-        messages: [
-          {
-            id: deployMsgId,
-            threadId: projectId,
-            resourceId: user.id,
-            role: 'assistant' as const,
-            content: {
-              format: 2,
-              parts: [{ type: 'text' as const, text: `Your app has been deployed! 🚀\n\n${deployUrl}` }],
-            },
-            createdAt: new Date(),
-            type: 'text',
-          },
-        ],
-      }).catch((err: unknown) => {
-        slog.warn('Failed to persist deploy message to memory', { projectId, error: err })
+      // Persist deploy message to conversation store so it shows on refresh
+      await conversationStore.saveMessage(projectId, user.id, {
+        id: crypto.randomUUID(),
+        role: 'assistant',
+        type: 'message',
+        parts: [{ type: 'text', text: `App deployed to ${deployUrl}` }],
       })
 
       return c.json({
