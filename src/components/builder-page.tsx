@@ -14,12 +14,26 @@ interface BuilderPageProps {
   initialPrompt?: string
   initialSandboxId?: string
   initialDeployUrl?: string
+  initialGenerationState?: {
+    workflowRunId?: string | null
+    pendingPlan?: {
+      projectName: string
+      features: Array<{ name: string; description: string }>
+    } | null
+  } | null
 }
 
 // Refresh signed URLs 10 min before 1h expiry
 const REFRESH_BEFORE_EXPIRY_MS = 10 * 60 * 1000
 
-export function BuilderPage({ projectId, projectName, initialPrompt, initialSandboxId, initialDeployUrl }: BuilderPageProps) {
+export function BuilderPage({
+  projectId,
+  projectName,
+  initialPrompt,
+  initialSandboxId,
+  initialDeployUrl,
+  initialGenerationState,
+}: BuilderPageProps) {
   const [panelContent, setPanelContent] = useState<PanelContent>(null)
   const [_sandboxId, setSandboxId] = useState(initialSandboxId)
   const [previewUrl, setPreviewUrl] = useState<string>()
@@ -140,7 +154,9 @@ export function BuilderPage({ projectId, projectName, initialPrompt, initialSand
     [panel],
   )
 
-  const [deployState, setDeployState] = useState<'idle' | 'deploying' | 'deployed' | 'error'>(initialDeployUrl ? 'deployed' : 'idle')
+  const [deployState, setDeployState] = useState<'idle' | 'deploying' | 'deployed' | 'error'>(
+    initialDeployUrl ? 'deployed' : 'idle',
+  )
   const [deployUrl, setDeployUrl] = useState<string | undefined>(initialDeployUrl)
 
   const handleDeploy = useCallback(async () => {
@@ -160,9 +176,7 @@ export function BuilderPage({ projectId, projectName, initialPrompt, initialSand
       const data = await res.json()
       setDeployUrl(data.deployUrl)
       setDeployState('deployed')
-      chatHandleRef.current?.addSystemMessage(
-        `Your app has been deployed! 🚀\n\n${data.deployUrl}`,
-      )
+      chatHandleRef.current?.addSystemMessage(`Your app has been deployed! 🚀\n\n${data.deployUrl}`)
     } catch {
       setDeployState('error')
       chatHandleRef.current?.addSystemMessage('Deployment failed. Please try again.')
@@ -174,12 +188,15 @@ export function BuilderPage({ projectId, projectName, initialPrompt, initialSand
       <ChatColumn
         projectId={projectId}
         initialPrompt={initialPrompt}
+        initialGenerationState={initialGenerationState}
         onSandboxReady={handleSandboxReady}
         onPanelOpen={handlePanelOpen}
         onGenerationComplete={fetchSandboxUrls}
         selectedElement={selectedElement}
         onEditComplete={() => setSelectedElement(null)}
-        onReady={(handle) => { chatHandleRef.current = handle }}
+        onReady={(handle) => {
+          chatHandleRef.current = handle
+        }}
       />
       <RightPanel
         isOpen={panel.isOpen}

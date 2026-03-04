@@ -73,6 +73,13 @@ export interface ChatMessage {
 export interface UseAgentStreamOptions {
   projectId: string
   initialPrompt?: string
+  initialGenerationState?: {
+    workflowRunId?: string | null
+    pendingPlan?: {
+      projectName: string
+      features: Array<{ name: string; description: string }>
+    } | null
+  } | null
   onGenerationComplete?: () => void
   onSandboxReady?: (sandboxId: string) => void
   selectedElement?: ElementContext | null
@@ -96,6 +103,7 @@ export interface UseAgentStreamReturn {
   validationChecks: ValidationCheckEntry[]
   timelineEvents: TimelineEntry[]
   toolSteps: ToolStep[]
+  analystToolSteps: ToolStep[]
   pendingClarification: ClarificationQuestion[] | null
   pendingPlan: PlanReadyEvent['plan'] | null
   userCredits: {
@@ -124,6 +132,7 @@ export interface UseAgentStreamReturn {
 export function useAgentStream({
   projectId,
   initialPrompt,
+  initialGenerationState,
   onGenerationComplete,
   onSandboxReady,
   selectedElement,
@@ -146,6 +155,8 @@ export function useAgentStream({
 
   const [timelineEvents, setTimelineEvents] = useState<TimelineEntry[]>([])
   const [toolSteps, setToolSteps] = useState<ToolStep[]>([])
+  const [analystToolSteps, setAnalystToolSteps] = useState<ToolStep[]>([])
+  const isAnalystPhase = useRef(false)
   const toolStepCounter = useRef(0)
   const currentTurnId = useRef<string | undefined>(undefined)
 
@@ -153,8 +164,12 @@ export function useAgentStream({
     null,
   )
   const [resumeRunId, setResumeRunId] = useState<string | null>(null)
-  const [pendingPlan, setPendingPlan] = useState<PlanReadyEvent['plan'] | null>(null)
-  const [workflowRunId, setWorkflowRunId] = useState<string | null>(null)
+  const [pendingPlan, setPendingPlan] = useState<PlanReadyEvent['plan'] | null>(
+    initialGenerationState?.pendingPlan ?? null,
+  )
+  const [workflowRunId, setWorkflowRunId] = useState<string | null>(
+    initialGenerationState?.workflowRunId ?? null,
+  )
   const [userCredits, setUserCredits] = useState<{
     credits_remaining: number
     credits_monthly: number
@@ -720,26 +735,26 @@ export function useAgentStream({
           const filePath = (args?.path as string) ?? (args?.filePath as string) ?? undefined
 
           const stepId = `${event.tool}-${now}-${toolStepCounter.current++}`
-          setToolSteps((prev) => [
-            ...prev,
-            {
-              id: stepId,
-              tool: event.tool,
-              label: event.label ?? event.tool,
-              status: 'running',
-              filePath,
-              startedAt: now,
-              turnId: currentTurnId.current,
-            },
-          ])
+          const step: ToolStep = {
+            id: stepId,
+            tool: event.tool,
+            label: event.label ?? event.tool,
+            status: 'running',
+            filePath,
+            startedAt: now,
+            turnId: currentTurnId.current,
+          }
+          setToolSteps((prev) => [...prev, step])
+          if (isAnalystPhase.current) {
+            setAnalystToolSteps((prev) => [...prev, step])
+          }
           break
         }
 
         case 'tool_complete': {
           if (INTERNAL_TOOLS.has(event.tool)) break
 
-          setToolSteps((prev) => {
-            // Find the last running step for this tool
+          const updateStep = (prev: ToolStep[]) => {
             const idx = prev.findLastIndex((s) => s.tool === event.tool && s.status === 'running')
             if (idx < 0) return prev
             const updated = [...prev]
@@ -753,7 +768,11 @@ export function useAgentStream({
               newContent: event.newContent,
             }
             return updated
-          })
+          }
+          setToolSteps(updateStep)
+          if (isAnalystPhase.current) {
+            setAnalystToolSteps(updateStep)
+          }
           break
         }
 
@@ -780,6 +799,7 @@ export function useAgentStream({
           break
 
         case 'workflow_suspended':
+          isAnalystPhase.current = false
           setPendingPlan(event.plan)
           setWorkflowRunId(event.runId)
           break
@@ -849,6 +869,9 @@ export function useAgentStream({
       setPageProgress([])
       setFileAssembly([])
       setValidationChecks([])
+      // Mark analyst phase — tool steps during this phase are tracked separately
+      isAnalystPhase.current = true
+      setAnalystToolSteps([])
 
       const assistantId = `assistant-${Date.now()}`
       currentTurnId.current = assistantId
@@ -1086,9 +1109,7 @@ export function useAgentStream({
       if (!response.ok || !response.body) {
         if (response.status === 402) {
           const errorData = await response.json()
-          setChatError(
-            new Error(`Out of credits. ${errorData.credits_remaining ?? 0} remaining.`),
-          )
+          setChatError(new Error(`Out of credits. ${errorData.credits_remaining ?? 0} remaining.`))
           setSessionMessages((prev) => prev.filter((m) => m.id !== assistantId))
           setChatStatus('ready')
           setGenerationStatus('error')
@@ -1128,9 +1149,7 @@ export function useAgentStream({
       if (err instanceof Error && err.name === 'AbortError') return
       if (import.meta.env.DEV) console.error('[builder-chat] handlePlanApprove error:', err)
       setChatError(err instanceof Error ? err : new Error('Resume failed'))
-      setSessionMessages((prev) =>
-        prev.filter((m) => m.id !== assistantId || m.content.length > 0),
-      )
+      setSessionMessages((prev) => prev.filter((m) => m.id !== assistantId || m.content.length > 0))
     } finally {
       setChatStatus('ready')
       setWorkflowRunId(null)
@@ -1195,6 +1214,7 @@ export function useAgentStream({
     validationChecks,
     timelineEvents,
     toolSteps: allToolSteps,
+    analystToolSteps,
     pendingClarification,
     pendingPlan,
     userCredits,

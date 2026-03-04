@@ -545,7 +545,7 @@ agentRoutes.post(
 
           if (approved) {
             // Resume build step — stream orchestrator events to client
-            const result = await traceAgent(`orchestrator:${model}`, async () => {
+            const result = (await traceAgent(`orchestrator:${model}`, async () => {
               // biome-ignore lint/suspicious/noExplicitAny: Mastra resumeStream return type
               const resumeOutput: any = run.resumeStream({
                 step: 'approve-plan',
@@ -558,19 +558,20 @@ agentRoutes.post(
                 userId: user.id,
                 runId,
               })
-            }) as { totalTokens: number; sandboxId?: string; openaiResponseId?: string }
+            })) as { totalTokens: number; sandboxId?: string; openaiResponseId?: string }
 
             // Update project status + persist OpenAI response ID
             const projectUpdate: Record<string, unknown> = {
               status: result.sandboxId ? 'complete' : 'error',
               sandboxId: result.sandboxId,
             }
-            if (result.openaiResponseId) {
-              const existingState = (project.generationState as Record<string, unknown>) || {}
-              projectUpdate.generationState = {
-                ...existingState,
-                lastOpenaiResponseId: result.openaiResponseId,
-              }
+            // Clear workflow state + persist OpenAI response ID
+            const existingState = (project.generationState as Record<string, unknown>) || {}
+            projectUpdate.generationState = {
+              ...existingState,
+              workflowRunId: null,
+              pendingPlan: null,
+              ...(result.openaiResponseId ? { lastOpenaiResponseId: result.openaiResponseId } : {}),
             }
             updateProject(
               projectId,
@@ -618,6 +619,20 @@ agentRoutes.post(
               step: 'approve-plan',
               resumeData: { approved: false, feedback },
             })
+
+            // Clear workflow state from project
+            const existingRejectState = (project.generationState as Record<string, unknown>) || {}
+            updateProject(
+              projectId,
+              {
+                generationState: {
+                  ...existingRejectState,
+                  workflowRunId: null,
+                  pendingPlan: null,
+                },
+              } as Partial<typeof projects.$inferInsert>,
+              user.id,
+            ).catch(() => {})
 
             // Settle credits to 0 (no build happened)
             await settleCredits(user.id, CREDIT_RESERVATION, 0)
@@ -675,21 +690,22 @@ agentRoutes.post(
           // biome-ignore lint/suspicious/noExplicitAny: workflow event payload shapes vary
           const e = event as any
 
-          // Mastra workflow fullStream passes agent chunks directly (tool-call,
-          // tool-result, text-delta, etc.) — NOT wrapped in workflow-step-output.
-          // Route all agent stream chunk types through processStreamChunk.
+          // Only forward tool events from analyst — NOT text-delta.
+          // text-delta contains raw JSON structured output tokens that
+          // render as ugly JSON in chat. The plan is rendered via plan_ready → PlanBlock.
           const agentChunkTypes = new Set([
-            'text-delta', 'tool-call', 'tool-result', 'step-finish', 'finish',
-            'tool-call-input-streaming-start', 'tool-call-input-streaming-end',
+            'tool-call',
+            'tool-result',
+            'step-finish',
+            'finish',
+            'tool-call-input-streaming-start',
+            'tool-call-input-streaming-end',
           ])
           if (agentChunkTypes.has(e.type)) {
             await processStreamChunk(e, emit, analystBridgeState)
           }
 
-          if (
-            e.type === 'workflow-step-result' &&
-            e.payload?.id === 'analyst'
-          ) {
+          if (e.type === 'workflow-step-result' && e.payload?.id === 'analyst') {
             // biome-ignore lint/suspicious/noExplicitAny: step result shape depends on outputSchema
             const stepOutput = e.payload?.output as any
             if (stepOutput?.plan) {
@@ -718,12 +734,16 @@ agentRoutes.post(
         const settlement = await settleCredits(user.id, CREDIT_RESERVATION, creditsUsed)
         settled = true
 
-        // Persist workflow runId in project's generationState for resume
+        // Persist workflow runId + plan in project's generationState for resume
         const existingState = (project.generationState as Record<string, unknown>) || {}
         updateProject(
           projectId,
           {
-            generationState: { ...existingState, workflowRunId },
+            generationState: {
+              ...existingState,
+              workflowRunId,
+              pendingPlan: capturedPlan,
+            },
           } as Partial<typeof projects.$inferInsert>,
           user.id,
         ).catch(() => {})

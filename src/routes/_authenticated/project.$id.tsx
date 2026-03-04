@@ -22,6 +22,13 @@ function ProjectPage() {
         status: string
         sandboxId: string | null
         deployUrl: string | null
+        generationState: {
+          workflowRunId?: string | null
+          pendingPlan?: {
+            projectName: string
+            features: Array<{ name: string; description: string }>
+          } | null
+        } | null
       }>
     },
   })
@@ -49,6 +56,7 @@ function ProjectPage() {
       initialPrompt={project.status === 'pending' ? (project.prompt ?? undefined) : undefined}
       initialSandboxId={project.sandboxId ?? undefined}
       initialDeployUrl={project.deployUrl ?? undefined}
+      initialGenerationState={project.generationState}
     />
   )
 }
