@@ -47,6 +47,56 @@ export interface PackageDependencies {
 }
 
 // ============================================================================
+// Design Agent Types
+// ============================================================================
+
+export interface PageSection {
+  id: string
+  label: string
+}
+
+export interface DesignAgentTokens {
+  colors: {
+    primary: string      // oklch
+    secondary: string
+    accent: string
+    background: string
+    foreground: string
+    muted: string
+    card: string
+    destructive: string
+  }
+  fonts: {
+    display: string
+    body: string
+    googleFontsUrl: string
+  }
+  style: {
+    borderRadius: string
+    cardStyle: string
+    navStyle: string
+    heroLayout: string
+    spacing: string
+    motion: string
+    imagery: string
+    sections: PageSection[]
+    contentWidth: 'narrow' | 'standard' | 'wide'
+  }
+}
+
+export type TemplateCategory = 'saas' | 'portfolio' | 'ecommerce' | 'blog' | 'dashboard' | 'landing'
+
+export interface TemplatePreset {
+  id: string
+  name: string
+  category: TemplateCategory
+  description: string
+  screenshotUrl: string
+  repoPath: string
+  tokens: DesignAgentTokens
+}
+
+// ============================================================================
 // ChatPlan (lightweight plan from chat AI → template pipeline)
 // ============================================================================
 
@@ -411,6 +461,25 @@ export interface WorkflowSuspendedEvent {
   }
 }
 
+export interface DesignReadyEvent {
+  type: 'design_ready'
+  tokens: DesignAgentTokens
+  recommendedTemplates: TemplatePreset[]
+}
+
+export interface DesignSuspendedEvent {
+  type: 'design_suspended'
+  runId: string
+  tokens: DesignAgentTokens
+  recommendedTemplates: TemplatePreset[]
+}
+
+export interface DesignApprovedEvent {
+  type: 'design_approved'
+  tokens: DesignAgentTokens
+  selectedTemplateId?: string
+}
+
 export interface ClarificationQuestion {
   question: string
   selectionMode: 'single' | 'multiple'
@@ -578,3 +647,6 @@ export type AgentStreamEvent =
   | CreditsUsedEvent
   | PlanReadyEvent
   | WorkflowSuspendedEvent
+  | DesignReadyEvent
+  | DesignSuspendedEvent
+  | DesignApprovedEvent
