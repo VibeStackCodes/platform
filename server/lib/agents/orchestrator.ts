@@ -151,7 +151,8 @@ Use the VibeStack image resolver for all photos: \`https://img.vibestack.site/s/
 4. **Show packages you install** — when calling installPackage, mention what you're adding and why.
 5. **Build loop**: write code → runBuild → if errors, read them, fix, rebuild. Max 3 repair attempts.
 6. **File size limit**: Keep individual files under 500 lines. Split into components.
-7. **No TODO/FIXME/placeholder comments** — ship complete code.`
+7. **No TODO/FIXME/placeholder comments** — ship complete code.
+8. **All navigation links must work** — every link, button, and navigation element must route to a real page. Never leave \`href="#"\` or dead links. If a page is referenced in navigation, create it. Verify all routes in \`App.tsx\` have corresponding page components.`
 
 /**
  * Processor: strip providerMetadata from recalled messages.
